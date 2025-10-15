@@ -149,10 +149,27 @@ def edit_command(args: argparse.Namespace) -> int:
         print('Failed to get a list of changed files', file=sys.stderr)
         return returncode
 
+    # Process all changes in the changelist
+    return include_changes_in_changelist(changes, changelist, workspace_dir, args.dry_run)
+
+
+def include_changes_in_changelist(changes: LocalChanges, changelist: str, workspace_dir: str, dry_run: bool = False) -> int:
+    """
+    Process local git changes by adding them to a Perforce changelist.
+
+    Args:
+        changes: LocalChanges object containing adds, mods, dels, moves
+        changelist: The changelist number to update
+        workspace_dir: The workspace directory
+        dry_run: If True, don't actually execute commands
+
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
     # Process added files
     for filename in changes.adds:
         res = run(['p4', 'add', '-c', changelist, filename],
-                  cwd=workspace_dir, dry_run=args.dry_run)
+                  cwd=workspace_dir, dry_run=dry_run)
         if res.returncode != 0:
             print('Failed to add file to perforce', file=sys.stderr)
             return res.returncode
@@ -165,14 +182,14 @@ def edit_command(args: argparse.Namespace) -> int:
         if current_changelist is None:
             # File is not checked out, use p4 edit
             res = run(['p4', 'edit', '-c', changelist, filename],
-                      cwd=workspace_dir, dry_run=args.dry_run)
+                      cwd=workspace_dir, dry_run=dry_run)
             if res.returncode != 0:
                 print('Failed to open file for edit in perforce', file=sys.stderr)
                 return res.returncode
         elif current_changelist != changelist:
             # File is checked out in different changelist, use p4 reopen
             res = run(['p4', 'reopen', '-c', changelist, filename],
-                      cwd=workspace_dir, dry_run=args.dry_run)
+                      cwd=workspace_dir, dry_run=dry_run)
             if res.returncode != 0:
                 print('Failed to reopen file in perforce', file=sys.stderr)
                 return res.returncode
@@ -181,7 +198,7 @@ def edit_command(args: argparse.Namespace) -> int:
     # Process deleted files
     for filename in changes.dels:
         res = run(['p4', 'delete', '-c', changelist, filename],
-                  cwd=workspace_dir, dry_run=args.dry_run)
+                  cwd=workspace_dir, dry_run=dry_run)
         if res.returncode != 0:
             print('Failed to delete file from perforce', file=sys.stderr)
             return res.returncode
@@ -189,12 +206,12 @@ def edit_command(args: argparse.Namespace) -> int:
     # Process moved/renamed files
     for from_filename, to_filename in changes.moves:
         res = run(['p4', 'delete', '-c', changelist, from_filename],
-                  cwd=workspace_dir, dry_run=args.dry_run)
+                  cwd=workspace_dir, dry_run=dry_run)
         if res.returncode != 0:
             print('Failed to delete from-file in perforce', file=sys.stderr)
             return res.returncode
         res = run(['p4', 'add', '-c', changelist, to_filename],
-                  cwd=workspace_dir, dry_run=args.dry_run)
+                  cwd=workspace_dir, dry_run=dry_run)
         if res.returncode != 0:
             print('Failed to add file to-file to perforce', file=sys.stderr)
             return res.returncode

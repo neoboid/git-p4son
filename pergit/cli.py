@@ -10,6 +10,7 @@ from .sync import sync_command
 from .edit import edit_command
 from .changelist import changelist_command
 from .list_changes import list_changes_command
+from .review import review_command
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -31,6 +32,8 @@ Examples:
   pergit changelist update 12345 -b main # Update CL 12345 commit list
   pergit list-changes        # List commit subjects since HEAD~1
   pergit list-changes --base-branch main # List commit subjects since main branch
+  pergit review new          # Create new changelist and Swarm review
+  pergit review update 12345 # Update existing changelist and Swarm review
         """
     )
 
@@ -165,6 +168,41 @@ Examples:
         help='Base branch to compare against. Default is HEAD~1'
     )
 
+    # Review subcommand
+    review_parser = subparsers.add_parser(
+        'review',
+        help='Create or update Swarm reviews',
+        description='Create new Swarm reviews or update existing ones with git changes'
+    )
+    review_subparsers = review_parser.add_subparsers(
+        dest='review_action',
+        help='Available review actions',
+        metavar='ACTION'
+    )
+
+    # Review update subcommand
+    review_update_parser = review_subparsers.add_parser(
+        'update',
+        help='Update existing changelist and Swarm review',
+        description='Update an existing changelist with changes since base branch and update the Swarm review'
+    )
+    review_update_parser.add_argument(
+        'changelist',
+        help='Changelist number to update'
+    )
+    review_update_parser.add_argument(
+        '-b', '--base-branch',
+        default='HEAD~1',
+        help='Base branch where p4 and git are in sync. Finds common ancestor with '
+             'current branch and includes files that changed on base branch but not on '
+             'current branch. Default is HEAD~1'
+    )
+    review_update_parser.add_argument(
+        '-n', '--dry-run',
+        action='store_true',
+        help='Pretend and print all commands, but do not execute'
+    )
+
     return parser
 
 
@@ -177,6 +215,8 @@ def run_command(args: argparse.Namespace) -> int:
         return changelist_command(args)
     elif args.command == 'list-changes':
         return list_changes_command(args)
+    elif args.command == 'review':
+        return review_command(args)
     else:
         print(f'Unknown command: {args.command}', file=sys.stderr)
         return 1

@@ -4,6 +4,7 @@ Main CLI entry point for pergit.
 
 import argparse
 import sys
+import time
 from . import __version__
 from .sync import sync_command
 from .edit import edit_command
@@ -34,6 +35,11 @@ Examples:
         '--version',
         action='version',
         version=f'pergit {__version__}'
+    )
+
+    parser.add_argument(
+        '-s', '--sleep',
+        help='Sleep for the specified number of seconds after the command is done.'
     )
 
     subparsers = parser.add_subparsers(
@@ -100,6 +106,17 @@ Examples:
 
     return parser
 
+def run_command(args):
+    if args.command == 'sync':
+        return sync_command(args)
+    elif args.command == 'edit':
+        return edit_command(args)
+    elif args.command == 'list-changes':
+        return list_changes_command(args)
+    else:
+        print(f'Unknown command: {args.command}', file=sys.stderr)
+        return 1
+
 
 def main():
     """Main entry point for the CLI."""
@@ -111,15 +128,14 @@ def main():
         return 1
 
     try:
-        if args.command == 'sync':
-            return sync_command(args)
-        elif args.command == 'edit':
-            return edit_command(args)
-        elif args.command == 'list-changes':
-            return list_changes_command(args)
-        else:
-            print(f'Unknown command: {args.command}', file=sys.stderr)
-            return 1
+        exit_code = run_command(args)
+
+        if exit_code == 0 and args.sleep is not None:
+             seconds = int(args.sleep)
+             print(f'Sleeping for {seconds} seconds')
+             time.sleep(seconds)
+
+        return exit_code
     except KeyboardInterrupt:
         print('\nOperation cancelled by user', file=sys.stderr)
         return 1

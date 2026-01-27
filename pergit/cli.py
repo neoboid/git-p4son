@@ -8,6 +8,7 @@ import time
 from . import __version__
 from .sync import sync_command
 from .edit import edit_command
+from .changelist import changelist_command
 from .list_changes import list_changes_command
 
 
@@ -24,8 +25,9 @@ Examples:
   pergit sync last-synced    # Re-sync the last synced changelist
   pergit sync 12345 --force  # Force sync with writable files and allow older changelists
   pergit edit 12345          # Open git changes for edit in changelist 12345
-  pergit edit new            # Create new changelist and open git changes for edit
   pergit edit 12345 --dry-run # Preview what would be opened for edit
+  pergit changelist new -m "Fix bug" # Create new changelist with description
+  pergit changelist new -m "Fix bug" -b main # Create changelist with commits since main
   pergit list-changes        # List commit subjects since HEAD~1
   pergit list-changes --base-branch main # List commit subjects since main branch
         """
@@ -77,7 +79,7 @@ Examples:
     )
     edit_parser.add_argument(
         'changelist',
-        help='Changelist to update, or "new" to create a new changelist'
+        help='Changelist number to update'
     )
     edit_parser.add_argument(
         '-b', '--base-branch',
@@ -90,6 +92,41 @@ Examples:
         '-n', '--dry-run',
         action='store_true',
         help='Pretend and print all commands, but do not execute'
+    )
+
+    # Changelist subcommand
+    changelist_parser = subparsers.add_parser(
+        'changelist',
+        help='Manage Perforce changelists',
+        description='Manage Perforce changelists.'
+    )
+    changelist_subparsers = changelist_parser.add_subparsers(
+        dest='changelist_action',
+        help='Available changelist actions',
+        metavar='ACTION'
+    )
+
+    # changelist new
+    changelist_new_parser = changelist_subparsers.add_parser(
+        'new',
+        help='Create a new Perforce changelist',
+        description='Create a new Perforce changelist with a description and '
+        'enumerated git commits since the base branch.'
+    )
+    changelist_new_parser.add_argument(
+        '-m', '--message',
+        required=True,
+        help='Changelist description message'
+    )
+    changelist_new_parser.add_argument(
+        '-b', '--base-branch',
+        default='HEAD~1',
+        help='Base branch for enumerating commits. Default is HEAD~1'
+    )
+    changelist_new_parser.add_argument(
+        '-n', '--dry-run',
+        action='store_true',
+        help='Pretend and print what would be created, but do not execute'
     )
 
     # List-changes subcommand
@@ -111,6 +148,8 @@ def run_command(args):
         return sync_command(args)
     elif args.command == 'edit':
         return edit_command(args)
+    elif args.command == 'changelist':
+        return changelist_command(args)
     elif args.command == 'list-changes':
         return list_changes_command(args)
     else:

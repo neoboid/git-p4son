@@ -4,9 +4,7 @@ Edit command implementation for pergit.
 
 import re
 import sys
-import subprocess
 from .common import ensure_workspace, run
-from .list_changes import get_enumerated_change_description_since
 
 
 class LocalChanges:
@@ -130,76 +128,6 @@ def get_local_git_changes(base_branch, workspace_dir):
     return (0, changes)
 
 
-def create_new_changelist(base_branch, workspace_dir, dry_run=False):
-    """
-    Create a new Perforce changelist with description from git log.
-
-    Args:
-        base_branch: The base branch to compare against for description
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually create the changelist
-
-    Returns:
-        Tuple of (returncode, changelist_number or None)
-    """
-    # Get changelist description
-    returncode, description = get_enumerated_change_description_since(
-        base_branch, workspace_dir)
-    if returncode != 0:
-        return (returncode, None)
-
-    # If no description, use a default
-    if not description:
-        description = "New changelist created by pergit"
-
-    # Create the changelist
-    if dry_run:
-        print(f"Would create new changelist with description:")
-        print(description)
-        return (0, "new")
-
-    # Prepare the changelist spec content
-    tabbed_description = "\n\t".join(description.splitlines())
-    spec_content = f"Change: new\n\nDescription:\n\t{tabbed_description}\n"
-
-    # Create the changelist using p4 change, pass description via stdin
-    try:
-        result = subprocess.run(
-            ['p4', 'change', '-i'],
-            cwd=workspace_dir,
-            input=spec_content,
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode != 0:
-            print('Failed to create new changelist', file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
-            return (result.returncode, None)
-
-        # Extract changelist number from output
-        # Format: "Change 12345 created."
-        changelist_number = None
-        for line in result.stdout.splitlines():
-            if 'Change' in line and 'created' in line:
-                match = re.search(r'Change (\d+) created', line)
-                if match:
-                    changelist_number = match.group(1)
-                    break
-
-        if changelist_number is None:
-            print(
-                'Failed to extract changelist number from p4 change output', file=sys.stderr)
-            print('Output:', result.stdout, file=sys.stderr)
-            return (1, None)
-
-        return (0, changelist_number)
-
-    except Exception as e:
-        print(f'Failed to create new changelist: {e}', file=sys.stderr)
-        return (1, None)
-
-
 def edit_command(args):
     """
     Execute the edit command.
@@ -212,20 +140,7 @@ def edit_command(args):
     """
     workspace_dir = ensure_workspace()
 
-    # Handle 'new' changelist creation
     changelist = args.changelist
-    if args.changelist.lower() == 'new':
-        returncode, changelist = create_new_changelist(
-            args.base_branch, workspace_dir, dry_run=args.dry_run)
-        if returncode != 0:
-            print('Failed to create new changelist', file=sys.stderr)
-            return returncode
-
-        if args.dry_run:
-            print(f"Would use changelist: {changelist}")
-            # For dry run, we still need to continue to show what would be edited
-        else:
-            print(f"Created new changelist: {changelist}")
 
     returncode, changes = get_local_git_changes(
         args.base_branch, workspace_dir)

@@ -2,11 +2,12 @@
 List-changes command implementation for pergit.
 """
 
+import argparse
 import sys
 from .common import ensure_workspace, run
 
 
-def get_commit_subjects_since(base_branch, workspace_dir):
+def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> tuple[int, list[str] | None]:
     """
     Get list of commit subjects from git log since base branch.
 
@@ -38,7 +39,7 @@ def get_commit_subjects_since(base_branch, workspace_dir):
     return (0, subjects)
 
 
-def get_enumerated_change_description_since(base_branch, workspace_dir):
+def get_enumerated_change_description_since(base_branch: str, workspace_dir: str) -> tuple[int, str | None]:
     """
     Get changelist description from git log since base branch.
 
@@ -64,7 +65,7 @@ def get_enumerated_change_description_since(base_branch, workspace_dir):
     return (0, '\n'.join(description_lines))
 
 
-def list_changes_command(args):
+def list_changes_command(args: argparse.Namespace) -> int:
     """
     Execute the list-changes command.
 

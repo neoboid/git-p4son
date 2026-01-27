@@ -2,6 +2,7 @@
 Sync command implementation for pergit.
 """
 
+import argparse
 import os
 import re
 import subprocess
@@ -9,16 +10,17 @@ import sys
 import time
 from timeit import default_timer as timer
 from datetime import timedelta
+from typing import IO
 
 from .common import ensure_workspace, run, run_with_output
 
 
-def echo_output_to_stream(line, stream):
+def echo_output_to_stream(line: str, stream: IO[str]) -> None:
     """Echo a line to a stream."""
     print(line, file=stream)
 
 
-def get_writable_files(stderr_lines):
+def get_writable_files(stderr_lines: list[str]) -> list[str]:
     """Extract writable files from p4 sync stderr output."""
     cant_clobber_prefix = "Can't clobber writable file "
     writable_files = []
@@ -30,7 +32,7 @@ def get_writable_files(stderr_lines):
     return writable_files
 
 
-def parse_p4_sync_line(line):
+def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
     """Parse a line from p4 sync output."""
     patterns = [
         ('add', ' - added as '),
@@ -46,7 +48,7 @@ def parse_p4_sync_line(line):
     return (None, None)
 
 
-def get_file_size(filename):
+def get_file_size(filename: str) -> int:
     """Get the size of a file in bytes."""
     if not os.path.isfile(filename):
         return 0
@@ -54,7 +56,7 @@ def get_file_size(filename):
     return file_stats.st_size if file_stats else 0
 
 
-def green_text(s):
+def green_text(s: str) -> str:
     """Format text in green color."""
     return f'\033[92m{s}\033[0m'
 
@@ -62,12 +64,12 @@ def green_text(s):
 class SyncStats:
     """Statistics for sync operations."""
 
-    def __init__(self):
-        self.count = 0
-        self.total_size = 0
+    def __init__(self) -> None:
+        self.count: int = 0
+        self.total_size: int = 0
 
 
-def readable_file_size(num, suffix="B"):
+def readable_file_size(num: float, suffix: str = "B") -> str:
     """Convert bytes to human readable format."""
     for unit in ('', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi'):
         if abs(num) < 1024.0:
@@ -79,15 +81,15 @@ def readable_file_size(num, suffix="B"):
 class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
-    def __init__(self, file_count_to_sync):
-        self.start_timestamp = timer()
-        self.synced_file_count = 0
-        self.file_count_to_sync = file_count_to_sync
-        self.stats = {}
+    def __init__(self, file_count_to_sync: int) -> None:
+        self.start_timestamp: float = timer()
+        self.synced_file_count: int = 0
+        self.file_count_to_sync: int = file_count_to_sync
+        self.stats: dict[str, SyncStats] = {}
         for mode in ['add', 'del', 'upd', 'clb']:
             self.stats[mode] = SyncStats()
 
-    def __call__(self, line, stream):
+    def __call__(self, line: str, stream: IO[str]) -> None:
         if re.search(r"//...@\d+ - file\(s\) up-to-date\.", line):
             print('All files are up to date')
             return
@@ -116,7 +118,7 @@ class P4SyncOutputProcessor:
 
         print('{}sync stats {}'.format(indentation, self.get_sync_stats()))
 
-    def get_sync_stats(self):
+    def get_sync_stats(self) -> str:
         """Get current sync statistics."""
         duration_sec = timer() - self.start_timestamp
         duration = timedelta(seconds=duration_sec)
@@ -132,7 +134,7 @@ class P4SyncOutputProcessor:
             duration,
             readable_file_size(synced_size/duration_sec))
 
-    def print_stats(self):
+    def print_stats(self) -> None:
         """Print final sync statistics."""
         sync_stats = self.get_sync_stats()
         print(f'Sync stats: {sync_stats}')
@@ -143,7 +145,7 @@ class P4SyncOutputProcessor:
             print('  size : {}'.format(readable_file_size(stat.total_size)))
 
 
-def p4_force_sync_file(changelist, filename, workspace_dir):
+def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> int:
     """Force sync a single file."""
     output_processor = P4SyncOutputProcessor(-1)
     res = run_with_output(['p4', 'sync', '-f', '%s@%s' %
@@ -152,7 +154,7 @@ def p4_force_sync_file(changelist, filename, workspace_dir):
     return res.returncode
 
 
-def get_file_count_to_sync(changelist, workspace_dir):
+def get_file_count_to_sync(changelist: int, workspace_dir: str) -> int:
     """Get the number of files that need to be synced."""
     res = run(['p4', 'sync', '-n', '//...@%s' %
               (changelist)], cwd=workspace_dir)
@@ -163,7 +165,7 @@ def get_file_count_to_sync(changelist, workspace_dir):
     return len(res.stdout)
 
 
-def p4_sync(changelist, force, workspace_dir):
+def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
     """Sync files from Perforce."""
     file_count_to_sync = get_file_count_to_sync(changelist, workspace_dir)
     if file_count_to_sync < 0:
@@ -195,7 +197,7 @@ def p4_sync(changelist, force, workspace_dir):
     return True
 
 
-def p4_is_workspace_clean(workspace_dir):
+def p4_is_workspace_clean(workspace_dir: str) -> bool:
     """Check if Perforce workspace is clean."""
     res = run_with_output(['p4', 'opened'], cwd=workspace_dir,
                           on_output=echo_output_to_stream)
@@ -207,7 +209,7 @@ def p4_is_workspace_clean(workspace_dir):
     return len(local_changes) == 0
 
 
-def git_is_workspace_clean(workspace_dir):
+def git_is_workspace_clean(workspace_dir: str) -> bool:
     """Check if git workspace is clean."""
     res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir,
                           on_output=echo_output_to_stream)
@@ -219,14 +221,14 @@ def git_is_workspace_clean(workspace_dir):
     return len(local_changes) == 0
 
 
-def git_add_all_files(workspace_dir):
+def git_add_all_files(workspace_dir: str) -> bool:
     """Add all files to git."""
     res = run_with_output(['git', 'add', '.'], cwd=workspace_dir,
                           on_output=echo_output_to_stream)
     return res.returncode == 0
 
 
-def git_commit(message, workspace_dir, allow_empty=False):
+def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> bool:
     """Commit changes to git."""
     args = ['commit', '-m', message]
     if allow_empty:
@@ -236,7 +238,7 @@ def git_commit(message, workspace_dir, allow_empty=False):
     return res.returncode == 0
 
 
-def git_changelist_of_last_commit(workspace_dir):
+def git_changelist_of_last_commit(workspace_dir: str) -> int | None:
     """Get the changelist number from the last commit message."""
     res = run_with_output(['git', 'log', '--oneline', '-1', '--pretty="%s"'],
                           cwd=workspace_dir, on_output=echo_output_to_stream)
@@ -252,7 +254,7 @@ def git_changelist_of_last_commit(workspace_dir):
         return None
 
 
-def get_latest_changelist_affecting_workspace(workspace_dir):
+def get_latest_changelist_affecting_workspace(workspace_dir: str) -> tuple[int, int | None]:
     """
     Get the latest changelist that affects files in the client's workspace view.
     This finds the most recent changelist that would be pulled by 'p4 sync'.
@@ -294,7 +296,7 @@ def get_latest_changelist_affecting_workspace(workspace_dir):
         return (1, None)
 
 
-def sync_command(args):
+def sync_command(args: argparse.Namespace) -> int:
     """
     Execute the sync command.
 

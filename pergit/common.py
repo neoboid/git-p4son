@@ -10,14 +10,15 @@ import sys
 import threading
 from timeit import default_timer as timer
 from datetime import timedelta
+from typing import IO, Callable
 
 
-def is_workspace_dir(directory):
+def is_workspace_dir(directory: str) -> bool:
     """Check if a directory is a git workspace."""
     return os.path.isdir(os.path.join(directory, '.git'))
 
 
-def get_workspace_dir():
+def get_workspace_dir() -> str | None:
     """Find the git workspace root directory by walking up the directory tree."""
     candidate_dir = os.getcwd()
     while True:
@@ -30,7 +31,7 @@ def get_workspace_dir():
         candidate_dir = parent_dir
 
 
-def ensure_workspace():
+def ensure_workspace() -> str:
     """Ensure we're in a git workspace and return the workspace directory."""
     workspace_dir = get_workspace_dir()
     if not workspace_dir:
@@ -42,13 +43,13 @@ def ensure_workspace():
 class RunResult:
     """Result of a command execution."""
 
-    def __init__(self, returncode, stdout, stderr):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+    def __init__(self, returncode: int, stdout: list[str], stderr: list[str]) -> None:
+        self.returncode: int = returncode
+        self.stdout: list[str] = stdout
+        self.stderr: list[str] = stderr
 
 
-def join_command_line(command):
+def join_command_line(command: list[str]) -> str:
     command_line = ''
     for c in command:
         if c.find(' ') != -1:
@@ -58,7 +59,7 @@ def join_command_line(command):
     return command_line
 
 
-def run(command, cwd='.', dry_run=False):
+def run(command: list[str], cwd: str = '.', dry_run: bool = False) -> RunResult:
     """
     Run a command and return the result.
 
@@ -89,13 +90,13 @@ def run(command, cwd='.', dry_run=False):
     return RunResult(result.returncode, result.stdout.splitlines(), result.stderr.splitlines())
 
 
-def enqueue_lines(stream, output_queue):
+def enqueue_lines(stream: IO[str], output_queue: queue.Queue[str]) -> None:
     """Enqueue lines from a stream into a queue."""
     for line in iter(stream.readline, ''):
         output_queue.put(line.rstrip())
 
 
-def run_with_output(command, cwd='.', on_output=None):
+def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[..., None] | None = None) -> RunResult:
     """
     Run a command with real-time output processing.
 
@@ -113,9 +114,9 @@ def run_with_output(command, cwd='.', on_output=None):
 
     start_timestamp = timer()
 
-    stdout_lines = []
-    stderr_lines = []
-    returncode = None
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    returncode: int | None = None
 
     with subprocess.Popen(command,
                           cwd=cwd,
@@ -124,12 +125,12 @@ def run_with_output(command, cwd='.', on_output=None):
                           stdin=None,
                           text=True) as process:
 
-        output_queue = queue.Queue()
+        output_queue: queue.Queue[str] = queue.Queue()
         out_thread = threading.Thread(
             target=enqueue_lines, args=(process.stdout, output_queue))
         out_thread.daemon = True
 
-        error_queue = queue.Queue()
+        error_queue: queue.Queue[str] = queue.Queue()
         err_thread = threading.Thread(
             target=enqueue_lines, args=(process.stderr, error_queue))
         err_thread.daemon = True

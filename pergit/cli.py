@@ -12,7 +12,7 @@ from .changelist import changelist_command
 from .list_changes import list_changes_command
 
 
-def create_parser():
+def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
         prog='pergit',
@@ -167,7 +167,7 @@ Examples:
 
     return parser
 
-def run_command(args):
+def run_command(args: argparse.Namespace) -> int:
     if args.command == 'sync':
         return sync_command(args)
     elif args.command == 'edit':
@@ -181,7 +181,7 @@ def run_command(args):
         return 1
 
 
-def main():
+def main() -> int:
     """Main entry point for the CLI."""
     parser = create_parser()
     args = parser.parse_args()

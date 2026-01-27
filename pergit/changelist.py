@@ -2,6 +2,7 @@
 Changelist command implementation for pergit.
 """
 
+import argparse
 import re
 import sys
 import subprocess
@@ -9,7 +10,7 @@ from .common import ensure_workspace
 from .list_changes import get_enumerated_change_description_since
 
 
-def create_changelist(message, base_branch, workspace_dir, dry_run=False):
+def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> tuple[int, str | None]:
     """
     Create a new Perforce changelist with the given message and
     enumerated git commits as description.
@@ -81,7 +82,7 @@ def create_changelist(message, base_branch, workspace_dir, dry_run=False):
         return (1, None)
 
 
-def get_changelist_spec(changelist_nr, workspace_dir):
+def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> tuple[int, str | None]:
     """
     Fetch the changelist spec from Perforce.
 
@@ -109,7 +110,7 @@ def get_changelist_spec(changelist_nr, workspace_dir):
         return (1, None)
 
 
-def extract_description(spec_text):
+def extract_description(spec_text: str) -> str:
     """
     Extract the Description field from a p4 changelist spec.
 
@@ -133,7 +134,7 @@ def extract_description(spec_text):
     return '\n'.join(description_lines)
 
 
-def replace_description_in_spec(spec_text, new_description):
+def replace_description_in_spec(spec_text: str, new_description: str) -> str:
     """
     Replace the Description field in a p4 changelist spec.
 
@@ -168,7 +169,7 @@ def replace_description_in_spec(spec_text, new_description):
     return '\n'.join(result_lines) + '\n'
 
 
-def split_description_message_and_commits(description):
+def split_description_message_and_commits(description: str) -> tuple[str, str, str]:
     """
     Split a changelist description into the user message, the
     enumerated commit list, and any trailing text.
@@ -210,7 +211,7 @@ def split_description_message_and_commits(description):
     return (message, commits, trailing)
 
 
-def update_changelist(changelist_nr, base_branch, workspace_dir, dry_run=False):
+def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> int:
     """
     Update an existing Perforce changelist by replacing the enumerated
     commit list in the description.
@@ -273,7 +274,7 @@ def update_changelist(changelist_nr, base_branch, workspace_dir, dry_run=False):
         return 1
 
 
-def changelist_new_command(args):
+def changelist_new_command(args: argparse.Namespace) -> int:
     """
     Execute the 'changelist new' command.
 
@@ -296,7 +297,7 @@ def changelist_new_command(args):
     return 0
 
 
-def changelist_update_command(args):
+def changelist_update_command(args: argparse.Namespace) -> int:
     """
     Execute the 'changelist update' command.
 
@@ -319,7 +320,7 @@ def changelist_update_command(args):
     return 0
 
 
-def changelist_command(args):
+def changelist_command(args: argparse.Namespace) -> int:
     """
     Dispatch changelist subcommands.
 

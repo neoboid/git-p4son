@@ -2,6 +2,7 @@
 Edit command implementation for pergit.
 """
 
+import argparse
 import re
 import sys
 from .common import ensure_workspace, run
@@ -10,14 +11,14 @@ from .common import ensure_workspace, run
 class LocalChanges:
     """Container for local git changes."""
 
-    def __init__(self):
-        self.adds = []
-        self.mods = []
-        self.dels = []
-        self.moves = []
+    def __init__(self) -> None:
+        self.adds: list[str] = []
+        self.mods: list[str] = []
+        self.dels: list[str] = []
+        self.moves: list[tuple[str, str]] = []
 
 
-def check_file_status(filename, workspace_dir):
+def check_file_status(filename: str, workspace_dir: str) -> str | None:
     """
     Check if a file is already checked out in Perforce and return its changelist.
 
@@ -50,7 +51,7 @@ def check_file_status(filename, workspace_dir):
     return None
 
 
-def find_common_ancestor(branch1, branch2, workspace_dir):
+def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> tuple[int, str | None]:
     """
     Find the common ancestor commit between two branches.
 
@@ -73,7 +74,7 @@ def find_common_ancestor(branch1, branch2, workspace_dir):
     return (0, res.stdout[0].strip())
 
 
-def get_local_git_changes(base_branch, workspace_dir):
+def get_local_git_changes(base_branch: str, workspace_dir: str) -> tuple[int, LocalChanges | None]:
     """
     Get local git changes between base_branch and HEAD using common ancestor logic.
 
@@ -128,7 +129,7 @@ def get_local_git_changes(base_branch, workspace_dir):
     return (0, changes)
 
 
-def edit_command(args):
+def edit_command(args: argparse.Namespace) -> int:
     """
     Execute the edit command.
 

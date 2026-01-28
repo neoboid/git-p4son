@@ -55,7 +55,7 @@ def open_changes_for_edit(base_branch: str, changelist: str, workspace_dir: str,
     return include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
 
 
-def p4_add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> tuple[int, bool]:
+def add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> tuple[int, bool]:
     """
     Add the #review keyword to a changelist description.
 
@@ -173,7 +173,7 @@ def review_new_command(args: argparse.Namespace) -> int:
         return returncode
 
     # Add #review keyword to changelist description
-    returncode = p4_add_review_keyword_to_changelist(
+    returncode = add_review_keyword_to_changelist(
         changelist, workspace_dir, dry_run=args.dry_run)
     if returncode != 0:
         return returncode

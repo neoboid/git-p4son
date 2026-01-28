@@ -6,7 +6,7 @@ from unittest import mock
 from pergit.review import (
     p4_shelve_changelist,
     open_changes_for_edit,
-    p4_add_review_keyword_to_changelist,
+    add_review_keyword_to_changelist,
     review_new_command,
     review_update_command,
     review_command,
@@ -93,7 +93,7 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
             stdout=SPEC_LINES_WITHOUT_REVIEW.copy())
         mock_subprocess.return_value = mock.Mock(
             returncode=0, stdout='', stderr='')
-        rc = p4_add_review_keyword_to_changelist('100', '/ws')
+        rc = add_review_keyword_to_changelist('100', '/ws')
         self.assertEqual(rc, 0)
         # Verify p4 change -i was called with updated spec
         call_kwargs = mock_subprocess.call_args
@@ -105,27 +105,27 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
     def test_already_has_review_keyword(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=SPEC_LINES_WITH_REVIEW.copy())
-        rc = p4_add_review_keyword_to_changelist('100', '/ws')
+        rc = add_review_keyword_to_changelist('100', '/ws')
         self.assertEqual(rc, 0)
 
     @mock.patch('pergit.review.run')
     def test_get_spec_failure(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
-        rc = p4_add_review_keyword_to_changelist('100', '/ws')
+        rc = add_review_keyword_to_changelist('100', '/ws')
         self.assertEqual(rc, 1)
 
     @mock.patch('pergit.review.run')
     def test_dry_run(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=SPEC_LINES_WITHOUT_REVIEW.copy())
-        rc = p4_add_review_keyword_to_changelist(
+        rc = add_review_keyword_to_changelist(
             '100', '/ws', dry_run=True)
         self.assertEqual(rc, 0)
 
 
 class TestReviewNewCommand(unittest.TestCase):
     @mock.patch('pergit.review.p4_shelve_changelist', return_value=0)
-    @mock.patch('pergit.review.p4_add_review_keyword_to_changelist', return_value=0)
+    @mock.patch('pergit.review.add_review_keyword_to_changelist', return_value=0)
     @mock.patch('pergit.review.open_changes_for_edit', return_value=0)
     @mock.patch('pergit.review.create_changelist', return_value=(0, '500'))
     @mock.patch('pergit.review.ensure_workspace', return_value='/ws')

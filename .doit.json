@@ -1,0 +1,5 @@
+{
+    "test": {
+        "cmd": "python -m pytest tests/"
+    }
+}

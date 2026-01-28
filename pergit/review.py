@@ -23,7 +23,7 @@ def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = Fa
         dry_run: If True, don't actually shelve
 
     Returns:
-        Tuple of (returncode, success)
+        Exit code (0 for success, non-zero for failure)
     """
     res = run(['p4', 'shelve', '-f', '-Af', '-c', changelist],
               cwd=workspace_dir, dry_run=dry_run)
@@ -65,13 +65,13 @@ def p4_add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry
         dry_run: If True, don't actually update
 
     Returns:
-        Tuple of (returncode, success)
+        Exit code (0 for success, non-zero for failure)
     """
     # Get current changelist description
     res = run(['p4', 'change', '-o', changelist], cwd=workspace_dir)
     if res.returncode != 0:
         print('Failed to get changelist description', file=sys.stderr)
-        return (res.returncode, False)
+        return res.returncode
 
     # Parse the changelist spec to find description and track its end
     lines = res.stdout
@@ -97,7 +97,7 @@ def p4_add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry
             lines[description_start_idx:description_end_idx])
         if '#review' in description_text:
             print(f'Changelist {changelist} already has #review keyword')
-            return (0, True)
+            return 0
 
     # Add #review as the last line of description
     updated_lines = lines.copy()
@@ -108,7 +108,7 @@ def p4_add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry
     # Update the changelist
     if dry_run:
         print(f"Would add #review keyword to changelist {changelist}")
-        return (0, True)
+        return 0
 
     try:
         result = subprocess.run(
@@ -122,13 +122,12 @@ def p4_add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry
         if result.returncode != 0:
             print('Failed to update changelist description', file=sys.stderr)
             print(result.stderr, file=sys.stderr)
-            return (result.returncode, False)
 
-        return (0, True)
+        return result.returncode
 
     except Exception as e:
         print(f'Failed to update changelist description: {e}', file=sys.stderr)
-        return (1, False)
+        return 1
 
 
 def review_new_command(args: argparse.Namespace) -> int:
@@ -174,9 +173,9 @@ def review_new_command(args: argparse.Namespace) -> int:
         return returncode
 
     # Add #review keyword to changelist description
-    returncode, success = p4_add_review_keyword_to_changelist(
+    returncode = p4_add_review_keyword_to_changelist(
         changelist, workspace_dir, dry_run=args.dry_run)
-    if not success:
+    if returncode != 0:
         return returncode
 
     # Shelve the changelist to create the review

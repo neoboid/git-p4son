@@ -1,5 +1,5 @@
 """
-Review command implementation for pergit.
+Review command implementation for git-p4son.
 """
 
 import argparse
@@ -121,7 +121,7 @@ def review_new_command(args: argparse.Namespace) -> int:
     # Check alias availability before creating the changelist
     if args.alias and not args.dry_run:
         alias_path = os.path.join(
-            workspace_dir, '.pergit', 'changelists', args.alias)
+            workspace_dir, '.git-p4son', 'changelists', args.alias)
         if os.path.exists(alias_path) and not args.force:
             print(f'Alias "{args.alias}" already exists (use -f/--force to overwrite)',
                   file=sys.stderr)
@@ -225,6 +225,6 @@ def review_command(args: argparse.Namespace) -> int:
     elif args.review_action == 'update':
         return review_update_command(args)
     else:
-        print('No review action specified. Use "pergit review -h" for help.',
+        print('No review action specified. Use "git-p4son review -h" for help.',
               file=sys.stderr)
         return 1

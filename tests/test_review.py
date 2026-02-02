@@ -1,9 +1,9 @@
-"""Tests for pergit.review module."""
+"""Tests for git_p4son.review module."""
 
 import unittest
 from unittest import mock
 
-from pergit.review import (
+from git_p4son.review import (
     p4_shelve_changelist,
     add_review_keyword_to_changelist,
     review_new_command,
@@ -14,7 +14,7 @@ from tests.helpers import make_run_result
 
 
 class TestP4ShelveChangelist(unittest.TestCase):
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_success(self, mock_run):
         mock_run.return_value = make_run_result()
         rc = p4_shelve_changelist('100', '/ws')
@@ -24,13 +24,13 @@ class TestP4ShelveChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_failure(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
         rc = p4_shelve_changelist('100', '/ws')
         self.assertEqual(rc, 1)
 
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_dry_run(self, mock_run):
         mock_run.return_value = make_run_result()
         rc = p4_shelve_changelist('100', '/ws', dry_run=True)
@@ -68,8 +68,8 @@ SPEC_LINES_WITH_REVIEW = [
 
 
 class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
-    @mock.patch('pergit.review.subprocess.run')
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.subprocess.run')
+    @mock.patch('git_p4son.review.run')
     def test_adds_review_keyword(self, mock_run, mock_subprocess):
         mock_run.return_value = make_run_result(
             stdout=SPEC_LINES_WITHOUT_REVIEW.copy())
@@ -83,20 +83,20 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
             'input') or call_kwargs[1].get('input')
         self.assertIn('#review', spec_input)
 
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_already_has_review_keyword(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=SPEC_LINES_WITH_REVIEW.copy())
         rc = add_review_keyword_to_changelist('100', '/ws')
         self.assertEqual(rc, 0)
 
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_get_spec_failure(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
         rc = add_review_keyword_to_changelist('100', '/ws')
         self.assertEqual(rc, 1)
 
-    @mock.patch('pergit.review.run')
+    @mock.patch('git_p4son.review.run')
     def test_dry_run(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=SPEC_LINES_WITHOUT_REVIEW.copy())
@@ -106,11 +106,11 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
 
 
 class TestReviewNewCommand(unittest.TestCase):
-    @mock.patch('pergit.review.p4_shelve_changelist', return_value=0)
-    @mock.patch('pergit.review.add_review_keyword_to_changelist', return_value=0)
-    @mock.patch('pergit.review.open_changes_for_edit', return_value=0)
-    @mock.patch('pergit.review.create_changelist', return_value=(0, '500'))
-    @mock.patch('pergit.review.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.review.p4_shelve_changelist', return_value=0)
+    @mock.patch('git_p4son.review.add_review_keyword_to_changelist', return_value=0)
+    @mock.patch('git_p4son.review.open_changes_for_edit', return_value=0)
+    @mock.patch('git_p4son.review.create_changelist', return_value=(0, '500'))
+    @mock.patch('git_p4son.review.ensure_workspace', return_value='/ws')
     def test_full_flow(self, _ws, mock_create, mock_open, mock_review, mock_shelve):
         args = mock.Mock(message='New review',
                          base_branch='HEAD~1', dry_run=False,
@@ -123,8 +123,8 @@ class TestReviewNewCommand(unittest.TestCase):
         mock_review.assert_called_once_with('500', '/ws', dry_run=False)
         mock_shelve.assert_called_once_with('500', '/ws', dry_run=False)
 
-    @mock.patch('pergit.review.create_changelist', return_value=(1, None))
-    @mock.patch('pergit.review.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.review.create_changelist', return_value=(1, None))
+    @mock.patch('git_p4son.review.ensure_workspace', return_value='/ws')
     def test_create_failure(self, _ws, _create):
         args = mock.Mock(message='msg', base_branch='HEAD~1', dry_run=False,
                          alias=None, force=False)
@@ -133,10 +133,10 @@ class TestReviewNewCommand(unittest.TestCase):
 
 
 class TestReviewUpdateCommand(unittest.TestCase):
-    @mock.patch('pergit.review.p4_shelve_changelist', return_value=0)
-    @mock.patch('pergit.review.open_changes_for_edit', return_value=0)
-    @mock.patch('pergit.review.resolve_changelist', return_value='500')
-    @mock.patch('pergit.review.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.review.p4_shelve_changelist', return_value=0)
+    @mock.patch('git_p4son.review.open_changes_for_edit', return_value=0)
+    @mock.patch('git_p4son.review.resolve_changelist', return_value='500')
+    @mock.patch('git_p4son.review.ensure_workspace', return_value='/ws')
     def test_update_without_description(self, _ws, _resolve, mock_open, mock_shelve):
         args = mock.Mock(changelist='500', base_branch='HEAD~1',
                          dry_run=False, description=False)
@@ -145,11 +145,11 @@ class TestReviewUpdateCommand(unittest.TestCase):
         mock_open.assert_called_once()
         mock_shelve.assert_called_once()
 
-    @mock.patch('pergit.review.p4_shelve_changelist', return_value=0)
-    @mock.patch('pergit.review.open_changes_for_edit', return_value=0)
-    @mock.patch('pergit.review.update_changelist', return_value=0)
-    @mock.patch('pergit.review.resolve_changelist', return_value='500')
-    @mock.patch('pergit.review.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.review.p4_shelve_changelist', return_value=0)
+    @mock.patch('git_p4son.review.open_changes_for_edit', return_value=0)
+    @mock.patch('git_p4son.review.update_changelist', return_value=0)
+    @mock.patch('git_p4son.review.resolve_changelist', return_value='500')
+    @mock.patch('git_p4son.review.ensure_workspace', return_value='/ws')
     def test_update_with_description(self, _ws, _resolve, mock_update, mock_open, mock_shelve):
         args = mock.Mock(changelist='500', base_branch='HEAD~1',
                          dry_run=False, description=True)
@@ -158,8 +158,8 @@ class TestReviewUpdateCommand(unittest.TestCase):
         mock_update.assert_called_once_with(
             '500', 'HEAD~1', '/ws', dry_run=False)
 
-    @mock.patch('pergit.review.resolve_changelist', return_value=None)
-    @mock.patch('pergit.review.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.review.resolve_changelist', return_value=None)
+    @mock.patch('git_p4son.review.ensure_workspace', return_value='/ws')
     def test_invalid_changelist(self, _ws, _resolve):
         args = mock.Mock(changelist='abc', base_branch='HEAD~1',
                          dry_run=False, description=False)
@@ -168,14 +168,14 @@ class TestReviewUpdateCommand(unittest.TestCase):
 
 
 class TestReviewCommand(unittest.TestCase):
-    @mock.patch('pergit.review.review_new_command', return_value=0)
+    @mock.patch('git_p4son.review.review_new_command', return_value=0)
     def test_dispatches_new(self, mock_new):
         args = mock.Mock(review_action='new')
         rc = review_command(args)
         self.assertEqual(rc, 0)
         mock_new.assert_called_once()
 
-    @mock.patch('pergit.review.review_update_command', return_value=0)
+    @mock.patch('git_p4son.review.review_update_command', return_value=0)
     def test_dispatches_update(self, mock_update):
         args = mock.Mock(review_action='update')
         rc = review_command(args)

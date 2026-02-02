@@ -1,5 +1,5 @@
 """
-Entry point for running pergit as a module: python -m pergit
+Entry point for running git-p4son as a module: python -m git_p4son
 """
 
 from .cli import main

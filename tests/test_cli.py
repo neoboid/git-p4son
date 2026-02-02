@@ -1,9 +1,9 @@
-"""Tests for pergit.cli module."""
+"""Tests for git_p4son.cli module."""
 
 import unittest
 from unittest import mock
 
-from pergit.cli import create_parser, run_command
+from git_p4son.cli import create_parser, run_command
 
 
 class TestCreateParser(unittest.TestCase):
@@ -87,7 +87,7 @@ class TestCreateParser(unittest.TestCase):
 
 
 class TestRunCommand(unittest.TestCase):
-    @mock.patch('pergit.cli.sync_command', return_value=0)
+    @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_dispatches_sync(self, mock_sync):
         parser = create_parser()
         args = parser.parse_args(['sync', '100'])
@@ -95,7 +95,7 @@ class TestRunCommand(unittest.TestCase):
         mock_sync.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('pergit.cli.edit_command', return_value=0)
+    @mock.patch('git_p4son.cli.edit_command', return_value=0)
     def test_dispatches_edit(self, mock_edit):
         parser = create_parser()
         args = parser.parse_args(['edit', '100'])
@@ -103,7 +103,7 @@ class TestRunCommand(unittest.TestCase):
         mock_edit.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('pergit.cli.changelist_command', return_value=0)
+    @mock.patch('git_p4son.cli.changelist_command', return_value=0)
     def test_dispatches_changelist(self, mock_cl):
         parser = create_parser()
         args = parser.parse_args(['changelist', 'new', '-m', 'msg'])
@@ -111,7 +111,7 @@ class TestRunCommand(unittest.TestCase):
         mock_cl.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('pergit.cli.list_changes_command', return_value=0)
+    @mock.patch('git_p4son.cli.list_changes_command', return_value=0)
     def test_dispatches_list_changes(self, mock_lc):
         parser = create_parser()
         args = parser.parse_args(['list-changes'])
@@ -119,7 +119,7 @@ class TestRunCommand(unittest.TestCase):
         mock_lc.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('pergit.cli.review_command', return_value=0)
+    @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_dispatches_review(self, mock_review):
         parser = create_parser()
         args = parser.parse_args(['review', 'new', '-m', 'msg'])

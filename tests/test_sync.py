@@ -1,10 +1,10 @@
-"""Tests for pergit.sync module."""
+"""Tests for git_p4son.sync module."""
 
 import sys
 import unittest
 from unittest import mock
 
-from pergit.sync import (
+from git_p4son.sync import (
     P4SyncOutputProcessor,
     echo_output_to_stream,
     get_file_count_to_sync,
@@ -68,62 +68,62 @@ class TestGetWritableFiles(unittest.TestCase):
 
 
 class TestGitIsWorkspaceClean(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_clean_workspace(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
         self.assertTrue(git_is_workspace_clean('/ws'))
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_dirty_workspace(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=['M file.txt'])
         self.assertFalse(git_is_workspace_clean('/ws'))
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_command_failure(self, mock_rwo):
         mock_rwo.return_value = make_run_result(returncode=1)
         self.assertFalse(git_is_workspace_clean('/ws'))
 
 
 class TestP4IsWorkspaceClean(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_clean(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
         self.assertTrue(p4_is_workspace_clean('/ws'))
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_dirty(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - edit default change (text)'
         ])
         self.assertFalse(p4_is_workspace_clean('/ws'))
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_command_failure(self, mock_rwo):
         mock_rwo.return_value = make_run_result(returncode=1)
         self.assertFalse(p4_is_workspace_clean('/ws'))
 
 
 class TestGitAddAllFiles(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_success(self, mock_rwo):
         mock_rwo.return_value = make_run_result()
         self.assertTrue(git_add_all_files('/ws'))
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_failure(self, mock_rwo):
         mock_rwo.return_value = make_run_result(returncode=1)
         self.assertFalse(git_add_all_files('/ws'))
 
 
 class TestGitCommit(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_success(self, mock_rwo):
         mock_rwo.return_value = make_run_result()
         self.assertTrue(git_commit('msg', '/ws'))
         cmd = mock_rwo.call_args[0][0]
         self.assertEqual(cmd, ['git', 'commit', '-m', 'msg'])
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_allow_empty(self, mock_rwo):
         mock_rwo.return_value = make_run_result()
         git_commit('msg', '/ws', allow_empty=True)
@@ -132,15 +132,31 @@ class TestGitCommit(unittest.TestCase):
 
 
 class TestGitChangelistOfLastCommit(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
-    def test_extracts_changelist(self, mock_rwo):
+    @mock.patch('git_p4son.sync.run_with_output')
+    def test_extracts_changelist_nr(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '12345: p4 sync //...@12345'
+        ])
+        result = git_changelist_of_last_commit('/ws')
+        self.assertEqual(result, 12345)
+
+    @mock.patch('git_p4son.sync.run_with_output')
+    def test_extracts_changelist_pergit(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             'pergit: p4 sync //...@12345'
         ])
         result = git_changelist_of_last_commit('/ws')
         self.assertEqual(result, 12345)
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
+    def test_extracts_changelist_git_p4son(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            'git-p4son: p4 sync //...@12345'
+        ])
+        result = git_changelist_of_last_commit('/ws')
+        self.assertEqual(result, 12345)
+
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_extracts_changelist_fail(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             'pergot: p4 sync //...@12345'
@@ -148,7 +164,7 @@ class TestGitChangelistOfLastCommit(unittest.TestCase):
         result = git_changelist_of_last_commit('/ws')
         self.assertEqual(result, None)
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_no_match(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '"some other commit message"'
@@ -156,13 +172,13 @@ class TestGitChangelistOfLastCommit(unittest.TestCase):
         result = git_changelist_of_last_commit('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_empty_output(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
         result = git_changelist_of_last_commit('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('pergit.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run_with_output')
     def test_command_failure(self, mock_rwo):
         mock_rwo.return_value = make_run_result(returncode=1)
         result = git_changelist_of_last_commit('/ws')
@@ -170,7 +186,7 @@ class TestGitChangelistOfLastCommit(unittest.TestCase):
 
 
 class TestGetLatestChangelistAffectingWorkspace(unittest.TestCase):
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_success(self, mock_run):
         mock_run.side_effect = [
             make_run_result(stdout=['Client name: myclient', 'other: info']),
@@ -182,14 +198,14 @@ class TestGetLatestChangelistAffectingWorkspace(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(cl, 54321)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_p4_info_failure(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
         rc, cl = get_latest_changelist_affecting_workspace('/ws')
         self.assertNotEqual(rc, 0)
         self.assertIsNone(cl)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_no_client_name(self, mock_run):
         mock_run.side_effect = [
             make_run_result(stdout=['Server: perforce:1666']),
@@ -198,7 +214,7 @@ class TestGetLatestChangelistAffectingWorkspace(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIsNone(cl)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_no_changes_found(self, mock_run):
         mock_run.side_effect = [
             make_run_result(stdout=['Client name: myclient']),
@@ -209,7 +225,7 @@ class TestGetLatestChangelistAffectingWorkspace(unittest.TestCase):
 
 
 class TestGetFileCountToSync(unittest.TestCase):
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_returns_count(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
             '//depot/a.txt - added',
@@ -218,7 +234,7 @@ class TestGetFileCountToSync(unittest.TestCase):
         count = get_file_count_to_sync(12345, '/ws')
         self.assertEqual(count, 2)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_failure_returns_negative(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
         count = get_file_count_to_sync(12345, '/ws')
@@ -244,21 +260,21 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
 
 
 class TestP4Sync(unittest.TestCase):
-    @mock.patch('pergit.sync.run_with_output')
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.sync.run')
     def test_success(self, mock_run, mock_rwo):
         mock_run.return_value = make_run_result(stdout=['file1', 'file2'])
         mock_rwo.return_value = make_run_result()
         result = p4_sync(12345, False, '/ws')
         self.assertTrue(result)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_up_to_date(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
         result = p4_sync(12345, False, '/ws')
         self.assertTrue(result)
 
-    @mock.patch('pergit.sync.run')
+    @mock.patch('git_p4son.sync.run')
     def test_count_failure(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1)
         result = p4_sync(12345, False, '/ws')
@@ -266,14 +282,14 @@ class TestP4Sync(unittest.TestCase):
 
 
 class TestSyncCommand(unittest.TestCase):
-    @mock.patch('pergit.sync.git_commit', return_value=True)
-    @mock.patch('pergit.sync.git_add_all_files', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean')
-    @mock.patch('pergit.sync.resolve_changelist', return_value='12345')
-    @mock.patch('pergit.sync.p4_sync', return_value=True)
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=10000)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.git_commit', return_value=True)
+    @mock.patch('git_p4son.sync.git_add_all_files', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean')
+    @mock.patch('git_p4son.sync.resolve_changelist', return_value='12345')
+    @mock.patch('git_p4son.sync.p4_sync', return_value=True)
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=10000)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_sync_specific_cl(self, _ws, _p4clean, _last_cl, _p4sync,
                               _resolve, mock_git_clean, _git_add, _git_commit):
         # First call: initial check (clean), second call: after sync (dirty -> add files)
@@ -282,40 +298,40 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
-    @mock.patch('pergit.sync.git_is_workspace_clean', return_value=False)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=False)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_dirty_git_workspace_aborts(self, _ws, _git_clean):
         args = mock.Mock(changelist='100', force=False)
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('pergit.sync.resolve_changelist', return_value='100')
-    @mock.patch('pergit.sync.git_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=False)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
+    @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=False)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_dirty_p4_workspace_aborts(self, _ws, _p4clean, _git_clean, _resolve):
         args = mock.Mock(changelist='100', force=False)
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('pergit.sync.resolve_changelist', return_value='100')
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=200)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=200)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_older_cl_without_force_aborts(self, _ws, _git_clean, _p4clean, _last_cl, _resolve):
         args = mock.Mock(changelist='100', force=False)
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('pergit.sync.resolve_changelist', return_value='100')
-    @mock.patch('pergit.sync.git_commit', return_value=True)
-    @mock.patch('pergit.sync.git_add_all_files', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean')
-    @mock.patch('pergit.sync.p4_sync', return_value=True)
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=200)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
+    @mock.patch('git_p4son.sync.git_commit', return_value=True)
+    @mock.patch('git_p4son.sync.git_add_all_files', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean')
+    @mock.patch('git_p4son.sync.p4_sync', return_value=True)
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=200)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_older_cl_with_force_proceeds(self, _ws, _p4clean, _last_cl,
                                           _p4sync, mock_git_clean, _add, _commit, _resolve):
         mock_git_clean.side_effect = [True, False]
@@ -323,35 +339,35 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
-    @mock.patch('pergit.sync.resolve_changelist', return_value='100')
-    @mock.patch('pergit.sync.p4_sync', return_value=True)
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=100)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
+    @mock.patch('git_p4son.sync.p4_sync', return_value=True)
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=100)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_same_cl_is_noop(self, _ws, _git_clean, _p4clean, _last_cl, _p4sync, _resolve):
         args = mock.Mock(changelist='100', force=False)
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
-    @mock.patch('pergit.sync.p4_sync', return_value=True)
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=100)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.p4_sync', return_value=True)
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=100)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_last_synced(self, _ws, _git_clean, _p4clean, _last_cl, mock_p4sync):
         args = mock.Mock(changelist='last-synced', force=False)
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_called_once_with(100, False, '/ws')
 
-    @mock.patch('pergit.sync.get_latest_changelist_affecting_workspace')
-    @mock.patch('pergit.sync.git_commit', return_value=True)
-    @mock.patch('pergit.sync.git_is_workspace_clean')
-    @mock.patch('pergit.sync.p4_sync', return_value=True)
-    @mock.patch('pergit.sync.git_changelist_of_last_commit', return_value=100)
-    @mock.patch('pergit.sync.p4_is_workspace_clean', return_value=True)
-    @mock.patch('pergit.sync.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.sync.get_latest_changelist_affecting_workspace')
+    @mock.patch('git_p4son.sync.git_commit', return_value=True)
+    @mock.patch('git_p4son.sync.git_is_workspace_clean')
+    @mock.patch('git_p4son.sync.p4_sync', return_value=True)
+    @mock.patch('git_p4son.sync.git_changelist_of_last_commit', return_value=100)
+    @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
+    @mock.patch('git_p4son.sync.ensure_workspace', return_value='/ws')
     def test_latest_keyword(self, _ws, _p4clean, _last_cl, _p4sync,
                             mock_git_clean, _commit, mock_get_latest):
         mock_get_latest.return_value = (0, 200)

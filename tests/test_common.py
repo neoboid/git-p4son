@@ -1,4 +1,4 @@
-"""Tests for pergit.common module."""
+"""Tests for git_p4son.common module."""
 
 import os
 import subprocess
@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from pergit.common import (
+from git_p4son.common import (
     RunResult,
     get_workspace_dir,
     is_workspace_dir,

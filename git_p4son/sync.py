@@ -1,5 +1,5 @@
 """
-Sync command implementation for pergit.
+Sync command implementation for git-p4son.
 """
 
 import argparse
@@ -226,7 +226,7 @@ def git_changelist_of_last_commit(workspace_dir: str) -> int | None:
         return None
 
     msg = res.stdout[0]
-    pattern = r"pergit: p4 sync //\.\.\.@(\d+)"
+    pattern = r"^(\d+|pergit|git-p4son): p4 sync //\.\.\.@(\d+)$"
     match = re.search(pattern, msg)
     if match:
         return int(match.group(1))
@@ -368,7 +368,7 @@ def sync_command(args: argparse.Namespace) -> int:
             return 1
         print('')
 
-    commit_msg = 'pergit: p4 sync //...@%s' % (args.changelist)
+    commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)
     if not git_commit(commit_msg, workspace_dir, allow_empty=True):
         print('Failed to commit files to git')
         return 1

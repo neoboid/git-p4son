@@ -1,5 +1,5 @@
 """
-Main CLI entry point for pergit.
+Main CLI entry point for git-p4son.
 """
 
 import argparse
@@ -16,31 +16,31 @@ from .review import review_command
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
-        prog='pergit',
+        prog='git-p4son',
         description='Utility for keeping a Perforce workspace and local git repo in sync',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  pergit sync 12345          # Sync with changelist 12345
-  pergit sync latest         # Sync with the latest changelist affecting the workspace
-  pergit sync last-synced    # Re-sync the last synced changelist
-  pergit sync 12345 --force  # Force sync with writable files and allow older changelists
-  pergit edit 12345          # Open git changes for edit in changelist 12345
-  pergit edit 12345 --dry-run # Preview what would be opened for edit
-  pergit changelist new -m "Fix bug" # Create new changelist with description
-  pergit changelist new -m "Fix bug" -b main # Create changelist with commits since main
-  pergit changelist update 12345 -b main # Update CL 12345 commit list
-  pergit list-changes        # List commit subjects since HEAD~1
-  pergit list-changes --base-branch main # List commit subjects since main branch
-  pergit review new          # Create new changelist and Swarm review
-  pergit review update 12345 # Update existing changelist and Swarm review
+  git-p4son sync 12345          # Sync with changelist 12345
+  git-p4son sync latest         # Sync with the latest changelist affecting the workspace
+  git-p4son sync last-synced    # Re-sync the last synced changelist
+  git-p4son sync 12345 --force  # Force sync with writable files and allow older changelists
+  git-p4son edit 12345          # Open git changes for edit in changelist 12345
+  git-p4son edit 12345 --dry-run # Preview what would be opened for edit
+  git-p4son changelist new -m "Fix bug" # Create new changelist with description
+  git-p4son changelist new -m "Fix bug" -b main # Create changelist with commits since main
+  git-p4son changelist update 12345 -b main # Update CL 12345 commit list
+  git-p4son list-changes        # List commit subjects since HEAD~1
+  git-p4son list-changes --base-branch main # List commit subjects since main branch
+  git-p4son review new          # Create new changelist and Swarm review
+  git-p4son review update 12345 # Update existing changelist and Swarm review
         """
     )
 
     parser.add_argument(
         '--version',
         action='version',
-        version=f'pergit {__version__}'
+        version=f'git-p4son {__version__}'
     )
 
     parser.add_argument(
@@ -149,7 +149,7 @@ Examples:
         'set',
         help='Save a changelist number under a named alias',
         description='Save a changelist number under a named alias in '
-        '.pergit/changelists/<alias>.'
+        '.git-p4son/changelists/<alias>.'
     )
     changelist_set_parser.add_argument(
         'changelist',

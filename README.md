@@ -1,4 +1,4 @@
-# pergit
+# git-p4son
 
 A tool for managing a local git repository within a Perforce workspace.
 
@@ -11,39 +11,39 @@ that help out with the repetitive and error prone stuff.
 
 ## Installation
 
-Currently, pergit must be installed from source. Clone the repository and install:
+Currently, git-p4son must be installed from source. Clone the repository and install:
 
 ```sh
-git clone https://github.com/derwiath/pergit.git
-cd pergit
+git clone https://github.com/derwiath/git-p4son.git
+cd git-p4son
 pip install .
 ```
 
 Or install in development mode:
 
 ```sh
-git clone https://github.com/derwiath/pergit.git
-cd pergit
+git clone https://github.com/derwiath/git-p4son.git
+cd git-p4son
 pip install -e .
 ```
 
 ## Development
 
-To contribute to pergit or modify it for your needs, you can install it in development mode:
+To contribute to git-p4son or modify it for your needs, you can install it in development mode:
 
 ```sh
-git clone https://github.com/derwiath/pergit.git
-cd pergit
+git clone https://github.com/derwiath/git-p4son.git
+cd git-p4son
 pip install -e .
 ```
 
 The `-e` flag installs the package in "editable" mode. Which means that changes
-to the code are immediately available and `pergit` can be tested right
+to the code are immediately available and `git-p4son` can be tested right
 away without reinstalling.
 
 ### Development Requirements
 
-pergit only uses Python standard library modules, no additional packages are required.
+git-p4son only uses Python standard library modules, no additional packages are required.
 
 ## Setup
 
@@ -73,14 +73,14 @@ git commit -m "Initial commit for CL 123"
 
 ## Usage
 
-pergit provides three main commands: `sync`, `edit`, and `list-changes`.
+git-p4son provides three main commands: `sync`, `edit`, and `list-changes`.
 
 ### Sync Command
 
 Sync local git repository with a Perforce workspace:
 
 ```sh
-pergit sync <changelist> [--force]
+git-p4son sync <changelist> [--force]
 ```
 
 **Arguments:**
@@ -93,10 +93,10 @@ pergit sync <changelist> [--force]
 
 **Examples:**
 ```sh
-pergit sync 12345
-pergit sync latest
-pergit sync last-synced
-pergit sync 12345 --force
+git-p4son sync 12345
+git-p4son sync latest
+git-p4son sync last-synced
+git-p4son sync 12345 --force
 ```
 
 ### Edit Command
@@ -104,7 +104,7 @@ pergit sync 12345 --force
 Find files that have changed between your current git `HEAD` and the base branch, and open them for edit in Perforce:
 
 ```sh
-pergit edit <changelist> [--base-branch BASE_BRANCH] [--dry-run]
+git-p4son edit <changelist> [--base-branch BASE_BRANCH] [--dry-run]
 ```
 
 **Arguments:**
@@ -116,9 +116,9 @@ pergit edit <changelist> [--base-branch BASE_BRANCH] [--dry-run]
 
 **Examples:**
 ```sh
-pergit edit 12345
-pergit edit 12345 --base-branch main
-pergit edit 12345 --dry-run
+git-p4son edit 12345
+git-p4son edit 12345 --base-branch main
+git-p4son edit 12345 --dry-run
 ```
 
 ### List-Changes Command
@@ -126,7 +126,7 @@ pergit edit 12345 --dry-run
 List commit subjects since a base branch in chronological order (oldest first):
 
 ```sh
-pergit list-changes [--base-branch BASE_BRANCH]
+git-p4son list-changes [--base-branch BASE_BRANCH]
 ```
 
 **Options:**
@@ -134,20 +134,20 @@ pergit list-changes [--base-branch BASE_BRANCH]
 
 **Examples:**
 ```sh
-pergit list-changes
-pergit list-changes --base-branch main
+git-p4son list-changes
+git-p4son list-changes --base-branch main
 ```
 
 This command is useful for generating changelist descriptions by listing all commit messages since the base branch, numbered sequentially.
 
 ## Usage Example
 
-Here's a typical workflow using pergit:
+Here's a typical workflow using git-p4son:
 
 ```sh
 # Sync main with new changes from perforce, CL 124
 git checkout main
-pergit sync 124
+git-p4son sync 124
 
 # Start work on a new feature
 git checkout -b my-fancy-feature
@@ -158,7 +158,7 @@ git commit -m "Feature part1"
 
 # Sync to the latest changelist affecting the workspace
 git checkout main
-pergit sync latest
+git-p4son sync latest
 
 # Rebase your changes on main
 git checkout my-fancy-feature
@@ -169,17 +169,17 @@ git add .
 git commit -m "Feature part2"
 
 # List all commit messages since main branch (useful for changelist description)
-pergit list-changes --base-branch main
+git-p4son list-changes --base-branch main
 
 # Open all edited files on your feature branch (compared to main) for edit in perforce
 # Store all files in changelist 126
-pergit edit 126 --base-branch main
+git-p4son edit 126 --base-branch main
 
 # Swap over to p4v and submit as CL 126
 
 # Sync to the latest changelist from perforce
 git checkout main
-pergit sync latest
+git-p4son sync latest
 
 # Remove old branch as you don't need it anymore
 git branch -D my-fancy-feature

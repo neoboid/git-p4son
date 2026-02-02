@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pergit is a Python CLI tool that bridges Perforce (P4) and Git. It maintains a local git repository within a Perforce workspace, keeping a `main` branch in sync with the Perforce depot while supporting feature branches for local development.
+git-p4son is a Python CLI tool that bridges Perforce (P4) and Git. It maintains a local git repository within a Perforce workspace, keeping a `main` branch in sync with the Perforce depot while supporting feature branches for local development.
 
 ## Development Commands
 
@@ -13,8 +13,8 @@ Pergit is a Python CLI tool that bridges Perforce (P4) and Git. It maintains a l
 pip install -e .
 
 # Run the tool
-pergit [command] [options]
-python -m pergit [command] [options]
+git-p4son [command] [options]
+python -m git_p4son [command] [options]
 ```
 
 There are no tests, linters, or CI configured. The project has zero external dependencies (standard library only). Python 3.7+ is required.

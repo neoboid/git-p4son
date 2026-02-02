@@ -1,6 +1,6 @@
-"""Shared test helpers for pergit tests."""
+"""Shared test helpers for git_p4son tests."""
 
-from pergit.common import RunResult
+from git_p4son.common import RunResult
 
 
 def make_run_result(returncode=0, stdout=None, stderr=None):
@@ -26,7 +26,7 @@ class MockRunDispatcher:
             ('p4', 'info'): make_run_result(stdout=['Client name: myclient']),
             ('git', 'status'): make_run_result(stdout=[]),
         })
-        with mock.patch('pergit.common.run', side_effect=dispatcher):
+        with mock.patch('git_p4son.common.run', side_effect=dispatcher):
             ...
 
     Commands are matched by tuple prefix: ('p4', 'info') matches

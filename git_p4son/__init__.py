@@ -1,5 +1,5 @@
 """
-Pergit - Utility for keeping a Perforce workspace and local git repo in sync.
+git-p4son - Utility for keeping a Perforce workspace and local git repo in sync.
 
 This package provides two main commands:
 - sync: Sync local git repository with a Perforce workspace

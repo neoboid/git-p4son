@@ -1,5 +1,5 @@
 """
-List-changes command implementation for pergit.
+List-changes command implementation for git-p4son.
 """
 
 import argparse

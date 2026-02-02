@@ -1,7 +1,7 @@
 """
-Changelist alias utilities for pergit.
+Changelist alias utilities for git-p4son.
 
-Stores named aliases for changelist numbers in .pergit/changelists/<name>.
+Stores named aliases for changelist numbers in .git-p4son/changelists/<name>.
 """
 
 import os
@@ -10,15 +10,15 @@ import sys
 
 def _changelists_dir(workspace_dir: str) -> str:
     """Return the path to the changelists alias directory."""
-    return os.path.join(workspace_dir, '.pergit', 'changelists')
+    return os.path.join(workspace_dir, '.git-p4son', 'changelists')
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """
     Save a changelist number under a named alias.
 
-    Creates .pergit/changelists/ directory if needed and writes the
-    changelist number to .pergit/changelists/<name>.
+    Creates .git-p4son/changelists/ directory if needed and writes the
+    changelist number to .git-p4son/changelists/<name>.
 
     Args:
         name: The alias name

@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pergit"
+name = "git-p4son"
 version = "1.0.0"
 description = "Utility for keeping a Perforce workspace and local git repo in sync"
 readme = "README.md"
@@ -24,9 +24,9 @@ classifiers = [
 ]
 
 [project.scripts]
-pergit = "pergit.cli:main"
+git-p4son = "git_p4son.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/derwiath/pergit"
-Repository = "https://github.com/derwiath/pergit"
-Issues = "https://github.com/derwiath/pergit/issues"
+Homepage = "https://github.com/derwiath/git-p4son"
+Repository = "https://github.com/derwiath/git-p4son"
+Issues = "https://github.com/derwiath/git-p4son/issues"

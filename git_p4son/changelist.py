@@ -1,5 +1,5 @@
 """
-Changelist command implementation for pergit.
+Changelist command implementation for git-p4son.
 """
 
 import argparse
@@ -294,7 +294,7 @@ def changelist_new_command(args: argparse.Namespace) -> int:
     # Check alias availability before creating the changelist
     if args.alias and not args.dry_run:
         alias_path = os.path.join(
-            workspace_dir, '.pergit', 'changelists', args.alias)
+            workspace_dir, '.git-p4son', 'changelists', args.alias)
         if os.path.exists(alias_path) and not args.force:
             print(f'Alias "{args.alias}" already exists (use -f/--force to overwrite)',
                   file=sys.stderr)
@@ -384,6 +384,6 @@ def changelist_command(args: argparse.Namespace) -> int:
     elif args.changelist_action == 'set':
         return changelist_set_command(args)
     else:
-        print('No changelist action specified. Use "pergit changelist -h" for help.',
+        print('No changelist action specified. Use "git-p4son changelist -h" for help.',
               file=sys.stderr)
         return 1

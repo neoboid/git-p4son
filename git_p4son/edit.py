@@ -1,5 +1,5 @@
 """
-Edit command implementation for pergit.
+Edit command implementation for git-p4son.
 """
 
 import argparse

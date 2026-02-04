@@ -125,6 +125,14 @@ function _GitP4sonCompleter {
                             $f, $f, 'ParameterName', $f)
                     }
                 }
+            } else {
+                # Optional alias name for the new changelist
+                foreach ($a in (_GitP4sonGetAliases)) {
+                    if ($a -like "$wordToComplete*") {
+                        $completions += [System.Management.Automation.CompletionResult]::new(
+                            $a, $a, 'ParameterValue', "Alias: $a")
+                    }
+                }
             }
         }
         'update' {

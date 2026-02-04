@@ -45,10 +45,17 @@ function _GitP4sonCompleter {
         }
     }
 
-    # Count positional args after command (excluding the word being completed and flags)
+    # Count positional args after command (excluding the word being completed and flags).
+    # When wordToComplete is non-empty, it is always the last element in argsAfterCommand,
+    # so we skip the last element by position rather than matching by value to avoid
+    # miscounting when duplicate values appear.
+    $argsToCount = $argsAfterCommand
+    if ($wordToComplete -ne '' -and $argsToCount.Count -gt 0) {
+        $argsToCount = @($argsToCount | Select-Object -SkipLast 1)
+    }
     $positionals = @()
-    foreach ($arg in $argsAfterCommand) {
-        if ($arg -ne $wordToComplete -and $arg -notmatch '^-') {
+    foreach ($arg in $argsToCount) {
+        if ($arg -notmatch '^-') {
             $positionals += $arg
         }
     }

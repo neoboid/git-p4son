@@ -1,18 +1,15 @@
-"""Tests for git_p4son.changelist module."""
+"""Tests for changelist functions in git_p4son.lib module."""
 
 import unittest
 from unittest import mock
 
-from git_p4son.changelist import (
+from git_p4son.lib import (
     create_changelist,
     extract_description,
     get_changelist_spec,
     replace_description_in_spec,
     split_description_message_and_commits,
     update_changelist,
-    changelist_new_command,
-    changelist_update_command,
-    changelist_command,
 )
 from tests.helpers import make_run_result
 
@@ -112,8 +109,8 @@ class TestSplitDescriptionMessageAndCommits(unittest.TestCase):
 
 
 class TestCreateChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.subprocess.run')
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
     def test_creates_changelist(self, mock_get_desc, mock_subprocess):
         mock_get_desc.return_value = (0, '1. Add feature\n2. Fix bug')
         mock_subprocess.return_value = mock.Mock(
@@ -131,8 +128,8 @@ class TestCreateChangelist(unittest.TestCase):
         self.assertIn('My message', spec_input)
         self.assertIn('1. Add feature', spec_input)
 
-    @mock.patch('git_p4son.changelist.subprocess.run')
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
     def test_no_commits(self, mock_get_desc, mock_subprocess):
         mock_get_desc.return_value = (0, None)
         mock_subprocess.return_value = mock.Mock(
@@ -144,15 +141,15 @@ class TestCreateChangelist(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(cl_num, '100')
 
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
     def test_dry_run(self, mock_get_desc):
         mock_get_desc.return_value = (0, '1. Commit')
         rc, cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
         self.assertEqual(rc, 0)
         self.assertIsNone(cl_num)
 
-    @mock.patch('git_p4son.changelist.subprocess.run')
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
     def test_p4_failure(self, mock_get_desc, mock_subprocess):
         mock_get_desc.return_value = (0, '1. Commit')
         mock_subprocess.return_value = mock.Mock(
@@ -166,7 +163,7 @@ class TestCreateChangelist(unittest.TestCase):
 
 
 class TestGetChangelistSpec(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.subprocess.run')
+    @mock.patch('git_p4son.lib.subprocess.run')
     def test_success(self, mock_subprocess):
         mock_subprocess.return_value = mock.Mock(
             returncode=0,
@@ -177,7 +174,7 @@ class TestGetChangelistSpec(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(spec, SAMPLE_SPEC)
 
-    @mock.patch('git_p4son.changelist.subprocess.run')
+    @mock.patch('git_p4son.lib.subprocess.run')
     def test_failure(self, mock_subprocess):
         mock_subprocess.return_value = mock.Mock(
             returncode=1,
@@ -190,9 +187,9 @@ class TestGetChangelistSpec(unittest.TestCase):
 
 
 class TestUpdateChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.subprocess.run')
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
-    @mock.patch('git_p4son.changelist.get_changelist_spec')
+    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_updates_commit_list(self, mock_get_spec, mock_get_desc, mock_subprocess):
         mock_get_spec.return_value = (0, SAMPLE_SPEC)
         mock_get_desc.return_value = (0, '1. New commit A\n2. New commit B')
@@ -211,58 +208,13 @@ class TestUpdateChangelist(unittest.TestCase):
         # user message preserved
         self.assertIn('Fix the login bug', spec_input)
 
-    @mock.patch('git_p4son.changelist.get_enumerated_change_description_since')
-    @mock.patch('git_p4son.changelist.get_changelist_spec')
+    @mock.patch('git_p4son.lib.get_enumerated_change_description_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_dry_run(self, mock_get_spec, mock_get_desc):
         mock_get_spec.return_value = (0, SAMPLE_SPEC)
         mock_get_desc.return_value = (0, '1. New commit')
         rc = update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
         self.assertEqual(rc, 0)
-
-
-class TestChangelistNewCommand(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.ensure_workspace', return_value='/ws')
-    @mock.patch('git_p4son.changelist.create_changelist', return_value=(0, '500'))
-    def test_success(self, mock_create, _mock_ws):
-        args = mock.Mock(message='msg', base_branch='HEAD~1', dry_run=False,
-                         alias=None, force=False)
-        rc = changelist_new_command(args)
-        self.assertEqual(rc, 0)
-        mock_create.assert_called_once_with(
-            'msg', 'HEAD~1', '/ws', dry_run=False)
-
-
-class TestChangelistUpdateCommand(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.ensure_workspace', return_value='/ws')
-    @mock.patch('git_p4son.changelist.update_changelist', return_value=0)
-    @mock.patch('git_p4son.changelist.resolve_changelist', return_value='500')
-    def test_success(self, _mock_resolve, mock_update, _mock_ws):
-        args = mock.Mock(changelist='500', base_branch='HEAD~1', dry_run=False)
-        rc = changelist_update_command(args)
-        self.assertEqual(rc, 0)
-        mock_update.assert_called_once_with(
-            '500', 'HEAD~1', '/ws', dry_run=False)
-
-
-class TestChangelistCommand(unittest.TestCase):
-    @mock.patch('git_p4son.changelist.changelist_new_command', return_value=0)
-    def test_dispatches_new(self, mock_new):
-        args = mock.Mock(changelist_action='new')
-        rc = changelist_command(args)
-        self.assertEqual(rc, 0)
-        mock_new.assert_called_once()
-
-    @mock.patch('git_p4son.changelist.changelist_update_command', return_value=0)
-    def test_dispatches_update(self, mock_update):
-        args = mock.Mock(changelist_action='update')
-        rc = changelist_command(args)
-        self.assertEqual(rc, 0)
-        mock_update.assert_called_once()
-
-    def test_no_action(self):
-        args = mock.Mock(changelist_action=None)
-        rc = changelist_command(args)
-        self.assertEqual(rc, 1)
 
 
 if __name__ == '__main__':

@@ -7,10 +7,9 @@ import sys
 import time
 from . import __version__
 from .sync import sync_command
-from .edit import edit_command
-from .changelist import changelist_command
+from .new import new_command
+from .update import update_command
 from .list_changes import list_changes_command
-from .review import review_command
 from .alias import alias_command
 
 
@@ -26,15 +25,13 @@ Examples:
   git-p4son sync latest         # Sync with the latest changelist affecting the workspace
   git-p4son sync last-synced    # Re-sync the last synced changelist
   git-p4son sync 12345 --force  # Force sync with writable files and allow older changelists
-  git-p4son edit 12345          # Open git changes for edit in changelist 12345
-  git-p4son edit 12345 --dry-run # Preview what would be opened for edit
-  git-p4son changelist new -m "Fix bug" # Create new changelist with description
-  git-p4son changelist new -m "Fix bug" -b main # Create changelist with commits since main
-  git-p4son changelist update 12345 -b main # Update CL 12345 commit list
+  git-p4son new -m "Fix bug"    # Create changelist, open files for edit
+  git-p4son new -m "Fix bug" --review  # Create changelist, open files, create Swarm review
+  git-p4son new -m "Fix bug" --no-edit # Create changelist only, don't open files
+  git-p4son update 12345        # Update changelist description and open files for edit
+  git-p4son update myalias --shelve    # Update changelist and re-shelve
   git-p4son list-changes        # List commit subjects since HEAD~1
   git-p4son list-changes --base-branch main # List commit subjects since main branch
-  git-p4son review new          # Create new changelist and Swarm review
-  git-p4son review update 12345 # Update existing changelist and Swarm review
         """
     )
 
@@ -74,98 +71,87 @@ Examples:
              'syncing to changelists older than the current one.'
     )
 
-    # Edit subcommand
-    edit_parser = subparsers.add_parser(
-        'edit',
-        help='Open local git changes for edit in Perforce',
-        description='Find files that have changed and open for edit in p4. '
-        'Finds common ancestor between base-branch and current branch, then opens '
-        'files that changed on base branch but not on current branch.'
-    )
-    edit_parser.add_argument(
-        'changelist',
-        help='Changelist number or named alias to update'
-    )
-    edit_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch where p4 and git are in sync. Finds common ancestor with '
-             'current branch and opens files that changed on base branch but not on '
-             'current branch. Default is HEAD~1'
-    )
-    edit_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Pretend and print all commands, but do not execute'
-    )
-
-    # Changelist subcommand
-    changelist_parser = subparsers.add_parser(
-        'changelist',
-        help='Manage Perforce changelists',
-        description='Manage Perforce changelists.'
-    )
-    changelist_subparsers = changelist_parser.add_subparsers(
-        dest='changelist_action',
-        help='Available changelist actions',
-        metavar='ACTION'
-    )
-
-    # changelist new
-    changelist_new_parser = changelist_subparsers.add_parser(
+    # New subcommand
+    new_parser = subparsers.add_parser(
         'new',
-        help='Create a new Perforce changelist',
+        help='Create a new changelist, open files for edit, and optionally create a Swarm review',
         description='Create a new Perforce changelist with a description and '
-        'enumerated git commits since the base branch.'
+        'enumerated git commits since the base branch. By default also opens '
+        'changed files for edit in the changelist.'
     )
-    changelist_new_parser.add_argument(
+    new_parser.add_argument(
         '-m', '--message',
         required=True,
         help='Changelist description message'
     )
-    changelist_new_parser.add_argument(
+    new_parser.add_argument(
         '-b', '--base-branch',
         default='HEAD~1',
-        help='Base branch for enumerating commits. Default is HEAD~1'
+        help='Base branch for enumerating commits and finding changed files. Default is HEAD~1'
     )
-    changelist_new_parser.add_argument(
+    new_parser.add_argument(
         'alias',
         nargs='?',
         default=None,
         help='Optional alias name to save the new changelist number under'
     )
-    changelist_new_parser.add_argument(
+    new_parser.add_argument(
         '-f', '--force',
         action='store_true',
         help='Overwrite an existing alias file'
     )
-    changelist_new_parser.add_argument(
+    new_parser.add_argument(
         '-n', '--dry-run',
         action='store_true',
-        help='Pretend and print what would be created, but do not execute'
+        help='Pretend and print what would be done, but do not execute'
+    )
+    new_parser.add_argument(
+        '--no-edit',
+        action='store_true',
+        help='Skip opening changed files for edit in Perforce'
+    )
+    new_parser.add_argument(
+        '--shelve',
+        action='store_true',
+        help='Shelve the changelist after creating it'
+    )
+    new_parser.add_argument(
+        '--review',
+        action='store_true',
+        help='Add #review keyword and shelve to create a Swarm review'
     )
 
-    # changelist update
-    changelist_update_parser = changelist_subparsers.add_parser(
+    # Update subcommand
+    update_parser = subparsers.add_parser(
         'update',
-        help='Update the commit list in an existing changelist',
+        help='Update an existing changelist description and open files for edit',
         description='Update an existing Perforce changelist description by '
         'replacing the enumerated commit list with the current commits '
-        'since the base branch. The user message is preserved.'
+        'since the base branch. By default also opens changed files for edit.'
     )
-    changelist_update_parser.add_argument(
+    update_parser.add_argument(
         'changelist',
         help='Changelist number or named alias to update'
     )
-    changelist_update_parser.add_argument(
+    update_parser.add_argument(
         '-b', '--base-branch',
         default='HEAD~1',
-        help='Base branch for enumerating commits. Default is HEAD~1'
+        help='Base branch for enumerating commits and finding changed files. Default is HEAD~1'
     )
-    changelist_update_parser.add_argument(
+    update_parser.add_argument(
         '-n', '--dry-run',
         action='store_true',
-        help='Pretend and print what would be updated, but do not execute'
+        help='Pretend and print what would be done, but do not execute'
+    )
+    update_parser.add_argument(
+        '--no-edit',
+        action='store_true',
+        help='Skip opening changed files for edit in Perforce'
+    )
+    update_parser.add_argument(
+        '--shelve',
+        action='store_true',
+        help='Re-shelve the changelist after updating'
     )
 
     # List-changes subcommand
@@ -178,81 +164,6 @@ Examples:
         '-b', '--base-branch',
         default='HEAD~1',
         help='Base branch to compare against. Default is HEAD~1'
-    )
-
-    # Review subcommand
-    review_parser = subparsers.add_parser(
-        'review',
-        help='Create or update Swarm reviews',
-        description='Create new Swarm reviews or update existing ones with git changes'
-    )
-    review_subparsers = review_parser.add_subparsers(
-        dest='review_action',
-        help='Available review actions',
-        metavar='ACTION'
-    )
-
-    # Review new subcommand
-    review_new_parser = review_subparsers.add_parser(
-        'new',
-        help='Create new changelist and Swarm review',
-        description='Create a new changelist with changes since base branch and create a Swarm review'
-    )
-    review_new_parser.add_argument(
-        '-m', '--message',
-        required=True,
-        help='Changelist description message'
-    )
-    review_new_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch where p4 and git are in sync. Finds common ancestor with '
-             'current branch and includes files that changed on base branch but not on '
-             'current branch. Default is HEAD~1'
-    )
-    review_new_parser.add_argument(
-        'alias',
-        nargs='?',
-        default=None,
-        help='Optional alias name to save the new changelist number under'
-    )
-    review_new_parser.add_argument(
-        '-f', '--force',
-        action='store_true',
-        help='Overwrite an existing alias file'
-    )
-    review_new_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Pretend and print all commands, but do not execute'
-    )
-
-    # Review update subcommand
-    review_update_parser = review_subparsers.add_parser(
-        'update',
-        help='Update existing changelist and Swarm review',
-        description='Update an existing changelist with changes since base branch and update the Swarm review'
-    )
-    review_update_parser.add_argument(
-        'changelist',
-        help='Changelist number or named alias to update'
-    )
-    review_update_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch where p4 and git are in sync. Finds common ancestor with '
-             'current branch and includes files that changed on base branch but not on '
-             'current branch. Default is HEAD~1'
-    )
-    review_update_parser.add_argument(
-        '-d', '--description',
-        action='store_true',
-        help='Update the changelist description with the current commit list'
-    )
-    review_update_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Pretend and print all commands, but do not execute'
     )
 
     # Alias subcommand
@@ -320,14 +231,12 @@ Examples:
 def run_command(args: argparse.Namespace) -> int:
     if args.command == 'sync':
         return sync_command(args)
-    elif args.command == 'edit':
-        return edit_command(args)
-    elif args.command == 'changelist':
-        return changelist_command(args)
+    elif args.command == 'new':
+        return new_command(args)
+    elif args.command == 'update':
+        return update_command(args)
     elif args.command == 'list-changes':
         return list_changes_command(args)
-    elif args.command == 'review':
-        return review_command(args)
     elif args.command == 'alias':
         return alias_command(args)
     else:

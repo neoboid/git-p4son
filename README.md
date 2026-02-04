@@ -73,7 +73,7 @@ git commit -m "Initial commit for CL 123"
 
 ## Usage
 
-git-p4son provides six commands: `sync`, `edit`, `changelist`, `list-changes`, `review`, and `alias`.
+git-p4son provides five commands: `sync`, `new`, `update`, `list-changes`, and `alias`.
 
 To see help for any command, use `-h`:
 
@@ -108,38 +108,12 @@ git p4son sync last-synced
 git p4son sync 12345 --force
 ```
 
-### Edit Command
+### New Command
 
-Find files that have changed between your current git `HEAD` and the base branch, and open them for edit in Perforce:
-
-```sh
-git p4son edit <changelist> [--base-branch BASE_BRANCH] [--dry-run]
-```
-
-**Arguments:**
-- `changelist`: Changelist number or named alias to add files to
-
-**Options:**
-- `-b, --base-branch BASE_BRANCH`: Base branch where p4 and git are in sync. Default is `HEAD~1`.
-- `-n, --dry-run`: Pretend and print all commands, but do not execute
-
-**Examples:**
-```sh
-git p4son edit 12345
-git p4son edit 12345 --base-branch main
-git p4son edit 12345 --dry-run
-```
-
-### Changelist Command
-
-Manage Perforce changelists.
-
-#### changelist new
-
-Create a new Perforce changelist with a description and enumerated git commits:
+Create a new Perforce changelist with a description and enumerated git commits since the base branch. By default also opens changed files for edit in the changelist. Optionally creates a Swarm review.
 
 ```sh
-git p4son changelist new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-run]
+git p4son new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-run] [--no-edit] [--shelve] [--review]
 ```
 
 **Arguments:**
@@ -147,36 +121,45 @@ git p4son changelist new -m <message> [--base-branch BASE_BRANCH] [alias] [--for
 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message (required)
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits. Default is `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
-- `-n, --dry-run`: Pretend and print what would be created, but do not execute
+- `-n, --dry-run`: Pretend and print what would be done, but do not execute
+- `--no-edit`: Skip opening changed files for edit in Perforce
+- `--shelve`: Shelve the changelist after creating it
+- `--review`: Add `#review` keyword and shelve to create a Swarm review
 
 **Examples:**
 ```sh
-git p4son changelist new -m "Fix login bug"
-git p4son changelist new -m "Add feature" -b main
-git p4son changelist new -m "Fix bug" myalias
+git p4son new -m "Fix login bug"
+git p4son new -m "Add feature" -b main
+git p4son new -m "Fix bug" myalias
+git p4son new -m "Fix bug" --no-edit
+git p4son new -m "New feature" --review -b main myalias
 ```
 
-#### changelist update
+### Update Command
 
-Update an existing changelist description by replacing the enumerated commit list:
+Update an existing Perforce changelist description by replacing the enumerated commit list with the current commits since the base branch. By default also opens changed files for edit.
 
 ```sh
-git p4son changelist update <changelist> [--base-branch BASE_BRANCH] [--dry-run]
+git p4son update <changelist> [--base-branch BASE_BRANCH] [--dry-run] [--no-edit] [--shelve]
 ```
 
 **Arguments:**
 - `changelist`: Changelist number or named alias to update
 
 **Options:**
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits. Default is `HEAD~1`
-- `-n, --dry-run`: Pretend and print what would be updated, but do not execute
+- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is `HEAD~1`
+- `-n, --dry-run`: Pretend and print what would be done, but do not execute
+- `--no-edit`: Skip opening changed files for edit in Perforce
+- `--shelve`: Re-shelve the changelist after updating
 
 **Examples:**
 ```sh
-git p4son changelist update 12345
-git p4son changelist update myalias -b main
+git p4son update 12345
+git p4son update myalias -b main
+git p4son update myalias --shelve
+git p4son update 12345 --no-edit
 ```
 
 ### List-Changes Command
@@ -197,55 +180,6 @@ git p4son list-changes --base-branch main
 ```
 
 This command is useful for generating changelist descriptions by listing all commit messages since the base branch, numbered sequentially.
-
-### Review Command
-
-Create or update Swarm reviews.
-
-#### review new
-
-Create a new changelist with changes since base branch and create a Swarm review:
-
-```sh
-git p4son review new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-run]
-```
-
-**Arguments:**
-- `alias`: Optional alias name to save the new changelist number under
-
-**Options:**
-- `-m, --message MESSAGE`: Changelist description message (required)
-- `-b, --base-branch BASE_BRANCH`: Base branch where p4 and git are in sync. Default is `HEAD~1`
-- `-f, --force`: Overwrite an existing alias file
-- `-n, --dry-run`: Pretend and print all commands, but do not execute
-
-**Examples:**
-```sh
-git p4son review new -m "Fix login bug"
-git p4son review new -m "Add feature" -b main myalias
-```
-
-#### review update
-
-Update an existing changelist with changes since base branch and update the Swarm review:
-
-```sh
-git p4son review update <changelist> [--base-branch BASE_BRANCH] [--description] [--dry-run]
-```
-
-**Arguments:**
-- `changelist`: Changelist number or named alias to update
-
-**Options:**
-- `-b, --base-branch BASE_BRANCH`: Base branch where p4 and git are in sync. Default is `HEAD~1`
-- `-d, --description`: Update the changelist description with the current commit list
-- `-n, --dry-run`: Pretend and print all commands, but do not execute
-
-**Examples:**
-```sh
-git p4son review update 12345
-git p4son review update myalias -d
-```
 
 ### Alias Command
 
@@ -351,15 +285,15 @@ git commit -m "Feature part2"
 # List all commit messages since main branch (useful for changelist description)
 git p4son list-changes --base-branch main
 
-# Create a new changelist and open files for Swarm review
-git p4son review new -m "My fancy feature" -b main myfeature
+# Create a new changelist, open files for edit, and create a Swarm review
+git p4son new -m "My fancy feature" --review -b main myfeature
 
 # After review feedback, make more changes
 git add .
 git commit -m "Address review feedback"
 
-# Update the review with new changes
-git p4son review update myfeature -d -b main
+# Update the changelist, re-open files, and re-shelve
+git p4son update myfeature --shelve -b main
 
 # After approval, submit in p4v
 

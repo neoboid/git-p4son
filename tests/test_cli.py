@@ -25,31 +25,53 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['sync', '100', '-f'])
         self.assertTrue(args.force)
 
-    def test_edit_command(self):
-        args = self.parser.parse_args(['edit', '12345'])
-        self.assertEqual(args.command, 'edit')
+    def test_new_command(self):
+        args = self.parser.parse_args(['new', '-m', 'Fix bug'])
+        self.assertEqual(args.command, 'new')
+        self.assertEqual(args.message, 'Fix bug')
+        self.assertEqual(args.base_branch, 'HEAD~1')
+        self.assertFalse(args.dry_run)
+        self.assertFalse(args.no_edit)
+        self.assertFalse(args.shelve)
+        self.assertFalse(args.review)
+
+    def test_new_command_with_options(self):
+        args = self.parser.parse_args(
+            ['new', '-m', 'Fix bug', '-b', 'main', '-n', '--no-edit',
+             '--shelve', '--review'])
+        self.assertEqual(args.message, 'Fix bug')
+        self.assertEqual(args.base_branch, 'main')
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.no_edit)
+        self.assertTrue(args.shelve)
+        self.assertTrue(args.review)
+
+    def test_new_command_with_alias(self):
+        args = self.parser.parse_args(['new', '-m', 'Fix bug', 'myalias'])
+        self.assertEqual(args.alias, 'myalias')
+
+    def test_new_command_with_force(self):
+        args = self.parser.parse_args(
+            ['new', '-m', 'Fix bug', 'myalias', '-f'])
+        self.assertTrue(args.force)
+
+    def test_update_command(self):
+        args = self.parser.parse_args(['update', '12345'])
+        self.assertEqual(args.command, 'update')
         self.assertEqual(args.changelist, '12345')
         self.assertEqual(args.base_branch, 'HEAD~1')
         self.assertFalse(args.dry_run)
+        self.assertFalse(args.no_edit)
+        self.assertFalse(args.shelve)
 
-    def test_edit_command_with_options(self):
-        args = self.parser.parse_args(['edit', '99', '-b', 'main', '-n'])
-        self.assertEqual(args.base_branch, 'main')
-        self.assertTrue(args.dry_run)
-
-    def test_changelist_new(self):
-        args = self.parser.parse_args(['changelist', 'new', '-m', 'Fix bug'])
-        self.assertEqual(args.command, 'changelist')
-        self.assertEqual(args.changelist_action, 'new')
-        self.assertEqual(args.message, 'Fix bug')
-        self.assertEqual(args.base_branch, 'HEAD~1')
-
-    def test_changelist_update(self):
+    def test_update_command_with_options(self):
         args = self.parser.parse_args(
-            ['changelist', 'update', '123', '-b', 'main'])
-        self.assertEqual(args.changelist_action, 'update')
+            ['update', '123', '-b', 'main', '-n', '--no-edit', '--shelve'])
         self.assertEqual(args.changelist, '123')
         self.assertEqual(args.base_branch, 'main')
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.no_edit)
+        self.assertTrue(args.shelve)
 
     def test_list_changes(self):
         args = self.parser.parse_args(['list-changes'])
@@ -59,22 +81,6 @@ class TestCreateParser(unittest.TestCase):
     def test_list_changes_with_base_branch(self):
         args = self.parser.parse_args(['list-changes', '-b', 'main'])
         self.assertEqual(args.base_branch, 'main')
-
-    def test_review_new(self):
-        args = self.parser.parse_args(['review', 'new', '-m', 'Review this'])
-        self.assertEqual(args.command, 'review')
-        self.assertEqual(args.review_action, 'new')
-        self.assertEqual(args.message, 'Review this')
-
-    def test_review_update(self):
-        args = self.parser.parse_args(['review', 'update', '456'])
-        self.assertEqual(args.review_action, 'update')
-        self.assertEqual(args.changelist, '456')
-        self.assertFalse(args.description)
-
-    def test_review_update_with_description(self):
-        args = self.parser.parse_args(['review', 'update', '456', '-d'])
-        self.assertTrue(args.description)
 
     def test_sleep_option(self):
         args = self.parser.parse_args(['-s', '5', 'sync', '100'])
@@ -95,20 +101,20 @@ class TestRunCommand(unittest.TestCase):
         mock_sync.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.edit_command', return_value=0)
-    def test_dispatches_edit(self, mock_edit):
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_dispatches_new(self, mock_new):
         parser = create_parser()
-        args = parser.parse_args(['edit', '100'])
+        args = parser.parse_args(['new', '-m', 'msg'])
         result = run_command(args)
-        mock_edit.assert_called_once_with(args)
+        mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.changelist_command', return_value=0)
-    def test_dispatches_changelist(self, mock_cl):
+    @mock.patch('git_p4son.cli.update_command', return_value=0)
+    def test_dispatches_update(self, mock_update):
         parser = create_parser()
-        args = parser.parse_args(['changelist', 'new', '-m', 'msg'])
+        args = parser.parse_args(['update', '100'])
         result = run_command(args)
-        mock_cl.assert_called_once_with(args)
+        mock_update.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.cli.list_changes_command', return_value=0)
@@ -117,14 +123,6 @@ class TestRunCommand(unittest.TestCase):
         args = parser.parse_args(['list-changes'])
         result = run_command(args)
         mock_lc.assert_called_once_with(args)
-        self.assertEqual(result, 0)
-
-    @mock.patch('git_p4son.cli.review_command', return_value=0)
-    def test_dispatches_review(self, mock_review):
-        parser = create_parser()
-        args = parser.parse_args(['review', 'new', '-m', 'msg'])
-        result = run_command(args)
-        mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
 

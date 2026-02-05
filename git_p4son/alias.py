@@ -109,7 +109,8 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
         while True:
             try:
-                response = input('Delete? [y]es / [n]o / [a]ll / [q]uit: ').strip().lower()
+                response = input(
+                    'Delete? [y]es / [n]o / [a]ll / [q]uit: ').strip().lower()
             except EOFError:
                 print()
                 return 0

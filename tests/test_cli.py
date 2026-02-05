@@ -83,7 +83,7 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(args.base_branch, 'main')
 
     def test_sleep_option(self):
-        args = self.parser.parse_args(['-s', '5', 'sync', '100'])
+        args = self.parser.parse_args(['update', '100', '-s', '5'])
         self.assertEqual(args.sleep, '5')
 
     def test_version_flag(self):

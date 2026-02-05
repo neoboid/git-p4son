@@ -116,6 +116,23 @@ def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> tuple[int, st
         return (1, None)
 
 
+def find_line_starting_with(lines: list[str], prefix: str) -> int:
+    """
+    Find the index of the first line starting with prefix.
+
+    Args:
+        lines: List of lines to search
+        prefix: The prefix to match
+
+    Returns:
+        Index of the first matching line, or len(lines) if not found.
+    """
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            return i
+    return len(lines)
+
+
 def extract_description_lines(spec_text: str) -> list[str]:
     """
     Extract the Description field from a p4 changelist spec.
@@ -126,12 +143,7 @@ def extract_description_lines(spec_text: str) -> list[str]:
         List of description lines with tabs stripped.
     """
     lines = spec_text.splitlines()
-
-    # Find the Description: line
-    i = 0
-    while i < len(lines) and not lines[i].startswith('Description:'):
-        i += 1
-    i += 1  # skip past Description: line
+    i = find_line_starting_with(lines, 'Description:') + 1
 
     # Collect tab-indented description lines
     description_lines = []
@@ -154,20 +166,15 @@ def replace_description_in_spec(spec_text: str, new_description_lines: list[str]
         The spec text with the description replaced.
     """
     lines = spec_text.splitlines()
-    result_lines = []
-
-    # Find the Description: line
-    i = 0
-    while i < len(lines) and not lines[i].startswith('Description:'):
-        result_lines.append(lines[i])
-        i += 1
+    i = find_line_starting_with(lines, 'Description:')
 
     if i >= len(lines):
-        # No Description: found, return original
         return spec_text
 
-    # Add Description: header and new description lines
-    result_lines.append(lines[i])
+    # Lines before Description: and the header itself
+    result_lines = lines[:i + 1]
+
+    # Add new description lines
     for desc_line in new_description_lines:
         result_lines.append('\t' + desc_line)
     i += 1

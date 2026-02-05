@@ -133,6 +133,23 @@ def find_line_starting_with(lines: list[str], prefix: str) -> int:
     return len(lines)
 
 
+def find_end_of_indented_section(lines: list[str], start: int) -> int:
+    """
+    Find the end of a tab-indented section.
+
+    Args:
+        lines: List of lines to search
+        start: Index to start searching from
+
+    Returns:
+        Index of the first non-tab-indented line, or len(lines) if all remaining lines are indented.
+    """
+    i = start
+    while i < len(lines) and lines[i].startswith('\t'):
+        i += 1
+    return i
+
+
 def extract_description_lines(spec_text: str) -> list[str]:
     """
     Extract the Description field from a p4 changelist spec.
@@ -143,15 +160,9 @@ def extract_description_lines(spec_text: str) -> list[str]:
         List of description lines with tabs stripped.
     """
     lines = spec_text.splitlines()
-    i = find_line_starting_with(lines, 'Description:') + 1
-
-    # Collect tab-indented description lines
-    description_lines = []
-    while i < len(lines) and lines[i].startswith('\t'):
-        description_lines.append(lines[i][1:])  # strip leading tab
-        i += 1
-
-    return description_lines
+    start = find_line_starting_with(lines, 'Description:') + 1
+    end = find_end_of_indented_section(lines, start)
+    return [line[1:] for line in lines[start:end]]
 
 
 def replace_description_in_spec(spec_text: str, new_description_lines: list[str]) -> str:
@@ -166,25 +177,16 @@ def replace_description_in_spec(spec_text: str, new_description_lines: list[str]
         The spec text with the description replaced.
     """
     lines = spec_text.splitlines()
-    i = find_line_starting_with(lines, 'Description:')
+    desc_line = find_line_starting_with(lines, 'Description:')
 
-    if i >= len(lines):
+    if desc_line >= len(lines):
         return spec_text
 
-    # Lines before Description: and the header itself
-    result_lines = lines[:i + 1]
+    desc_end = find_end_of_indented_section(lines, desc_line + 1)
 
-    # Add new description lines
-    for desc_line in new_description_lines:
-        result_lines.append('\t' + desc_line)
-    i += 1
-
-    # Skip old description lines (tab-indented)
-    while i < len(lines) and lines[i].startswith('\t'):
-        i += 1
-
-    # Append remaining lines
-    result_lines.extend(lines[i:])
+    result_lines = lines[:desc_line + 1]
+    result_lines.extend('\t' + line for line in new_description_lines)
+    result_lines.extend(lines[desc_end:])
 
     return '\n'.join(result_lines) + '\n'
 

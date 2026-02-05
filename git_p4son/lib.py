@@ -547,39 +547,25 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry_ru
         print('Failed to get changelist description', file=sys.stderr)
         return res.returncode
 
-    # Parse the changelist spec to find description and track its end
     lines = res.stdout
-    description_start_idx = None
-    description_end_idx = None
+    desc_start = find_line_starting_with(lines, 'Description:')
+    if desc_start >= len(lines):
+        print('No Description: field found', file=sys.stderr)
+        return 1
 
-    for i, line in enumerate(lines):
-        if description_start_idx is None and line.strip() == 'Description:':
-            description_start_idx = i
-        elif re.match(r'^[A-Za-z].*:$', line.strip()):
-            # Description ends when we hit the next field header (non-indented line with a colon)
-            description_end_idx = i
-            break
+    desc_end = find_end_of_indented_section(lines, desc_start + 1)
 
     # Check if #review is already in the description
-    if description_start_idx is not None:
-        # If we didn't find another field header, description goes to end
-        if description_end_idx is None:
-            description_end_idx = len(lines)
+    if any('#review' in line for line in lines[desc_start:desc_end]):
+        print(f'Changelist {changelist} already has #review keyword')
+        return 0
 
-        for desc_line in lines[description_start_idx:description_end_idx]:
-            if '#review' in desc_line:
-                print(f'Changelist {changelist} already has #review keyword')
-                return 0
-
-    # Update the changelist
     if dry_run:
         print(f"Would add #review keyword to changelist {changelist}")
         return 0
 
-    # Add #review as the last line of description
-    if description_start_idx is not None:
-        # Insert #review before the empty line that ends the description
-        lines.insert(description_end_idx, '\t#review')
+    # Insert #review at the end of the description
+    lines.insert(desc_end, '\t#review')
 
     try:
         result = subprocess.run(

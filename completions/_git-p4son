@@ -3,138 +3,42 @@
 # Zsh completion for git-p4son
 # Also works as _git-p4son for "git p4son" subcommand completion.
 #
+# Delegates to "git-p4son complete" for candidate generation.
+#
 # Installation:
 #   Add the completions directory to fpath before compinit in ~/.zshrc:
 #     fpath=(/path/to/git-p4son/completions $fpath)
 #     autoload -Uz compinit && compinit
 
-__git-p4son_aliases() {
-    local root
-    root=$(git rev-parse --show-toplevel 2>/dev/null) || return
-    local alias_dir="$root/.git-p4son/changelists"
-    [[ -d "$alias_dir" ]] || return
-    local -a aliases
-    for f in "$alias_dir"/*(N:t); do
-        aliases+=("$f")
-    done
-    (( ${#aliases} )) && compadd -X "aliases" -- "${aliases[@]}"
-}
-
-__git-p4son_sync() {
-    _arguments -s \
-        '(-f --force)'{-f,--force}'[Force sync writable files and allow older changelists]' \
-        '1: :->changelist'
-
-    case "$state" in
-        changelist)
-            local -a specials=('latest:Sync to latest changelist' 'last-synced:Re-sync last synced changelist')
-            _describe 'changelist' specials
-            __git-p4son_aliases
-            ;;
-    esac
-}
-
-__git-p4son_new() {
-    _arguments -s \
-        '(-m --message)'{-m,--message}'[Changelist description]:message:' \
-        '(-b --base-branch)'{-b,--base-branch}'[Base branch]:branch:__git_branch_names' \
-        '(-f --force)'{-f,--force}'[Overwrite existing alias]' \
-        '(-n --dry-run)'{-n,--dry-run}'[Dry run]' \
-        '--no-edit[Skip opening files for edit]' \
-        '--shelve[Shelve after creating]' \
-        '--review[Create Swarm review]' \
-        '(-s --sleep)'{-s,--sleep}'[Sleep after command]:seconds:' \
-        '1:alias name:'
-}
-
-__git-p4son_update() {
-    _arguments -s \
-        '(-b --base-branch)'{-b,--base-branch}'[Base branch]:branch:__git_branch_names' \
-        '(-n --dry-run)'{-n,--dry-run}'[Dry run]' \
-        '--no-edit[Skip opening files for edit]' \
-        '--shelve[Re-shelve after updating]' \
-        '(-s --sleep)'{-s,--sleep}'[Sleep after command]:seconds:' \
-        '1: :->changelist'
-
-    case "$state" in
-        changelist)
-            __git-p4son_aliases
-            ;;
-    esac
-}
-
-__git-p4son_list-changes() {
-    _arguments -s \
-        '(-b --base-branch)'{-b,--base-branch}'[Base branch]:branch:__git_branch_names'
-}
-
-__git-p4son_alias() {
-    local -a alias_commands=(
-        'list:List all aliases'
-        'set:Save a changelist under an alias'
-        'delete:Delete an alias'
-        'clean:Interactive cleanup of aliases'
-    )
-
-    _arguments -C \
-        '1: :->subcmd' \
-        '*:: :->args'
-
-    case "$state" in
-        subcmd)
-            _describe 'alias command' alias_commands
-            ;;
-        args)
-            case "${words[1]}" in
-                set)
-                    _arguments -s \
-                        '(-f --force)'{-f,--force}'[Overwrite existing alias]' \
-                        '1:changelist number:' \
-                        '2:alias name:'
-                    ;;
-                delete)
-                    _arguments -s \
-                        '1: :->alias_name'
-                    case "$state" in
-                        alias_name)
-                            __git-p4son_aliases
-                            ;;
-                    esac
-                    ;;
-            esac
-            ;;
-    esac
-}
-
 _git-p4son() {
-    local -a commands=(
-        'sync:Sync git repo with Perforce workspace'
-        'new:Create a new changelist'
-        'update:Update an existing changelist'
-        'list-changes:List commit subjects since base branch'
-        'alias:Manage changelist aliases'
-    )
+    local -a comp_words
+    # words[1] is "git-p4son" or "p4son"; pass the rest including current word
+    comp_words=("${words[@]:1}")
 
-    _arguments -C \
-        '--version[Show version]' \
-        '1: :->command' \
-        '*:: :->args'
+    local output
+    output=$(git-p4son complete -- "${comp_words[@]}" 2>/dev/null) || return
 
-    case "$state" in
-        command)
-            _describe 'command' commands
-            ;;
-        args)
-            local cmd="${words[1]}"
-            case "$cmd" in
-                sync)        __git-p4son_sync ;;
-                new)         __git-p4son_new ;;
-                update)      __git-p4son_update ;;
-                list-changes) __git-p4son_list-changes ;;
-                alias)       __git-p4son_alias ;;
-            esac
-            ;;
-    esac
+    # Handle special directives
+    if [[ "$output" == "__branch__" ]]; then
+        __git_branch_names
+        return
+    fi
+
+    # Parse tab-separated output into _describe format (name:description)
+    local -a descriptions
+    local line name desc
+    while IFS=$'\t' read -r name desc; do
+        [[ -z "$name" ]] && continue
+        if [[ -n "$desc" ]]; then
+            descriptions+=("${name}:${desc}")
+        else
+            descriptions+=("$name")
+        fi
+    done <<< "$output"
+
+    if (( ${#descriptions} )); then
+        _describe '' descriptions
+    fi
 }
 
 _git-p4son "$@"

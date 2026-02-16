@@ -11,6 +11,7 @@ from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
+from .complete import run_complete
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -249,6 +250,14 @@ def run_command(args: argparse.Namespace) -> int:
 
 def main() -> int:
     """Main entry point for the CLI."""
+    # Handle 'complete' before argparse to avoid flag/word conflicts
+    if len(sys.argv) >= 2 and sys.argv[1] == 'complete':
+        words = sys.argv[2:]
+        # Strip leading '--' separator if present
+        if words and words[0] == '--':
+            words = words[1:]
+        return run_complete(words)
+
     parser = create_parser()
     args = parser.parse_args()
 

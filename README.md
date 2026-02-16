@@ -1,10 +1,17 @@
-# git-p4son
+# Git Perforcesson
 
-A tool for managing a local git repository within a Perforce workspace.
+`git-p4son` is a tool for managing a local git repository within a Perforce workspace.
+This way you can use the familiar local git development flow even though you are
+working on a project where perforce is used for source control.
 
-The idea is to have a `main` branch that is kept in sync with the Perforce depot.
-From `main` you branch out into feature branches, where you do local
-changes and rebase on `main` whenever it is updated.
+The idea is to have a `main` git branch that is kept in sync with the a branch of a Perforce depot.
+From `main` you branch out into feature branches, where you do local changes
+and rebase on `main` whenever it is updated.
+
+Once your changes is ready to be submitted in perforce `git-p4son` can help you create both
+changelists and push them for reviews. You can even push individual git commits as patches
+for review, so that the reviewer can see the changes in the order you made them locally. Similar
+to the pull request worfkflow on github.
 
 This is a bit cumbersome to do manually, but this package provides commands
 that help out with the repetitive and error prone stuff.
@@ -19,14 +26,6 @@ cd git-p4son
 pip install .
 ```
 
-Or install in development mode:
-
-```sh
-git clone https://github.com/derwiath/git-p4son.git
-cd git-p4son
-pip install -e .
-```
-
 ## Development
 
 To contribute to git-p4son or modify it for your needs, you can install it in development mode:
@@ -39,7 +38,8 @@ pip install -e .
 
 The `-e` flag installs the package in "editable" mode. Which means that changes
 to the code are immediately available and `git p4son` can be tested right
-away without reinstalling.
+away without reinstalling. This is also handy if you want to auto update Git Perforcesson
+whenever you pull from github.
 
 ### Development Requirements
 
@@ -64,7 +64,7 @@ git init
   keep a part of it in your local git repo.
 * Add a `.gitignore` file and commit.
   Ideally your ignore file should ignore the same files that is ignored
-  by perforce.
+  by perforce, as specified by `.p4ignore`.
 * Add all files and commit
 ```sh
 git add .
@@ -82,7 +82,8 @@ git p4son -h
 git p4son sync -h
 ```
 
-**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h` instead, or `git p4son -- --help` to force it through. Alternatively, call the executable directly: `git-p4son --help`.
+**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h` instead, or `git p4son -- --help` to force it through.
+Alternatively, call the executable directly: `git-p4son --help`.
 
 ### Sync Command
 
@@ -110,7 +111,8 @@ git p4son sync 12345 --force
 
 ### New Command
 
-Create a new Perforce changelist with a description and enumerated git commits since the base branch. By default also opens changed files for edit in the changelist. Optionally creates a Swarm review.
+Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits since the base branch.
+Optionally creates a Swarm review.
 
 ```sh
 git p4son new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-run] [--no-edit] [--shelve] [--review]
@@ -317,8 +319,8 @@ git p4son new -m "My fancy feature" --review -b main myfeature
 git add .
 git commit -m "Address review feedback"
 
-# Update the changelist, re-open files, and re-shelve
-git p4son update myfeature --shelve -b main
+# Update the changelist with latest commit, re-open files, and re-shelve
+git p4son update myfeature --shelve
 
 # After approval, submit in p4v
 

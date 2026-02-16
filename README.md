@@ -73,7 +73,7 @@ git commit -m "Initial commit for CL 123"
 
 ## Usage
 
-git-p4son provides five commands: `sync`, `new`, `update`, `list-changes`, and `alias`.
+git-p4son provides six commands: `sync`, `new`, `update`, `review`, `list-changes`, and `alias`.
 
 To see help for any command, use `-h`:
 
@@ -162,6 +162,50 @@ git p4son update 12345
 git p4son update myalias -b main
 git p4son update myalias --shelve
 git p4son update 12345 --no-edit
+```
+
+### Review Command
+
+Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec` lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit, then opens it in your editor for review before executing.
+
+```sh
+git p4son review <alias> -m <message> [--base-branch BASE_BRANCH] [--force] [--dry-run]
+```
+
+**Arguments:**
+- `alias`: Alias name for the new changelist
+
+**Options:**
+- `-m, --message MESSAGE`: Changelist description message (required)
+- `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
+- `-f, --force`: Overwrite an existing alias file
+- `-n, --dry-run`: Print the generated rebase todo without executing
+
+When run, the command generates a todo like this and opens it in your editor:
+
+```
+pick abc1234 First commit
+exec git p4son new my-feature --review -m 'My feature'
+pick def5678 Second commit
+exec git p4son update my-feature --shelve
+pick ghi9012 Third commit
+exec git p4son update my-feature --shelve
+```
+
+You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file — just like a normal `git rebase -i`. Each `exec` line automatically sleeps after shelving to give Perforce/Swarm time to process.
+
+If the rebase fails mid-way, you can fix the issue and run `git rebase --continue` as usual.
+
+**Examples:**
+```sh
+# Review all commits since main
+git p4son review my-feature -m "Add my feature" -b main
+
+# Review just the last commit (default base branch)
+git p4son review my-feature -m "Fix bug"
+
+# Preview the generated todo without executing
+git p4son review my-feature -m "Add my feature" -b main --dry-run
 ```
 
 ### List-Changes Command
@@ -309,11 +353,9 @@ git rebase main
 git add .
 git commit -m "Feature part2"
 
-# List all commit messages since main branch (useful for changelist description)
-git p4son list-changes --base-branch main
-
-# Create a new changelist, open files for edit, and create a Swarm review
-git p4son new -m "My fancy feature" --review -b main myfeature
+# Create a Swarm review with all commits since main in one go
+# This opens an interactive rebase with pre-filled exec lines
+git p4son review myfeature -m "My fancy feature" -b main
 
 # After review feedback, make more changes
 git add .

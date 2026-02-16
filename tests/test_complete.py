@@ -94,12 +94,18 @@ class TestComplete(unittest.TestCase):
         self.assertIn('update', names)
         self.assertIn('list-changes', names)
         self.assertIn('alias', names)
-        self.assertEqual(len(names), 5)
+        self.assertIn('review', names)
+        self.assertEqual(len(names), 6)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
         names = self._names(result)
         self.assertNotIn('complete', names)
+
+    def test_hidden_sequence_editor_not_completed(self, _ws, _aliases):
+        result = _complete(self.parser, [''], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertNotIn('_sequence-editor', names)
 
     def test_prefix_filters_commands(self, _ws, _aliases):
         result = _complete(self.parser, ['sy'], workspace_dir='/ws')

@@ -11,6 +11,7 @@ from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
+from .review import review_command, sequence_editor_command
 from .complete import run_complete
 
 
@@ -229,6 +230,49 @@ Examples:
         'yes/no/all/quit prompts'
     )
 
+    # Review subcommand
+    review_parser = subparsers.add_parser(
+        'review',
+        help='Create a Swarm review via automated interactive rebase',
+        description='Automate the interactive rebase workflow by generating '
+        'a rebase todo with exec lines that run git p4son new/update '
+        'for each commit since the base branch.'
+    )
+    review_parser.add_argument(
+        'alias',
+        help='Alias name for the new changelist'
+    )
+    review_parser.add_argument(
+        '-m', '--message',
+        required=True,
+        help='Changelist description message'
+    )
+    review_parser.add_argument(
+        '-b', '--base-branch',
+        default='HEAD~1',
+        help='Base branch to rebase onto and find commits since. Default is HEAD~1'
+    )
+    review_parser.add_argument(
+        '-f', '--force',
+        action='store_true',
+        help='Overwrite an existing alias file'
+    )
+    review_parser.add_argument(
+        '-n', '--dry-run',
+        action='store_true',
+        help='Print the generated rebase todo without executing'
+    )
+
+    # Hidden _sequence-editor subcommand (used internally by review)
+    seq_editor_parser = subparsers.add_parser(
+        '_sequence-editor',
+        help=argparse.SUPPRESS,
+    )
+    seq_editor_parser.add_argument(
+        'filename',
+        help='The rebase todo file to edit'
+    )
+
     return parser
 
 
@@ -243,6 +287,10 @@ def run_command(args: argparse.Namespace) -> int:
         return list_changes_command(args)
     elif args.command == 'alias':
         return alias_command(args)
+    elif args.command == 'review':
+        return review_command(args)
+    elif args.command == '_sequence-editor':
+        return sequence_editor_command(args)
     else:
         print(f'Unknown command: {args.command}', file=sys.stderr)
         return 1

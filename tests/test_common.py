@@ -8,12 +8,56 @@ from unittest import mock
 
 from git_p4son.common import (
     RunResult,
+    branch_to_alias,
+    get_current_branch,
     get_workspace_dir,
     is_workspace_dir,
     join_command_line,
     run,
     run_with_output,
 )
+
+
+class TestGetCurrentBranch(unittest.TestCase):
+    @mock.patch('subprocess.run')
+    def test_returns_branch_name(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=0, stdout='feat/foo\n')
+        result = get_current_branch('/ws')
+        mock_run.assert_called_once_with(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd='/ws',
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result, 'feat/foo')
+
+    @mock.patch('subprocess.run')
+    def test_detached_head_returns_none(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('subprocess.run')
+    def test_command_failure_returns_none(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=128, stdout='')
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('subprocess.run', side_effect=OSError('no git'))
+    def test_exception_returns_none(self, mock_run):
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+
+class TestBranchToAlias(unittest.TestCase):
+    def test_replaces_slashes(self):
+        self.assertEqual(branch_to_alias('feat/my-feature'), 'feat-my-feature')
+
+    def test_no_slash_passthrough(self):
+        self.assertEqual(branch_to_alias('my-branch'), 'my-branch')
+
+    def test_multiple_slashes(self):
+        self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
 
 
 class TestJoinCommandLine(unittest.TestCase):

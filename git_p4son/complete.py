@@ -9,7 +9,7 @@ Special directives (e.g. __branch__) tell the shell wrapper to use native comple
 import argparse
 
 from .changelist_store import list_changelist_aliases
-from .common import get_workspace_dir
+from .common import branch_to_alias, get_current_branch, get_workspace_dir
 
 _HIDDEN_COMMANDS = frozenset({'complete', '_sequence-editor'})
 
@@ -82,6 +82,23 @@ def _complete_flag_value(flag, prefix):
     return []
 
 
+def _get_branch_candidates(prefix, workspace_dir):
+    """Get @branch completion candidates based on prefix."""
+    if not workspace_dir:
+        return []
+    keyword = '@branch'
+    if prefix == keyword:
+        branch = get_current_branch(workspace_dir)
+        if branch and branch != 'main':
+            return [(branch_to_alias(branch), 'Current branch')]
+        return []
+    if keyword.startswith(prefix):
+        branch = get_current_branch(workspace_dir)
+        if branch and branch != 'main':
+            return [(keyword, 'Use current branch name')]
+    return []
+
+
 def _complete_positional(command, subcommand, positional_count,
                          prefix, workspace_dir, command_parser):
     """Complete a positional argument."""
@@ -111,6 +128,10 @@ def _complete_positional(command, subcommand, positional_count,
 
         if subcommand == 'set' and positional_count == 1:
             return _filter(aliases, prefix)
+
+    if command in ('new', 'review') and positional_count == 0:
+        branch_candidates = _get_branch_candidates(prefix, workspace_dir)
+        return branch_candidates + _filter(aliases, prefix)
 
     return []
 

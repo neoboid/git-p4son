@@ -12,6 +12,7 @@ from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
 from .review import review_command, sequence_editor_command
+from .common import branch_to_alias, get_current_branch, get_workspace_dir
 from .complete import run_complete
 
 
@@ -276,7 +277,29 @@ Examples:
     return parser
 
 
+def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
+    """Resolve @branch in args.alias. Returns error code or None on success."""
+    if getattr(args, 'alias', None) != '@branch':
+        return None
+    workspace_dir = get_workspace_dir()
+    if not workspace_dir:
+        print('Error: not in a git workspace', file=sys.stderr)
+        return 1
+    branch = get_current_branch(workspace_dir)
+    if not branch or branch == 'main':
+        print('Error: @branch cannot be used on main or detached HEAD',
+              file=sys.stderr)
+        return 1
+    args.alias = branch_to_alias(branch)
+    return None
+
+
 def run_command(args: argparse.Namespace) -> int:
+    if args.command in ('new', 'review'):
+        error = _resolve_branch_alias(args)
+        if error is not None:
+            return error
+
     if args.command == 'sync':
         return sync_command(args)
     elif args.command == 'new':

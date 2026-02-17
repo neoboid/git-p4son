@@ -223,6 +223,75 @@ class TestComplete(unittest.TestCase):
         self.assertIn('--force', names)
 
 
+@mock.patch('git_p4son.complete.get_current_branch', return_value='feat/cool')
+@mock.patch('git_p4son.complete.list_changelist_aliases',
+            return_value=[('myalias', '999')])
+@mock.patch('git_p4son.complete.get_workspace_dir', return_value='/ws')
+class TestCompleteBranchAlias(unittest.TestCase):
+    def setUp(self):
+        self.parser = create_parser()
+
+    def _names(self, candidates):
+        return [name for name, _ in candidates]
+
+    def test_new_positional_at_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', '@'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_new_positional_at_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', '@branch'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('feat-cool', names)
+        self.assertNotIn('@branch', names)
+
+    def test_review_positional_at_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['review', '@'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_new_positional_includes_aliases(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', ''], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+        self.assertIn('myalias', names)
+
+
+@mock.patch('git_p4son.complete.get_current_branch', return_value='feat/cool')
+@mock.patch('git_p4son.complete.list_changelist_aliases',
+            return_value=[('myalias', '999')])
+@mock.patch('git_p4son.complete.get_workspace_dir', return_value=None)
+class TestCompleteBranchNoWorkspace(unittest.TestCase):
+    def setUp(self):
+        self.parser = create_parser()
+
+    def _names(self, candidates):
+        return [name for name, _ in candidates]
+
+    def test_new_positional_no_at_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', '@'], workspace_dir=None)
+        names = self._names(result)
+        self.assertNotIn('@branch', names)
+
+
+@mock.patch('git_p4son.complete.get_current_branch', return_value='main')
+@mock.patch('git_p4son.complete.list_changelist_aliases',
+            return_value=[('myalias', '999')])
+@mock.patch('git_p4son.complete.get_workspace_dir', return_value='/ws')
+class TestCompleteBranchOnMain(unittest.TestCase):
+    def setUp(self):
+        self.parser = create_parser()
+
+    def _names(self, candidates):
+        return [name for name, _ in candidates]
+
+    def test_new_positional_no_at_branch_on_main(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', '@'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertNotIn('@branch', names)
+
+
 @mock.patch('git_p4son.complete.list_changelist_aliases',
             return_value=[('myalias', '999')])
 @mock.patch('git_p4son.complete.get_workspace_dir', return_value=None)

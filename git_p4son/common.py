@@ -13,6 +13,30 @@ from datetime import timedelta
 from typing import IO, Callable
 
 
+def get_current_branch(workspace_dir: str) -> str | None:
+    """Return the current git branch name, or None on error/detached HEAD."""
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        branch = result.stdout.strip()
+        if branch == 'HEAD':
+            return None
+        return branch
+    except Exception:
+        return None
+
+
+def branch_to_alias(branch_name: str) -> str:
+    """Sanitize a branch name for use as an alias filename."""
+    return branch_name.replace('/', '-')
+
+
 def is_workspace_dir(directory: str) -> bool:
     """Check if a directory is a git workspace."""
     return os.path.isdir(os.path.join(directory, '.git'))

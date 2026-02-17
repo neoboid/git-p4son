@@ -37,7 +37,9 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     if returncode != 0:
         return (returncode, None)
 
-    description_lines = message.splitlines() + commit_lines
+    description_lines = message.splitlines()
+    if commit_lines:
+        description_lines += ['', 'Changes included:'] + commit_lines
 
     if dry_run:
         print(f"Would create new changelist with description:")

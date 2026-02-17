@@ -63,14 +63,8 @@ Register-ArgumentCompleter -CommandName git-p4son -Native -ScriptBlock {
     _GitP4sonCompleter $wordToComplete $commandAst $cursorPosition $p4sonArgs
 }
 
-# Save any existing git completer (e.g. posh-git) before we register ours,
-# so we can chain to it for non-p4son subcommands.
-$script:_GitP4sonPreviousGitCompleter = $null
-if ($global:__NativeArgumentCompleters -and $global:__NativeArgumentCompleters.ContainsKey('git')) {
-    $script:_GitP4sonPreviousGitCompleter = $global:__NativeArgumentCompleters['git']
-}
-
-# Register completer for "git" to handle "git p4son ..." subcommand
+# Register completer for "git" to handle "git p4son ..." subcommand.
+# For non-p4son commands, delegate to posh-git's Expand-GitCommand if available.
 Register-ArgumentCompleter -CommandName git -Native -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
@@ -83,8 +77,10 @@ Register-ArgumentCompleter -CommandName git -Native -ScriptBlock {
         return _GitP4sonCompleter $wordToComplete $commandAst $cursorPosition $p4sonArgs
     }
 
-    # Not a p4son subcommand, fall back to the previous git completer
-    if ($script:_GitP4sonPreviousGitCompleter) {
-        return & $script:_GitP4sonPreviousGitCompleter $wordToComplete $commandAst $cursorPosition
+    # Not a p4son subcommand — delegate to posh-git if available
+    if (Get-Command Expand-GitCommand -ErrorAction SilentlyContinue) {
+        $padLength = $cursorPosition - $commandAst.Extent.StartOffset
+        $textToComplete = $commandAst.ToString().PadRight($padLength, ' ').Substring(0, $padLength)
+        return Expand-GitCommand $textToComplete
     }
 }

@@ -44,8 +44,10 @@ function _GitP4sonCompleter {
         $name = $parts[0]
         $desc = if ($parts.Count -gt 1) { $parts[1] } else { $name }
         $type = if ($name -match '^-') { 'ParameterName' } else { 'ParameterValue' }
+        # Quote @-prefixed values so PowerShell doesn't interpret them as splatting
+        $completionText = if ($name -match '^@') { "'$name'" } else { $name }
         $completions += [System.Management.Automation.CompletionResult]::new(
-            $name, $name, $type, $desc)
+            $completionText, $name, $type, $desc)
     }
 
     return $completions

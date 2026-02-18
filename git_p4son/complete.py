@@ -112,7 +112,8 @@ def _complete_positional(command, subcommand, positional_count,
         return _filter(candidates, prefix)
 
     if command == 'update' and positional_count == 0:
-        return _filter(aliases, prefix)
+        branch_candidates = _get_branch_candidates(prefix, workspace_dir)
+        return branch_candidates + _filter(aliases, prefix)
 
     if command == 'alias':
         if subcommand is None and positional_count == 0:
@@ -127,7 +128,8 @@ def _complete_positional(command, subcommand, positional_count,
             return _filter(aliases, prefix)
 
         if subcommand == 'set' and positional_count == 1:
-            return _filter(aliases, prefix)
+            branch_candidates = _get_branch_candidates(prefix, workspace_dir)
+            return branch_candidates + _filter(aliases, prefix)
 
     if command in ('new', 'review') and positional_count == 0:
         branch_candidates = _get_branch_candidates(prefix, workspace_dir)

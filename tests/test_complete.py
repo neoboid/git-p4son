@@ -251,6 +251,58 @@ class TestCompleteBranchAlias(unittest.TestCase):
         names = self._names(result)
         self.assertIn('@branch', names)
 
+    def test_new_positional_at_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', '@br'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_review_positional_at_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['review', '@br'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_update_positional_at_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', '@'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_update_positional_at_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', '@br'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_update_positional_at_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', '@branch'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('feat-cool', names)
+        self.assertNotIn('@branch', names)
+
+    def test_update_positional_includes_aliases(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', ''], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+        self.assertIn('myalias', names)
+
+    def test_alias_set_at_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', '@'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_alias_set_at_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', '@br'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('@branch', names)
+
+    def test_alias_set_at_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', '@branch'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('feat-cool', names)
+        self.assertNotIn('@branch', names)
+
     def test_new_positional_includes_aliases(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', ''], workspace_dir='/ws')
         names = self._names(result)

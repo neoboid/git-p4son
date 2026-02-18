@@ -277,20 +277,34 @@ Examples:
     return parser
 
 
-def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
-    """Resolve @branch in args.alias. Returns error code or None on success."""
-    if getattr(args, 'alias', None) != '@branch':
-        return None
+def _resolve_branch_keyword(value: str) -> str | None:
+    """Resolve @branch to the branch-derived alias name.
+
+    Returns the resolved alias name, or None if resolution fails.
+    Prints an error message on failure.
+    """
+    if value != '@branch':
+        return value
     workspace_dir = get_workspace_dir()
     if not workspace_dir:
         print('Error: not in a git workspace', file=sys.stderr)
-        return 1
+        return None
     branch = get_current_branch(workspace_dir)
     if not branch or branch == 'main':
         print('Error: @branch cannot be used on main or detached HEAD',
               file=sys.stderr)
+        return None
+    return branch_to_alias(branch)
+
+
+def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
+    """Resolve @branch in args.alias. Returns error code or None on success."""
+    if getattr(args, 'alias', None) != '@branch':
+        return None
+    resolved = _resolve_branch_keyword('@branch')
+    if resolved is None:
         return 1
-    args.alias = branch_to_alias(branch)
+    args.alias = resolved
     return None
 
 
@@ -299,6 +313,18 @@ def run_command(args: argparse.Namespace) -> int:
         error = _resolve_branch_alias(args)
         if error is not None:
             return error
+
+    if args.command == 'update':
+        resolved = _resolve_branch_keyword(args.changelist)
+        if resolved is None:
+            return 1
+        args.changelist = resolved
+
+    if args.command == 'alias' and args.alias_action == 'set':
+        resolved = _resolve_branch_keyword(args.alias)
+        if resolved is None:
+            return 1
+        args.alias = resolved
 
     if args.command == 'sync':
         return sync_command(args)

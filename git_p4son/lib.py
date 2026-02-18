@@ -566,8 +566,8 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry_ru
         print(f"Would add #review keyword to changelist {changelist}")
         return 0
 
-    # Insert #review at the end of the description
-    lines.insert(desc_end, '\t#review')
+    # Insert #review at the end of the description, preceded by a blank line
+    lines[desc_end:desc_end] = ['\t', '\t#review']
 
     try:
         result = subprocess.run(

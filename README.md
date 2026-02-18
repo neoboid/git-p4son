@@ -95,8 +95,8 @@ git p4son sync <changelist> [--force]
 
 **Arguments:**
 - `changelist`: Changelist number, named alias, or special keywords:
-  - `latest`: Sync to the latest changelist affecting the workspace
-  - `last-synced`: Re-sync the last synced changelist
+  - `@latest`: Sync to the latest changelist affecting the workspace
+  - `@last-synced`: Re-sync the last synced changelist
 
 **Options:**
 - `-f, --force`: Force sync encountered writable files and allow syncing to older changelists.
@@ -104,8 +104,8 @@ git p4son sync <changelist> [--force]
 **Examples:**
 ```sh
 git p4son sync 12345
-git p4son sync latest
-git p4son sync last-synced
+git p4son sync @latest
+git p4son sync @last-synced
 git p4son sync 12345 --force
 ```
 
@@ -343,7 +343,7 @@ git commit -m "Feature part1"
 
 # Sync to the latest changelist affecting the workspace
 git checkout main
-git p4son sync latest
+git p4son sync @latest
 
 # Rebase your changes on main
 git checkout my-fancy-feature
@@ -368,7 +368,7 @@ git p4son update myfeature --shelve
 
 # Sync to the latest changelist from perforce
 git checkout main
-git p4son sync latest
+git p4son sync @latest
 
 # Remove old branch as you don't need it anymore
 git branch -D my-fancy-feature

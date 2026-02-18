@@ -29,6 +29,10 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
     Returns:
         True on success, False on failure
     """
+    if '@' in name:
+        print('Alias name cannot contain "@"', file=sys.stderr)
+        return False
+
     changelists_dir = _changelists_dir(workspace_dir)
     alias_path = os.path.join(changelists_dir, name)
 

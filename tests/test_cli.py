@@ -17,8 +17,8 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.force)
 
     def test_sync_command_with_force(self):
-        args = self.parser.parse_args(['sync', 'latest', '--force'])
-        self.assertEqual(args.changelist, 'latest')
+        args = self.parser.parse_args(['sync', '@latest', '--force'])
+        self.assertEqual(args.changelist, '@latest')
         self.assertTrue(args.force)
 
     def test_sync_command_short_force(self):

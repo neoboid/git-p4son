@@ -58,7 +58,7 @@ Examples:
     )
     sync_parser.add_argument(
         'changelist',
-        help='Changelist number or named alias to sync, "latest" to sync to the latest changelist affecting the workspace, or "last-synced" to re-sync the last synced changelist'
+        help='Changelist number or named alias to sync, "@latest" to sync to the latest changelist affecting the workspace, or "@last-synced" to re-sync the last synced changelist'
     )
     sync_parser.add_argument(
         '-f', '--force',

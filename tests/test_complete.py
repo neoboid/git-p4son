@@ -129,15 +129,15 @@ class TestComplete(unittest.TestCase):
     def test_sync_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', ''], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('latest', names)
-        self.assertIn('last-synced', names)
+        self.assertIn('@latest', names)
+        self.assertIn('@last-synced', names)
         self.assertIn('myalias', names)
 
     def test_sync_positional_prefix(self, _ws, _aliases):
-        result = _complete(self.parser, ['sync', 'la'], workspace_dir='/ws')
+        result = _complete(self.parser, ['sync', '@la'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('latest', names)
-        self.assertIn('last-synced', names)
+        self.assertIn('@latest', names)
+        self.assertIn('@last-synced', names)
         self.assertNotIn('myalias', names)
 
     def test_sync_flags(self, _ws, _aliases):
@@ -357,8 +357,8 @@ class TestCompleteNoWorkspace(unittest.TestCase):
     def test_sync_no_aliases(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', ''], workspace_dir=None)
         names = self._names(result)
-        self.assertIn('latest', names)
-        self.assertIn('last-synced', names)
+        self.assertIn('@latest', names)
+        self.assertIn('@last-synced', names)
         self.assertNotIn('myalias', names)
 
     def test_update_empty(self, _ws, _aliases):

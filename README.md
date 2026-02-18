@@ -330,9 +330,9 @@ This enables completion for both `git p4son <TAB>` and `git-p4son <TAB>`.
 Here's a typical workflow using git-p4son:
 
 ```sh
-# Sync main with new changes from perforce, CL 124
+# Sync main with latest changes from perforce
 git checkout main
-git p4son sync 124
+git p4son sync @latest
 
 # Start work on a new feature
 git checkout -b my-fancy-feature
@@ -353,16 +353,23 @@ git rebase main
 git add .
 git commit -m "Feature part2"
 
-# Create a Swarm review with all commits since main in one go
-# This opens an interactive rebase with pre-filled exec lines
-git p4son review myfeature -m "My fancy feature" -b main
+# Create a Swarm review with all commits since main in one go.
+# This opens an interactive rebase with pre-filled exec lines updating changelist
+# with git-p4son after each picked changelist.
+#
+# @branch is a special keyword that gets resolved to current git branch.
+# in this case the review is put in a new changelist, and an alias called "my-fancy-feature" is
+# set up for this changelist number so that you can refer to this CL with the alias instead of number
+# in follow up commands.
+git p4son review @branch -m "My fancy feature" -b main
 
 # After review feedback, make more changes
 git add .
 git commit -m "Address review feedback"
 
 # Update the changelist with latest commit, re-open files, and re-shelve
-git p4son update myfeature --shelve
+# We could have used @branch here instead of spelling out the alias by name
+git p4son update my-fancy-feature --shelve
 
 # After approval, submit in p4v
 
@@ -370,8 +377,11 @@ git p4son update myfeature --shelve
 git checkout main
 git p4son sync @latest
 
-# Remove old branch as you don't need it anymore
+# Force remove old branch as you don't need it anymore
 git branch -D my-fancy-feature
+
+# Remove changelist alias
+git p4son alias delete my-fancy-feature
 
 # Start working on the next feature
 git checkout -b my-next-fancy-feature

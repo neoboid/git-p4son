@@ -17,7 +17,12 @@ git p4son [command] [options]
 python -m git_p4son [command] [options]
 ```
 
-There are no tests, linters, or CI configured. The project has zero external dependencies (standard library only). Python 3.7+ is required.
+The project has zero external dependencies (standard library only). Python 3.7+ is required.
+
+Run tests with:
+```bash
+python -m pytest tests/
+```
 
 Format code with `autopep8`:
 ```bash

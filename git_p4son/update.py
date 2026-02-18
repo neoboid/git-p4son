@@ -34,26 +34,20 @@ def update_command(args: argparse.Namespace) -> int:
         return 1
 
     # Update changelist description
-    returncode = update_changelist(
+    update_changelist(
         changelist, args.base_branch, workspace_dir, dry_run=args.dry_run)
-    if returncode != 0:
-        return returncode
 
     if not args.dry_run:
         print(f"Updated changelist {changelist}")
 
     # Open changed files for edit
     if not args.no_edit:
-        returncode = open_changes_for_edit(
+        open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
-        if returncode != 0:
-            return returncode
 
     # Shelve the changelist
     if args.shelve:
-        returncode = p4_shelve_changelist(
+        p4_shelve_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
-        if returncode != 0:
-            return returncode
 
     return 0

@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import (
+    CommandError,
     RunResult,
     branch_to_alias,
     get_current_branch,
@@ -128,6 +129,7 @@ class TestRun(unittest.TestCase):
             cwd='/tmp',
             capture_output=True,
             text=True,
+            input=None,
         )
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, ['line1', 'line2'])
@@ -140,15 +142,16 @@ class TestRun(unittest.TestCase):
         self.assertEqual(result.stderr, [])
 
     @mock.patch('subprocess.run')
-    def test_nonzero_returncode(self, mock_subprocess_run):
+    def test_nonzero_returncode_raises(self, mock_subprocess_run):
         mock_subprocess_run.return_value = mock.Mock(
             returncode=1,
             stdout='',
             stderr='error\n',
         )
-        result = run(['p4', 'info'])
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(result.stderr, ['error'])
+        with self.assertRaises(CommandError) as ctx:
+            run(['p4', 'info'])
+        self.assertEqual(ctx.exception.returncode, 1)
+        self.assertEqual(ctx.exception.stderr, ['error'])
 
 
 class TestRunWithOutput(unittest.TestCase):

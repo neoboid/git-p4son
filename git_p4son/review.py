@@ -23,17 +23,15 @@ def _todo_path(workspace_dir: str) -> str:
     return os.path.join(_reviews_dir(workspace_dir), 'todo')
 
 
-def _get_commit_lines(base_branch: str, workspace_dir: str) -> tuple[int, list[str]]:
+def _get_commit_lines(base_branch: str, workspace_dir: str) -> list[str]:
     """Get git log --oneline lines for commits since base branch.
 
     Returns:
-        Tuple of (returncode, list of "hash subject" lines)
+        List of "hash subject" lines.
     """
     res = run(['git', 'log', '--oneline', '--reverse',
                f'{base_branch}..HEAD'], cwd=workspace_dir)
-    if res.returncode != 0:
-        return (res.returncode, [])
-    return (0, res.stdout)
+    return res.stdout
 
 
 def _generate_todo(commit_lines: list[str], alias: str, message: str,
@@ -100,11 +98,7 @@ def review_command(args: argparse.Namespace) -> int:
             return 1
 
     # Get commits since base branch
-    returncode, commit_lines = _get_commit_lines(
-        args.base_branch, workspace_dir)
-    if returncode != 0:
-        print('Failed to get commit list', file=sys.stderr)
-        return returncode
+    commit_lines = _get_commit_lines(args.base_branch, workspace_dir)
 
     if not commit_lines:
         print('No commits found since {}'.format(args.base_branch),

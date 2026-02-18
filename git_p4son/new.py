@@ -42,10 +42,8 @@ def new_command(args: argparse.Namespace) -> int:
             return 1
 
     # Create new changelist
-    returncode, changelist = create_changelist(
+    changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run)
-    if returncode != 0:
-        return returncode
 
     if not args.dry_run:
         print(f"Created changelist {changelist}")
@@ -57,23 +55,17 @@ def new_command(args: argparse.Namespace) -> int:
 
     # Open changed files for edit in the new changelist
     if not args.no_edit:
-        returncode = open_changes_for_edit(
+        open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
-        if returncode != 0:
-            return returncode
 
     # Add #review keyword to changelist description
     if args.review:
-        returncode = add_review_keyword_to_changelist(
+        add_review_keyword_to_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
-        if returncode != 0:
-            return returncode
 
     # Shelve the changelist
     if args.shelve or args.review:
-        returncode = p4_shelve_changelist(
+        p4_shelve_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
-        if returncode != 0:
-            return returncode
 
     return 0

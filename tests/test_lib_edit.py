@@ -3,6 +3,7 @@
 import unittest
 from unittest import mock
 
+from git_p4son.common import CommandError
 from git_p4son.lib import (
     LocalChanges,
     check_file_status,
@@ -50,23 +51,20 @@ class TestFindCommonAncestor(unittest.TestCase):
     @mock.patch('git_p4son.lib.run')
     def test_finds_ancestor(self, mock_run):
         mock_run.return_value = make_run_result(stdout=['abc123def456'])
-        rc, ancestor = find_common_ancestor('main', 'HEAD', '/ws')
-        self.assertEqual(rc, 0)
+        ancestor = find_common_ancestor('main', 'HEAD', '/ws')
         self.assertEqual(ancestor, 'abc123def456')
 
     @mock.patch('git_p4son.lib.run')
     def test_failure(self, mock_run):
-        mock_run.return_value = make_run_result(returncode=1)
-        rc, ancestor = find_common_ancestor('main', 'HEAD', '/ws')
-        self.assertEqual(rc, 1)
-        self.assertIsNone(ancestor)
+        mock_run.side_effect = CommandError('merge-base failed')
+        with self.assertRaises(CommandError):
+            find_common_ancestor('main', 'HEAD', '/ws')
 
     @mock.patch('git_p4son.lib.run')
     def test_no_output(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
-        rc, ancestor = find_common_ancestor('main', 'HEAD', '/ws')
-        self.assertEqual(rc, 1)
-        self.assertIsNone(ancestor)
+        with self.assertRaises(CommandError):
+            find_common_ancestor('main', 'HEAD', '/ws')
 
 
 class TestGetLocalGitChanges(unittest.TestCase):
@@ -83,8 +81,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
                 'R100\told_name.txt\tnew_name.txt',
             ]),
         ]
-        rc, changes = get_local_git_changes('main', '/ws')
-        self.assertEqual(rc, 0)
+        changes = get_local_git_changes('main', '/ws')
         self.assertEqual(changes.mods, ['modified.txt'])
         self.assertEqual(changes.adds, ['added.txt'])
         self.assertEqual(changes.dels, ['deleted.txt'])
@@ -92,10 +89,9 @@ class TestGetLocalGitChanges(unittest.TestCase):
 
     @mock.patch('git_p4son.lib.run')
     def test_merge_base_failure(self, mock_run):
-        mock_run.return_value = make_run_result(returncode=1)
-        rc, changes = get_local_git_changes('main', '/ws')
-        self.assertNotEqual(rc, 0)
-        self.assertIsNone(changes)
+        mock_run.side_effect = CommandError('merge-base failed')
+        with self.assertRaises(CommandError):
+            get_local_git_changes('main', '/ws')
 
     @mock.patch('git_p4son.lib.run')
     def test_unknown_status(self, mock_run):
@@ -103,9 +99,8 @@ class TestGetLocalGitChanges(unittest.TestCase):
             make_run_result(stdout=['abc123']),
             make_run_result(stdout=['X\tunknown.txt']),
         ]
-        rc, changes = get_local_git_changes('main', '/ws')
-        self.assertNotEqual(rc, 0)
-        self.assertIsNone(changes)
+        with self.assertRaises(CommandError):
+            get_local_git_changes('main', '/ws')
 
 
 class TestIncludeChangesInChangelist(unittest.TestCase):
@@ -115,8 +110,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.adds = ['new_file.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'add', '-c', '100', 'new_file.txt'],
             cwd='/ws', dry_run=False,
@@ -128,8 +122,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'edit', '-c', '100', 'mod.txt'],
             cwd='/ws', dry_run=False,
@@ -141,8 +134,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'reopen', '-c', '100', 'mod.txt'],
             cwd='/ws', dry_run=False,
@@ -154,8 +146,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_not_called()
 
     @mock.patch('git_p4son.lib.check_file_status')
@@ -164,8 +155,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['old.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'delete', '-c', '100', 'old.txt'],
             cwd='/ws', dry_run=False,
@@ -177,8 +167,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.moves = [('old.txt', 'new.txt')]
-        rc = include_changes_in_changelist(changes, '100', '/ws')
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws')
         calls = mock_run.call_args_list
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][0][0], [
@@ -191,8 +180,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.adds = ['new.txt']
-        rc = include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
-        self.assertEqual(rc, 0)
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
         mock_run.assert_called_with(
             ['p4', 'add', '-c', '100', 'new.txt'],
             cwd='/ws', dry_run=True,
@@ -200,20 +188,19 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
 
 
 class TestOpenChangesForEdit(unittest.TestCase):
-    @mock.patch('git_p4son.lib.include_changes_in_changelist', return_value=0)
+    @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.lib.get_local_git_changes')
     def test_success(self, mock_get_changes, mock_include):
         mock_changes = mock.Mock()
-        mock_get_changes.return_value = (0, mock_changes)
-        rc = open_changes_for_edit('100', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 0)
+        mock_get_changes.return_value = mock_changes
+        open_changes_for_edit('100', 'HEAD~1', '/ws')
         mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
 
     @mock.patch('git_p4son.lib.get_local_git_changes')
     def test_get_changes_failure(self, mock_get_changes):
-        mock_get_changes.return_value = (1, None)
-        rc = open_changes_for_edit('100', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 1)
+        mock_get_changes.side_effect = CommandError('get changes failed')
+        with self.assertRaises(CommandError):
+            open_changes_for_edit('100', 'HEAD~1', '/ws')
 
 
 if __name__ == '__main__':

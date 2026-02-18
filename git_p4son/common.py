@@ -64,6 +64,15 @@ def ensure_workspace() -> str:
     return workspace_dir
 
 
+class CommandError(Exception):
+    """Raised when a subprocess command fails."""
+
+    def __init__(self, message: str, returncode: int = 1, stderr: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.stderr = stderr or []
+
+
 class RunResult:
     """Result of a command execution."""
 
@@ -83,7 +92,8 @@ def join_command_line(command: list[str]) -> str:
     return command_line
 
 
-def run(command: list[str], cwd: str = '.', dry_run: bool = False) -> RunResult:
+def run(command: list[str], cwd: str = '.', dry_run: bool = False,
+        input: str | None = None) -> RunResult:
     """
     Run a command and return the result.
 
@@ -91,6 +101,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False) -> RunResult:
         command: List of command arguments
         cwd: Working directory to run the command in
         dry_run: If True, only print the command without executing
+        input: Optional string to pass to the subprocess via stdin
 
     Returns:
         RunResult object with returncode, stdout, and stderr
@@ -105,11 +116,19 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False) -> RunResult:
     result = subprocess.run(command,
                             cwd=cwd,
                             capture_output=True,
-                            text=True)
+                            text=True,
+                            input=input)
 
     end_timestamp = timer()
 
     print('Elapsed time is', timedelta(seconds=end_timestamp - start_timestamp))
+
+    if result.returncode != 0:
+        raise CommandError(
+            join_command_line(command),
+            returncode=result.returncode,
+            stderr=result.stderr.splitlines(),
+        )
 
     return RunResult(result.returncode, result.stdout.splitlines(), result.stderr.splitlines())
 
@@ -220,5 +239,12 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
     end_timestamp = timer()
 
     print('Elapsed time is', timedelta(seconds=end_timestamp - start_timestamp))
+
+    if returncode != 0:
+        raise CommandError(
+            join_command_line(command),
+            returncode=returncode,
+            stderr=stderr_lines,
+        )
 
     return RunResult(returncode, stdout_lines, stderr_lines)

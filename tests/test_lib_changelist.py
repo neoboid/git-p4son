@@ -3,6 +3,7 @@
 import unittest
 from unittest import mock
 
+from git_p4son.common import CommandError
 from git_p4son.lib import (
     create_changelist,
     extract_description_lines,
@@ -109,104 +110,75 @@ class TestSplitDescriptionLines(unittest.TestCase):
 
 
 class TestCreateChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
-    def test_creates_changelist(self, mock_get_lines, mock_subprocess):
-        mock_get_lines.return_value = (0, ['1. Add feature', '2. Fix bug'])
-        mock_subprocess.return_value = mock.Mock(
-            returncode=0,
-            stdout='Change 99999 created.\n',
-            stderr='',
-        )
-        rc, cl_num = create_changelist('My message', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 0)
+    def test_creates_changelist(self, mock_get_lines, mock_run):
+        mock_get_lines.return_value = ['1. Add feature', '2. Fix bug']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 99999 created.'])
+        cl_num = create_changelist('My message', 'HEAD~1', '/ws')
         self.assertEqual(cl_num, '99999')
         # Verify spec was passed via stdin
-        call_kwargs = mock_subprocess.call_args
-        spec_input = call_kwargs.kwargs.get(
-            'input') or call_kwargs[1].get('input')
+        call_kwargs = mock_run.call_args
+        spec_input = call_kwargs.kwargs.get('input')
         self.assertIn('My message', spec_input)
         self.assertIn('1. Add feature', spec_input)
 
-    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
-    def test_no_commits(self, mock_get_lines, mock_subprocess):
-        mock_get_lines.return_value = (0, [])
-        mock_subprocess.return_value = mock.Mock(
-            returncode=0,
-            stdout='Change 100 created.\n',
-            stderr='',
-        )
-        rc, cl_num = create_changelist('Solo message', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 0)
+    def test_no_commits(self, mock_get_lines, mock_run):
+        mock_get_lines.return_value = []
+        mock_run.return_value = make_run_result(
+            stdout=['Change 100 created.'])
+        cl_num = create_changelist('Solo message', 'HEAD~1', '/ws')
         self.assertEqual(cl_num, '100')
 
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_dry_run(self, mock_get_lines):
-        mock_get_lines.return_value = (0, ['1. Commit'])
-        rc, cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
-        self.assertEqual(rc, 0)
+        mock_get_lines.return_value = ['1. Commit']
+        cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
         self.assertIsNone(cl_num)
 
-    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
-    def test_p4_failure(self, mock_get_lines, mock_subprocess):
-        mock_get_lines.return_value = (0, ['1. Commit'])
-        mock_subprocess.return_value = mock.Mock(
-            returncode=1,
-            stdout='',
-            stderr='Error creating changelist',
-        )
-        rc, cl_num = create_changelist('Msg', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 1)
-        self.assertIsNone(cl_num)
+    def test_p4_failure(self, mock_get_lines, mock_run):
+        mock_get_lines.return_value = ['1. Commit']
+        mock_run.side_effect = CommandError('p4 change failed')
+        with self.assertRaises(CommandError):
+            create_changelist('Msg', 'HEAD~1', '/ws')
 
 
 class TestGetChangelistSpec(unittest.TestCase):
-    @mock.patch('git_p4son.lib.subprocess.run')
-    def test_success(self, mock_subprocess):
-        mock_subprocess.return_value = mock.Mock(
-            returncode=0,
-            stdout=SAMPLE_SPEC,
-            stderr='',
-        )
-        rc, spec = get_changelist_spec('12345', '/ws')
-        self.assertEqual(rc, 0)
+    @mock.patch('git_p4son.lib.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=SAMPLE_SPEC.splitlines())
+        spec = get_changelist_spec('12345', '/ws')
         self.assertEqual(spec, SAMPLE_SPEC)
 
-    @mock.patch('git_p4son.lib.subprocess.run')
-    def test_failure(self, mock_subprocess):
-        mock_subprocess.return_value = mock.Mock(
-            returncode=1,
-            stdout='',
-            stderr='Changelist not found',
-        )
-        rc, spec = get_changelist_spec('99999', '/ws')
-        self.assertEqual(rc, 1)
-        self.assertIsNone(spec)
+    @mock.patch('git_p4son.lib.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = CommandError('Changelist not found')
+        with self.assertRaises(CommandError):
+            get_changelist_spec('99999', '/ws')
 
 
 class TestUpdateChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
-    def test_appends_new_commits(self, mock_get_spec, mock_get_lines, mock_subprocess):
-        mock_get_spec.return_value = (0, SAMPLE_SPEC)
+    def test_appends_new_commits(self, mock_get_spec, mock_get_lines, mock_run):
+        mock_get_spec.return_value = SAMPLE_SPEC
         # New commits should be numbered 3 and 4 (continuing from existing 1, 2)
-        mock_get_lines.return_value = (0, ['3. New commit A', '4. New commit B'])
-        mock_subprocess.return_value = mock.Mock(
-            returncode=0,
-            stdout='Change 12345 updated.',
-            stderr='',
-        )
-        rc = update_changelist('12345', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 0)
+        mock_get_lines.return_value = ['3. New commit A', '4. New commit B']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws')
         # Verify start_number was passed correctly (2 existing commits -> start at 3)
         mock_get_lines.assert_called_once_with('HEAD~1', '/ws', start_number=3)
         # Verify the new spec was passed
-        call_kwargs = mock_subprocess.call_args
-        spec_input = call_kwargs.kwargs.get(
-            'input') or call_kwargs[1].get('input')
+        call_kwargs = mock_run.call_args
+        spec_input = call_kwargs.kwargs.get('input')
         # Old commits preserved
         self.assertIn('1. Add validation', spec_input)
         self.assertIn('2. Fix redirect', spec_input)
@@ -219,24 +191,19 @@ class TestUpdateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_dry_run(self, mock_get_spec, mock_get_lines):
-        mock_get_spec.return_value = (0, SAMPLE_SPEC)
-        mock_get_lines.return_value = (0, ['3. New commit'])
-        rc = update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
-        self.assertEqual(rc, 0)
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_get_lines.return_value = ['3. New commit']
+        update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
 
-    @mock.patch('git_p4son.lib.subprocess.run')
+    @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
-    def test_no_existing_commits_starts_at_one(self, mock_get_spec, mock_get_lines, mock_subprocess):
-        mock_get_spec.return_value = (0, SAMPLE_SPEC_NO_COMMITS)
-        mock_get_lines.return_value = (0, ['1. First commit'])
-        mock_subprocess.return_value = mock.Mock(
-            returncode=0,
-            stdout='Change 12345 updated.',
-            stderr='',
-        )
-        rc = update_changelist('12345', 'HEAD~1', '/ws')
-        self.assertEqual(rc, 0)
+    def test_no_existing_commits_starts_at_one(self, mock_get_spec, mock_get_lines, mock_run):
+        mock_get_spec.return_value = SAMPLE_SPEC_NO_COMMITS
+        mock_get_lines.return_value = ['1. First commit']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws')
         # Should start at 1 since no existing commits
         mock_get_lines.assert_called_once_with('HEAD~1', '/ws', start_number=1)
 

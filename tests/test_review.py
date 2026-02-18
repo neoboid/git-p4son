@@ -4,6 +4,7 @@ import os
 import unittest
 from unittest import mock
 
+from git_p4son.common import CommandError
 from git_p4son.review import (
     _generate_todo,
     _get_commit_lines,
@@ -68,8 +69,7 @@ class TestGetCommitLines(unittest.TestCase):
             'abc1234 First commit',
             'def5678 Second commit',
         ])
-        rc, lines = _get_commit_lines('main', '/workspace')
-        self.assertEqual(rc, 0)
+        lines = _get_commit_lines('main', '/workspace')
         self.assertEqual(lines, ['abc1234 First commit', 'def5678 Second commit'])
         mock_run.assert_called_once_with(
             ['git', 'log', '--oneline', '--reverse', 'main..HEAD'],
@@ -78,10 +78,9 @@ class TestGetCommitLines(unittest.TestCase):
 
     @mock.patch('git_p4son.review.run')
     def test_failure(self, mock_run):
-        mock_run.return_value = make_run_result(returncode=128)
-        rc, lines = _get_commit_lines('main', '/workspace')
-        self.assertEqual(rc, 128)
-        self.assertEqual(lines, [])
+        mock_run.side_effect = CommandError('git log failed')
+        with self.assertRaises(CommandError):
+            _get_commit_lines('main', '/workspace')
 
 
 class TestReviewCommand(unittest.TestCase):

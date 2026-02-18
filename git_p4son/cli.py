@@ -12,7 +12,7 @@ from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
 from .review import review_command, sequence_editor_command
-from .common import branch_to_alias, get_current_branch, get_workspace_dir, ensure_workspace
+from .common import CommandError, branch_to_alias, get_current_branch, get_workspace_dir, ensure_workspace
 from .complete import run_complete
 
 
@@ -372,6 +372,11 @@ def main() -> int:
     except KeyboardInterrupt:
         print('\nOperation cancelled by user', file=sys.stderr)
         return 1
+    except CommandError as e:
+        for line in e.stderr:
+            print(line, file=sys.stderr)
+        print(f'Command failed with exit code {e.returncode}', file=sys.stderr)
+        return e.returncode
     except Exception as e:
         print(f'Error: {e}', file=sys.stderr)
         return 1

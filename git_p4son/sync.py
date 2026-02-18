@@ -3,16 +3,13 @@ Sync command implementation for git-p4son.
 """
 
 import argparse
-import os
 import re
-import subprocess
 import sys
-import time
 from timeit import default_timer as timer
 from datetime import timedelta
 from typing import IO
 
-from .common import run, run_with_output
+from .common import CommandError, run, run_with_output
 from .changelist_store import resolve_changelist
 
 
@@ -125,97 +122,83 @@ class P4SyncOutputProcessor:
             print(f'  count: {stat.count}')
 
 
-def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> int:
+def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
     """Force sync a single file."""
     output_processor = P4SyncOutputProcessor(-1)
-    res = run_with_output(['p4', 'sync', '-f', '%s@%s' %
-                          (filename, changelist)], cwd=workspace_dir, on_output=output_processor)
+    run_with_output(['p4', 'sync', '-f', '%s@%s' %
+                    (filename, changelist)], cwd=workspace_dir, on_output=output_processor)
     output_processor.print_stats()
-    return res.returncode
 
 
 def get_file_count_to_sync(changelist: int, workspace_dir: str) -> int:
     """Get the number of files that need to be synced."""
     res = run(['p4', 'sync', '-n', '//...@%s' %
               (changelist)], cwd=workspace_dir)
-
-    if res.returncode != 0:
-        return -1
-
     return len(res.stdout)
 
 
 def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
-    """Sync files from Perforce."""
+    """Sync files from Perforce.
+
+    Returns True on success, False if writable files were found without --force.
+    Raises CommandError on actual command failures.
+    """
     file_count_to_sync = get_file_count_to_sync(changelist, workspace_dir)
-    if file_count_to_sync < 0:
-        return False
     if file_count_to_sync == 0:
         print('All files are up to date')
         return True
     print(f'Syncing {file_count_to_sync} files')
 
     output_processor = P4SyncOutputProcessor(file_count_to_sync)
-    res = run_with_output(['p4', 'sync', '//...@%s' %
-                          (changelist)], cwd=workspace_dir, on_output=output_processor)
-    output_processor.print_stats()
-    if res.returncode == 0:
+    try:
+        run_with_output(['p4', 'sync', '//...@%s' %
+                        (changelist)], cwd=workspace_dir, on_output=output_processor)
+        output_processor.print_stats()
         return True
-
-    writable_files = get_writable_files(res.stderr)
-    print('Found %d writable files' % len(writable_files))
-    if force:
-        for filename in writable_files:
-            if p4_force_sync_file(changelist, filename, workspace_dir) != 0:
-                return False
-    else:
-        print('Leaving files as is, use --force to force sync')
-        for filename in writable_files:
-            print(filename)
-        return False
-
-    return True
+    except CommandError as e:
+        output_processor.print_stats()
+        writable_files = get_writable_files(e.stderr)
+        if not writable_files:
+            raise
+        print('Found %d writable files' % len(writable_files))
+        if force:
+            for filename in writable_files:
+                p4_force_sync_file(changelist, filename, workspace_dir)
+            return True
+        else:
+            print('Leaving files as is, use --force to force sync')
+            for filename in writable_files:
+                print(filename)
+            return False
 
 
 def p4_is_workspace_clean(workspace_dir: str) -> bool:
     """Check if Perforce workspace is clean."""
     res = run_with_output(['p4', 'opened'], cwd=workspace_dir,
                           on_output=echo_output_to_stream)
-    if res.returncode != 0:
-        print('Failed to run p4 opened')
-        return False
-
-    local_changes = res.stdout
-    return len(local_changes) == 0
+    return len(res.stdout) == 0
 
 
 def git_is_workspace_clean(workspace_dir: str) -> bool:
     """Check if git workspace is clean."""
     res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir,
                           on_output=echo_output_to_stream)
-    if res.returncode != 0:
-        print('Failed to run git status')
-        return False
-
-    local_changes = res.stdout
-    return len(local_changes) == 0
+    return len(res.stdout) == 0
 
 
-def git_add_all_files(workspace_dir: str) -> bool:
+def git_add_all_files(workspace_dir: str) -> None:
     """Add all files to git."""
-    res = run_with_output(['git', 'add', '.'], cwd=workspace_dir,
-                          on_output=echo_output_to_stream)
-    return res.returncode == 0
+    run_with_output(['git', 'add', '.'], cwd=workspace_dir,
+                    on_output=echo_output_to_stream)
 
 
-def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> bool:
+def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
     """Commit changes to git."""
     args = ['commit', '-m', message]
     if allow_empty:
         args.append('--allow-empty')
-    res = run_with_output(['git'] + args,
-                          cwd=workspace_dir, on_output=echo_output_to_stream)
-    return res.returncode == 0
+    run_with_output(['git'] + args,
+                    cwd=workspace_dir, on_output=echo_output_to_stream)
 
 
 def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
@@ -224,7 +207,7 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
         ['git', 'log', '-1', '--pretty=%s',
          '--grep=: p4 sync //\\.\\.\\.@'],
         cwd=workspace_dir, on_output=echo_output_to_stream)
-    if res.returncode != 0 or len(res.stdout) == 0:
+    if len(res.stdout) == 0:
         return None
 
     msg = res.stdout[0]
@@ -236,7 +219,7 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
         return None
 
 
-def get_latest_changelist_affecting_workspace(workspace_dir: str) -> tuple[int, int | None]:
+def get_latest_changelist_affecting_workspace(workspace_dir: str) -> int:
     """
     Get the latest changelist that affects files in the client's workspace view.
     This finds the most recent changelist that would be pulled by 'p4 sync'.
@@ -245,12 +228,10 @@ def get_latest_changelist_affecting_workspace(workspace_dir: str) -> tuple[int, 
         workspace_dir: The workspace directory
 
     Returns:
-        Tuple of (returncode, changelist_number or None)
+        The latest changelist number.
     """
     # First, get the client name
     res = run(['p4', 'info'], cwd=workspace_dir)
-    if res.returncode != 0:
-        return (res.returncode, None)
 
     client_name = None
     for line in res.stdout:
@@ -259,23 +240,22 @@ def get_latest_changelist_affecting_workspace(workspace_dir: str) -> tuple[int, 
             break
 
     if not client_name:
-        return (1, None)
+        raise CommandError('No client name found in p4 info output')
 
     # Get the latest changelist that affects files in the client's workspace view
     # Using #head to get the latest revisions in the depot that match the client view
     res = run(['p4', 'changes', '-m1', '-s', 'submitted',
               f'//{client_name}/...#head'], cwd=workspace_dir)
-    if res.returncode != 0 or len(res.stdout) == 0:
-        return (res.returncode, None)
+    if not res.stdout:
+        raise CommandError('No changelists found affecting workspace')
 
     # Parse the changelist number from the output
     # Format is typically: "Change 12345 on 2023/01/01 by user@workspace 'description'"
     line = res.stdout[0]
     match = re.search(r'Change (\d+)', line)
-    if match:
-        return (0, int(match.group(1)))
-    else:
-        return (1, None)
+    if not match:
+        raise CommandError(f'Failed to parse changelist from: {line}')
+    return int(match.group(1))
 
 
 def sync_command(args: argparse.Namespace) -> int:
@@ -316,15 +296,8 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # Handle "@latest" keyword
     if args.changelist.lower() == '@latest':
-        returncode, latest_changelist = get_latest_changelist_affecting_workspace(
+        latest_changelist = get_latest_changelist_affecting_workspace(
             workspace_dir)
-        if returncode != 0:
-            print('Failed to get latest changelist affecting workspace',
-                  file=sys.stderr)
-            return 1
-        if latest_changelist is None:
-            print('No changelists found affecting workspace', file=sys.stderr)
-            return 1
         print(f'Latest changelist affecting workspace: {latest_changelist}')
         args.changelist = latest_changelist
     else:
@@ -365,15 +338,11 @@ def sync_command(args: argparse.Namespace) -> int:
     print('')
 
     if not git_is_workspace_clean(workspace_dir):
-        if not git_add_all_files(workspace_dir):
-            print('Failed to add all files to git')
-            return 1
+        git_add_all_files(workspace_dir)
         print('')
 
     commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)
-    if not git_commit(commit_msg, workspace_dir, allow_empty=True):
-        print('Failed to commit files to git')
-        return 1
+    git_commit(commit_msg, workspace_dir, allow_empty=True)
     print('')
 
     print('Finished with success')

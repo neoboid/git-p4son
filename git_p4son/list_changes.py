@@ -3,11 +3,10 @@ List-changes command implementation for git-p4son.
 """
 
 import argparse
-import sys
 from .common import run
 
 
-def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> tuple[int, list[str] | None]:
+def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]:
     """
     Get list of commit subjects from git log since base branch.
 
@@ -16,15 +15,12 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> tuple[int
         workspace_dir: The workspace directory
 
     Returns:
-        Tuple of (returncode, list_of_subjects or None)
+        List of commit subjects.
     """
     # Run git log to get commit subjects since base branch
     # Using --reverse to get oldest commits first
     res = run(['git', 'log', '--oneline', '--reverse', '{}..HEAD'.format(base_branch)],
               cwd=workspace_dir)
-
-    if res.returncode != 0:
-        return (res.returncode, None)
 
     # Extract just the subjects (everything after the hash and space)
     subjects = []
@@ -36,10 +32,10 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> tuple[int
             # Fallback if format is unexpected
             subjects.append(line)
 
-    return (0, subjects)
+    return subjects
 
 
-def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> tuple[int, list[str]]:
+def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> list[str]:
     """
     Get enumerated commit lines from git log since base branch.
 
@@ -49,21 +45,18 @@ def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, star
         start_number: The starting number for enumeration (default 1)
 
     Returns:
-        Tuple of (returncode, list of enumerated commit lines)
+        List of enumerated commit lines.
     """
-    returncode, subjects = get_commit_subjects_since(
-        base_branch, workspace_dir)
-    if returncode != 0:
-        return (returncode, [])
+    subjects = get_commit_subjects_since(base_branch, workspace_dir)
 
     lines = []
     for i, subject in enumerate(subjects, start_number):
         lines.append(f"{i}. {subject}")
 
-    return (0, lines)
+    return lines
 
 
-def get_enumerated_change_description_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> tuple[int, str | None]:
+def get_enumerated_change_description_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> str | None:
     """
     Get changelist description from git log since base branch.
 
@@ -73,17 +66,15 @@ def get_enumerated_change_description_since(base_branch: str, workspace_dir: str
         start_number: The starting number for enumeration (default 1)
 
     Returns:
-        Tuple of (returncode, description_string or None)
+        Description string, or None if no commits found.
     """
-    returncode, lines = get_enumerated_commit_lines_since(
+    lines = get_enumerated_commit_lines_since(
         base_branch, workspace_dir, start_number)
-    if returncode != 0:
-        return (returncode, None)
 
     if not lines:
-        return (0, None)
+        return None
 
-    return (0, '\n'.join(lines))
+    return '\n'.join(lines)
 
 
 def list_changes_command(args: argparse.Namespace) -> int:
@@ -96,13 +87,8 @@ def list_changes_command(args: argparse.Namespace) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure)
     """
-    workspace_dir = args.workspace_dir
-
-    returncode, description = get_enumerated_change_description_since(
-        args.base_branch, workspace_dir)
-    if returncode != 0:
-        print('Failed to get commit list', file=sys.stderr)
-        return returncode
+    description = get_enumerated_change_description_since(
+        args.base_branch, args.workspace_dir)
 
     if description:
         print(description)

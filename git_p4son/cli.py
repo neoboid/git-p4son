@@ -58,7 +58,7 @@ Examples:
     )
     sync_parser.add_argument(
         'changelist',
-        help='Changelist number or named alias to sync, "@latest" to sync to the latest changelist affecting the workspace, or "@last-synced" to re-sync the last synced changelist'
+        help='Changelist number or named alias to sync, "latest" to sync to the latest changelist affecting the workspace, or "last-synced" to re-sync the last synced changelist'
     )
     sync_parser.add_argument(
         '-f', '--force',
@@ -278,26 +278,26 @@ Examples:
 
 
 def _resolve_branch_keyword(value: str, workspace_dir: str) -> str | None:
-    """Resolve @branch to the branch-derived alias name.
+    """Resolve 'branch' keyword to the branch-derived alias name.
 
     Returns the resolved alias name, or None if resolution fails.
     Prints an error message on failure.
     """
-    if value != '@branch':
+    if value != 'branch':
         return value
     branch = get_current_branch(workspace_dir)
     if not branch or branch == 'main':
-        print('Error: @branch cannot be used on main or detached HEAD',
+        print('Error: "branch" keyword cannot be used on main or detached HEAD',
               file=sys.stderr)
         return None
     return branch_to_alias(branch)
 
 
 def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
-    """Resolve @branch in args.alias. Returns error code or None on success."""
-    if getattr(args, 'alias', None) != '@branch':
+    """Resolve 'branch' keyword in args.alias. Returns error code or None on success."""
+    if getattr(args, 'alias', None) != 'branch':
         return None
-    resolved = _resolve_branch_keyword('@branch', args.workspace_dir)
+    resolved = _resolve_branch_keyword('branch', args.workspace_dir)
     if resolved is None:
         return 1
     args.alias = resolved

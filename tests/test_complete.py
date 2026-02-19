@@ -129,15 +129,15 @@ class TestComplete(unittest.TestCase):
     def test_sync_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', ''], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@latest', names)
-        self.assertIn('@last-synced', names)
+        self.assertIn('latest', names)
+        self.assertIn('last-synced', names)
         self.assertIn('myalias', names)
 
     def test_sync_positional_prefix(self, _ws, _aliases):
-        result = _complete(self.parser, ['sync', '@la'], workspace_dir='/ws')
+        result = _complete(self.parser, ['sync', 'la'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@latest', names)
-        self.assertIn('@last-synced', names)
+        self.assertIn('latest', names)
+        self.assertIn('last-synced', names)
         self.assertNotIn('myalias', names)
 
     def test_sync_flags(self, _ws, _aliases):
@@ -234,79 +234,79 @@ class TestCompleteBranchAlias(unittest.TestCase):
     def _names(self, candidates):
         return [name for name, _ in candidates]
 
-    def test_new_positional_at_branch(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['new', '@'], workspace_dir='/ws')
+    def test_new_positional_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', 'b'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_new_positional_at_branch_expand(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['new', '@branch'],
+    def test_new_positional_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', 'branch'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('feat-cool', names)
-        self.assertNotIn('@branch', names)
+        self.assertNotIn('branch', names)
 
-    def test_review_positional_at_branch(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['review', '@'], workspace_dir='/ws')
+    def test_review_positional_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['review', 'b'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_new_positional_at_br_prefix(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['new', '@br'], workspace_dir='/ws')
+    def test_new_positional_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', 'br'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_review_positional_at_br_prefix(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['review', '@br'], workspace_dir='/ws')
+    def test_review_positional_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['review', 'br'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_update_positional_at_branch(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['update', '@'], workspace_dir='/ws')
+    def test_update_positional_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', 'b'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_update_positional_at_br_prefix(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['update', '@br'], workspace_dir='/ws')
+    def test_update_positional_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', 'br'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_update_positional_at_branch_expand(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['update', '@branch'],
+    def test_update_positional_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['update', 'branch'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('feat-cool', names)
-        self.assertNotIn('@branch', names)
+        self.assertNotIn('branch', names)
 
     def test_update_positional_includes_aliases(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['update', ''], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
         self.assertIn('myalias', names)
 
-    def test_alias_set_at_branch(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', '@'],
+    def test_alias_set_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', 'b'],
                            workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_alias_set_at_br_prefix(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', '@br'],
+    def test_alias_set_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', 'br'],
                            workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
 
-    def test_alias_set_at_branch_expand(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', '@branch'],
+    def test_alias_set_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'set', '123', 'branch'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('feat-cool', names)
-        self.assertNotIn('@branch', names)
+        self.assertNotIn('branch', names)
 
     def test_new_positional_includes_aliases(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', ''], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('@branch', names)
+        self.assertIn('branch', names)
         self.assertIn('myalias', names)
 
 
@@ -321,10 +321,10 @@ class TestCompleteBranchNoWorkspace(unittest.TestCase):
     def _names(self, candidates):
         return [name for name, _ in candidates]
 
-    def test_new_positional_no_at_branch(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['new', '@'], workspace_dir=None)
+    def test_new_positional_no_branch(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', 'b'], workspace_dir=None)
         names = self._names(result)
-        self.assertNotIn('@branch', names)
+        self.assertNotIn('branch', names)
 
 
 @mock.patch('git_p4son.complete.get_current_branch', return_value='main')
@@ -338,10 +338,10 @@ class TestCompleteBranchOnMain(unittest.TestCase):
     def _names(self, candidates):
         return [name for name, _ in candidates]
 
-    def test_new_positional_no_at_branch_on_main(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['new', '@'], workspace_dir='/ws')
+    def test_new_positional_no_branch_on_main(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['new', 'b'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertNotIn('@branch', names)
+        self.assertNotIn('branch', names)
 
 
 @mock.patch('git_p4son.complete.list_changelist_aliases',
@@ -357,8 +357,8 @@ class TestCompleteNoWorkspace(unittest.TestCase):
     def test_sync_no_aliases(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', ''], workspace_dir=None)
         names = self._names(result)
-        self.assertIn('@latest', names)
-        self.assertIn('@last-synced', names)
+        self.assertIn('latest', names)
+        self.assertIn('last-synced', names)
         self.assertNotIn('myalias', names)
 
     def test_update_empty(self, _ws, _aliases):

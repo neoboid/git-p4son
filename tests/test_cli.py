@@ -17,8 +17,8 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.force)
 
     def test_sync_command_with_force(self):
-        args = self.parser.parse_args(['sync', '@latest', '--force'])
-        self.assertEqual(args.changelist, '@latest')
+        args = self.parser.parse_args(['sync', 'latest', '--force'])
+        self.assertEqual(args.changelist, 'latest')
         self.assertTrue(args.force)
 
     def test_sync_command_short_force(self):
@@ -133,9 +133,9 @@ class TestResolveBranchAlias(unittest.TestCase):
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/foo')
     def test_resolves_at_branch_for_new(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', '@branch'])
+        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
         args.workspace_dir = '/ws'
-        self.assertEqual(args.alias, '@branch')
+        self.assertEqual(args.alias, 'branch')
         error = _resolve_branch_alias(args)
         self.assertIsNone(error)
         self.assertEqual(args.alias, 'feat-foo')
@@ -145,7 +145,7 @@ class TestResolveBranchAlias(unittest.TestCase):
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_run_command_resolves_at_branch_for_review(
             self, mock_review, _ws, _branch):
-        args = self.parser.parse_args(['review', '-m', 'msg', '@branch'])
+        args = self.parser.parse_args(['review', '-m', 'msg', 'branch'])
         result = run_command(args)
         self.assertEqual(args.alias, 'feat-bar')
         mock_review.assert_called_once_with(args)
@@ -153,14 +153,14 @@ class TestResolveBranchAlias(unittest.TestCase):
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
     def test_detached_head_returns_error(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', '@branch'])
+        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
         args.workspace_dir = '/ws'
         error = _resolve_branch_alias(args)
         self.assertEqual(error, 1)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='main')
     def test_main_branch_returns_error(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', '@branch'])
+        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
         args.workspace_dir = '/ws'
         error = _resolve_branch_alias(args)
         self.assertEqual(error, 1)

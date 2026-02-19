@@ -95,8 +95,8 @@ git p4son sync <changelist> [--force]
 
 **Arguments:**
 - `changelist`: Changelist number, named alias, or special keywords:
-  - `@latest`: Sync to the latest changelist affecting the workspace
-  - `@last-synced`: Re-sync the last synced changelist
+  - `latest`: Sync to the latest changelist affecting the workspace
+  - `last-synced`: Re-sync the last synced changelist
 
 **Options:**
 - `-f, --force`: Force sync encountered writable files and allow syncing to older changelists.
@@ -104,8 +104,8 @@ git p4son sync <changelist> [--force]
 **Examples:**
 ```sh
 git p4son sync 12345
-git p4son sync @latest
-git p4son sync @last-synced
+git p4son sync latest
+git p4son sync last-synced
 git p4son sync 12345 --force
 ```
 
@@ -332,7 +332,7 @@ Here's a typical workflow using git-p4son:
 ```sh
 # Sync main with latest changes from perforce
 git checkout main
-git p4son sync @latest
+git p4son sync latest
 
 # Start work on a new feature
 git checkout -b my-fancy-feature
@@ -343,7 +343,7 @@ git commit -m "Feature part1"
 
 # Sync to the latest changelist affecting the workspace
 git checkout main
-git p4son sync @latest
+git p4son sync latest
 
 # Rebase your changes on main
 git checkout my-fancy-feature
@@ -357,25 +357,25 @@ git commit -m "Feature part2"
 # This opens an interactive rebase with pre-filled exec lines updating changelist
 # with git-p4son after each picked changelist.
 #
-# @branch is a special keyword that gets resolved to current git branch.
+# "branch" is a special keyword that gets resolved to current git branch.
 # in this case the review is put in a new changelist, and an alias called "my-fancy-feature" is
 # set up for this changelist number so that you can refer to this CL with the alias instead of number
 # in follow up commands.
-git p4son review @branch -m "My fancy feature" -b main
+git p4son review branch -m "My fancy feature" -b main
 
 # After review feedback, make more changes
 git add .
 git commit -m "Address review feedback"
 
 # Update the changelist with latest commit, re-open files, and re-shelve
-# We could have used @branch here instead of spelling out the alias by name
+# We could have used "branch" here instead of spelling out the alias by name
 git p4son update my-fancy-feature --shelve
 
 # After approval, submit in p4v
 
 # Sync to the latest changelist from perforce
 git checkout main
-git p4son sync @latest
+git p4son sync latest
 
 # Force remove old branch as you don't need it anymore
 git branch -D my-fancy-feature

@@ -281,21 +281,21 @@ def sync_command(args: argparse.Namespace) -> int:
     print('')
 
     # Resolve changelist alias (skip special keywords)
-    if args.changelist.lower() not in ('@latest', '@last-synced'):
+    if args.changelist.lower() not in ('latest', 'last-synced'):
         resolved = resolve_changelist(args.changelist, workspace_dir)
         if resolved is None:
             return 1
         args.changelist = resolved
 
     last_changelist = git_changelist_of_last_sync(workspace_dir)
-    if args.changelist.lower() == '@last-synced':
+    if args.changelist.lower() == 'last-synced':
         if not p4_sync(last_changelist, args.force, workspace_dir):
             print('Failed to sync files from perforce')
             return 1
         return 0
 
-    # Handle "@latest" keyword
-    if args.changelist.lower() == '@latest':
+    # Handle "latest" keyword
+    if args.changelist.lower() == 'latest':
         latest_changelist = get_latest_changelist_affecting_workspace(
             workspace_dir)
         print(f'Latest changelist affecting workspace: {latest_changelist}')

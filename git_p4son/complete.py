@@ -83,10 +83,10 @@ def _complete_flag_value(flag, prefix):
 
 
 def _get_branch_candidates(prefix, workspace_dir):
-    """Get @branch completion candidates based on prefix."""
+    """Get 'branch' completion candidates based on prefix."""
     if not workspace_dir:
         return []
-    keyword = '@branch'
+    keyword = 'branch'
     if prefix == keyword:
         branch = get_current_branch(workspace_dir)
         if branch and branch != 'main':
@@ -106,8 +106,8 @@ def _complete_positional(command, subcommand, positional_count,
 
     if command == 'sync' and positional_count == 0:
         candidates = [
-            ('@latest', 'Sync to latest changelist'),
-            ('@last-synced', 'Re-sync last synced changelist'),
+            ('latest', 'Sync to latest changelist'),
+            ('last-synced', 'Re-sync last synced changelist'),
         ] + aliases
         return _filter(candidates, prefix)
 

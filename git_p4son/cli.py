@@ -12,6 +12,7 @@ from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
 from .review import review_command, sequence_editor_command
+from .changelist_store import RESERVED_KEYWORDS
 from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_workspace_dir
 from .complete import run_complete
 
@@ -290,7 +291,12 @@ def _resolve_branch_keyword(value: str, workspace_dir: str) -> str | None:
         print('Error: "branch" keyword cannot be used on main or detached HEAD',
               file=sys.stderr)
         return None
-    return branch_to_alias(branch)
+    alias = branch_to_alias(branch)
+    if alias in RESERVED_KEYWORDS:
+        print(f'Error: branch "{branch}" resolves to reserved keyword "{alias}"',
+              file=sys.stderr)
+        return None
+    return alias
 
 
 def _resolve_branch_alias(args: argparse.Namespace) -> int | None:

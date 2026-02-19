@@ -8,6 +8,9 @@ import os
 import sys
 
 
+RESERVED_KEYWORDS = frozenset({'latest', 'last-synced', 'branch'})
+
+
 def _changelists_dir(workspace_dir: str) -> str:
     """Return the path to the changelists alias directory."""
     return os.path.join(workspace_dir, '.git-p4son', 'changelists')
@@ -29,8 +32,8 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
     Returns:
         True on success, False on failure
     """
-    if '@' in name:
-        print('Alias name cannot contain "@"', file=sys.stderr)
+    if name in RESERVED_KEYWORDS:
+        print(f'Alias name "{name}" is a reserved keyword', file=sys.stderr)
         return False
 
     changelists_dir = _changelists_dir(workspace_dir)

@@ -92,7 +92,7 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 0)
 
 
-@mock.patch('git_p4son.cli.ensure_workspace', return_value='/ws')
+@mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_dispatches_sync(self, mock_sync, _ws):
@@ -141,7 +141,7 @@ class TestResolveBranchAlias(unittest.TestCase):
         self.assertEqual(args.alias, 'feat-foo')
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
-    @mock.patch('git_p4son.cli.ensure_workspace', return_value='/ws')
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_run_command_resolves_at_branch_for_review(
             self, mock_review, _ws, _branch):

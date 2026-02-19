@@ -12,7 +12,7 @@ from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
 from .review import review_command, sequence_editor_command
-from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_workspace_dir, ensure_workspace
+from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_workspace_dir
 from .complete import run_complete
 
 
@@ -305,7 +305,10 @@ def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
 
 
 def run_command(args: argparse.Namespace) -> int:
-    args.workspace_dir = ensure_workspace()
+    args.workspace_dir = get_workspace_dir()
+    if not args.workspace_dir:
+        print('Failed to find workspace root directory', file=sys.stderr)
+        return 1
 
     if args.command in ('new', 'review'):
         error = _resolve_branch_alias(args)

@@ -55,15 +55,6 @@ def get_workspace_dir() -> str | None:
         candidate_dir = parent_dir
 
 
-def ensure_workspace() -> str:
-    """Ensure we're in a git workspace and return the workspace directory."""
-    workspace_dir = get_workspace_dir()
-    if not workspace_dir:
-        print('Failed to find workspace root directory', file=sys.stderr)
-        sys.exit(1)
-    return workspace_dir
-
-
 class CommandError(Exception):
     """Raised for logic/validation errors in commands."""
 

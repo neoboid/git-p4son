@@ -67,6 +67,88 @@ Place the plan in the section at the bottom, leaving the rest for reference
 Make sure to format all code after each step, before committing.
 Make sure all test pass before committing and moving on to next step
 
+## First impressions after testing the implemntation
+
+It looks good!
+
+Now I want to add colors.
+Heading line should be yellow
+the `>` should be turquise
+The error line should be prepended with "Error:" that is red, the rest of the line can be uncolored/white, where we detail return code etc
+raw stderr output should be uncolored/white
+all other lines should be uncolored/white
+
+
+# Color plan
+
+## Color scheme
+
+| Line type | Color |
+|-----------|-------|
+| Heading (`# ...`) | Yellow (entire line) |
+| Command prompt (`>`) | Cyan/turquoise (just the `>`, not the command text) |
+| `error()` output | Red `Error:` prefix, rest uncolored |
+| `fail()` output | Red `Failed` prefix, rest uncolored |
+| Everything else (detail, info, verbose, stdin, elapsed, raw stderr) | Uncolored/white |
+
+## TTY detection
+
+Colors auto-detect: on when stdout/stderr is a TTY (terminal), off when piped to a file or another command.
+Uses `stream.isatty()` from the standard library.
+
+## Changes to `git_p4son/log.py`
+
+Add ANSI color constants and a TTY-aware helper at module level:
+
+```python
+_YELLOW = '\033[33m'
+_CYAN = '\033[36m'
+_RED = '\033[31m'
+_RESET = '\033[0m'
+
+def _use_color(stream) -> bool:
+    return hasattr(stream, 'isatty') and stream.isatty()
+```
+
+Add semantic aliases so methods reference purpose, not raw color:
+
+```python
+_HEADING_COLOR = _YELLOW
+_COMMAND_COLOR = _CYAN
+_ERROR_COLOR = _RED
+```
+
+Add a `_color(text, color, stream)` helper that wraps text in ANSI codes only when the stream is a TTY.
+
+Methods to update:
+- `heading()` — wrap entire line in yellow
+- `command()` — wrap just `>` in cyan. The `_spinner_line` stores **plain** text (no ANSI codes) so
+  `\r` reprinting works correctly. Only the initial `print()` gets color.
+- `stop_spinner()` — when reprinting the clean line, apply cyan to `>` to match the original output
+- `error()` — prepend with red `Error: ` prefix
+- `fail()` — wrap `Failed` in red, rest uncolored
+
+## Changes to `tests/test_log.py`
+
+Existing tests use `capsys` which is not a TTY, so `_use_color()` returns False — all existing
+assertions stay unchanged (no ANSI codes in output).
+
+Add a `TestColor` class that patches `isatty` to return True:
+- Heading contains yellow ANSI codes
+- Command `>` contains cyan ANSI codes
+- Error output contains red `Error:` prefix
+- Fail output contains red `Failed` prefix
+
+## Files to modify
+- `git_p4son/log.py`
+- `tests/test_log.py`
+
+## Verification
+- `python -m pytest tests/` — all tests pass
+- `autopep8 -i -r git_p4son/ tests/`
+- Manual: run a command in a terminal to visually verify colors
+
+
 # Analysis and plan
 
 ## Current output audit

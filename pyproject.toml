@@ -29,6 +29,6 @@ include = ["git_p4son*"]
 git-p4son = "git_p4son.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/derwiath/git-p4son"
-Repository = "https://github.com/derwiath/git-p4son"
-Issues = "https://github.com/derwiath/git-p4son/issues"
+Homepage = "https://github.com/neoboid/git-p4son"
+Repository = "https://github.com/neoboid/git-p4son"
+Issues = "https://github.com/neoboid/git-p4son/issues"

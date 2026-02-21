@@ -7,7 +7,7 @@ name = "git-p4son"
 version = "1.0.0"
 description = "Utility for keeping a Perforce workspace and local git repo in sync"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     {name = "Andreas Andersson", email = "andreas@neoboid.com"}
@@ -17,6 +17,8 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Version Control",

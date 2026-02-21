@@ -5,9 +5,14 @@
 #
 # Delegates to "git-p4son complete" for candidate generation.
 #
-# Installation:
-#   Add the completions directory to fpath before compinit in ~/.zshrc:
-#     fpath=(/path/to/git-p4son/completions $fpath)
+# Installation (pip install):
+#   Add to ~/.zshrc before compinit:
+#     fpath=($(git-p4son completion -d zsh) $fpath)
+#     autoload -Uz compinit && compinit
+#
+# Installation (from repo):
+#   Add to ~/.zshrc before compinit:
+#     fpath=(/path/to/git-p4son/git_p4son/completions $fpath)
 #     autoload -Uz compinit && compinit
 
 _git-p4son() {

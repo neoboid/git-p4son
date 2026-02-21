@@ -11,7 +11,7 @@ import argparse
 from .changelist_store import list_changelist_aliases
 from .common import branch_to_alias, get_current_branch, get_workspace_dir
 
-_HIDDEN_COMMANDS = frozenset({'complete', '_sequence-editor'})
+_HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
 
 
 def _get_subparsers_action(parser):

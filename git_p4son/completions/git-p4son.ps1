@@ -3,9 +3,13 @@
 #
 # Delegates to "git-p4son complete" for candidate generation.
 #
-# Installation:
-#   Dot-source this file in your PowerShell profile ($PROFILE):
-#     . /path/to/git-p4son/completions/git-p4son.ps1
+# Installation (pip install):
+#   Dot-source in your PowerShell profile ($PROFILE):
+#     . $(git-p4son completion powershell)
+#
+# Installation (from repo):
+#   Dot-source in your PowerShell profile ($PROFILE):
+#     . /path/to/git-p4son/git_p4son/completions/git-p4son.ps1
 
 function _GitP4sonCompleter {
     param($wordToComplete, $commandAst, $cursorPosition, $p4sonArgs)

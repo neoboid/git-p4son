@@ -5,6 +5,7 @@ Main CLI entry point for git-p4son.
 import argparse
 import sys
 import time
+from importlib.resources import files
 from . import __version__
 from .sync import sync_command
 from .new import new_command
@@ -273,6 +274,24 @@ Examples:
         help='Print the generated rebase todo without executing'
     )
 
+    # Completion subcommand (prints shell completion script path)
+    completion_parser = subparsers.add_parser(
+        'completion',
+        help='Print path to a shell completion script',
+        description='Print the path to a shell completion script '
+        'for zsh or powershell.'
+    )
+    completion_parser.add_argument(
+        'shell',
+        choices=['zsh', 'powershell'],
+        help='Shell to print completion script path for'
+    )
+    completion_parser.add_argument(
+        '-d', '--dirname',
+        action='store_true',
+        help='Print the directory instead of the full file path'
+    )
+
     # Hidden _sequence-editor subcommand (used internally by review)
     seq_editor_parser = subparsers.add_parser(
         '_sequence-editor',
@@ -314,6 +333,25 @@ def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
         return 1
     args.alias = resolved
     return None
+
+
+_COMPLETION_FILES = {
+    'zsh': '_git-p4son',
+    'powershell': 'git-p4son.ps1',
+}
+
+
+def completion_command(args: argparse.Namespace) -> int:
+    """Print path to a shell completion script."""
+    filename = _COMPLETION_FILES[args.shell]
+    completions_dir = files('git_p4son') / 'completions'
+
+    if args.dirname:
+        print(completions_dir)
+    else:
+        print(completions_dir / filename)
+
+    return 0
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -384,6 +422,10 @@ def main() -> int:
     if not args.command:
         parser.print_help()
         return 1
+
+    # Handle completion before run_command (no workspace needed)
+    if args.command == 'completion':
+        return completion_command(args)
 
     log.verbose_mode = args.verbose
 

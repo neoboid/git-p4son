@@ -6,6 +6,6 @@ This package provides two main commands:
 - edit: Open local git changes for edit in Perforce
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __author__ = "Andreas Andersson"
 __email__ = "andreas@neoboid.com"

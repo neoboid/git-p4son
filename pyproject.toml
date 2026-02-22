@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "git-p4son"
-version = "0.1.1"
+version = "0.1.3"
 description = "Utility for keeping a Perforce workspace and local git repo in sync"
 readme = "README.md"
 requires-python = ">=3.10"

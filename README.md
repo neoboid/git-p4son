@@ -44,8 +44,8 @@ git-p4son only uses Python standard library modules — no additional packages a
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
 1. **Enable clobber on your Perforce workspace.** This allows `p4 sync` to overwrite writable files, which is
-   necessary because git removes the read-only flag on files it touches. Run `p4 client`, find the `Options:` line,
-   and change `noclobber` to `clobber`.
+   necessary because git removes the read-only flag on files it touches. Edit the workspace in P4V to set the
+   clobber flag, or run `p4 client` and change `noclobber` to `clobber` in the Options line.
 
 2. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
    history:
@@ -53,35 +53,30 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    p4 sync //...@12345
    ```
 
-3. **Initialize a git repo.** This can be anywhere inside your Perforce workspace — it doesn't have to be at the
-   root. You may choose to only track a subdirectory:
+3. **Initialize the git repo with git-p4son.** This can be anywhere inside your Perforce workspace — it doesn't
+   have to be at the root:
    ```sh
    cd /path/to/your/workspace    # or a subdirectory of it
-   git init
+   git p4son init
    ```
+   This checks preconditions (P4 workspace, clobber flag), runs `git init`, sets up `.gitignore` (copying from
+   `.p4ignore` if available), and creates an initial commit.
 
-4. **Add a `.gitignore` file.** Ideally this should ignore the same files as your `.p4ignore`. A minimal starting
-   point:
-   ```
-   *.obj
-   *.o
-   *.exe
-   *.pdb
-   ```
+4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded before
+   adding workspace files.
 
-5. **Create an initial commit.** Include the changelist number in the message for your own reference:
+5. **Run the first sync** to add all workspace files with a tracked commit:
    ```sh
-   git add .
-   git commit -m "Initial commit at CL 12345"
+   git p4son sync latest
    ```
 
-From here, use `git p4son sync latest` to pull new changes from Perforce (this creates a properly tracked sync
-commit) and branch off `main` for local development. See the [Usage Example](#usage-example) below for a typical
+From here, branch off `main` for local development. See the [Usage Example](#usage-example) below for a typical
 workflow.
 
 ## Usage
 
-git-p4son provides seven commands: `sync`, `new`, `update`, `review`, `list-changes`, `alias`, and `completion`.
+git-p4son provides eight commands: `init`, `sync`, `new`, `update`, `review`, `list-changes`, `alias`,
+and `completion`.
 
 To see help for any command, use `-h`:
 
@@ -97,6 +92,20 @@ Alternatively, call the executable directly: `git-p4son --help`.
 **Global options:**
 - `-v, --verbose`: Show verbose output (commands, elapsed times, raw subprocess output)
 - `--version`: Show program version
+
+### Init Command
+
+Initialize a git repository inside a Perforce workspace:
+
+```sh
+git p4son init
+```
+
+This command checks preconditions (Perforce workspace, clobber flag), runs `git init`, sets up `.gitignore`,
+and creates an initial commit. The `.gitignore` is set up using this priority:
+- If `.gitignore` already exists, it is left as is
+- If `.p4ignore` exists, it is copied to `.gitignore` as a starting point
+- Otherwise, an empty `.gitignore` is created
 
 ### Sync Command
 

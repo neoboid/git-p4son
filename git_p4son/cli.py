@@ -12,6 +12,7 @@ from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
+from .init import init_command
 from .review import review_command, sequence_editor_command
 from .changelist_store import RESERVED_KEYWORDS
 from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_workspace_dir
@@ -58,6 +59,15 @@ Examples:
         dest='command',
         help='Available commands',
         metavar='COMMAND'
+    )
+
+    # Init subcommand
+    subparsers.add_parser(
+        'init',
+        help='Initialize a git repository inside a Perforce workspace',
+        description='Set up a new git repository inside a Perforce workspace. '
+        'Checks preconditions (P4 workspace, clobber flag), initializes git, '
+        'sets up .gitignore, and creates an initial commit.'
     )
 
     # Sync subcommand
@@ -423,7 +433,9 @@ def main() -> int:
         parser.print_help()
         return 1
 
-    # Handle completion before run_command (no workspace needed)
+    # Handle init and completion before run_command (no workspace needed)
+    if args.command == 'init':
+        return init_command(args)
     if args.command == 'completion':
         return completion_command(args)
 

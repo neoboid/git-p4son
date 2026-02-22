@@ -95,7 +95,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('list-changes', names)
         self.assertIn('alias', names)
         self.assertIn('review', names)
-        self.assertEqual(len(names), 6)
+        self.assertIn('init', names)
+        self.assertEqual(len(names), 7)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')

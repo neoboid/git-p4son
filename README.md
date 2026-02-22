@@ -67,7 +67,7 @@ git commit -m "Initial commit for CL 123"
 
 ## Usage
 
-git-p4son provides six commands: `sync`, `new`, `update`, `review`, `list-changes`, and `alias`.
+git-p4son provides seven commands: `sync`, `new`, `update`, `review`, `list-changes`, `alias`, and `completion`.
 
 To see help for any command, use `-h`:
 
@@ -76,8 +76,13 @@ git p4son -h
 git p4son sync -h
 ```
 
-**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h` instead, or `git p4son -- --help` to force it through.
+**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h`
+instead, or `git p4son -- --help` to force it through.
 Alternatively, call the executable directly: `git-p4son --help`.
+
+**Global options:**
+- `-v, --verbose`: Show verbose output (commands, elapsed times, raw subprocess output)
+- `--version`: Show program version
 
 ### Sync Command
 
@@ -123,6 +128,7 @@ git p4son new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Shelve the changelist after creating it
 - `--review`: Add `#review` keyword and shelve to create a Swarm review
+- `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
 ```sh
@@ -149,6 +155,7 @@ git p4son update <changelist> [--base-branch BASE_BRANCH] [--dry-run] [--no-edit
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
+- `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
 ```sh
@@ -293,6 +300,35 @@ This command iterates through each alias, displays it, and prompts for action:
 ```sh
 git p4son alias clean
 ```
+
+### Completion Command
+
+Print the path to a shell completion script:
+
+```sh
+git-p4son completion <shell> [--dirname]
+```
+
+**Arguments:**
+- `shell`: Shell to print completion script path for (`zsh` or `powershell`)
+
+**Options:**
+- `-d, --dirname`: Print the directory containing the completion script instead of the full file path
+
+See [Shell Completions](#shell-completions) below for installation instructions.
+
+### The `branch` keyword
+
+Several commands accept a special `branch` keyword that resolves to an alias name derived from the current git
+branch. This lets you avoid typing the alias name manually when it matches your branch.
+
+The keyword works anywhere an alias or changelist argument is accepted:
+- `git p4son new branch -m "Fix bug"` — creates a changelist and saves the alias under the current branch name
+- `git p4son update branch --shelve` — updates the changelist associated with the current branch
+- `git p4son review branch -m "Feature" -b main` — creates a review using the branch name as alias
+- `git p4son alias set 12345 branch` — saves a changelist number under the current branch name
+
+The keyword cannot be used on the `main` branch or in a detached HEAD state.
 
 ## Shell Completions
 

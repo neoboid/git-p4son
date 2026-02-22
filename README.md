@@ -43,9 +43,9 @@ git-p4son only uses Python standard library modules — no additional packages a
 
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
-1. **Enable clobber on your Perforce workspace.** This allows `p4 sync` to overwrite writable files, which is
-   necessary because git removes the read-only flag on files it touches. Edit the workspace in P4V to set the
-   clobber flag, or run `p4 client` and change `noclobber` to `clobber` in the Options line.
+1. **Enable clobber on your Perforce workspace.** Git removes the read-only flag on files it touches, so `p4 sync`
+   needs the clobber flag to overwrite writable files. Edit the workspace in P4V to set the clobber flag, or run
+   `p4 client` and change `noclobber` to `clobber` in the Options line.
 
 2. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
    history:
@@ -53,19 +53,18 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    p4 sync //...@12345
    ```
 
-3. **Initialize the git repo with git-p4son.** This can be anywhere inside your Perforce workspace — it doesn't
-   have to be at the root:
+3. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace — it doesn't have to be at the
+   root:
    ```sh
    cd /path/to/your/workspace    # or a subdirectory of it
    git p4son init
    ```
-   This checks preconditions (P4 workspace, clobber flag), runs `git init`, sets up `.gitignore` (copying from
-   `.p4ignore` if available), and creates an initial commit.
+   The command verifies that you are inside a P4 workspace with clobber enabled, runs `git init`, sets up
+   `.gitignore` (copying from `.p4ignore` if available), and creates an initial commit.
 
-4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded before
-   adding workspace files.
+4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-5. **Run the first sync** to add all workspace files with a tracked commit:
+5. **Run `git p4son sync latest`** to record the current workspace state as a tracked sync commit:
    ```sh
    git p4son sync latest
    ```

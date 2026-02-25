@@ -261,17 +261,16 @@ def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
         return None
 
     # Parse the output to extract changelist number
-    # Format: "//depot/path/file#1 - edit change 12345 (text) by user@workspace"
+    # Format: "//depot/path/file#1 - <action> change 12345 (type) by user@workspace"
+    # where <action> is edit, add, delete, move/add, move/delete, etc.
     for line in res.stdout:
-        if '- edit default change ' in line:
+        if ' default change ' in line:
             return 'default'
-        if '- edit change ' in line:
-            # Extract changelist number using regex
-            match = re.search(r'change (\d+)', line)
-            if match:
-                return match.group(1)
+        match = re.search(r' change (\d+) ', line)
+        if match:
+            return match.group(1)
 
-    # If we get here, file is checked out but we couldn't parse the changelist
+    # If we get here, file is opened but we couldn't parse the changelist
     return None
 
 

@@ -46,6 +46,38 @@ class TestGetChangelistForFile(unittest.TestCase):
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertIsNone(result)
 
+    @mock.patch('git_p4son.lib.run')
+    def test_file_opened_for_add(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            "//depot/foo.txt#1 - add change 12345 (text) by user@ws"
+        ])
+        result = get_changelist_for_file('foo.txt', '/ws')
+        self.assertEqual(result, '12345')
+
+    @mock.patch('git_p4son.lib.run')
+    def test_file_opened_for_delete(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            "//depot/foo.txt#3 - delete change 12345 (text) by user@ws"
+        ])
+        result = get_changelist_for_file('foo.txt', '/ws')
+        self.assertEqual(result, '12345')
+
+    @mock.patch('git_p4son.lib.run')
+    def test_file_opened_for_move_add(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            "//depot/foo.txt#1 - move/add change 12345 (text) by user@ws"
+        ])
+        result = get_changelist_for_file('foo.txt', '/ws')
+        self.assertEqual(result, '12345')
+
+    @mock.patch('git_p4son.lib.run')
+    def test_add_in_default_changelist(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            "//depot/foo.txt#1 - add default change (text) by user@ws"
+        ])
+        result = get_changelist_for_file('foo.txt', '/ws')
+        self.assertEqual(result, 'default')
+
 
 class TestFindCommonAncestor(unittest.TestCase):
     @mock.patch('git_p4son.lib.run')

@@ -344,6 +344,23 @@ def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str,
     include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
 
 
+def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
+                          workspace_dir: str, dry_run: bool) -> None:
+    """Ensure a file is opened in the given changelist.
+
+    If the file is not yet opened, run the specified p4 action (add, edit, delete).
+    If it's already opened in a different changelist, reopen it.
+    If it's already in the correct changelist, do nothing.
+    """
+    current = get_changelist_for_file(filename, workspace_dir)
+    if current is None:
+        run(['p4', p4_action, '-c', changelist, filename],
+            cwd=workspace_dir, dry_run=dry_run)
+    elif current != changelist:
+        run(['p4', 'reopen', '-c', changelist, filename],
+            cwd=workspace_dir, dry_run=dry_run)
+
+
 def include_changes_in_changelist(changes: LocalChanges, changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
     """
     Process local git changes by adding them to a Perforce changelist.
@@ -354,34 +371,23 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str, worksp
         workspace_dir: The workspace directory
         dry_run: If True, don't actually execute commands
     """
-    # Process added files
     for filename in changes.adds:
-        run(['p4', 'add', '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+        _ensure_in_changelist(filename, 'add', changelist,
+                              workspace_dir, dry_run)
 
-    # Process modified files
     for filename in changes.mods:
-        current_changelist = get_changelist_for_file(filename, workspace_dir)
+        _ensure_in_changelist(filename, 'edit', changelist,
+                              workspace_dir, dry_run)
 
-        if current_changelist is None:
-            run(['p4', 'edit', '-c', changelist, filename],
-                cwd=workspace_dir, dry_run=dry_run)
-        elif current_changelist != changelist:
-            run(['p4', 'reopen', '-c', changelist, filename],
-                cwd=workspace_dir, dry_run=dry_run)
-        # If current_changelist == changelist, file is already in correct changelist, do nothing
-
-    # Process deleted files
     for filename in changes.dels:
-        run(['p4', 'delete', '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+        _ensure_in_changelist(filename, 'delete',
+                              changelist, workspace_dir, dry_run)
 
-    # Process moved/renamed files
     for from_filename, to_filename in changes.moves:
-        run(['p4', 'delete', '-c', changelist, from_filename],
-            cwd=workspace_dir, dry_run=dry_run)
-        run(['p4', 'add', '-c', changelist, to_filename],
-            cwd=workspace_dir, dry_run=dry_run)
+        _ensure_in_changelist(from_filename, 'delete',
+                              changelist, workspace_dir, dry_run)
+        _ensure_in_changelist(to_filename, 'add',
+                              changelist, workspace_dir, dry_run)
 
 
 # ---------------------------------------------------------------------------

@@ -120,6 +120,46 @@ class TestError:
         assert out == ''
 
 
+class TestFileChange:
+    def test_add_prefix(self, capsys):
+        log = Log()
+        log.file_change('new.txt', 'add')
+        out = capsys.readouterr().out
+        assert out == '  + new.txt\n'
+
+    def test_delete_prefix(self, capsys):
+        log = Log()
+        log.file_change('old.txt', 'delete')
+        out = capsys.readouterr().out
+        assert out == '  - old.txt\n'
+
+    def test_modify_prefix(self, capsys):
+        log = Log()
+        log.file_change('changed.txt', 'modify')
+        out = capsys.readouterr().out
+        assert out == '  ~ changed.txt\n'
+
+    def test_untracked_prefix(self, capsys):
+        log = Log()
+        log.file_change('unknown.txt', 'untracked')
+        out = capsys.readouterr().out
+        assert out == '  ? unknown.txt\n'
+
+    def test_add_has_green_color(self, capsys):
+        log = Log()
+        with patch.object(sys.stdout, 'isatty', return_value=True):
+            log.file_change('new.txt', 'add')
+        out = capsys.readouterr().out
+        assert out == f'  {Color.ADD}+{Color.RESET} new.txt\n'
+
+    def test_delete_has_red_color(self, capsys):
+        log = Log()
+        with patch.object(sys.stdout, 'isatty', return_value=True):
+            log.file_change('old.txt', 'delete')
+        out = capsys.readouterr().out
+        assert out == f'  {Color.DELETE}-{Color.RESET} old.txt\n'
+
+
 class TestFail:
     def test_fail_goes_to_stderr(self, capsys):
         log = Log()

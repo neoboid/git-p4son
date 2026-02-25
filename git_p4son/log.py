@@ -13,6 +13,7 @@ from datetime import timedelta
 HEADING_PREFIX = '#'
 
 # ANSI color codes.
+_GREEN = '\033[32m'
 _YELLOW = '\033[33m'
 _CYAN = '\033[36m'
 _RED = '\033[31m'
@@ -26,6 +27,10 @@ class Color:
     COMMAND = _CYAN
     ERROR = _RED
     FAIL = _RED
+    ADD = _GREEN
+    DELETE = _RED
+    MODIFY = _YELLOW
+    UNTRACKED = _YELLOW
     RESET = _RESET
 
 
@@ -103,6 +108,21 @@ class Log:
         """Print an error message to stderr."""
         prefix = _color('Error:', Color.ERROR, sys.stderr)
         print(f'{prefix} {text}', file=sys.stderr)
+
+    def file_change(self, filename: str, change: str) -> None:
+        """Print a file change line with colored prefix.
+
+        change is one of 'add', 'delete', 'modify', 'untracked'.
+        """
+        prefixes = {
+            'add': ('+', Color.ADD),
+            'delete': ('-', Color.DELETE),
+            'modify': ('~', Color.MODIFY),
+            'untracked': ('?', Color.UNTRACKED),
+        }
+        symbol, color = prefixes.get(change, ('?', _RESET))
+        prefix = _color(symbol, color, sys.stdout)
+        print(f'  {prefix} {filename}')
 
     def fail(self, returncode: int) -> None:
         """Print a failure message with return code to stderr."""

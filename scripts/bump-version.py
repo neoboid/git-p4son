@@ -121,6 +121,9 @@ def main():
     print(f'{old_str} -> {new_str}')
     print(f'Committed: {commit_msg}')
     print(f'Tagged: {tag}')
+    print()
+    print(f'To publish, push the commit and tag:')
+    print(f'  git push && git push origin {tag}')
 
 
 if __name__ == '__main__':

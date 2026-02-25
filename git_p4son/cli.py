@@ -113,13 +113,19 @@ Examples:
     new_parser.add_argument(
         'alias',
         nargs='?',
-        default=None,
-        help='Optional alias name to save the new changelist number under'
+        default='branch',
+        help='Alias name to save the new changelist number under. '
+             'Defaults to the current branch name'
     )
     new_parser.add_argument(
         '-f', '--force',
         action='store_true',
         help='Overwrite an existing alias file'
+    )
+    new_parser.add_argument(
+        '--no-alias',
+        action='store_true',
+        help='Skip saving a changelist alias'
     )
     new_parser.add_argument(
         '-n', '--dry-run',
@@ -156,7 +162,10 @@ Examples:
     )
     update_parser.add_argument(
         'changelist',
-        help='Changelist number or named alias to update'
+        nargs='?',
+        default='branch',
+        help='Changelist number or named alias to update. '
+             'Defaults to the current branch name'
     )
     update_parser.add_argument(
         '-b', '--base-branch',
@@ -227,7 +236,10 @@ Examples:
     )
     alias_set_parser.add_argument(
         'alias',
-        help='Alias name to save the changelist number under'
+        nargs='?',
+        default='branch',
+        help='Alias name to save the changelist number under. '
+             'Defaults to the current branch name'
     )
     alias_set_parser.add_argument(
         '-f', '--force',
@@ -243,7 +255,9 @@ Examples:
     )
     alias_delete_parser.add_argument(
         'alias',
-        help='Alias name to delete'
+        nargs='?',
+        default='branch',
+        help='Alias name to delete. Defaults to the current branch name'
     )
 
     # alias clean
@@ -264,7 +278,9 @@ Examples:
     )
     review_parser.add_argument(
         'alias',
-        help='Alias name for the new changelist'
+        nargs='?',
+        default='branch',
+        help='Alias name for the new changelist. Defaults to the current branch name'
     )
     review_parser.add_argument(
         '-m', '--message',
@@ -327,8 +343,10 @@ def _resolve_branch_keyword(value: str, workspace_dir: str) -> str | None:
     if value != 'branch':
         return value
     branch = get_current_branch(workspace_dir)
-    if not branch or branch == 'main':
-        log.error('"branch" keyword cannot be used on main or detached HEAD')
+    if not branch:
+        log.error(
+            'Cannot resolve branch name on detached HEAD. '
+            'Use --no-alias or supply an explicit alias name.')
         return None
     alias = branch_to_alias(branch)
     if alias in RESERVED_KEYWORDS:
@@ -376,13 +394,16 @@ def run_command(args: argparse.Namespace) -> int:
     log.detail('root', args.workspace_dir)
 
     if args.command in ('new', 'review'):
-        if getattr(args, 'alias', None) == 'branch':
-            log.heading('Resolving alias from current git branch')
-        error = _resolve_branch_alias(args)
-        if error is not None:
-            return error
-        if getattr(args, 'alias', None) and args.alias != 'branch':
-            log.detail('alias', args.alias)
+        if getattr(args, 'no_alias', False):
+            args.alias = None
+        else:
+            if getattr(args, 'alias', None) == 'branch':
+                log.heading('Resolving alias from current git branch')
+            error = _resolve_branch_alias(args)
+            if error is not None:
+                return error
+            if getattr(args, 'alias', None) and args.alias != 'branch':
+                log.detail('alias', args.alias)
 
     if args.command == 'update':
         if args.changelist == 'branch':
@@ -392,7 +413,7 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         args.changelist = resolved
 
-    if args.command == 'alias' and args.alias_action == 'set':
+    if args.command == 'alias' and args.alias_action in ('set', 'delete'):
         if args.alias == 'branch':
             log.heading('Resolving alias from current git branch')
         resolved = _resolve_branch_keyword(args.alias, args.workspace_dir)

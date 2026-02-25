@@ -89,12 +89,12 @@ def _get_branch_candidates(prefix, workspace_dir):
     keyword = 'branch'
     if prefix == keyword:
         branch = get_current_branch(workspace_dir)
-        if branch and branch != 'main':
+        if branch:
             return [(branch_to_alias(branch), 'Current branch')]
         return []
     if keyword.startswith(prefix):
         branch = get_current_branch(workspace_dir)
-        if branch and branch != 'main':
+        if branch:
             return [(keyword, 'Use current branch name')]
     return []
 
@@ -124,7 +124,8 @@ def _complete_positional(command, subcommand, positional_count,
             return []
 
         if subcommand == 'delete' and positional_count == 0:
-            return _filter(aliases, prefix)
+            branch_candidates = _get_branch_candidates(prefix, workspace_dir)
+            return branch_candidates + _filter(aliases, prefix)
 
         if subcommand == 'set' and positional_count == 1:
             branch_candidates = _get_branch_candidates(prefix, workspace_dir)

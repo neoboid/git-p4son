@@ -302,6 +302,19 @@ class TestCompleteBranchAlias(unittest.TestCase):
         self.assertIn('feat-cool', names)
         self.assertNotIn('branch', names)
 
+    def test_alias_delete_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'delete', 'b'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('branch', names)
+
+    def test_alias_delete_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'delete', 'branch'],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('feat-cool', names)
+        self.assertNotIn('branch', names)
+
     def test_new_positional_includes_aliases(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', ''], workspace_dir='/ws')
         names = self._names(result)
@@ -337,10 +350,10 @@ class TestCompleteBranchOnMain(unittest.TestCase):
     def _names(self, candidates):
         return [name for name, _ in candidates]
 
-    def test_new_positional_no_branch_on_main(self, _ws, _aliases, _branch):
+    def test_new_positional_branch_on_main(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', 'b'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertNotIn('branch', names)
+        self.assertIn('branch', names)
 
 
 @mock.patch('git_p4son.complete.list_changelist_aliases',

@@ -242,7 +242,7 @@ class LocalChanges:
         self.moves: list[tuple[str, str]] = []
 
 
-def check_file_status(filename: str, workspace_dir: str) -> str | None:
+def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
     """
     Check if a file is already checked out in Perforce and return its changelist.
 
@@ -362,7 +362,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str, worksp
 
     # Process modified files
     for filename in changes.mods:
-        current_changelist = check_file_status(filename, workspace_dir)
+        current_changelist = get_changelist_for_file(filename, workspace_dir)
 
         if current_changelist is None:
             run(['p4', 'edit', '-c', changelist, filename],

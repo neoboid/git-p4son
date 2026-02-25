@@ -64,9 +64,9 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
 
 4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-5. **Run `git p4son sync latest`** to record the current workspace state as a tracked sync commit:
+5. **Run `git p4son sync`** to record the current workspace state as a tracked sync commit:
    ```sh
-   git p4son sync latest
+   git p4son sync
    ```
 
 From here, branch off `main` for local development. See the [Usage Example](#usage-example) below for a typical
@@ -111,21 +111,20 @@ and creates an initial commit. The `.gitignore` is set up using this priority:
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync <changelist> [--force]
+git p4son sync [changelist] [--force]
 ```
 
 **Arguments:**
-- `changelist`: Changelist number, named alias, or special keywords:
-  - `latest`: Sync to the latest changelist affecting the workspace
-  - `last-synced`: Re-sync the last synced changelist
+- `changelist` (optional): Changelist number, or `last-synced` to re-sync the last synced changelist. Omit to
+  sync to the latest changelist affecting the workspace.
 
 **Options:**
 - `-f, --force`: Force sync encountered writable files and allow syncing to older changelists.
 
 **Examples:**
 ```sh
+git p4son sync              # sync to latest
 git p4son sync 12345
-git p4son sync latest
 git p4son sync last-synced
 git p4son sync 12345 --force
 ```
@@ -136,18 +135,21 @@ Create a new Perforce changelist and add changed files to it. Description will c
 Optionally creates a Swarm review.
 
 ```sh
-git p4son new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-run] [--no-edit] [--shelve] [--review]
+git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit] [--no-alias]
+                           [--shelve] [--review]
 ```
 
 **Arguments:**
-- `alias`: Optional alias name to save the new changelist number under
+- `alias` (optional): Alias name to save the new changelist number under. Defaults to the current branch name.
 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message (required)
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
+  `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
 - `--no-edit`: Skip opening changed files for edit in Perforce
+- `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
 - `--review`: Add `#review` keyword and shelve to create a Swarm review
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
@@ -157,8 +159,8 @@ git p4son new -m <message> [--base-branch BASE_BRANCH] [alias] [--force] [--dry-
 git p4son new -m "Fix login bug"
 git p4son new -m "Add feature" -b main
 git p4son new -m "Fix bug" myalias
-git p4son new -m "Fix bug" --no-edit
-git p4son new -m "New feature" --review -b main myalias
+git p4son new -m "Fix bug" --no-alias
+git p4son new -m "New feature" --review -b main
 ```
 
 ### Update Command
@@ -166,14 +168,15 @@ git p4son new -m "New feature" --review -b main myalias
 Update an existing Perforce changelist description by replacing the enumerated commit list with the current commits since the base branch. By default also opens changed files for edit.
 
 ```sh
-git p4son update <changelist> [--base-branch BASE_BRANCH] [--dry-run] [--no-edit] [--shelve]
+git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-edit] [--shelve]
 ```
 
 **Arguments:**
-- `changelist`: Changelist number or named alias to update
+- `changelist` (optional): Changelist number or named alias to update. Defaults to the current branch name.
 
 **Options:**
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
+  `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
@@ -181,10 +184,10 @@ git p4son update <changelist> [--base-branch BASE_BRANCH] [--dry-run] [--no-edit
 
 **Examples:**
 ```sh
+git p4son update              # update changelist for current branch
+git p4son update --shelve     # update and re-shelve
 git p4son update 12345
 git p4son update myalias -b main
-git p4son update myalias --shelve
-git p4son update 12345 --no-edit
 ```
 
 ### Review Command
@@ -192,11 +195,11 @@ git p4son update 12345 --no-edit
 Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec` lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit, then opens it in your editor for review before executing.
 
 ```sh
-git p4son review <alias> -m <message> [--base-branch BASE_BRANCH] [--force] [--dry-run]
+git p4son review [alias] -m <message> [--base-branch BASE_BRANCH] [--force] [--dry-run]
 ```
 
 **Arguments:**
-- `alias`: Alias name for the new changelist
+- `alias` (optional): Alias name for the new changelist. Defaults to the current branch name.
 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message (required)
@@ -221,14 +224,14 @@ If the rebase fails mid-way, you can fix the issue and run `git rebase --continu
 
 **Examples:**
 ```sh
-# Review all commits since main
-git p4son review my-feature -m "Add my feature" -b main
+# Review all commits since main (alias defaults to branch name)
+git p4son review -m "Add my feature" -b main
 
 # Review just the last commit (default base branch)
-git p4son review my-feature -m "Fix bug"
+git p4son review -m "Fix bug"
 
 # Preview the generated todo without executing
-git p4son review my-feature -m "Add my feature" -b main --dry-run
+git p4son review -m "Add my feature" -b main --dry-run
 ```
 
 ### List-Changes Command
@@ -272,18 +275,19 @@ git p4son alias list
 Save a changelist number under a named alias:
 
 ```sh
-git p4son alias set <changelist> <alias> [--force]
+git p4son alias set <changelist> [alias] [--force]
 ```
 
 **Arguments:**
 - `changelist`: Changelist number to save
-- `alias`: Alias name to save the changelist number under
+- `alias` (optional): Alias name to save the changelist number under. Defaults to the current branch name.
 
 **Options:**
 - `-f, --force`: Overwrite an existing alias file
 
 **Examples:**
 ```sh
+git p4son alias set 12345              # alias defaults to branch name
 git p4son alias set 12345 myfeature
 git p4son alias set 67890 myfeature -f
 ```
@@ -293,14 +297,15 @@ git p4son alias set 67890 myfeature -f
 Delete a changelist alias:
 
 ```sh
-git p4son alias delete <alias>
+git p4son alias delete [alias]
 ```
 
 **Arguments:**
-- `alias`: Alias name to delete
+- `alias` (optional): Alias name to delete. Defaults to the current branch name.
 
 **Examples:**
 ```sh
+git p4son alias delete              # delete alias for current branch
 git p4son alias delete myfeature
 ```
 
@@ -341,16 +346,11 @@ See [Shell Completions](#shell-completions) below for installation instructions.
 
 ### The `branch` keyword
 
-Several commands accept a special `branch` keyword that resolves to an alias name derived from the current git
-branch. This lets you avoid typing the alias name manually when it matches your branch.
+Most commands that accept an alias or changelist argument default to the current branch name. You can also pass the
+`branch` keyword explicitly — it resolves to an alias name derived from the current git branch.
 
-The keyword works anywhere an alias or changelist argument is accepted:
-- `git p4son new branch -m "Fix bug"` — creates a changelist and saves the alias under the current branch name
-- `git p4son update branch --shelve` — updates the changelist associated with the current branch
-- `git p4son review branch -m "Feature" -b main` — creates a review using the branch name as alias
-- `git p4son alias set 12345 branch` — saves a changelist number under the current branch name
-
-The keyword cannot be used on the `main` branch or in a detached HEAD state.
+The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new` and `review`) or supply an
+explicit alias name instead.
 
 ## Shell Completions
 
@@ -382,7 +382,7 @@ Here's a typical workflow using git-p4son:
 ```sh
 # Sync main with latest changes from perforce
 git checkout main
-git p4son sync latest
+git p4son sync
 
 # Start work on a new feature
 git checkout -b my-fancy-feature
@@ -393,7 +393,7 @@ git commit -m "Feature part1"
 
 # Sync to the latest changelist affecting the workspace
 git checkout main
-git p4son sync latest
+git p4son sync
 
 # Rebase your changes on main
 git checkout my-fancy-feature
@@ -404,33 +404,30 @@ git add .
 git commit -m "Feature part2"
 
 # Create a Swarm review with all commits since main in one go.
-# This opens an interactive rebase with pre-filled exec lines updating changelist
-# with git-p4son after each picked changelist.
-#
-# "branch" is a special keyword that gets resolved to current git branch.
-# in this case the review is put in a new changelist, and an alias called "my-fancy-feature" is
-# set up for this changelist number so that you can refer to this CL with the alias instead of number
-# in follow up commands.
-git p4son review branch -m "My fancy feature" -b main
+# This opens an interactive rebase with pre-filled exec lines updating
+# the changelist with git-p4son after each picked commit.
+# An alias called "my-fancy-feature" (derived from the branch name) is
+# saved so you can refer to this CL by name in follow-up commands.
+git p4son review -m "My fancy feature" -b main
 
 # After review feedback, make more changes
 git add .
 git commit -m "Address review feedback"
 
-# Update the changelist with latest commit, re-open files, and re-shelve
-# We could have used "branch" here instead of spelling out the alias by name
-git p4son update my-fancy-feature --shelve
+# Update the changelist with latest commit, re-open files, and re-shelve.
+# The changelist is looked up by branch name automatically.
+git p4son update --shelve
 
 # After approval, submit in p4v
 
 # Sync to the latest changelist from perforce
 git checkout main
-git p4son sync latest
+git p4son sync
 
 # Force remove old branch as you don't need it anymore
 git branch -D my-fancy-feature
 
-# Remove changelist alias
+# Remove changelist alias for the branch
 git p4son alias delete my-fancy-feature
 
 # Start working on the next feature

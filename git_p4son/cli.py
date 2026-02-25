@@ -28,16 +28,14 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  git-p4son sync 12345          # Sync with changelist 12345
-  git-p4son sync latest         # Sync with the latest changelist affecting the workspace
+  git-p4son sync                # Sync to the latest changelist
+  git-p4son sync 12345          # Sync to changelist 12345
   git-p4son sync last-synced    # Re-sync the last synced changelist
-  git-p4son sync 12345 --force  # Force sync with writable files and allow older changelists
-  git-p4son new -m "Fix bug"    # Create changelist, open files for edit
-  git-p4son new -m "Fix bug" --review  # Create changelist, open files, create Swarm review
-  git-p4son new -m "Fix bug" --no-edit # Create changelist only, don't open files
-  git-p4son update 12345        # Update changelist description and open files for edit
-  git-p4son update myalias --shelve    # Update changelist and re-shelve
-  git-p4son list-changes        # List commit subjects since HEAD~1
+  git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
+  git-p4son new -m "Fix bug" --review  # Create changelist, create Swarm review
+  git-p4son new -m "Fix bug" --no-alias # Create changelist without saving an alias
+  git-p4son update --shelve     # Update changelist for current branch and re-shelve
+  git-p4son update 12345        # Update changelist 12345
   git-p4son list-changes --base-branch main # List commit subjects since main branch
         """
     )

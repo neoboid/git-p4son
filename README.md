@@ -24,6 +24,12 @@ pip install git-p4son
 
 Requires Python 3.10 or later.
 
+### Updating
+
+```sh
+pip install --upgrade git-p4son
+```
+
 ## Development
 
 To install from source in editable mode:

@@ -150,16 +150,43 @@ def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
             return False
 
 
-def p4_is_workspace_clean(workspace_dir: str) -> bool:
-    """Check if Perforce workspace is clean."""
+def p4_get_opened_files(workspace_dir: str) -> list[tuple[str, str]]:
+    """Return list of (filename, change_type) tuples for files opened in Perforce."""
     res = run_with_output(['p4', 'opened'], cwd=workspace_dir)
-    return len(res.stdout) == 0
+    files = []
+    for line in res.stdout:
+        # Format: "//depot/path/file#rev - <action> change ..."
+        parts = line.split(' - ', 1)
+        if len(parts) < 2:
+            continue
+        depot_path = parts[0].split('#')[0]
+        action = parts[1].split()[0]
+        if action in ('add', 'move/add'):
+            change = 'add'
+        elif action in ('delete', 'move/delete'):
+            change = 'delete'
+        else:
+            change = 'modify'
+        files.append((depot_path, change))
+    return files
 
 
-def git_is_workspace_clean(workspace_dir: str) -> bool:
-    """Check if git workspace is clean."""
+def git_get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
+    """Return list of (filename, change_type) tuples for dirty files in git."""
     res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
-    return len(res.stdout) == 0
+    files = []
+    for line in res.stdout:
+        status = line[:2].strip()
+        filename = line[3:]
+        if status == 'A':
+            files.append((filename, 'add'))
+        elif status == 'D':
+            files.append((filename, 'delete'))
+        elif status == '??':
+            files.append((filename, 'untracked'))
+        else:
+            files.append((filename, 'modify'))
+    return files
 
 
 def git_add_all_files(workspace_dir: str) -> None:
@@ -243,14 +270,20 @@ def sync_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     log.heading('Checking git workspace')
-    if not git_is_workspace_clean(workspace_dir):
+    dirty_files = git_get_dirty_files(workspace_dir)
+    if dirty_files:
         log.error('workspace is not clean, aborting')
+        for filename, change in dirty_files:
+            log.file_change(filename, change)
         return 1
     log.info('clean')
 
     log.heading('Checking p4 workspace')
-    if not p4_is_workspace_clean(workspace_dir):
+    opened_files = p4_get_opened_files(workspace_dir)
+    if opened_files:
         log.error('workspace is not clean, aborting')
+        for filename, change in opened_files:
+            log.file_change(filename, change)
         return 1
     log.info('clean')
 
@@ -314,7 +347,7 @@ def sync_command(args: argparse.Namespace) -> int:
         return 1
 
     log.heading('Committing git changes')
-    if not git_is_workspace_clean(workspace_dir):
+    if git_get_dirty_files(workspace_dir):
         git_add_all_files(workspace_dir)
 
     commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)

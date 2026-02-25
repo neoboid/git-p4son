@@ -297,12 +297,11 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.git_commit')
     @mock.patch('git_p4son.sync.git_add_all_files')
     @mock.patch('git_p4son.sync.git_is_workspace_clean')
-    @mock.patch('git_p4son.sync.resolve_changelist', return_value='12345')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=10000)
     @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
     def test_sync_specific_cl(self, _p4clean, _last_cl, _p4sync,
-                              _resolve, mock_git_clean, _git_add, _git_commit):
+                              mock_git_clean, _git_add, _git_commit):
         # First call: initial check (clean), second call: after sync (dirty -> add files)
         mock_git_clean.side_effect = [True, False]
         args = mock.Mock(changelist='12345', force=False, workspace_dir='/ws')
@@ -315,24 +314,21 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
     @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
     @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=False)
-    def test_dirty_p4_workspace_aborts(self, _p4clean, _git_clean, _resolve):
+    def test_dirty_p4_workspace_aborts(self, _p4clean, _git_clean):
         args = mock.Mock(changelist='100', force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=200)
     @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
     @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
-    def test_older_cl_without_force_aborts(self, _git_clean, _p4clean, _last_cl, _resolve):
+    def test_older_cl_without_force_aborts(self, _git_clean, _p4clean, _last_cl):
         args = mock.Mock(changelist='100', force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
-    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
     @mock.patch('git_p4son.sync.git_commit')
     @mock.patch('git_p4son.sync.git_add_all_files')
     @mock.patch('git_p4son.sync.git_is_workspace_clean')
@@ -340,18 +336,17 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=200)
     @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
     def test_older_cl_with_force_proceeds(self, _p4clean, _last_cl,
-                                          _p4sync, mock_git_clean, _add, _commit, _resolve):
+                                          _p4sync, mock_git_clean, _add, _commit):
         mock_git_clean.side_effect = [True, False]
         args = mock.Mock(changelist='100', force=True, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
-    @mock.patch('git_p4son.sync.resolve_changelist', return_value='100')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
     @mock.patch('git_p4son.sync.p4_is_workspace_clean', return_value=True)
     @mock.patch('git_p4son.sync.git_is_workspace_clean', return_value=True)
-    def test_same_cl_is_noop(self, _git_clean, _p4clean, _last_cl, _p4sync, _resolve):
+    def test_same_cl_is_noop(self, _git_clean, _p4clean, _last_cl, _p4sync):
         args = mock.Mock(changelist='100', force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -377,7 +372,7 @@ class TestSyncCommand(unittest.TestCase):
                             mock_git_clean, _commit, mock_get_latest):
         mock_get_latest.return_value = 200
         mock_git_clean.side_effect = [True, True]  # clean before and after
-        args = mock.Mock(changelist='latest', force=False, workspace_dir='/ws')
+        args = mock.Mock(changelist=None, force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 

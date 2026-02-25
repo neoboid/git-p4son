@@ -9,7 +9,7 @@ import os
 from .log import log
 
 
-RESERVED_KEYWORDS = frozenset({'latest', 'last-synced', 'branch'})
+RESERVED_KEYWORDS = frozenset({'last-synced', 'branch'})
 
 
 def _changelists_dir(workspace_dir: str) -> str:

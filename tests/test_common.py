@@ -10,6 +10,7 @@ from git_p4son.common import (
     CommandError,
     RunError,
     RunResult,
+    _get_rebase_branch,
     branch_to_alias,
     get_current_branch,
     get_workspace_dir,
@@ -33,11 +34,20 @@ class TestGetCurrentBranch(unittest.TestCase):
         )
         self.assertEqual(result, 'feat/foo')
 
+    @mock.patch('git_p4son.common._get_rebase_branch', return_value=None)
     @mock.patch('subprocess.run')
-    def test_detached_head_returns_none(self, mock_run):
+    def test_detached_head_returns_none(self, mock_run, mock_rebase):
         mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
         result = get_current_branch('/ws')
         self.assertIsNone(result)
+        mock_rebase.assert_called_once_with('/ws')
+
+    @mock.patch('git_p4son.common._get_rebase_branch', return_value='feat/my-branch')
+    @mock.patch('subprocess.run')
+    def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
+        mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
+        result = get_current_branch('/ws')
+        self.assertEqual(result, 'feat/my-branch')
 
     @mock.patch('subprocess.run')
     def test_command_failure_returns_none(self, mock_run):
@@ -48,6 +58,47 @@ class TestGetCurrentBranch(unittest.TestCase):
     @mock.patch('subprocess.run', side_effect=OSError('no git'))
     def test_exception_returns_none(self, mock_run):
         result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+
+class TestGetRebaseBranch(unittest.TestCase):
+    def test_reads_branch_from_rebase_merge_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
+            os.makedirs(rebase_dir)
+            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
+                f.write('refs/heads/feat/my-feature\n')
+            with mock.patch('subprocess.run') as mock_run:
+                mock_run.return_value = mock.Mock(
+                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+                result = _get_rebase_branch(tmpdir)
+            self.assertEqual(result, 'feat/my-feature')
+
+    def test_strips_refs_heads_prefix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
+            os.makedirs(rebase_dir)
+            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
+                f.write('refs/heads/main\n')
+            with mock.patch('subprocess.run') as mock_run:
+                mock_run.return_value = mock.Mock(
+                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+                result = _get_rebase_branch(tmpdir)
+            self.assertEqual(result, 'main')
+
+    def test_returns_none_when_no_rebase_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, '.git'))
+            with mock.patch('subprocess.run') as mock_run:
+                mock_run.return_value = mock.Mock(
+                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+                result = _get_rebase_branch(tmpdir)
+            self.assertIsNone(result)
+
+    def test_returns_none_when_git_dir_fails(self):
+        with mock.patch('subprocess.run') as mock_run:
+            mock_run.return_value = mock.Mock(returncode=128, stdout='')
+            result = _get_rebase_branch('/ws')
         self.assertIsNone(result)
 
 

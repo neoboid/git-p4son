@@ -16,7 +16,11 @@ from .log import log
 
 
 def get_current_branch(workspace_dir: str) -> str | None:
-    """Return the current git branch name, or None on error/detached HEAD."""
+    """Return the current git branch name, or None on error/detached HEAD.
+
+    When in detached HEAD during an interactive rebase, returns the
+    original branch name from git's rebase state.
+    """
     try:
         result = subprocess.run(
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
@@ -28,9 +32,32 @@ def get_current_branch(workspace_dir: str) -> str | None:
             return None
         branch = result.stdout.strip()
         if branch == 'HEAD':
-            return None
+            return _get_rebase_branch(workspace_dir)
         return branch
     except Exception:
+        return None
+
+
+def _get_rebase_branch(workspace_dir: str) -> str | None:
+    """During interactive rebase, read the original branch from git state."""
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        git_dir = result.stdout.strip()
+        head_name_file = os.path.join(git_dir, 'rebase-merge', 'head-name')
+        with open(head_name_file) as f:
+            ref = f.read().strip()
+        prefix = 'refs/heads/'
+        if ref.startswith(prefix):
+            return ref[len(prefix):]
+        return ref
+    except FileNotFoundError:
         return None
 
 

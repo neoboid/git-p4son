@@ -111,7 +111,7 @@ class TestError:
         log = Log()
         log.error('something went wrong')
         err = capsys.readouterr().err
-        assert err == 'Error: something went wrong\n'
+        assert err == '[err] something went wrong\n'
 
     def test_error_not_on_stdout(self, capsys):
         log = Log()
@@ -239,7 +239,7 @@ class TestColor:
         with patch.object(sys.stderr, 'isatty', return_value=True):
             log.error('something broke')
         err = capsys.readouterr().err
-        assert err == f'{Color.ERROR}Error:{Color.RESET} something broke\n'
+        assert err == f'[{Color.ERROR}err{Color.RESET}] something broke\n'
 
     def test_fail_has_colored_prefix(self, capsys):
         log = Log()

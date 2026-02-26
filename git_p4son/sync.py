@@ -272,18 +272,18 @@ def sync_command(args: argparse.Namespace) -> int:
     log.heading('Checking git workspace')
     dirty_files = git_get_dirty_files(workspace_dir)
     if dirty_files:
-        log.error('workspace is not clean, aborting')
         for filename, change in dirty_files:
             log.file_change(filename, change)
+        log.error('workspace is not clean, aborting')
         return 1
     log.info('clean')
 
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(workspace_dir)
     if opened_files:
-        log.error('workspace is not clean, aborting')
         for filename, change in opened_files:
             log.file_change(filename, change)
+        log.error('workspace is not clean, aborting')
         return 1
     log.info('clean')
 

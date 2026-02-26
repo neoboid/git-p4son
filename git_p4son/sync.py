@@ -349,6 +349,6 @@ def sync_command(args: argparse.Namespace) -> int:
 
     commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)
     git_commit(commit_msg, workspace_dir, allow_empty=True)
-    log.success(f'Committed {len_dirty_files} files')
+    log.success(f'Committed {len(dirty_files)} files')
 
     return 0

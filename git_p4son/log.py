@@ -53,8 +53,8 @@ def _color(text: str, color: str, stream) -> str:
 def _color_status(status: str, color: str, stream) -> str:
     """Format and wrap status in ANSI color codes
        if the stream supports color."""
-    colored_status = _color(status, Color.SUCCESS, sys.stdout)
-    return f'[{ok}]'
+    colored_status = _color(status, color, stream)
+    return f'[{colored_status}]'
 
 
 # Spinner characters — simple ASCII set.

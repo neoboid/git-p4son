@@ -16,6 +16,7 @@ HEADING_PREFIX = '#'
 _GREEN = '\033[32m'
 _YELLOW = '\033[33m'
 _CYAN = '\033[36m'
+_MAGENTA = '\033[35m'
 _RED = '\033[31m'
 _ORANGE = '\033[38;5;208m'
 _RESET = '\033[0m'
@@ -24,7 +25,7 @@ _CLEAR_TO_EOL = '\033[K'
 
 class Color:
     """Semantic color assignments."""
-    HEADING = _YELLOW
+    HEADING = _MAGENTA
     COMMAND = _CYAN
     SUCCESS = _GREEN
     ERROR = _RED

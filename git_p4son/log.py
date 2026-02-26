@@ -49,6 +49,7 @@ def _color(text: str, color: str, stream) -> str:
         return f'{color}{text}{_RESET}'
     return text
 
+
 def _color_status(status: str, color: str, stream) -> str:
     """Format and wrap status in ANSI color codes
        if the stream supports color."""

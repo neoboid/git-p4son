@@ -26,7 +26,9 @@ class Color:
     """Semantic color assignments."""
     HEADING = _YELLOW
     COMMAND = _CYAN
+    SUCCESS = _GREEN
     ERROR = _RED
+    WARNING = _ORANGE
     FAIL = _RED
     ADD = _GREEN
     DELETE = _RED
@@ -45,6 +47,12 @@ def _color(text: str, color: str, stream) -> str:
     if _use_color(stream):
         return f'{color}{text}{_RESET}'
     return text
+
+def _color_status(status: str, color: str, stream) -> str:
+    """Format and wrap status in ANSI color codes
+       if the stream supports color."""
+    colored_status = _color(status, Color.SUCCESS, sys.stdout)
+    return f'[{ok}]'
 
 
 # Spinner characters — simple ASCII set.
@@ -69,6 +77,21 @@ class Log:
         self._heading_count += 1
         line = f'{HEADING_PREFIX} {text}'
         print(_color(line, Color.HEADING, sys.stdout))
+
+    def success(self, text: str) -> None:
+        """Print an success message to stdout."""
+        ok = _color_status('ok', Color.SUCCESS, sys.stdout)
+        print(f'{ok} {text}', file=sys.stdout)
+
+    def warning(self, text: str) -> None:
+        """Print an warning message to stdout."""
+        warn = _color_status('warn', Color.WARNING, sys.stdout)
+        print(f'{warn} {text}', file=sys.stdout)
+
+    def error(self, text: str) -> None:
+        """Print an error message to stderr."""
+        error = _color_status('err', Color.ERROR, sys.stderr)
+        print(f'{error} {text}', file=sys.stderr)
 
     def command(self, cmd: str) -> None:
         """Print a subprocess command line."""
@@ -104,11 +127,6 @@ class Log:
     def elapsed(self, duration: timedelta) -> None:
         """Print elapsed time."""
         print(f'elapsed: {duration}')
-
-    def error(self, text: str) -> None:
-        """Print an error message to stderr."""
-        prefix = _color('Error:', Color.ERROR, sys.stderr)
-        print(f'{prefix} {text}', file=sys.stderr)
 
     def file_change(self, filename: str, change: str) -> None:
         """Print a file change line with colored prefix.

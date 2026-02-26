@@ -108,6 +108,16 @@ def main():
         print(f'Error: tag {tag} already exists.', file=sys.stderr)
         sys.exit(1)
 
+    # Safety: all tests must pass
+    print('Running tests...')
+    result = subprocess.run(
+        [sys.executable, '-m', 'pytest', 'tests/', '-q'],
+        cwd=ROOT)
+    if result.returncode != 0:
+        print('Error: tests failed. Fix them before releasing.',
+              file=sys.stderr)
+        sys.exit(1)
+
     # Update files
     replace_in_file(PYPROJECT, f'version = "{old_str}"', f'version = "{new_str}"')
     replace_in_file(INIT_PY, f'__version__ = "{old_str}"', f'__version__ = "{new_str}"')

@@ -118,9 +118,10 @@ def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
     Returns True on success, False if writable files were found without --force.
     Raises CommandError on actual command failures.
     """
+    log.heading(f'Syncing to CL {changelist}')
     file_count_to_sync = get_file_count_to_sync(changelist, workspace_dir)
     if file_count_to_sync == 0:
-        log.info('all files up to date')
+        log.success('All files up to date')
         return True
     log.info(f'{file_count_to_sync} files to sync')
 
@@ -129,24 +130,25 @@ def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
         result = run_with_output(
             ['p4', 'sync', '//...@%s' % (changelist)],
             cwd=workspace_dir, on_output=output_processor)
-        log.info(output_processor.get_summary())
         if result.elapsed:
             log.elapsed(result.elapsed)
+        log.success(output_processor.get_summary())
         return True
     except RunError as e:
         log.info(output_processor.get_summary())
         writable_files = get_writable_files(e.stderr)
         if not writable_files:
             raise
-        log.info(f'Found {len(writable_files)} writable files')
         if force:
             for filename in writable_files:
                 p4_force_sync_file(changelist, filename, workspace_dir)
+            log.success(f'Force synced {len(writable_files)} writable files')
             return True
         else:
             log.info('Leaving files as is, use --force to force sync')
             for filename in writable_files:
                 log.info(filename)
+            log.error('Failed to sync files from perforce')
             return False
 
 
@@ -274,33 +276,31 @@ def sync_command(args: argparse.Namespace) -> int:
     if dirty_files:
         for filename, change in dirty_files:
             log.file_change(filename, change)
-        log.error('workspace is not clean, aborting')
+        log.error('Workspace is not clean')
         return 1
-    log.info('clean')
+    log.success('clean')
 
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(workspace_dir)
     if opened_files:
         for filename, change in opened_files:
             log.file_change(filename, change)
-        log.error('workspace is not clean, aborting')
+        log.error('Workspace is not clean')
         return 1
-    log.info('clean')
+    log.success('Clean')
 
     log.heading('Finding last synced changelist')
     last_changelist = git_changelist_of_last_sync(workspace_dir)
     if last_changelist is not None:
-        log.detail('last synced', f'CL {last_changelist}')
+        log.success(f'CL {last_changelist}')
     else:
-        log.info('no previous sync found')
+        log.warning('No previous sync found')
 
     if args.changelist is not None and args.changelist.lower() == 'last-synced':
         if last_changelist is None:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
-        log.heading(f'Syncing to CL {last_changelist}')
         if not p4_sync(last_changelist, args.force, workspace_dir):
-            log.error('Failed to sync files from perforce')
             return 1
         return 0
 
@@ -309,7 +309,7 @@ def sync_command(args: argparse.Namespace) -> int:
         log.heading('Finding latest changelist')
         latest_changelist = get_latest_changelist_affecting_workspace(
             workspace_dir)
-        log.detail('latest', f'CL {latest_changelist}')
+        log.success(f'CL {latest_changelist}')
         args.changelist = latest_changelist
     else:
         # Convert changelist string to integer
@@ -320,7 +320,7 @@ def sync_command(args: argparse.Namespace) -> int:
             return 1
 
     if last_changelist == args.changelist:
-        log.info(f'Already at CL {last_changelist}, nothing to do.')
+        log.success(f'Already at CL {last_changelist}, nothing to do.')
         return 0
 
     # Check if trying to sync to an older changelist
@@ -331,27 +331,24 @@ def sync_command(args: argparse.Namespace) -> int:
                 f'(currently at CL {last_changelist}) without --force.')
             return 1
         else:
-            log.info(
-                f'Warning: syncing to older CL {args.changelist} '
+            log.warning(
+                f'Syncing to older CL {args.changelist} '
                 f'(currently at CL {last_changelist}) with --force')
 
     if last_changelist is not None:
-        log.heading(f'Syncing to CL {last_changelist}')
         if not p4_sync(last_changelist, args.force, workspace_dir):
-            log.error('Failed to sync files from perforce')
             return 1
 
-    log.heading(f'Syncing to CL {args.changelist}')
     if not p4_sync(args.changelist, args.force, workspace_dir):
-        log.error('Failed to sync files from perforce')
         return 1
 
     log.heading('Committing git changes')
-    if git_get_dirty_files(workspace_dir):
+    dirty_files = git_get_dirty_files(workspace_dir)
+    if dirty_files:
         git_add_all_files(workspace_dir)
 
     commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)
     git_commit(commit_msg, workspace_dir, allow_empty=True)
+    log.success(f'Committed {len_dirty_files} files')
 
-    log.info('Done')
     return 0

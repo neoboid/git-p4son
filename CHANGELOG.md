@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Add CHANGELOG with release notes since 0.1.0
+
 ## 0.1.8
 
 - Make -m/--message optional for new and review commands

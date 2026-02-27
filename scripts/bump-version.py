@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Bump the version of git-p4son.
 
-Updates pyproject.toml and git_p4son/__init__.py, commits, and tags.
+Two-step workflow:
+  1. bump-version.py [patch|minor|major]  — bump version files, generate changelog
+  2. (edit CHANGELOG.md if desired)
+  3. bump-version.py --finalize            — commit and tag
 """
 
 import argparse
@@ -13,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / 'pyproject.toml'
 INIT_PY = ROOT / 'git_p4son' / '__init__.py'
+CHANGELOG = ROOT / 'CHANGELOG.md'
 
 VERSION_RE = re.compile(r'(\d+)\.(\d+)\.(\d+)')
 
@@ -67,17 +71,46 @@ def run(cmd):
     return result
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Bump the git-p4son version.')
-    parser.add_argument(
-        'part',
-        nargs='?',
-        default='patch',
-        choices=['major', 'minor', 'patch'],
-        help='Which part to bump (default: patch)'
-    )
-    args = parser.parse_args()
+def get_previous_tag():
+    """Return the most recent version tag, or None if no tags exist."""
+    result = subprocess.run(
+        ['git', 'describe', '--tags', '--abbrev=0'],
+        capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
 
+
+def get_release_notes(previous_tag):
+    """Get commit subjects since previous_tag, excluding release commits."""
+    if previous_tag:
+        cmd = ['git', 'log', f'{previous_tag}..HEAD', '--format=%s']
+    else:
+        cmd = ['git', 'log', '--format=%s']
+    result = run(cmd)
+    subjects = result.stdout.strip().splitlines()
+    return [s for s in subjects if not s.startswith('Release git-p4son v')]
+
+
+def update_changelog(version, notes):
+    """Prepend a new version section to CHANGELOG.md."""
+    section = f'\n## {version}\n\n'
+    for note in notes:
+        section += f'- {note}\n'
+
+    if CHANGELOG.exists():
+        text = CHANGELOG.read_text()
+        # Insert after the "# Changelog" header line
+        header_end = text.index('\n') + 1
+        text = text[:header_end] + section + text[header_end:]
+    else:
+        text = '# Changelog\n' + section
+
+    CHANGELOG.write_text(text)
+
+
+def prepare(args):
+    """Prepare a release: bump version files and generate changelog."""
     # Read current version from pyproject.toml
     pyproject_version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
     init_version = read_version(INIT_PY, r'__version__\s*=\s*"([^"]+)"')
@@ -118,22 +151,72 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
+    # Generate release notes
+    previous_tag = get_previous_tag()
+    notes = get_release_notes(previous_tag)
+
     # Update files
-    replace_in_file(PYPROJECT, f'version = "{old_str}"', f'version = "{new_str}"')
-    replace_in_file(INIT_PY, f'__version__ = "{old_str}"', f'__version__ = "{new_str}"')
+    replace_in_file(
+        PYPROJECT, f'version = "{old_str}"', f'version = "{new_str}"')
+    replace_in_file(
+        INIT_PY, f'__version__ = "{old_str}"', f'__version__ = "{new_str}"')
+    update_changelog(new_str, notes)
+
+    print(f'{old_str} -> {new_str}')
+    print()
+    if notes:
+        print('Release notes:')
+        for note in notes:
+            print(f'  - {note}')
+        print()
+    print('Review CHANGELOG.md, then run:')
+    print('  python scripts/bump-version.py --finalize')
+
+
+def finalize(args):
+    """Commit and tag the prepared release."""
+    version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
+    tag = f'v{version}'
+
+    # Safety: tag must not exist (confirms prepare ran but finalize hasn't)
+    existing_tags = run(['git', 'tag', '--list', tag])
+    if existing_tags.stdout.strip():
+        print(f'Error: tag {tag} already exists.', file=sys.stderr)
+        sys.exit(1)
 
     # Commit and tag
-    commit_msg = f'Release git-p4son v{new_str}'
-    run(['git', 'add', str(PYPROJECT), str(INIT_PY)])
+    commit_msg = f'Release git-p4son v{version}'
+    run(['git', 'add', str(PYPROJECT), str(INIT_PY), str(CHANGELOG)])
     run(['git', 'commit', '-m', commit_msg])
     run(['git', 'tag', tag])
 
-    print(f'{old_str} -> {new_str}')
     print(f'Committed: {commit_msg}')
     print(f'Tagged: {tag}')
     print()
-    print(f'To publish, push the commit and tag:')
+    print('To publish, push the commit and tag:')
     print(f'  git push && git push origin {tag}')
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Bump the git-p4son version.')
+    parser.add_argument(
+        'part',
+        nargs='?',
+        default='patch',
+        choices=['major', 'minor', 'patch'],
+        help='Which part to bump (default: patch)'
+    )
+    parser.add_argument(
+        '--finalize',
+        action='store_true',
+        help='Commit and tag the prepared release'
+    )
+    args = parser.parse_args()
+
+    if args.finalize:
+        finalize(args)
+    else:
+        prepare(args)
 
 
 if __name__ == '__main__':

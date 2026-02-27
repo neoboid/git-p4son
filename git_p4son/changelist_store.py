@@ -45,7 +45,8 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
         return False
 
-    os.makedirs(changelists_dir, exist_ok=True)
+    if not os.path.isdir(changelists_dir):
+        os.makedirs(changelists_dir, exist_ok=True)
 
     with open(alias_path, 'w') as f:
         f.write(changelist + '\n')

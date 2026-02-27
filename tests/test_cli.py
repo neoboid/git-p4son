@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from git_p4son.cli import create_parser, run_command, _resolve_branch_alias
+from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
 
 
 class TestCreateParser(unittest.TestCase):
@@ -137,18 +137,14 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(result, 0)
 
 
-class TestResolveBranchAlias(unittest.TestCase):
+class TestResolveBranchKeyword(unittest.TestCase):
     def setUp(self):
         self.parser = create_parser()
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/foo')
-    def test_resolves_at_branch_for_new(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
-        args.workspace_dir = '/ws'
-        self.assertEqual(args.alias, 'branch')
-        error = _resolve_branch_alias(args)
-        self.assertIsNone(error)
-        self.assertEqual(args.alias, 'feat-foo')
+    def test_resolves_branch_to_alias(self, _branch):
+        result = _resolve_branch_keyword('/ws')
+        self.assertEqual(result, 'feat-foo')
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
@@ -162,19 +158,14 @@ class TestResolveBranchAlias(unittest.TestCase):
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
-    def test_detached_head_returns_error(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
-        args.workspace_dir = '/ws'
-        error = _resolve_branch_alias(args)
-        self.assertEqual(error, 1)
+    def test_detached_head_returns_none(self, _branch):
+        result = _resolve_branch_keyword('/ws')
+        self.assertIsNone(result)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='main')
     def test_main_branch_resolves_to_main(self, _branch):
-        args = self.parser.parse_args(['new', '-m', 'msg', 'branch'])
-        args.workspace_dir = '/ws'
-        error = _resolve_branch_alias(args)
-        self.assertIsNone(error)
-        self.assertEqual(args.alias, 'main')
+        result = _resolve_branch_keyword('/ws')
+        self.assertEqual(result, 'main')
 
     def test_new_defaults_to_branch(self):
         args = self.parser.parse_args(['new', '-m', 'msg'])
@@ -189,12 +180,13 @@ class TestResolveBranchAlias(unittest.TestCase):
         self.assertIsNone(args.alias)
         self.assertEqual(result, 0)
 
-    def test_non_branch_alias_is_unchanged(self):
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
+    def test_explicit_alias_unchanged(self, _ws, mock_new):
         args = self.parser.parse_args(['new', '-m', 'msg', 'myalias'])
-        args.workspace_dir = '/ws'
-        error = _resolve_branch_alias(args)
-        self.assertIsNone(error)
+        result = run_command(args)
         self.assertEqual(args.alias, 'myalias')
+        self.assertEqual(result, 0)
 
 
 if __name__ == '__main__':

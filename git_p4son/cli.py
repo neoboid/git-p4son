@@ -332,14 +332,12 @@ Examples:
     return parser
 
 
-def _resolve_branch_keyword(value: str, workspace_dir: str) -> str | None:
-    """Resolve 'branch' keyword to the branch-derived alias name.
+def _resolve_branch_keyword(workspace_dir: str) -> str | None:
+    """Resolve current git branch to an alias name.
 
     Returns the resolved alias name, or None if resolution fails.
     Prints an error message on failure.
     """
-    if value != 'branch':
-        return value
     branch = get_current_branch(workspace_dir)
     if not branch:
         log.error(
@@ -351,17 +349,6 @@ def _resolve_branch_keyword(value: str, workspace_dir: str) -> str | None:
         log.error(f'branch "{branch}" resolves to reserved keyword "{alias}"')
         return None
     return alias
-
-
-def _resolve_branch_alias(args: argparse.Namespace) -> int | None:
-    """Resolve 'branch' keyword in args.alias. Returns error code or None on success."""
-    if getattr(args, 'alias', None) != 'branch':
-        return None
-    resolved = _resolve_branch_keyword('branch', args.workspace_dir)
-    if resolved is None:
-        return 1
-    args.alias = resolved
-    return None
 
 
 _COMPLETION_FILES = {
@@ -394,30 +381,31 @@ def run_command(args: argparse.Namespace) -> int:
     if args.command in ('new', 'review'):
         if getattr(args, 'no_alias', False):
             args.alias = None
-        else:
-            if getattr(args, 'alias', None) == 'branch':
-                log.heading('Resolving alias from current git branch')
-            error = _resolve_branch_alias(args)
-            if error is not None:
-                return error
-            if getattr(args, 'alias', None) and args.alias != 'branch':
-                log.detail('alias', args.alias)
+        elif args.alias == 'branch':
+            log.heading('Resolving alias from current git branch')
+            resolved = _resolve_branch_keyword(args.workspace_dir)
+            if resolved is None:
+                return 1
+            args.alias = resolved
+            log.success(f'branch -> {args.alias}')
 
     if args.command == 'update':
         if args.changelist == 'branch':
             log.heading('Resolving alias from current git branch')
-        resolved = _resolve_branch_keyword(args.changelist, args.workspace_dir)
-        if resolved is None:
-            return 1
-        args.changelist = resolved
+            resolved = _resolve_branch_keyword(args.workspace_dir)
+            if resolved is None:
+                return 1
+            args.changelist = resolved
+            log.success(f'branch -> {args.changelist}')
 
     if args.command == 'alias' and args.alias_action in ('set', 'delete'):
         if args.alias == 'branch':
             log.heading('Resolving alias from current git branch')
-        resolved = _resolve_branch_keyword(args.alias, args.workspace_dir)
-        if resolved is None:
-            return 1
-        args.alias = resolved
+            resolved = _resolve_branch_keyword(args.workspace_dir)
+            if resolved is None:
+                return 1
+            args.alias = resolved
+            log.success(f'branch -> {args.alias}')
 
     if args.command == 'sync':
         return sync_command(args)

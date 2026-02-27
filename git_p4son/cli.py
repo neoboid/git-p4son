@@ -378,34 +378,28 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
     log.detail('root', args.workspace_dir)
 
-    if args.command in ('new', 'review'):
-        if getattr(args, 'no_alias', False):
-            args.alias = None
-        elif args.alias == 'branch':
-            log.heading('Resolving alias from current git branch')
-            resolved = _resolve_branch_keyword(args.workspace_dir)
-            if resolved is None:
-                return 1
-            args.alias = resolved
-            log.success(f'branch -> {args.alias}')
+    # Handle --no-alias for new/review
+    if args.command in ('new', 'review') and getattr(args, 'no_alias', False):
+        args.alias = None
 
-    if args.command == 'update':
-        if args.changelist == 'branch':
-            log.heading('Resolving alias from current git branch')
-            resolved = _resolve_branch_keyword(args.workspace_dir)
-            if resolved is None:
-                return 1
-            args.changelist = resolved
-            log.success(f'branch -> {args.changelist}')
+    # Determine which attribute may need branch resolution
+    branch_attr = None
+    if args.command in ('new', 'review') and getattr(args, 'alias', None) == 'branch':
+        branch_attr = 'alias'
+    elif args.command == 'update' and args.changelist == 'branch':
+        branch_attr = 'changelist'
+    elif (args.command == 'alias'
+          and args.alias_action in ('set', 'delete')
+          and args.alias == 'branch'):
+        branch_attr = 'alias'
 
-    if args.command == 'alias' and args.alias_action in ('set', 'delete'):
-        if args.alias == 'branch':
-            log.heading('Resolving alias from current git branch')
-            resolved = _resolve_branch_keyword(args.workspace_dir)
-            if resolved is None:
-                return 1
-            args.alias = resolved
-            log.success(f'branch -> {args.alias}')
+    if branch_attr:
+        log.heading('Resolving alias from current git branch')
+        resolved = _resolve_branch_keyword(args.workspace_dir)
+        if resolved is None:
+            return 1
+        setattr(args, branch_attr, resolved)
+        log.success(f'branch -> {resolved}')
 
     if args.command == 'sync':
         return sync_command(args)

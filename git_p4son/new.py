@@ -48,30 +48,33 @@ def new_command(args: argparse.Namespace) -> int:
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run)
 
     if not args.dry_run:
-        log.detail('created', f'CL {changelist}')
         if args.alias:
             if not save_changelist_alias(args.alias, changelist,
                                          workspace_dir, force=args.force):
                 return 1
-            log.detail('alias', f'{args.alias} -> {changelist}')
+            log.success(f'Created CL {changelist} (alias={args.alias})')
+        else:
+            log.success(f'Created CL {changelist}')
 
     # Open changed files for edit in the new changelist
     if not args.no_edit:
         log.heading('Opening files for edit')
         open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
+        log.success('Done')
 
     # Add #review keyword to changelist description
     if args.review:
         log.heading('Adding review keyword')
         add_review_keyword_to_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
+        log.success('Done')
 
     # Shelve the changelist
     if args.shelve or args.review:
         log.heading('Shelving')
         p4_shelve_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
+        log.success('Done')
 
-    log.info('Done')
     return 0

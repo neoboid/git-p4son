@@ -91,7 +91,7 @@ def init_command(args: argparse.Namespace) -> int:
 
     log.heading('Setting up .gitignore')
     result = _setup_gitignore(cwd)
-    log.info(result)
+    log.success(result)
 
     if not existing_repo:
         log.heading('Creating initial commit')

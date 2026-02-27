@@ -94,6 +94,6 @@ def list_changes_command(args: argparse.Namespace) -> int:
     if description:
         log.info(description)
     else:
-        log.info("No changes found")
+        log.success("No changes found")
 
     return 0

@@ -91,11 +91,14 @@ def review_command(args: argparse.Namespace) -> int:
 
     # Check alias availability before starting
     if not args.force:
+        log.heading('Verify that {args.alias} alias do not exist')
         if alias_exists(args.alias, workspace_dir):
             log.error(
                 f'Alias "{args.alias}" already exists '
                 f'(use -f/--force to overwrite)')
             return 1
+        else:
+            log.success('Done')
 
     # Get commits since base branch
     log.heading('Finding commits')
@@ -104,7 +107,7 @@ def review_command(args: argparse.Namespace) -> int:
     if not commit_lines:
         log.error(f'No commits found since {args.base_branch}')
         return 1
-    log.info(f'{len(commit_lines)} commits since {args.base_branch}')
+    log.success(f'{len(commit_lines)} commits since {args.base_branch}')
 
     # Generate the rebase todo
     log.heading('Generating rebase todo')
@@ -123,6 +126,8 @@ def review_command(args: argparse.Namespace) -> int:
     with open(todo_file, 'w') as f:
         f.write(todo_content)
 
+    log.success('Saved as {todo_file}')
+
     try:
         # Run git rebase -i with our sequence editor
         log.heading('Running interactive rebase')
@@ -139,7 +144,7 @@ def review_command(args: argparse.Namespace) -> int:
                 'You can fix any issues and run: git rebase --continue')
             return result.returncode
 
-        log.info('Done')
+        log.success('Done')
         return 0
     finally:
         # Clean up the todo file

@@ -376,7 +376,7 @@ def run_command(args: argparse.Namespace) -> int:
     if not args.workspace_dir:
         log.error('No .git directory found in current or parent directories')
         return 1
-    log.detail('root', args.workspace_dir)
+    log.success(args.workspace_dir)
 
     # Handle --no-alias for new/review
     if args.command in ('new', 'review') and getattr(args, 'no_alias', False):

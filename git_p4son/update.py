@@ -37,27 +37,26 @@ def update_command(args: argparse.Namespace) -> int:
         changelist = load_changelist_alias(args.changelist, workspace_dir)
         if changelist is None:
             return 1
-        log.detail(args.changelist, f'CL {changelist}')
+        log.success(f'{args.changelist} -> CL {changelist}')
 
     # Update changelist description
-    log.heading('Updating changelist description')
+    log.heading('Updating description for CL {changelist}')
     update_changelist(
         changelist, args.base_branch, workspace_dir, dry_run=args.dry_run)
-
-    if not args.dry_run:
-        log.info(f'Updated changelist {changelist}')
+    log.success('Done')
 
     # Open changed files for edit
     if not args.no_edit:
         log.heading('Opening files for edit')
         open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
+        log.success('Done')
 
     # Shelve the changelist
     if args.shelve:
         log.heading('Shelving')
         p4_shelve_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
+        log.success('Done')
 
-    log.info('Done')
     return 0

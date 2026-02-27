@@ -31,6 +31,8 @@ def alias_list_command(args: argparse.Namespace) -> int:
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
 
+    log.success(f'{len(aliases)} listed')
+
     return 0
 
 
@@ -54,7 +56,7 @@ def alias_set_command(args: argparse.Namespace) -> int:
                                  workspace_dir, force=args.force):
         return 1
 
-    log.detail('alias', f'{args.alias} -> {args.changelist}')
+    log.success(f'{args.alias} -> {args.changelist}')
     return 0
 
 
@@ -73,7 +75,7 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     if not delete_changelist_alias(args.alias, workspace_dir):
         return 1
 
-    log.info(f'Deleted alias "{args.alias}"')
+    log.success(f'Deleted alias "{args.alias}"')
     return 0
 
 
@@ -91,7 +93,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
     aliases = list_changelist_aliases(workspace_dir)
     if not aliases:
-        log.info('No aliases to clean')
+        log.success('No changelist aliases to clean')
         return 0
 
     delete_all = False
@@ -104,7 +106,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         if delete_all:
             delete_changelist_alias(name, workspace_dir)
             deleted_count += 1
-            print(f'  Deleted')
+            log.info(f'  Deleted')
             continue
 
         quit = False
@@ -119,7 +121,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
             if response in ('y', 'yes'):
                 delete_changelist_alias(name, workspace_dir)
                 deleted_count += 1
-                print(f'  Deleted')
+                log.info(f'  Deleted')
                 break
             elif response in ('n', 'no'):
                 break
@@ -127,7 +129,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
                 delete_all = True
                 delete_changelist_alias(name, workspace_dir)
                 deleted_count += 1
-                print(f'  Deleted')
+                log.info(f'  Deleted')
                 break
             elif response in ('q', 'quit'):
                 quit = True
@@ -137,7 +139,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         if quit:
             break
 
-    print(f'Deleted {deleted_count} alias(es)')
+    log.success(f'Deleted {deleted_count} alias(es)')
     return 0
 
 

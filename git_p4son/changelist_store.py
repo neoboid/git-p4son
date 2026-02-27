@@ -52,6 +52,7 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
         return False
 
     if not os.path.isdir(changelists_dir):
+        log.info(f'Creating {changelist_dir}')
         os.makedirs(changelists_dir, exist_ok=True)
 
     with open(alias_path, 'w') as f:

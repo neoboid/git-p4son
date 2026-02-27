@@ -61,6 +61,23 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
         return None
 
 
+def get_head_subject(workspace_dir: str) -> str | None:
+    """Return the subject line of the HEAD commit, or None on failure."""
+    try:
+        result = subprocess.run(
+            ['git', 'log', '-1', '--format=%s', 'HEAD'],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        subject = result.stdout.strip()
+        return subject if subject else None
+    except Exception:
+        return None
+
+
 def branch_to_alias(branch_name: str) -> str:
     """Sanitize a branch name for use as an alias filename."""
     return branch_name.replace('/', '-')

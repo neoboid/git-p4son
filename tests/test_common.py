@@ -13,6 +13,7 @@ from git_p4son.common import (
     _get_rebase_branch,
     branch_to_alias,
     get_current_branch,
+    get_head_subject,
     get_workspace_dir,
     is_workspace_dir,
     join_command_line,
@@ -58,6 +59,37 @@ class TestGetCurrentBranch(unittest.TestCase):
     @mock.patch('subprocess.run', side_effect=OSError('no git'))
     def test_exception_returns_none(self, mock_run):
         result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+
+class TestGetHeadSubject(unittest.TestCase):
+    @mock.patch('subprocess.run')
+    def test_returns_subject(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=0, stdout='Fix bug\n')
+        result = get_head_subject('/ws')
+        mock_run.assert_called_once_with(
+            ['git', 'log', '-1', '--format=%s', 'HEAD'],
+            cwd='/ws',
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result, 'Fix bug')
+
+    @mock.patch('subprocess.run')
+    def test_command_failure_returns_none(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=128, stdout='')
+        result = get_head_subject('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('subprocess.run')
+    def test_empty_output_returns_none(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=0, stdout='')
+        result = get_head_subject('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('subprocess.run', side_effect=OSError('no git'))
+    def test_exception_returns_none(self, mock_run):
+        result = get_head_subject('/ws')
         self.assertIsNone(result)
 
 

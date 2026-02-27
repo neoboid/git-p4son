@@ -15,7 +15,7 @@ from .alias import alias_command
 from .init import init_command
 from .review import review_command, sequence_editor_command
 from .changelist_store import RESERVED_KEYWORDS
-from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_workspace_dir
+from .common import CommandError, RunError, branch_to_alias, get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
 from .complete import run_complete
 
@@ -100,8 +100,8 @@ Examples:
     )
     new_parser.add_argument(
         '-m', '--message',
-        required=True,
-        help='Changelist description message'
+        default=None,
+        help='Changelist description message (defaults to HEAD commit subject)'
     )
     new_parser.add_argument(
         '-b', '--base-branch',
@@ -282,8 +282,8 @@ Examples:
     )
     review_parser.add_argument(
         '-m', '--message',
-        required=True,
-        help='Changelist description message'
+        default=None,
+        help='Changelist description message (defaults to HEAD commit subject)'
     )
     review_parser.add_argument(
         '-b', '--base-branch',
@@ -400,6 +400,14 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
+
+    if args.command in ('new', 'review') and args.message is None:
+        log.heading('Resolving message from HEAD commit')
+        args.message = get_head_subject(args.workspace_dir)
+        if args.message is None:
+            log.error('No commits found to derive message from')
+            return 1
+        log.success(args.message)
 
     if args.command == 'sync':
         return sync_command(args)

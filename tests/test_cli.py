@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
+from git_p4son.common import get_head_subject
 
 
 class TestCreateParser(unittest.TestCase):
@@ -29,6 +30,11 @@ class TestCreateParser(unittest.TestCase):
     def test_sync_command_short_force(self):
         args = self.parser.parse_args(['sync', '100', '-f'])
         self.assertTrue(args.force)
+
+    def test_new_command_no_message(self):
+        args = self.parser.parse_args(['new'])
+        self.assertEqual(args.command, 'new')
+        self.assertIsNone(args.message)
 
     def test_new_command(self):
         args = self.parser.parse_args(['new', '-m', 'Fix bug'])
@@ -118,6 +124,47 @@ class TestRunCommand(unittest.TestCase):
         args = parser.parse_args(['new', '-m', 'msg'])
         result = run_command(args)
         mock_new.assert_called_once_with(args)
+        self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_new_defaults_message_from_head(self, mock_new, _branch, _head, _ws):
+        parser = create_parser()
+        args = parser.parse_args(['new'])
+        result = run_command(args)
+        self.assertEqual(args.message, 'Add feature')
+        mock_new.assert_called_once_with(args)
+        self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_new_explicit_message_takes_precedence(self, mock_new, _branch, _head, _ws):
+        parser = create_parser()
+        args = parser.parse_args(['new', '-m', 'Explicit msg'])
+        result = run_command(args)
+        self.assertEqual(args.message, 'Explicit msg')
+        _head.assert_not_called()
+        self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value=None)
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    def test_new_no_commits_returns_error(self, _branch, _head, _ws):
+        parser = create_parser()
+        args = parser.parse_args(['new'])
+        result = run_command(args)
+        self.assertEqual(result, 1)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value='Review change')
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.cli.review_command', return_value=0)
+    def test_review_defaults_message_from_head(self, mock_review, _branch, _head, _ws):
+        parser = create_parser()
+        args = parser.parse_args(['review'])
+        result = run_command(args)
+        self.assertEqual(args.message, 'Review change')
+        mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)

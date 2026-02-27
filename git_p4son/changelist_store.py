@@ -17,6 +17,12 @@ def _changelists_dir(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, '.git-p4son', 'changelists')
 
 
+def alias_exists(name: str, workspace_dir: str) -> bool:
+    """Check whether a changelist alias exists."""
+    alias_path = os.path.join(_changelists_dir(workspace_dir), name)
+    return os.path.exists(alias_path)
+
+
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """
     Save a changelist number under a named alias.

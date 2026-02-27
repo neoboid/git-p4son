@@ -9,6 +9,7 @@ import argparse
 import os
 import shlex
 import subprocess
+from .changelist_store import alias_exists
 from .common import run
 from .log import log
 
@@ -89,10 +90,8 @@ def review_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     # Check alias availability before starting
-    if not args.dry_run:
-        alias_path = os.path.join(
-            workspace_dir, '.git-p4son', 'changelists', args.alias)
-        if os.path.exists(alias_path) and not args.force:
+    if not args.dry_run and not args.force:
+        if alias_exists(args.alias, workspace_dir):
             log.error(
                 f'Alias "{args.alias}" already exists '
                 f'(use -f/--force to overwrite)')

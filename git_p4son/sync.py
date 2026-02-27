@@ -112,13 +112,13 @@ def get_file_count_to_sync(changelist: int, workspace_dir: str) -> int:
     return len(res.stdout)
 
 
-def p4_sync(changelist: int, force: bool, workspace_dir: str) -> bool:
+def p4_sync(changelist: int, label: str, force: bool, workspace_dir: str) -> bool:
     """Sync files from Perforce.
 
     Returns True on success, False if writable files were found without --force.
     Raises CommandError on actual command failures.
     """
-    log.heading(f'Syncing to CL {changelist}')
+    log.heading(f'Syncing to {label} CL ({changelist})')
     file_count_to_sync = get_file_count_to_sync(changelist, workspace_dir)
     if file_count_to_sync == 0:
         log.success('All files up to date')
@@ -289,7 +289,8 @@ def sync_command(args: argparse.Namespace) -> int:
         return 1
     log.success('Clean')
 
-    log.heading('Finding last synced changelist')
+    last_changelist_label = 'last synced'
+    log.heading('Finding {last_changelist_label} changelist')
     last_changelist = git_changelist_of_last_sync(workspace_dir)
     if last_changelist is not None:
         log.success(f'CL {last_changelist}')
@@ -300,7 +301,7 @@ def sync_command(args: argparse.Namespace) -> int:
         if last_changelist is None:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
-        if not p4_sync(last_changelist, args.force, workspace_dir):
+        if not p4_sync(last_changelist, last_changelist_label, args.force, workspace_dir):
             return 1
         return 0
 
@@ -311,7 +312,9 @@ def sync_command(args: argparse.Namespace) -> int:
             workspace_dir)
         log.success(f'CL {latest_changelist}')
         args.changelist = latest_changelist
+        changelist_label = 'latest'
     else:
+        changelist_label = 'specified'
         # Convert changelist string to integer
         try:
             args.changelist = int(args.changelist)
@@ -336,10 +339,10 @@ def sync_command(args: argparse.Namespace) -> int:
                 f'(currently at CL {last_changelist}) with --force')
 
     if last_changelist is not None:
-        if not p4_sync(last_changelist, args.force, workspace_dir):
+        if not p4_sync(last_changelist, last_changelist_label, args.force, workspace_dir):
             return 1
 
-    if not p4_sync(args.changelist, args.force, workspace_dir):
+    if not p4_sync(args.changelist, changelist_label, args.force, workspace_dir):
         return 1
 
     log.heading('Committing git changes')

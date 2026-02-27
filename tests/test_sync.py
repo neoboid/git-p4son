@@ -335,20 +335,20 @@ class TestP4Sync(unittest.TestCase):
     def test_success(self, mock_run, mock_rwo):
         mock_run.return_value = make_run_result(stdout=['file1', 'file2'])
         mock_rwo.return_value = make_run_result()
-        result = p4_sync(12345, False, '/ws')
+        result = p4_sync(12345, 'test', False, '/ws')
         self.assertTrue(result)
 
     @mock.patch('git_p4son.sync.run')
     def test_up_to_date(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
-        result = p4_sync(12345, False, '/ws')
+        result = p4_sync(12345, 'test', False, '/ws')
         self.assertTrue(result)
 
     @mock.patch('git_p4son.sync.run')
     def test_count_failure(self, mock_run):
         mock_run.side_effect = RunError('p4 sync -n failed')
         with self.assertRaises(RunError):
-            p4_sync(12345, False, '/ws')
+            p4_sync(12345, 'test', False, '/ws')
 
 
 class TestSyncCommand(unittest.TestCase):
@@ -420,7 +420,7 @@ class TestSyncCommand(unittest.TestCase):
                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
-        mock_p4sync.assert_called_once_with(100, False, '/ws')
+        mock_p4sync.assert_called_once_with(100, 'last synced', False, '/ws')
 
     @mock.patch('git_p4son.sync.get_latest_changelist_affecting_workspace')
     @mock.patch('git_p4son.sync.git_commit')

@@ -6,7 +6,7 @@ and optionally re-shelves.
 """
 
 import argparse
-from .changelist_store import resolve_changelist
+from .changelist_store import load_changelist_alias
 from .lib import (
     update_changelist,
     open_changes_for_edit,
@@ -30,11 +30,14 @@ def update_command(args: argparse.Namespace) -> int:
     """
     workspace_dir = args.workspace_dir
 
-    log.heading('Resolving alias')
-    changelist = resolve_changelist(args.changelist, workspace_dir)
-    if changelist is None:
-        return 1
-    log.detail(args.changelist, f'CL {changelist}')
+    if args.changelist.isdigit():
+        changelist = args.changelist
+    else:
+        log.heading('Resolving alias')
+        changelist = load_changelist_alias(args.changelist, workspace_dir)
+        if changelist is None:
+            return 1
+        log.detail(args.changelist, f'CL {changelist}')
 
     # Update changelist description
     log.heading('Updating changelist description')

@@ -87,25 +87,6 @@ def load_changelist_alias(name: str, workspace_dir: str) -> str | None:
     return content
 
 
-def resolve_changelist(value: str, workspace_dir: str) -> str | None:
-    """
-    Resolve a changelist value that may be a number or a named alias.
-
-    If the value is all digits, it is returned as-is.
-    Otherwise it is looked up as an alias.
-
-    Args:
-        value: A changelist number or alias name
-        workspace_dir: The workspace root directory
-
-    Returns:
-        The changelist number string, or None if alias lookup failed
-    """
-    if value.isdigit():
-        return value
-    return load_changelist_alias(value, workspace_dir)
-
-
 def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
     """
     Return a list of all changelist aliases and their values.

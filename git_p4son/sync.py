@@ -38,22 +38,15 @@ def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
     return (None, None)
 
 
-class SyncStats:
-    """Statistics for sync operations."""
-
-    def __init__(self) -> None:
-        self.count: int = 0
-
-
 class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
     def __init__(self, file_count_to_sync: int) -> None:
         self.synced_file_count: int = 0
         self.file_count_to_sync: int = file_count_to_sync
-        self.stats: dict[str, SyncStats] = {}
+        self.stats: dict[str, int] = {}
         for mode in ['add', 'del', 'upd', 'clb']:
-            self.stats[mode] = SyncStats()
+            self.stats[mode] = 0
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if re.search(r"//...@\d+ - file\(s\) up-to-date\.", line):
@@ -66,7 +59,7 @@ class P4SyncOutputProcessor:
             return
 
         if mode in self.stats:
-            self.stats[mode].count += 1
+            self.stats[mode] += 1
         self.synced_file_count += 1
 
         if self.file_count_to_sync >= 0:
@@ -77,17 +70,17 @@ class P4SyncOutputProcessor:
 
     def get_summary(self) -> str:
         """Get a one-line sync summary."""
-        synced_count = self.stats['add'].count + \
-            self.stats['upd'].count - self.stats['clb'].count
+        synced_count = self.stats['add'] + \
+            self.stats['upd'] - self.stats['clb']
         parts = []
-        if self.stats['add'].count:
-            parts.append(f"add: {self.stats['add'].count}")
-        if self.stats['upd'].count:
-            parts.append(f"upd: {self.stats['upd'].count}")
-        if self.stats['del'].count:
-            parts.append(f"del: {self.stats['del'].count}")
-        if self.stats['clb'].count:
-            parts.append(f"clb: {self.stats['clb'].count}")
+        if self.stats['add']:
+            parts.append(f"add: {self.stats['add']}")
+        if self.stats['upd']:
+            parts.append(f"upd: {self.stats['upd']}")
+        if self.stats['del']:
+            parts.append(f"del: {self.stats['del']}")
+        if self.stats['clb']:
+            parts.append(f"clb: {self.stats['clb']}")
         detail = ', '.join(parts)
         if detail:
             return f'synced {synced_count} files ({detail})'

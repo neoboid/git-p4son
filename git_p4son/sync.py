@@ -275,41 +275,39 @@ def sync_command(args: argparse.Namespace) -> int:
     # No argument means sync to latest
     if args.changelist is None:
         log.heading('Finding latest changelist')
-        latest_changelist = get_latest_changelist_affecting_workspace(
-            workspace_dir)
-        log.success(f'CL {latest_changelist}')
-        args.changelist = latest_changelist
+        changelist = get_latest_changelist_affecting_workspace(workspace_dir)
+        log.success(f'CL {changelist}')
         changelist_label = 'latest'
     else:
         changelist_label = 'specified'
         # Convert changelist string to integer
         try:
-            args.changelist = int(args.changelist)
+            changelist = int(args.changelist)
         except ValueError:
             log.error(f'Invalid changelist number: {args.changelist}')
             return 1
 
-    if last_changelist == args.changelist:
+    if last_changelist == changelist:
         log.success(f'Already at CL {last_changelist}, nothing to do.')
         return 0
 
     # Check if trying to sync to an older changelist
-    if last_changelist is not None and args.changelist < last_changelist:
+    if last_changelist is not None and changelist < last_changelist:
         if not args.force:
             log.error(
-                f'Cannot sync to CL {args.changelist} '
+                f'Cannot sync to CL {changelist} '
                 f'(currently at CL {last_changelist}) without --force.')
             return 1
         else:
             log.warning(
-                f'Syncing to older CL {args.changelist} '
+                f'Syncing to older CL {changelist} '
                 f'(currently at CL {last_changelist}) with --force')
 
     if last_changelist is not None:
         if not p4_sync(last_changelist, last_changelist_label, args.force, workspace_dir):
             return 1
 
-    if not p4_sync(args.changelist, changelist_label, args.force, workspace_dir):
+    if not p4_sync(changelist, changelist_label, args.force, workspace_dir):
         return 1
 
     log.heading('Committing git changes')
@@ -317,7 +315,7 @@ def sync_command(args: argparse.Namespace) -> int:
     if dirty_files:
         git_add_all_files(workspace_dir)
 
-    commit_msg = f'git-p4son: p4 sync //...@{args.changelist}'
+    commit_msg = f'git-p4son: p4 sync //...@{changelist}'
     git_commit(commit_msg, workspace_dir, allow_empty=True)
     log.success(f'Committed {len(dirty_files)} files')
 

@@ -132,9 +132,9 @@ def join_command_line(command: list[str]) -> str:
     command_line = ''
     for c in command:
         if c.find(' ') != -1:
-            command_line += ' "%s"' % c
+            command_line += f' "{c}"'
         else:
-            command_line += ' %s' % c
+            command_line += f' {c}'
     return command_line
 
 

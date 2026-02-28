@@ -205,7 +205,7 @@ def get_local_git_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     """Get local git changes between base_branch and HEAD."""
     ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
 
-    res = run(['git', 'diff', '--name-status', '{}..{}'.format(ancestor, 'HEAD')],
+    res = run(['git', 'diff', '--name-status', f'{ancestor}..HEAD'],
               cwd=workspace_dir)
 
     changes = LocalChanges()
@@ -225,7 +225,7 @@ def get_local_git_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
             to_filename = tokens[2]
             changes.moves.append((from_filename, to_filename))
         else:
-            raise CommandError('Unknown git status in "{}"'.format(line))
+            raise CommandError(f'Unknown git status in "{line}"')
 
     return changes
 

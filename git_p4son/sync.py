@@ -98,7 +98,7 @@ def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> No
     """Force sync a single file."""
     output_processor = P4SyncOutputProcessor(-1)
     result = run_with_output(
-        ['p4', 'sync', '-f', '%s@%s' % (filename, changelist)],
+        ['p4', 'sync', '-f', f'{filename}@{changelist}'],
         cwd=workspace_dir, on_output=output_processor)
     log.info(output_processor.get_summary())
     if result.elapsed:
@@ -107,8 +107,8 @@ def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> No
 
 def get_file_count_to_sync(changelist: int, workspace_dir: str) -> int:
     """Get the number of files that need to be synced."""
-    res = run(['p4', 'sync', '-n', '//...@%s' %
-              (changelist)], cwd=workspace_dir)
+    res = run(['p4', 'sync', '-n', f'//...@{changelist}'],
+              cwd=workspace_dir)
     return len(res.stdout)
 
 
@@ -128,7 +128,7 @@ def p4_sync(changelist: int, label: str, force: bool, workspace_dir: str) -> boo
     output_processor = P4SyncOutputProcessor(file_count_to_sync)
     try:
         result = run_with_output(
-            ['p4', 'sync', '//...@%s' % (changelist)],
+            ['p4', 'sync', f'//...@{changelist}'],
             cwd=workspace_dir, on_output=output_processor)
         if result.elapsed:
             log.elapsed(result.elapsed)
@@ -310,7 +310,7 @@ def sync_command(args: argparse.Namespace) -> int:
         try:
             args.changelist = int(args.changelist)
         except ValueError:
-            log.error('Invalid changelist number: %s' % args.changelist)
+            log.error(f'Invalid changelist number: {args.changelist}')
             return 1
 
     if last_changelist == args.changelist:
@@ -341,7 +341,7 @@ def sync_command(args: argparse.Namespace) -> int:
     if dirty_files:
         git_add_all_files(workspace_dir)
 
-    commit_msg = 'git-p4son: p4 sync //...@%s' % (args.changelist)
+    commit_msg = f'git-p4son: p4 sync //...@{args.changelist}'
     git_commit(commit_msg, workspace_dir, allow_empty=True)
     log.success(f'Committed {len(dirty_files)} files')
 

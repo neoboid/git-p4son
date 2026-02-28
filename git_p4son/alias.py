@@ -74,7 +74,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         if delete_all:
             delete_changelist_alias(name, workspace_dir)
             deleted_count += 1
-            log.info(f'  Deleted')
+            log.info('  Deleted')
             continue
 
         quit = False
@@ -89,7 +89,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
             if response in ('y', 'yes'):
                 delete_changelist_alias(name, workspace_dir)
                 deleted_count += 1
-                log.info(f'  Deleted')
+                log.info('  Deleted')
                 break
             elif response in ('n', 'no'):
                 break
@@ -97,7 +97,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
                 delete_all = True
                 delete_changelist_alias(name, workspace_dir)
                 deleted_count += 1
-                log.info(f'  Deleted')
+                log.info('  Deleted')
                 break
             elif response in ('q', 'quit'):
                 quit = True

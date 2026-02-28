@@ -11,7 +11,7 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
     """Get commit subjects from git log since base branch."""
     # Run git log to get commit subjects since base branch
     # Using --reverse to get oldest commits first
-    res = run(['git', 'log', '--oneline', '--reverse', '{}..HEAD'.format(base_branch)],
+    res = run(['git', 'log', '--oneline', '--reverse', f'{base_branch}..HEAD'],
               cwd=workspace_dir)
 
     # Extract just the subjects (everything after the hash and space)

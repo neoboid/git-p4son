@@ -147,7 +147,7 @@ class RunResult:
 def join_command_line(command: list[str]) -> str:
     command_line = ''
     for c in command:
-        if c.find(' ') != -1:
+        if ' ' in c:
             command_line += f' "{c}"'
         else:
             command_line += f' {c}'

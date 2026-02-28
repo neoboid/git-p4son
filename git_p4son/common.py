@@ -253,28 +253,20 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
         out_thread.start()
         err_thread.start()
 
-        def poll_queue_until_empty(q, lines, cb):
+        def drain_queue(q, lines, stream):
             try:
                 while not q.empty():
                     line = q.get_nowait()
                     lines.append(line)
-                    if cb:
-                        cb(line)
+                    if on_output:
+                        on_output(line=line, stream=stream)
             except queue.Empty:
                 pass
-        try:
-            def on_stdout(l): return on_output(
-                line=l, stream=sys.stdout) if on_output else None
 
-            def on_stderr(l): return on_output(
-                line=l, stream=sys.stderr) if on_output else None
+        try:
             while True:
-                poll_queue_until_empty(output_queue,
-                                       stdout_lines,
-                                       on_stdout)
-                poll_queue_until_empty(error_queue,
-                                       stderr_lines,
-                                       on_stderr)
+                drain_queue(output_queue, stdout_lines, sys.stdout)
+                drain_queue(error_queue, stderr_lines, sys.stderr)
                 if process.poll() is not None:
                     if output_queue.empty() and error_queue.empty():
                         break
@@ -289,14 +281,16 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
             if final_stdout:
                 final_stdout_lines = final_stdout.splitlines()
                 stdout_lines = stdout_lines + final_stdout_lines
-                for l in final_stdout_lines:
-                    on_stdout(l)
+                for line in final_stdout_lines:
+                    if on_output:
+                        on_output(line=line, stream=sys.stdout)
 
             if final_stderr:
                 final_stderr_lines = final_stderr.splitlines()
                 stderr_lines = stderr_lines + final_stderr_lines
-                for l in final_stderr_lines:
-                    on_stderr(l)
+                for line in final_stderr_lines:
+                    if on_output:
+                        on_output(line=line, stream=sys.stderr)
 
         except KeyboardInterrupt:
             log.stop_spinner()

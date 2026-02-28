@@ -12,14 +12,9 @@ from .log import log
 
 def get_writable_files(stderr_lines: list[str]) -> list[str]:
     """Extract writable files from p4 sync stderr output."""
-    cant_clobber_prefix = "Can't clobber writable file "
-    writable_files = []
-    for line in stderr_lines:
-        if not line.startswith(cant_clobber_prefix):
-            continue
-        writable_file = line[len(cant_clobber_prefix):]
-        writable_files.append(writable_file.rstrip())
-    return writable_files
+    prefix = "Can't clobber writable file "
+    return [line[len(prefix):].rstrip()
+            for line in stderr_lines if line.startswith(prefix)]
 
 
 def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
@@ -44,9 +39,8 @@ class P4SyncOutputProcessor:
     def __init__(self, file_count_to_sync: int) -> None:
         self.synced_file_count: int = 0
         self.file_count_to_sync: int = file_count_to_sync
-        self.stats: dict[str, int] = {}
-        for mode in ['add', 'del', 'upd', 'clb']:
-            self.stats[mode] = 0
+        self.stats: dict[str, int] = {
+            mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if re.search(r"//...@\d+ - file\(s\) up-to-date\.", line):

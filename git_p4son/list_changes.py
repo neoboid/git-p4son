@@ -30,12 +30,8 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
 def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> list[str]:
     """Get enumerated commit lines from git log since base branch."""
     subjects = get_commit_subjects_since(base_branch, workspace_dir)
-
-    lines = []
-    for i, subject in enumerate(subjects, start_number):
-        lines.append(f"{i}. {subject}")
-
-    return lines
+    return [f"{i}. {subject}"
+            for i, subject in enumerate(subjects, start_number)]
 
 
 def get_enumerated_change_description_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> str | None:

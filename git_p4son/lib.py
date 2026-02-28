@@ -11,10 +11,6 @@ from .list_changes import get_enumerated_commit_lines_since
 from .log import log
 
 
-# ---------------------------------------------------------------------------
-# Changelist functions (from changelist.py)
-# ---------------------------------------------------------------------------
-
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str | None:
     """Create a new Perforce changelist with the given message and enumerated git commits."""
     # Build description: user message + enumerated commits
@@ -157,10 +153,6 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     run(['p4', 'change', '-i'], cwd=workspace_dir, input=new_spec)
 
 
-# ---------------------------------------------------------------------------
-# Edit functions (from edit.py)
-# ---------------------------------------------------------------------------
-
 class LocalChanges:
     """Container for local git changes."""
 
@@ -273,10 +265,6 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str, worksp
         _ensure_in_changelist(to_filename, 'add',
                               changelist, workspace_dir, dry_run)
 
-
-# ---------------------------------------------------------------------------
-# Review / shelve functions (from review.py)
-# ---------------------------------------------------------------------------
 
 def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
     """Shelve a changelist to make it available for review."""

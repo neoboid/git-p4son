@@ -12,15 +12,7 @@ from .log import log
 
 
 def alias_list_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'alias list' command.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the 'alias list' command."""
     workspace_dir = args.workspace_dir
 
     aliases = list_changelist_aliases(workspace_dir)
@@ -37,15 +29,7 @@ def alias_list_command(args: argparse.Namespace) -> int:
 
 
 def alias_set_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'alias set' command.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the 'alias set' command."""
     workspace_dir = args.workspace_dir
 
     if not args.changelist.isdigit():
@@ -61,15 +45,7 @@ def alias_set_command(args: argparse.Namespace) -> int:
 
 
 def alias_delete_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'alias delete' command.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the 'alias delete' command."""
     workspace_dir = args.workspace_dir
 
     if not delete_changelist_alias(args.alias, workspace_dir):
@@ -80,15 +56,7 @@ def alias_delete_command(args: argparse.Namespace) -> int:
 
 
 def alias_clean_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'alias clean' command with interactive prompts.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the 'alias clean' command with interactive prompts."""
     workspace_dir = args.workspace_dir
 
     aliases = list_changelist_aliases(workspace_dir)
@@ -144,15 +112,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
 
 def alias_command(args: argparse.Namespace) -> int:
-    """
-    Dispatch alias subcommands.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Dispatch alias subcommands."""
     if args.alias_action == 'list':
         return alias_list_command(args)
     elif args.alias_action == 'set':

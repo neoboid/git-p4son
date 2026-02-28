@@ -223,16 +223,7 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
 
 
 def get_latest_changelist_affecting_workspace(workspace_dir: str) -> int:
-    """
-    Get the latest changelist that affects files in the client's workspace view.
-    This finds the most recent changelist that would be pulled by 'p4 sync'.
-
-    Args:
-        workspace_dir: The workspace directory
-
-    Returns:
-        The latest changelist number.
-    """
+    """Get the latest submitted changelist affecting the workspace view."""
     # First, get the client name
     res = run(['p4', 'info'], cwd=workspace_dir)
 

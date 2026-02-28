@@ -25,11 +25,7 @@ def _todo_path(workspace_dir: str) -> str:
 
 
 def _get_commit_lines(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get git log --oneline lines for commits since base branch.
-
-    Returns:
-        List of "hash subject" lines.
-    """
+    """Get git log --oneline lines for commits since base branch."""
     res = run(['git', 'log', '--oneline', '--reverse',
                f'{base_branch}..HEAD'], cwd=workspace_dir)
     return res.stdout
@@ -37,17 +33,7 @@ def _get_commit_lines(base_branch: str, workspace_dir: str) -> list[str]:
 
 def _generate_todo(commit_lines: list[str], alias: str, message: str,
                    force: bool) -> str:
-    """Generate the rebase todo content with exec lines.
-
-    Args:
-        commit_lines: Lines from git log --oneline (hash + subject)
-        alias: The changelist alias name
-        message: The changelist description for the new command
-        force: Whether to pass --force to the new command
-
-    Returns:
-        The generated todo file content
-    """
+    """Generate the rebase todo content with exec lines."""
     lines = []
     last_index = len(commit_lines) - 1
     for i, commit_line in enumerate(commit_lines):
@@ -75,18 +61,7 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
 
 
 def review_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'review' command.
-
-    Generates a rebase todo with exec lines and runs git rebase -i
-    with GIT_SEQUENCE_EDITOR set to the _sequence-editor subcommand.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the review command."""
     workspace_dir = args.workspace_dir
 
     # Check alias availability before starting
@@ -153,18 +128,7 @@ def review_command(args: argparse.Namespace) -> int:
 
 
 def sequence_editor_command(args: argparse.Namespace) -> int:
-    """
-    Execute the '_sequence-editor' hidden subcommand.
-
-    Called by git as GIT_SEQUENCE_EDITOR. Overwrites the todo file with
-    our generated content, then opens the user's real editor.
-
-    Args:
-        args: Parsed command line arguments (args.filename is the todo file)
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Replace git's rebase todo with ours, then open the user's editor."""
     workspace_dir = args.workspace_dir
     todo_file = _todo_path(workspace_dir)
 

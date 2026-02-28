@@ -18,18 +18,7 @@ from .log import log
 
 
 def new_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'new' command.
-
-    Creates a new changelist, optionally opens files for edit,
-    and optionally creates a Swarm review.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the new command."""
     workspace_dir = args.workspace_dir
 
     # Check alias availability before creating the changelist

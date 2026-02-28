@@ -24,21 +24,7 @@ def alias_exists(name: str, workspace_dir: str) -> bool:
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
-    """
-    Save a changelist number under a named alias.
-
-    Creates .git-p4son/changelists/ directory if needed and writes the
-    changelist number to .git-p4son/changelists/<name>.
-
-    Args:
-        name: The alias name
-        changelist: The changelist number to store
-        workspace_dir: The workspace root directory
-        force: If True, overwrite an existing alias file
-
-    Returns:
-        True on success, False on failure
-    """
+    """Save a changelist number under a named alias."""
     if name in RESERVED_KEYWORDS:
         log.error(f'Alias name "{name}" is a reserved keyword')
         return False
@@ -62,16 +48,7 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
 
 
 def load_changelist_alias(name: str, workspace_dir: str) -> str | None:
-    """
-    Load a changelist number from a named alias.
-
-    Args:
-        name: The alias name
-        workspace_dir: The workspace root directory
-
-    Returns:
-        The changelist number string, or None if not found
-    """
+    """Load a changelist number from a named alias, or None if not found."""
     alias_path = os.path.join(_changelists_dir(workspace_dir), name)
 
     if not os.path.exists(alias_path):
@@ -89,15 +66,7 @@ def load_changelist_alias(name: str, workspace_dir: str) -> str | None:
 
 
 def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
-    """
-    Return a list of all changelist aliases and their values.
-
-    Args:
-        workspace_dir: The workspace root directory
-
-    Returns:
-        Sorted list of (alias_name, changelist_number) tuples.
-    """
+    """Return all changelist aliases as sorted (name, changelist) tuples."""
     changelists_dir = _changelists_dir(workspace_dir)
 
     if not os.path.isdir(changelists_dir):
@@ -116,16 +85,7 @@ def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
 
 
 def delete_changelist_alias(name: str, workspace_dir: str) -> bool:
-    """
-    Delete a changelist alias file.
-
-    Args:
-        name: The alias name to delete
-        workspace_dir: The workspace root directory
-
-    Returns:
-        True on success, False if not found
-    """
+    """Delete a changelist alias file."""
     alias_path = os.path.join(_changelists_dir(workspace_dir), name)
 
     if not os.path.exists(alias_path):

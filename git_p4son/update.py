@@ -16,18 +16,7 @@ from .log import log
 
 
 def update_command(args: argparse.Namespace) -> int:
-    """
-    Execute the 'update' command.
-
-    Updates an existing changelist description, optionally opens files
-    for edit, and optionally re-shelves.
-
-    Args:
-        args: Parsed command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for failure)
-    """
+    """Execute the update command."""
     workspace_dir = args.workspace_dir
 
     if args.changelist.isdigit():

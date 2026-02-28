@@ -16,19 +16,7 @@ from .log import log
 # ---------------------------------------------------------------------------
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str | None:
-    """
-    Create a new Perforce changelist with the given message and
-    enumerated git commits as description.
-
-    Args:
-        message: User-provided changelist description
-        base_branch: The base branch to compare against for commit list
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually create the changelist
-
-    Returns:
-        The changelist number as a string, or None for dry run.
-    """
+    """Create a new Perforce changelist with the given message and enumerated git commits."""
     # Build description: user message + enumerated commits
     commit_lines = get_enumerated_commit_lines_since(
         base_branch, workspace_dir)
@@ -63,31 +51,13 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
 
 def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
-    """
-    Fetch the changelist spec from Perforce.
-
-    Args:
-        changelist_nr: The changelist number
-        workspace_dir: The workspace directory
-
-    Returns:
-        The spec text as a string.
-    """
+    """Fetch the changelist spec from Perforce."""
     result = run(['p4', 'change', '-o', changelist_nr], cwd=workspace_dir)
     return '\n'.join(result.stdout) + '\n'
 
 
 def find_line_starting_with(lines: list[str], prefix: str) -> int:
-    """
-    Find the index of the first line starting with prefix.
-
-    Args:
-        lines: List of lines to search
-        prefix: The prefix to match
-
-    Returns:
-        Index of the first matching line, or len(lines) if not found.
-    """
+    """Find the index of the first line starting with prefix, or len(lines) if not found."""
     for i, line in enumerate(lines):
         if line.startswith(prefix):
             return i
@@ -95,16 +65,7 @@ def find_line_starting_with(lines: list[str], prefix: str) -> int:
 
 
 def find_end_of_indented_section(lines: list[str], start: int) -> int:
-    """
-    Find the end of a tab-indented section.
-
-    Args:
-        lines: List of lines to search
-        start: Index to start searching from
-
-    Returns:
-        Index of the first non-tab-indented line, or len(lines) if all remaining lines are indented.
-    """
+    """Find the end of a tab-indented section starting at the given index."""
     i = start
     while i < len(lines) and lines[i].startswith('\t'):
         i += 1
@@ -127,16 +88,7 @@ def extract_description_lines(spec_text: str) -> list[str]:
 
 
 def replace_description_in_spec(spec_text: str, new_description_lines: list[str]) -> str:
-    """
-    Replace the Description field in a p4 changelist spec.
-
-    Args:
-        spec_text: The full spec text from p4 change -o
-        new_description_lines: The new description as a list of lines
-
-    Returns:
-        The spec text with the description replaced.
-    """
+    """Replace the Description field in a p4 changelist spec."""
     lines = spec_text.splitlines()
     desc_line = find_line_starting_with(lines, 'Description:')
 
@@ -153,21 +105,7 @@ def replace_description_in_spec(spec_text: str, new_description_lines: list[str]
 
 
 def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """
-    Split changelist description lines into the user message, the
-    enumerated commit list, and any trailing text.
-
-    The commit list starts at the first line matching "1. " and
-    continues as long as lines match "<number>. ". Any text after
-    the numbered list is returned as trailing lines.
-
-    Args:
-        lines: The description as a list of lines
-
-    Returns:
-        Tuple of (message_lines, commit_lines, trailing_lines).
-        Each may be an empty list.
-    """
+    """Split description into (message_lines, commit_lines, trailing_lines)."""
     # Find start of numbered list
     start = None
     for i, line in enumerate(lines):
@@ -191,16 +129,7 @@ def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], lis
 
 
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """
-    Update an existing Perforce changelist by appending new commits
-    to the enumerated commit list in the description.
-
-    Args:
-        changelist_nr: The changelist number to update
-        base_branch: The base branch to compare against for commit list
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually update the changelist
-    """
+    """Update an existing changelist by appending new commits to the description."""
     # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
@@ -243,17 +172,7 @@ class LocalChanges:
 
 
 def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
-    """
-    Check if a file is already checked out in Perforce and return its changelist.
-
-    Args:
-        filename: The file to check
-        workspace_dir: The workspace directory
-
-    Returns:
-        changelist_number or None
-        changelist_number is None if file is not checked out
-    """
+    """Return the changelist a file is opened in, or None if not opened."""
     res = run(['p4', 'opened', filename], cwd=workspace_dir)
 
     # Check if file is not opened (p4 opened always returns 0, so check output)
@@ -275,17 +194,7 @@ def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
 
 
 def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:
-    """
-    Find the common ancestor commit between two branches.
-
-    Args:
-        branch1: First branch name
-        branch2: Second branch name
-        workspace_dir: The git workspace directory
-
-    Returns:
-        The common ancestor commit hash.
-    """
+    """Find the common ancestor commit between two branches."""
     res = run(['git', 'merge-base', branch1, branch2], cwd=workspace_dir)
     if not res.stdout or len(res.stdout) != 1:
         raise CommandError('git merge-base returned unexpected output')
@@ -293,16 +202,7 @@ def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:
 
 
 def get_local_git_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
-    """
-    Get local git changes between base_branch and HEAD using common ancestor logic.
-
-    Args:
-        base_branch: The base branch to compare against
-        workspace_dir: The git workspace directory
-
-    Returns:
-        LocalChanges object with adds, mods, dels, and moves.
-    """
+    """Get local git changes between base_branch and HEAD."""
     ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
 
     res = run(['git', 'diff', '--name-status', '{}..{}'.format(ancestor, 'HEAD')],
@@ -331,15 +231,7 @@ def get_local_git_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 
 
 def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """
-    Get local git changes and open them for edit in a Perforce changelist.
-
-    Args:
-        changelist: The changelist number to add files to
-        base_branch: The base branch to compare against
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually execute commands
-    """
+    """Get local git changes and open them for edit in a Perforce changelist."""
     changes = get_local_git_changes(base_branch, workspace_dir)
     include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
 
@@ -362,15 +254,7 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """
-    Process local git changes by adding them to a Perforce changelist.
-
-    Args:
-        changes: LocalChanges object containing adds, mods, dels, moves
-        changelist: The changelist number to update
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually execute commands
-    """
+    """Open local git changes for add/edit/delete in a Perforce changelist."""
     for filename in changes.adds:
         _ensure_in_changelist(filename, 'add', changelist,
                               workspace_dir, dry_run)
@@ -395,27 +279,13 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str, worksp
 # ---------------------------------------------------------------------------
 
 def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """
-    Shelve a changelist to make it available for review.
-
-    Args:
-        changelist: The changelist number to shelve
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually shelve
-    """
+    """Shelve a changelist to make it available for review."""
     run(['p4', 'shelve', '-f', '-Af', '-c', changelist],
         cwd=workspace_dir, dry_run=dry_run)
 
 
 def add_review_keyword_to_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """
-    Add the #review keyword to a changelist description.
-
-    Args:
-        changelist: The changelist number to update
-        workspace_dir: The workspace directory
-        dry_run: If True, don't actually update
-    """
+    """Add the #review keyword to a changelist description."""
     # Get current changelist description
     res = run(['p4', 'change', '-o', changelist], cwd=workspace_dir)
 

@@ -6,8 +6,7 @@ creates a Swarm review.
 """
 
 import argparse
-import os
-from .changelist_store import save_changelist_alias
+from .changelist_store import alias_exists, save_changelist_alias
 from .lib import (
     create_changelist,
     open_changes_for_edit,
@@ -23,9 +22,7 @@ def new_command(args: argparse.Namespace) -> int:
 
     # Check alias availability before creating the changelist
     if args.alias and not args.dry_run:
-        alias_path = os.path.join(
-            workspace_dir, '.git-p4son', 'changelists', args.alias)
-        if os.path.exists(alias_path) and not args.force:
+        if alias_exists(args.alias, workspace_dir) and not args.force:
             log.error(
                 f'Alias "{args.alias}" already exists '
                 f'(use -f/--force to overwrite)')

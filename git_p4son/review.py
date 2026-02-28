@@ -72,8 +72,7 @@ def review_command(args: argparse.Namespace) -> int:
                 f'Alias "{args.alias}" already exists '
                 f'(use -f/--force to overwrite)')
             return 1
-        else:
-            log.success('Done')
+        log.success('Done')
 
     # Get commits since base branch
     log.heading('Finding commits')

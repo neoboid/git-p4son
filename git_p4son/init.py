@@ -106,6 +106,6 @@ def init_command(args: argparse.Namespace) -> int:
 
         log.heading('Next steps')
         log.info('Review and edit .gitignore before adding workspace files.')
-        log.info('Then run: git p4son sync latest')
+        log.info('Then run: git p4son sync')
 
     return 0

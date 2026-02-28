@@ -54,6 +54,11 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
 
+## Code Style
+
+- Prefer short one-line docstrings. Avoid verbose Args/Returns sections when the function signature already makes the
+  purpose and parameters obvious.
+
 ## Git Conventions
 
 - Never mention "Claude" or "Co-Authored-By: Claude" in commit messages.

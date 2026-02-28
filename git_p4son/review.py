@@ -66,7 +66,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     # Check alias availability before starting
     if not args.force:
-        log.heading('Verify that {args.alias} alias do not exist')
+        log.heading(f'Checking alias "{args.alias}" is available')
         if alias_exists(args.alias, workspace_dir):
             log.error(
                 f'Alias "{args.alias}" already exists '
@@ -101,7 +101,7 @@ def review_command(args: argparse.Namespace) -> int:
     with open(todo_file, 'w') as f:
         f.write(todo_content)
 
-    log.success('Saved as {todo_file}')
+    log.success(f'Saved as {todo_file}')
 
     try:
         # Run git rebase -i with our sequence editor

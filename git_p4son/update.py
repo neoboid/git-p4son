@@ -29,7 +29,7 @@ def update_command(args: argparse.Namespace) -> int:
         log.success(f'{args.changelist} -> CL {changelist}')
 
     # Update changelist description
-    log.heading('Updating description for CL {changelist}')
+    log.heading(f'Updating description for CL {changelist}')
     update_changelist(
         changelist, args.base_branch, workspace_dir, dry_run=args.dry_run)
     log.success('Done')

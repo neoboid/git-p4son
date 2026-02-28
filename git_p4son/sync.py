@@ -52,8 +52,7 @@ class P4SyncOutputProcessor:
             log.verbose(f'Unparsable line: {line}')
             return
 
-        if mode in self.stats:
-            self.stats[mode] += 1
+        self.stats[mode] += 1
         self.synced_file_count += 1
 
         if self.file_count_to_sync >= 0:

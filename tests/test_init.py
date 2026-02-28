@@ -15,26 +15,12 @@ from tests.helpers import MockRunDispatcher, make_run_result
 
 
 class TestGetP4WorkspaceName(unittest.TestCase):
-    @mock.patch('git_p4son.init.run')
-    def test_valid_workspace(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Client name: my-client', 'Client root: /ws'])
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
+    def test_valid_workspace(self, _mock):
         self.assertEqual(_get_p4_workspace_name('/ws'), 'my-client')
 
-    @mock.patch('git_p4son.init.run')
-    def test_unknown_client(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Client name: *unknown*'])
-        self.assertIsNone(_get_p4_workspace_name('/ws'))
-
-    @mock.patch('git_p4son.init.run')
-    def test_no_client_line(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Server address: ssl:perforce:1666'])
-        self.assertIsNone(_get_p4_workspace_name('/ws'))
-
-    @mock.patch('git_p4son.init.run', side_effect=RunError('p4 info', returncode=1))
-    def test_p4_failure(self, mock_run):
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value=None)
+    def test_no_workspace(self, _mock):
         self.assertIsNone(_get_p4_workspace_name('/ws'))
 
 

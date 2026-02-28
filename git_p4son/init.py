@@ -9,28 +9,19 @@ import argparse
 import os
 import shutil
 
-from .common import CommandError, run, run_with_output
+from .common import CommandError, get_p4_client_name, run, run_with_output
 from .log import log
 
 
 def _get_p4_workspace_name(cwd: str) -> str | None:
-    """Get the Perforce workspace name by running p4 info.
-
-    Returns the client name on success, or None on failure.
-    """
-    try:
-        res = run(['p4', 'info'], cwd=cwd)
-        for line in res.stdout:
-            if line.startswith('Client name:'):
-                client_name = line.split(':', 1)[1].strip()
-                if client_name != '*unknown*':
-                    log.detail('client', client_name)
-                    return client_name
-        log.error('Not inside a Perforce workspace')
-        return None
-    except (CommandError, OSError):
-        log.error('Failed to run p4 info. Is Perforce installed and configured?')
-        return None
+    """Get the Perforce workspace name, logging errors on failure."""
+    client_name = get_p4_client_name(cwd)
+    if client_name:
+        log.detail('client', client_name)
+        return client_name
+    log.error('Not inside a Perforce workspace. '
+              'Is Perforce installed and configured?')
+    return None
 
 
 def _check_clobber(cwd: str) -> bool:

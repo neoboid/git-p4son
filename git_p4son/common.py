@@ -101,6 +101,22 @@ def get_workspace_dir() -> str | None:
         candidate_dir = parent_dir
 
 
+def get_p4_client_name(cwd: str) -> str | None:
+    """Get the Perforce client name by running p4 info.
+
+    Returns the client name, or None if not in a workspace.
+    """
+    result = subprocess.run(
+        ['p4', 'info'], cwd=cwd,
+        capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if line.startswith('Client name:'):
+            name = line.split(':', 1)[1].strip()
+            if name != '*unknown*':
+                return name
+    return None
+
+
 class CommandError(Exception):
     """Raised for logic/validation errors in commands."""
 

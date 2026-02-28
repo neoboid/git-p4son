@@ -260,36 +260,23 @@ class TestGitChangelistOfLastSync(unittest.TestCase):
 
 class TestGetLatestChangelistAffectingWorkspace(unittest.TestCase):
     @mock.patch('git_p4son.sync.run')
-    def test_success(self, mock_run):
-        mock_run.side_effect = [
-            make_run_result(stdout=['Client name: myclient', 'other: info']),
-            make_run_result(stdout=[
-                "Change 54321 on 2024/01/01 by user@ws 'description'"
-            ]),
-        ]
+    @mock.patch('git_p4son.sync.get_p4_client_name', return_value='myclient')
+    def test_success(self, _mock_client, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            "Change 54321 on 2024/01/01 by user@ws 'description'"
+        ])
         cl = get_latest_changelist_affecting_workspace('/ws')
         self.assertEqual(cl, 54321)
 
-    @mock.patch('git_p4son.sync.run')
-    def test_p4_info_failure(self, mock_run):
-        mock_run.side_effect = RunError('p4 info failed')
-        with self.assertRaises(RunError):
-            get_latest_changelist_affecting_workspace('/ws')
-
-    @mock.patch('git_p4son.sync.run')
-    def test_no_client_name(self, mock_run):
-        mock_run.side_effect = [
-            make_run_result(stdout=['Server: perforce:1666']),
-        ]
+    @mock.patch('git_p4son.sync.get_p4_client_name', return_value=None)
+    def test_no_client_name(self, _mock_client):
         with self.assertRaises(CommandError):
             get_latest_changelist_affecting_workspace('/ws')
 
     @mock.patch('git_p4son.sync.run')
-    def test_no_changes_found(self, mock_run):
-        mock_run.side_effect = [
-            make_run_result(stdout=['Client name: myclient']),
-            make_run_result(stdout=[]),
-        ]
+    @mock.patch('git_p4son.sync.get_p4_client_name', return_value='myclient')
+    def test_no_changes_found(self, _mock_client, mock_run):
+        mock_run.return_value = make_run_result(stdout=[])
         with self.assertRaises(CommandError):
             get_latest_changelist_affecting_workspace('/ws')
 

@@ -6,7 +6,7 @@ import argparse
 import re
 from typing import IO
 
-from .common import CommandError, RunError, run, run_with_output
+from .common import CommandError, RunError, get_p4_client_name, run, run_with_output
 from .log import log
 
 
@@ -210,19 +210,9 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
 
 def get_latest_changelist_affecting_workspace(workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the workspace view."""
-    # First, get the client name
-    res = run(['p4', 'info'], cwd=workspace_dir)
-
-    client_name = None
-    for line in res.stdout:
-        if line.startswith('Client name:'):
-            client_name = line.split(':', 1)[1].strip()
-            break
-
+    client_name = get_p4_client_name(workspace_dir)
     if not client_name:
         raise CommandError('No client name found in p4 info output')
-
-    # Get the latest changelist that affects files in the client's workspace view
     res = run(['p4', 'changes', '-m1', '-s', 'submitted',
               f'//{client_name}/...#head'], cwd=workspace_dir)
     if not res.stdout:

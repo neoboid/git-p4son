@@ -290,7 +290,7 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success('Clean')
 
     last_changelist_label = 'last synced'
-    log.heading('Finding {last_changelist_label} changelist')
+    log.heading(f'Finding {last_changelist_label} changelist')
     last_changelist = git_changelist_of_last_sync(workspace_dir)
     if last_changelist is not None:
         log.success(f'CL {last_changelist}')

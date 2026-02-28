@@ -13,8 +13,11 @@ from .common import CommandError, run, run_with_output
 from .log import log
 
 
-def _check_p4_workspace(cwd: str) -> bool:
-    """Verify we're inside a Perforce workspace by running p4 info."""
+def _get_p4_workspace_name(cwd: str) -> str | None:
+    """Get the Perforce workspace name by running p4 info.
+
+    Returns the client name on success, or None on failure.
+    """
     try:
         res = run(['p4', 'info'], cwd=cwd)
         for line in res.stdout:
@@ -22,12 +25,12 @@ def _check_p4_workspace(cwd: str) -> bool:
                 client_name = line.split(':', 1)[1].strip()
                 if client_name != '*unknown*':
                     log.detail('client', client_name)
-                    return True
+                    return client_name
         log.error('Not inside a Perforce workspace')
-        return False
+        return None
     except (CommandError, OSError):
         log.error('Failed to run p4 info. Is Perforce installed and configured?')
-        return False
+        return None
 
 
 def _check_clobber(cwd: str) -> bool:
@@ -68,7 +71,8 @@ def init_command(args: argparse.Namespace) -> int:
     cwd = os.getcwd()
 
     log.heading('Checking Perforce workspace')
-    if not _check_p4_workspace(cwd):
+    workspace_name = _get_p4_workspace_name(cwd)
+    if not workspace_name:
         return 1
 
     log.heading('Checking clobber flag')
@@ -76,10 +80,10 @@ def init_command(args: argparse.Namespace) -> int:
         log.info('clobber is enabled')
     else:
         log.error(
-            'clobber is not enabled on your workspace.\n'
+            f'clobber is not enabled on workspace "{workspace_name}".\n'
             '  Git removes read-only flags when switching branches, so p4 sync\n'
             '  will fail to overwrite those files unless clobber is enabled.\n'
-            '  Edit the workspace in P4V to set the clobber flag.')
+            f'  Edit "{workspace_name}" in P4V to set the clobber flag.')
         return 1
 
     git_dir = os.path.join(cwd, '.git')

@@ -7,35 +7,35 @@ from unittest import mock
 from git_p4son.common import RunError
 from git_p4son.init import (
     _check_clobber,
-    _check_p4_workspace,
+    _get_p4_workspace_name,
     _setup_gitignore,
     init_command,
 )
 from tests.helpers import MockRunDispatcher, make_run_result
 
 
-class TestCheckP4Workspace(unittest.TestCase):
+class TestGetP4WorkspaceName(unittest.TestCase):
     @mock.patch('git_p4son.init.run')
     def test_valid_workspace(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=['Client name: my-client', 'Client root: /ws'])
-        self.assertTrue(_check_p4_workspace('/ws'))
+        self.assertEqual(_get_p4_workspace_name('/ws'), 'my-client')
 
     @mock.patch('git_p4son.init.run')
     def test_unknown_client(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=['Client name: *unknown*'])
-        self.assertFalse(_check_p4_workspace('/ws'))
+        self.assertIsNone(_get_p4_workspace_name('/ws'))
 
     @mock.patch('git_p4son.init.run')
     def test_no_client_line(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=['Server address: ssl:perforce:1666'])
-        self.assertFalse(_check_p4_workspace('/ws'))
+        self.assertIsNone(_get_p4_workspace_name('/ws'))
 
     @mock.patch('git_p4son.init.run', side_effect=RunError('p4 info', returncode=1))
     def test_p4_failure(self, mock_run):
-        self.assertFalse(_check_p4_workspace('/ws'))
+        self.assertIsNone(_get_p4_workspace_name('/ws'))
 
 
 class TestCheckClobber(unittest.TestCase):
@@ -96,7 +96,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._check_p4_workspace', return_value=True)
+    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_p4, mock_clobber,
@@ -106,14 +106,14 @@ class TestInitCommand(unittest.TestCase):
         # Should have called git init, git add, git commit
         self.assertEqual(mock_run.call_count, 3)
 
-    @mock.patch('git_p4son.init._check_p4_workspace', return_value=False)
+    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value=None)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_not_p4_workspace(self, mock_cwd, mock_p4):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 
     @mock.patch('git_p4son.init._check_clobber', return_value=False)
-    @mock.patch('git_p4son.init._check_p4_workspace', return_value=True)
+    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
     @mock.patch('os.getcwd', return_value='/ws')
     def test_no_clobber(self, mock_cwd, mock_p4, mock_clobber):
         result = init_command(self._make_args())
@@ -121,7 +121,7 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._check_p4_workspace', return_value=True)
+    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_skips_git_init(self, mock_cwd, mock_exists,
@@ -136,7 +136,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._check_p4_workspace', return_value=True)
+    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_no_git_commands(self, mock_cwd, mock_exists,

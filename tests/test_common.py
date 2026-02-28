@@ -284,7 +284,6 @@ class TestRunWithOutput(unittest.TestCase):
             cwd='/tmp',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            stdin=None,
             text=True,
         )
         self.assertEqual(result.returncode, 0)

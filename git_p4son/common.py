@@ -237,7 +237,6 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
                           cwd=cwd,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,
-                          stdin=None,
                           text=True) as process:
 
         output_queue: queue.Queue[str] = queue.Queue()

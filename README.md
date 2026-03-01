@@ -16,6 +16,71 @@ to the pull request worfkflow on github.
 This is a bit cumbersome to do manually, but this package provides commands
 that help out with the repetitive and error prone stuff.
 
+## On big workspaces
+Sometimes git struggles to keep entire perforce workspaces in the repo, like when working
+on a Unreal Engine game with all source code in the workspace. If so, it helps to edit
+`.gitignore` and include only the subdirectories in which you work, the rest of the files
+will still be managed by perforce of course.
+
+## Usage Example
+
+Here's a typical workflow when developing a feature using `git-p4son`:
+
+```sh
+# Sync main with latest changes from perforce
+git checkout main
+git p4son sync
+
+# Start work on a new feature
+git checkout -b my-fancy-feature
+
+# Change some code
+git add .
+git commit -m "Feature part1"
+
+# Sync to the latest changelist affecting the workspace
+git checkout main
+git p4son sync
+
+# Rebase your changes on main
+git checkout my-fancy-feature
+git rebase main
+
+# Change even more code
+git add .
+git commit -m "Feature part2"
+
+# Create a Swarm review with all commits since main in one go.
+# This opens an interactive rebase with pre-filled exec lines updating
+# the changelist with git-p4son after each picked commit.
+# An alias called "my-fancy-feature" (derived from the branch name) is
+# saved so you can refer to this CL by name in follow-up commands.
+git p4son review -m "My fancy feature" -b main
+
+# After review feedback, make more changes
+git add .
+git commit -m "Address review feedback"
+
+# Update the changelist with latest commit, re-open files, and re-shelve.
+# The changelist is looked up by branch name automatically.
+git p4son update --shelve
+
+# After approval, submit in p4v
+
+# Sync to the latest changelist from perforce
+git checkout main
+git p4son sync
+
+# Force remove old branch as you don't need it anymore
+git branch -D my-fancy-feature
+
+# Remove changelist alias for the branch
+git p4son alias delete my-fancy-feature
+
+# Start working on the next feature
+git checkout -b my-next-fancy-feature
+```
+
 ## Installation
 
 ```sh
@@ -380,62 +445,3 @@ Add the following to your PowerShell profile (`$PROFILE`):
 ```
 
 Both enable completion for `git p4son <TAB>` and `git-p4son <TAB>`.
-
-## Usage Example
-
-Here's a typical workflow using git-p4son:
-
-```sh
-# Sync main with latest changes from perforce
-git checkout main
-git p4son sync
-
-# Start work on a new feature
-git checkout -b my-fancy-feature
-
-# Change some code
-git add .
-git commit -m "Feature part1"
-
-# Sync to the latest changelist affecting the workspace
-git checkout main
-git p4son sync
-
-# Rebase your changes on main
-git checkout my-fancy-feature
-git rebase main
-
-# Change even more code
-git add .
-git commit -m "Feature part2"
-
-# Create a Swarm review with all commits since main in one go.
-# This opens an interactive rebase with pre-filled exec lines updating
-# the changelist with git-p4son after each picked commit.
-# An alias called "my-fancy-feature" (derived from the branch name) is
-# saved so you can refer to this CL by name in follow-up commands.
-git p4son review -m "My fancy feature" -b main
-
-# After review feedback, make more changes
-git add .
-git commit -m "Address review feedback"
-
-# Update the changelist with latest commit, re-open files, and re-shelve.
-# The changelist is looked up by branch name automatically.
-git p4son update --shelve
-
-# After approval, submit in p4v
-
-# Sync to the latest changelist from perforce
-git checkout main
-git p4son sync
-
-# Force remove old branch as you don't need it anymore
-git branch -D my-fancy-feature
-
-# Remove changelist alias for the branch
-git p4son alias delete my-fancy-feature
-
-# Start working on the next feature
-git checkout -b my-next-fancy-feature
-```

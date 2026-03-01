@@ -95,6 +95,8 @@ Requires Python 3.10 or later.
 pip install --upgrade git-p4son
 ```
 
+For tab completion (zsh and PowerShell), see [Shell Completions](#shell-completions).
+
 ## Development
 
 To install from source in editable mode:

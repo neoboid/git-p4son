@@ -410,7 +410,7 @@ git-p4son completion <shell> [--dirname]
 ```
 
 **Arguments:**
-- `shell`: Shell to print completion script path for (`zsh` or `powershell`)
+- `shell`: Shell to print completion script path for (`bash`, `zsh`, or `powershell`)
 
 **Options:**
 - `-d, --dirname`: Print the directory containing the completion script instead of the full file path
@@ -427,7 +427,15 @@ explicit alias name instead.
 
 ## Shell Completions
 
-Tab completion is available for both zsh and PowerShell, including commands, flags, and dynamic alias names.
+Tab completion is available for bash, zsh, and PowerShell, including commands, flags, and dynamic alias names.
+
+### bash
+
+Add the following to `~/.bashrc`:
+
+```bash
+source $(git-p4son completion bash)
+```
 
 ### zsh
 
@@ -446,4 +454,4 @@ Add the following to your PowerShell profile (`$PROFILE`):
 . $(git-p4son completion powershell)
 ```
 
-Both enable completion for `git p4son <TAB>` and `git-p4son <TAB>`.
+All three enable completion for `git p4son <TAB>` and `git-p4son <TAB>`.

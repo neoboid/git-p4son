@@ -306,11 +306,11 @@ Examples:
         'completion',
         help='Print path to a shell completion script',
         description='Print the path to a shell completion script '
-        'for zsh or powershell.'
+        'for bash, zsh, or powershell.'
     )
     completion_parser.add_argument(
         'shell',
-        choices=['zsh', 'powershell'],
+        choices=['bash', 'zsh', 'powershell'],
         help='Shell to print completion script path for'
     )
     completion_parser.add_argument(
@@ -352,6 +352,7 @@ def _resolve_branch_keyword(workspace_dir: str) -> str | None:
 
 
 _COMPLETION_FILES = {
+    'bash': 'git-p4son.bash',
     'zsh': '_git-p4son',
     'powershell': 'git-p4son.ps1',
 }

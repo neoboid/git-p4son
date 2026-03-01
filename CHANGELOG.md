@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Link to shell completions from install section
+- Update readme with section on big workspaces
+- Remove 'latest' from sync suggestion
+- Fix some format log strings
+- Include workspace name in init clobber error message
+
 ## 0.1.9
 
 - Add CHANGELOG with release notes since 0.1.0

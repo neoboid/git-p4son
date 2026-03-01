@@ -5,6 +5,6 @@ This package provides commands for syncing a local git repository with a Perforc
 creating and updating changelists, and managing Swarm reviews.
 """
 
-__version__ = "0.1.9"
+__version__ = "0.2.0"
 __author__ = "Andreas Andersson"
 __email__ = "andreas@neoboid.com"

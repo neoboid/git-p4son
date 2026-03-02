@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Verify that git editor is set in init subcommand
+- Validate that editor can be resolved before running sequence editor in review subcommand
+- Improve setup section suggesting that the first sync needs to committed manually
+- Add bash shell completion
+
 ## 0.2.0
 
 - Link to shell completions from install section

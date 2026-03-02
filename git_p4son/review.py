@@ -106,7 +106,7 @@ def review_command(args: argparse.Namespace) -> int:
         # Run git rebase -i with our sequence editor
         log.heading('Running interactive rebase')
         env = os.environ.copy()
-        env['GIT_SEQUENCE_EDITOR'] = 'git p4son _sequence-editor'
+        env['GIT_SEQUENCE_EDITOR'] = 'git-p4son _sequence-editor'
         result = subprocess.run(
             ['git', 'rebase', '-i', args.base_branch],
             cwd=workspace_dir,

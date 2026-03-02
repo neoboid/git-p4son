@@ -120,13 +120,19 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    needs the clobber flag to overwrite writable files. Edit the workspace in P4V to set the clobber flag, or run
    `p4 client` and change `noclobber` to `clobber` in the Options line.
 
-2. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
+2. **Set a git editor** if you don't have one already. The `review` command opens an interactive rebase in your
+   editor. If you haven't configured one, set it with:
+   ```sh
+   git config --global core.editor <editor>   # e.g. vim, nano, code --wait
+   ```
+
+3. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
    history:
    ```sh
    p4 sync //...@12345
    ```
 
-3. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace — it doesn't have to be at the
+4. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace — it doesn't have to be at the
    root:
    ```sh
    cd /path/to/your/workspace    # or a subdirectory of it
@@ -135,15 +141,15 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    The command verifies that you are inside a P4 workspace with clobber enabled, runs `git init`, sets up
    `.gitignore` (copying from `.p4ignore` if available), and creates an initial commit.
 
-4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
+5. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-5. **Add and commit all files manually the first time**
+6. **Add and commit all files manually the first time**
    ```sh
    git add .
    git commit -m "Initial submit all files"
    ```
 
-6. **Run `git p4son sync`** to get your first official sync commit
+7. **Run `git p4son sync`** to get your first official sync commit
    ```sh
    git p4son sync
    ```

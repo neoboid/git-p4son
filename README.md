@@ -137,10 +137,17 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
 
 4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-5. **Run `git p4son sync`** to record the current workspace state as a tracked sync commit:
+5. **Add and commit all files manually the first time**
+   ```sh
+   git add .
+   git commit -m "Initial submit all files"
+   ```
+
+6. **Run `git p4son sync`** to get your first official sync commit
    ```sh
    git p4son sync
    ```
+   This creates a commit with message that records the CL you have synced.
 
 From here, branch off `main` for local development. See the [Usage Example](#usage-example) below for a typical
 workflow.

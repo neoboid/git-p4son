@@ -11,6 +11,7 @@ import shutil
 
 from .common import CommandError, get_p4_client_name, run, run_with_output
 from .log import log
+from .review import _resolve_editor
 
 
 def _get_p4_workspace_name(cwd: str) -> str | None:
@@ -98,5 +99,11 @@ def init_command(args: argparse.Namespace) -> int:
         log.heading('Next steps')
         log.info('Review and edit .gitignore before adding workspace files.')
         log.info('Then run: git p4son sync')
+
+    # Nudge user to set an editor if none is configured
+    if not _resolve_editor(cwd):
+        log.heading('Editor not configured')
+        log.warning(
+            'No git editor configured. Set one with: git config core.editor <editor>')
 
     return 0

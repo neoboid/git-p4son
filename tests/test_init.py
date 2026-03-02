@@ -79,6 +79,7 @@ class TestInitCommand(unittest.TestCase):
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
 
+    @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
@@ -86,7 +87,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_p4, mock_clobber,
-                     mock_run, mock_gitignore):
+                     mock_run, mock_gitignore, mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # Should have called git init, git add, git commit
@@ -105,6 +106,7 @@ class TestInitCommand(unittest.TestCase):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 
+    @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
     @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
@@ -112,13 +114,14 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_skips_git_init(self, mock_cwd, mock_exists,
                                           mock_p4, mock_clobber,
-                                          mock_gitignore):
+                                          mock_gitignore, mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # No git commands should be called (no init, no add, no commit)
         # run_with_output is not even imported/mocked here, so if it were
         # called it would actually run. Instead, mock it to verify.
 
+    @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
@@ -127,7 +130,8 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_no_git_commands(self, mock_cwd, mock_exists,
                                            mock_p4, mock_clobber,
-                                           mock_gitignore, mock_run):
+                                           mock_gitignore, mock_run,
+                                           mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         mock_run.assert_not_called()

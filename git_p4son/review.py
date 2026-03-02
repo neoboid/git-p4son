@@ -24,6 +24,19 @@ def _todo_path(workspace_dir: str) -> str:
     return os.path.join(_reviews_dir(workspace_dir), 'todo')
 
 
+def _resolve_editor(workspace_dir: str) -> str | None:
+    """Resolve the user's editor via git var GIT_EDITOR."""
+    result = subprocess.run(
+        ['git', 'var', 'GIT_EDITOR'],
+        capture_output=True,
+        text=True,
+        cwd=workspace_dir,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def _get_commit_lines(base_branch: str, workspace_dir: str) -> list[str]:
     """Get git log --oneline lines for commits since base branch."""
     res = run(['git', 'log', '--oneline', '--reverse',
@@ -73,6 +86,15 @@ def review_command(args: argparse.Namespace) -> int:
                 f'(use -f/--force to overwrite)')
             return 1
         log.success('Done')
+
+    # Validate editor is available before starting
+    log.heading('Checking editor')
+    editor = _resolve_editor(workspace_dir)
+    if not editor:
+        log.error(
+            'No git editor configured. Set one with: git config core.editor <editor>')
+        return 1
+    log.success(editor)
 
     # Get commits since base branch
     log.heading('Finding commits')
@@ -151,18 +173,11 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
             f.write('\n')
             f.writelines(comment_lines)
 
-    # Resolve the user's editor via git var GIT_EDITOR
-    result = subprocess.run(
-        ['git', 'var', 'GIT_EDITOR'],
-        capture_output=True,
-        text=True,
-        cwd=workspace_dir,
-    )
-    if result.returncode != 0:
-        log.error('Failed to resolve editor via git var GIT_EDITOR')
+    editor = _resolve_editor(workspace_dir)
+    if not editor:
+        log.error(
+            'No git editor configured. Set one with: git config core.editor <editor>')
         return 1
-
-    editor = result.stdout.strip()
 
     # Open the editor on the todo file
     # The editor command may contain arguments (e.g. "code --wait"),

@@ -90,8 +90,9 @@ class TestGetCommitLines(unittest.TestCase):
 
 class TestReviewCommand(unittest.TestCase):
     @mock.patch('git_p4son.review.subprocess.run')
+    @mock.patch('git_p4son.review._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.run')
-    def test_success(self, mock_run, mock_subprocess_run):
+    def test_success(self, mock_run, mock_resolve_editor, mock_subprocess_run):
         mock_run.return_value = make_run_result(stdout=[
             'abc1234 First commit',
             'def5678 Second commit',
@@ -119,12 +120,27 @@ class TestReviewCommand(unittest.TestCase):
         self.assertEqual(call_args[0][0], ['git', 'rebase', '-i', 'main'])
         self.assertEqual(
             call_args[1]['env']['GIT_SEQUENCE_EDITOR'],
-            'git p4son _sequence-editor',
+            'git-p4son _sequence-editor',
         )
 
+    @mock.patch('git_p4son.review._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.run')
-    def test_no_commits(self, mock_run):
+    def test_no_commits(self, mock_run, mock_resolve_editor):
         mock_run.return_value = make_run_result(stdout=[])
+        args = mock.Mock(
+            alias='my-feature',
+            message='My feature',
+            base_branch='main',
+            force=False,
+            dry_run=False,
+            workspace_dir='/workspace',
+        )
+        with mock.patch('os.path.exists', return_value=False):
+            rc = review_command(args)
+        self.assertEqual(rc, 1)
+
+    @mock.patch('git_p4son.review._resolve_editor', return_value=None)
+    def test_no_editor_fails_early(self, mock_resolve_editor):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
@@ -151,8 +167,9 @@ class TestReviewCommand(unittest.TestCase):
             rc = review_command(args)
         self.assertEqual(rc, 1)
 
+    @mock.patch('git_p4son.review._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.run')
-    def test_dry_run_prints_todo(self, mock_run):
+    def test_dry_run_prints_todo(self, mock_run, mock_resolve_editor):
         mock_run.return_value = make_run_result(stdout=[
             'abc1234 First commit',
             'def5678 Second commit',
@@ -169,8 +186,10 @@ class TestReviewCommand(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     @mock.patch('git_p4son.review.subprocess.run')
+    @mock.patch('git_p4son.review._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.run')
-    def test_rebase_failure(self, mock_run, mock_subprocess_run):
+    def test_rebase_failure(self, mock_run, mock_resolve_editor,
+                            mock_subprocess_run):
         mock_run.return_value = make_run_result(stdout=[
             'abc1234 First commit',
         ])

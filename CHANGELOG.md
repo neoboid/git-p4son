@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Improve output for editor validation on init
+- Add git editor setup step to README
+
 ## 0.2.1
 
 - Verify that git editor is set in init subcommand

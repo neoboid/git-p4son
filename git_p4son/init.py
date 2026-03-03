@@ -101,9 +101,12 @@ def init_command(args: argparse.Namespace) -> int:
         log.info('Then run: git p4son sync')
 
     # Nudge user to set an editor if none is configured
-    if not _resolve_editor(cwd):
-        log.heading('Editor not configured')
+    log.heading('Validating git editor configuration')
+    editor = _resolve_editor(cwd)
+    if editor:
+        log.success(editor)
+    else:
         log.warning(
-            'No git editor configured. Set one with: git config core.editor <editor>')
+            'No editor configured. Set one with: git config core.editor <editor>')
 
     return 0

@@ -14,17 +14,6 @@ from .log import log
 from .review import _resolve_editor
 
 
-def _get_p4_workspace_name(cwd: str) -> str | None:
-    """Get the Perforce workspace name, logging errors on failure."""
-    client_name = get_p4_client_name(cwd)
-    if client_name:
-        log.detail('client', client_name)
-        return client_name
-    log.error('Not inside a Perforce workspace. '
-              'Is Perforce installed and configured?')
-    return None
-
-
 def _check_clobber(cwd: str) -> bool:
     """Check if clobber is enabled on the workspace. Returns True if enabled."""
     try:
@@ -47,11 +36,11 @@ def _setup_gitignore(cwd: str) -> str:
     p4ignore_path = os.path.join(cwd, '.p4ignore')
 
     if os.path.exists(gitignore_path):
-        return 'using existing .gitignore'
+        return '.gitignore already exist'
 
     if os.path.exists(p4ignore_path):
         shutil.copy2(p4ignore_path, gitignore_path)
-        return 'copied .p4ignore to .gitignore'
+        return 'copied .p4ignore to new .gitignore'
 
     with open(gitignore_path, 'w') as f:
         pass
@@ -63,13 +52,17 @@ def init_command(args: argparse.Namespace) -> int:
     cwd = os.getcwd()
 
     log.heading('Checking Perforce workspace')
-    workspace_name = _get_p4_workspace_name(cwd)
-    if not workspace_name:
+    workspace_name = get_p4_client_name(cwd)
+    if workspace_name:
+        log.success(workspace_name)
+    else:
+        log.error('Not inside a Perforce workspace. '
+                  'Is Perforce installed and configured?')
         return 1
 
     log.heading('Checking clobber flag')
     if _check_clobber(cwd):
-        log.info('clobber is enabled')
+        log.success('clobber is enabled')
     else:
         log.error(
             f'clobber is not enabled on workspace "{workspace_name}".\n'
@@ -78,16 +71,18 @@ def init_command(args: argparse.Namespace) -> int:
             f'  Edit "{workspace_name}" in P4V to set the clobber flag.')
         return 1
 
-    git_dir = os.path.join(cwd, '.git')
-    existing_repo = os.path.exists(git_dir)
-
-    if not existing_repo:
-        log.heading('Initializing git repository')
-        run_with_output(['git', 'init'], cwd=cwd)
-
-    log.heading('Setting up .gitignore')
+    log.heading('Checking .gitignore')
     result = _setup_gitignore(cwd)
     log.success(result)
+
+    log.heading('Checking git repo')
+    git_dir = os.path.join(cwd, '.git')
+    existing_repo = os.path.exists(git_dir)
+    if existing_repo:
+        log.success('.git/ already exists')
+    else:
+        run_with_output(['git', 'init'], cwd=cwd)
+        log.success('created new git repository')
 
     if not existing_repo:
         log.heading('Creating initial commit')
@@ -97,8 +92,10 @@ def init_command(args: argparse.Namespace) -> int:
             cwd=cwd)
 
         log.heading('Next steps')
-        log.info('Review and edit .gitignore before adding workspace files.')
-        log.info('Then run: git p4son sync')
+        log.info('* Review and edit .gitignore')
+        log.info('* git add .')
+        log.info('* git commit -m "Initial commit"')
+        log.info('* git p4son sync')
 
     # Nudge user to set an editor if none is configured
     log.heading('Validating git editor configuration')

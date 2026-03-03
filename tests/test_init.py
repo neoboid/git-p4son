@@ -7,21 +7,10 @@ from unittest import mock
 from git_p4son.common import RunError
 from git_p4son.init import (
     _check_clobber,
-    _get_p4_workspace_name,
     _setup_gitignore,
     init_command,
 )
 from tests.helpers import MockRunDispatcher, make_run_result
-
-
-class TestGetP4WorkspaceName(unittest.TestCase):
-    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
-    def test_valid_workspace(self, _mock):
-        self.assertEqual(_get_p4_workspace_name('/ws'), 'my-client')
-
-    @mock.patch('git_p4son.init.get_p4_client_name', return_value=None)
-    def test_no_workspace(self, _mock):
-        self.assertIsNone(_get_p4_workspace_name('/ws'))
 
 
 class TestCheckClobber(unittest.TestCase):
@@ -52,7 +41,7 @@ class TestSetupGitignore(unittest.TestCase):
         with mock.patch('os.path.exists') as mock_exists:
             mock_exists.side_effect = lambda p: p.endswith('.gitignore')
             result = _setup_gitignore('/ws')
-            self.assertEqual(result, 'using existing .gitignore')
+            self.assertEqual(result, '.gitignore already exist')
 
     def test_copies_p4ignore(self):
         def exists_side_effect(path):
@@ -61,7 +50,7 @@ class TestSetupGitignore(unittest.TestCase):
         with mock.patch('os.path.exists', side_effect=exists_side_effect), \
                 mock.patch('shutil.copy2') as mock_copy:
             result = _setup_gitignore('/ws')
-            self.assertEqual(result, 'copied .p4ignore to .gitignore')
+            self.assertEqual(result, 'copied .p4ignore to new .gitignore')
             mock_copy.assert_called_once_with(
                 os.path.join('/ws', '.p4ignore'),
                 os.path.join('/ws', '.gitignore'))
@@ -83,7 +72,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_p4, mock_clobber,
@@ -93,23 +82,23 @@ class TestInitCommand(unittest.TestCase):
         # Should have called git init, git add, git commit
         self.assertEqual(mock_run.call_count, 3)
 
-    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value=None)
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value=None)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_not_p4_workspace(self, mock_cwd, mock_p4):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 
     @mock.patch('git_p4son.init._check_clobber', return_value=False)
-    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
     @mock.patch('os.getcwd', return_value='/ws')
     def test_no_clobber(self, mock_cwd, mock_p4, mock_clobber):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 
     @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_skips_git_init(self, mock_cwd, mock_exists,
@@ -123,9 +112,9 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init.run_with_output')
-    @mock.patch('git_p4son.init._setup_gitignore', return_value='using existing .gitignore')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
     @mock.patch('git_p4son.init._check_clobber', return_value=True)
-    @mock.patch('git_p4son.init._get_p4_workspace_name', return_value='my-client')
+    @mock.patch('git_p4son.init.get_p4_client_name', return_value='my-client')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_no_git_commands(self, mock_cwd, mock_exists,

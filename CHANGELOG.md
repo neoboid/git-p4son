@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Enable syncing just a sub-directory of your perforce workspace
+- Add pre-commit hook to enforce autopep8 formatting
+- Add pre-push hook that runs tests before pushing
+- Bump minimum Python to 3.11 to gain access to tomllib
+
 ## 0.2.2
 
 - Improve output for editor validation on init

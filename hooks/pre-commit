@@ -1,0 +1,17 @@
+#!/bin/sh
+# Block commits that contain unformatted Python code.
+# Only checks files that are staged for commit.
+
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.py')
+if [ -z "$files" ]; then
+    exit 0
+fi
+
+output=$(echo "$files" | xargs autopep8 --diff)
+if [ -n "$output" ]; then
+    echo "autopep8 found formatting issues in staged files:"
+    echo "$output"
+    echo ""
+    echo "Run: autopep8 -i -r git_p4son/ tests/"
+    exit 1
+fi

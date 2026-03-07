@@ -9,6 +9,7 @@ import argparse
 import os
 import shlex
 import subprocess
+from . import CONFIG_DIR
 from .changelist_store import alias_exists
 from .common import run
 from .log import log
@@ -16,7 +17,7 @@ from .log import log
 
 def _reviews_dir(workspace_dir: str) -> str:
     """Return the path to the reviews directory."""
-    return os.path.join(workspace_dir, '.git-p4son', 'reviews')
+    return os.path.join(workspace_dir, CONFIG_DIR, 'reviews')
 
 
 def _todo_path(workspace_dir: str) -> str:

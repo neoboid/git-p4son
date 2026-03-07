@@ -5,6 +5,8 @@ This package provides commands for syncing a local git repository with a Perforc
 creating and updating changelists, and managing Swarm reviews.
 """
 
+CONFIG_DIR = '.git-p4son'
+
 __version__ = "0.2.2"
 __author__ = "Andreas Andersson"
 __email__ = "andreas@neoboid.com"

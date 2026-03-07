@@ -6,6 +6,7 @@ Stores named aliases for changelist numbers in .git-p4son/changelists/<name>.
 
 import os
 
+from . import CONFIG_DIR
 from .log import log
 
 
@@ -14,7 +15,7 @@ RESERVED_KEYWORDS = frozenset({'last-synced', 'branch'})
 
 def _changelists_dir(workspace_dir: str) -> str:
     """Return the path to the changelists alias directory."""
-    return os.path.join(workspace_dir, '.git-p4son', 'changelists')
+    return os.path.join(workspace_dir, CONFIG_DIR, 'changelists')
 
 
 def alias_exists(name: str, workspace_dir: str) -> bool:

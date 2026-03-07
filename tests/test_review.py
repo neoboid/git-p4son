@@ -4,6 +4,7 @@ import os
 import unittest
 from unittest import mock
 
+from git_p4son import CONFIG_DIR
 from git_p4son.common import CommandError, RunError
 from git_p4son.review import (
     _generate_todo,
@@ -227,7 +228,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
 
         args = mock.Mock(filename='/tmp/git-rebase-todo',
                          workspace_dir='/workspace')
-        todo_file = os.path.join('/workspace', '.git-p4son', 'reviews', 'todo')
+        todo_file = os.path.join('/workspace', CONFIG_DIR, 'reviews', 'todo')
 
         with mock.patch('os.path.exists', return_value=True):
             with mock.patch('builtins.open', mock.mock_open(read_data=todo_content)):
@@ -268,7 +269,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
 
         args = mock.Mock(filename='/tmp/git-rebase-todo',
                          workspace_dir='/workspace')
-        todo_file = os.path.join('/workspace', '.git-p4son', 'reviews', 'todo')
+        todo_file = os.path.join('/workspace', CONFIG_DIR, 'reviews', 'todo')
 
         written = []
 

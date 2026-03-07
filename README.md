@@ -110,7 +110,19 @@ pip install -e .
 The `-e` flag installs the package in "editable" mode, meaning changes to the code are immediately available
 without reinstalling. This is also handy if you want to auto-update git-p4son whenever you pull from GitHub.
 
-git-p4son only uses Python standard library modules — no additional packages are required.
+git-p4son only uses Python standard library modules - no additional packages are required.
+
+### Git Hooks
+
+The repository includes git hooks in the `hooks/` directory (e.g. a pre-push hook that runs the test suite). To
+activate them, run:
+
+```sh
+scripts/setup-hooks.sh
+```
+
+This configures `core.hooksPath` so git uses the hooks from the repository. You only need to run this once after
+cloning.
 
 ## Setup
 

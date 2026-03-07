@@ -468,10 +468,9 @@ def main() -> int:
         return 1
     except RunError as e:
         if e.stderr:
-            log.error(e.stderr[0])
-            for line in e.stderr[1:]:
-                log.verbose(line)
-        log.fail(e.returncode)
+            for line in e.stderr:
+                log.error(line)
+        log.error(f'Process failed with return code {e.returncode}')
         return e.returncode
     except CommandError as e:
         log.error(str(e))

@@ -288,7 +288,7 @@ def sync_command(args: argparse.Namespace) -> int:
             return 1
 
     if last_changelist == changelist:
-        log.success(f'Already at CL {last_changelist}, nothing to do.')
+        log.info(f'Already at CL {last_changelist}, nothing to do.')
         return 0
 
     # Check if trying to sync to an older changelist

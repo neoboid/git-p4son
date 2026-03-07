@@ -114,8 +114,13 @@ git-p4son only uses Python standard library modules - no additional packages are
 
 ### Git Hooks
 
-The repository includes git hooks in the `hooks/` directory (e.g. a pre-push hook that runs the test suite). To
-activate them, run:
+The repository includes git hooks in the `hooks/` directory:
+
+- **pre-commit** - verifies that staged Python files are formatted with `autopep8`. Install it with
+  `pip install autopep8`.
+- **pre-push** - runs the test suite and blocks the push if any test fails.
+
+To activate the hooks, run:
 
 ```sh
 scripts/setup-hooks.sh

@@ -14,20 +14,22 @@ from .log import log
 from .review import _resolve_editor
 
 
-def _check_clobber(cwd: str) -> bool:
-    """Check if clobber is enabled on the workspace. Returns True if enabled."""
+def _get_p4_client_spec(cwd: str) -> list[str]:
+    """Get the raw p4 client spec lines."""
     try:
         res = run(['p4', 'client', '-o'], cwd=cwd)
-        for line in res.stdout:
-            stripped = line.strip()
-            if stripped.startswith('Options:'):
-                options = stripped.split()
-                if 'clobber' in options:
-                    return True
-                return False
-        return False
+        return res.stdout
     except (CommandError, OSError):
-        return False
+        return []
+
+
+def _check_clobber(spec_lines: list[str]) -> bool:
+    """Check if clobber is enabled in a client spec."""
+    for line in spec_lines:
+        stripped = line.strip()
+        if stripped.startswith('Options:'):
+            return 'clobber' in stripped.split()
+    return False
 
 
 def _setup_gitignore(cwd: str) -> str:
@@ -60,8 +62,10 @@ def init_command(args: argparse.Namespace) -> int:
                   'Is Perforce installed and configured?')
         return 1
 
+    spec_lines = _get_p4_client_spec(cwd)
+
     log.heading('Checking clobber flag')
-    if _check_clobber(cwd):
+    if _check_clobber(spec_lines):
         log.success('clobber is enabled')
     else:
         log.error(

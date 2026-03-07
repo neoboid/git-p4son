@@ -14,17 +14,13 @@ from tests.helpers import MockRunDispatcher, make_run_result
 
 
 class TestCheckClobber(unittest.TestCase):
-    @mock.patch('git_p4son.init.run')
-    def test_clobber_enabled(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Options:\tallwrite clobber compress'])
-        self.assertTrue(_check_clobber('/ws'))
+    def test_clobber_enabled(self):
+        lines = ['Options:\tallwrite clobber compress']
+        self.assertTrue(_check_clobber(lines))
 
-    @mock.patch('git_p4son.init.run')
-    def test_noclobber(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Options:\tallwrite noclobber compress'])
-        self.assertFalse(_check_clobber('/ws'))
+    def test_noclobber(self):
+        lines = ['Options:\tallwrite noclobber compress']
+        self.assertFalse(_check_clobber(lines))
 
     @mock.patch('git_p4son.init.run')
     def test_no_options_line(self, mock_run):

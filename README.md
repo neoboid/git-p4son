@@ -87,7 +87,7 @@ git checkout -b my-next-fancy-feature
 pip install git-p4son
 ```
 
-Requires Python 3.10 or later.
+Requires Python 3.11 or later.
 
 ### Updating
 

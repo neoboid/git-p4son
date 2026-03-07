@@ -6,7 +6,8 @@ import argparse
 import re
 from typing import IO
 
-from .common import CommandError, RunError, get_p4_client_name, run, run_with_output
+from .common import CommandError, RunError, run, run_with_output
+from .config import get_depot_root
 from .log import log
 
 
@@ -43,7 +44,7 @@ class P4SyncOutputProcessor:
             mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
     def __call__(self, line: str, stream: IO[str]) -> None:
-        if re.search(r"//...@\d+ - file\(s\) up-to-date\.", line):
+        if re.search(r"@\d+ - file\(s\) up-to-date\.", line):
             log.info('all files up to date')
             return
 
@@ -91,21 +92,24 @@ def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> No
         log.elapsed(result.elapsed)
 
 
-def get_file_count_to_sync(changelist: int, workspace_dir: str) -> int:
+def get_file_count_to_sync(changelist: int, depot_root: str,
+                           workspace_dir: str) -> int:
     """Get the number of files that need to be synced."""
-    res = run(['p4', 'sync', '-n', f'//...@{changelist}'],
+    res = run(['p4', 'sync', '-n', f'{depot_root}/...@{changelist}'],
               cwd=workspace_dir)
     return len(res.stdout)
 
 
-def p4_sync(changelist: int, label: str, force: bool, workspace_dir: str) -> bool:
+def p4_sync(changelist: int, label: str, force: bool, depot_root: str,
+            workspace_dir: str) -> bool:
     """Sync files from Perforce.
 
     Returns True on success, False if writable files were found without --force.
     Raises CommandError on actual command failures.
     """
     log.heading(f'Syncing to {label} CL ({changelist})')
-    file_count_to_sync = get_file_count_to_sync(changelist, workspace_dir)
+    file_count_to_sync = get_file_count_to_sync(changelist, depot_root,
+                                                workspace_dir)
     if file_count_to_sync == 0:
         log.success('All files up to date')
         return True
@@ -114,7 +118,7 @@ def p4_sync(changelist: int, label: str, force: bool, workspace_dir: str) -> boo
     output_processor = P4SyncOutputProcessor(file_count_to_sync)
     try:
         result = run_with_output(
-            ['p4', 'sync', f'//...@{changelist}'],
+            ['p4', 'sync', f'{depot_root}/...@{changelist}'],
             cwd=workspace_dir, on_output=output_processor)
         if result.elapsed:
             log.elapsed(result.elapsed)
@@ -194,13 +198,13 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
     """Get the changelist number from the most recent sync commit."""
     res = run_with_output(
         ['git', 'log', '-1', '--pretty=%s',
-         '--grep=: p4 sync //\\.\\.\\.@'],
+         '--grep=: p4 sync //'],
         cwd=workspace_dir)
     if len(res.stdout) == 0:
         return None
 
     msg = res.stdout[0]
-    pattern = r"^(\d+|pergit|git-p4son): p4 sync //\.\.\.@(\d+)$"
+    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
     match = re.search(pattern, msg)
     if match:
         return int(match.group(2))
@@ -208,13 +212,10 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
         return None
 
 
-def get_latest_changelist_affecting_workspace(workspace_dir: str) -> int:
-    """Get the latest submitted changelist affecting the workspace view."""
-    client_name = get_p4_client_name(workspace_dir)
-    if not client_name:
-        raise CommandError('No client name found in p4 info output')
+def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
+    """Get the latest submitted changelist affecting the depot root."""
     res = run(['p4', 'changes', '-m1', '-s', 'submitted',
-              f'//{client_name}/...#head'], cwd=workspace_dir)
+              f'{depot_root}/...#head'], cwd=workspace_dir)
     if not res.stdout:
         raise CommandError('No changelists found affecting workspace')
 
@@ -237,6 +238,13 @@ def sync_command(args: argparse.Namespace) -> int:
         Exit code (0 for success, non-zero for failure)
     """
     workspace_dir = args.workspace_dir
+
+    log.heading('Finding depot root')
+    depot_root = get_depot_root(workspace_dir)
+    if not depot_root:
+        log.error('No depot root configured. Run "git p4son init" first.')
+        return 1
+    log.success(depot_root)
 
     log.heading('Checking git workspace')
     dirty_files = git_get_dirty_files(workspace_dir)
@@ -268,14 +276,15 @@ def sync_command(args: argparse.Namespace) -> int:
         if last_changelist is None:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
-        if not p4_sync(last_changelist, last_changelist_label, args.force, workspace_dir):
+        if not p4_sync(last_changelist, last_changelist_label, args.force,
+                       depot_root, workspace_dir):
             return 1
         return 0
 
     # No argument means sync to latest
     if args.changelist is None:
         log.heading('Finding latest changelist')
-        changelist = get_latest_changelist_affecting_workspace(workspace_dir)
+        changelist = get_latest_changelist(depot_root, workspace_dir)
         log.success(f'CL {changelist}')
         changelist_label = 'latest'
     else:
@@ -304,10 +313,12 @@ def sync_command(args: argparse.Namespace) -> int:
                 f'(currently at CL {last_changelist}) with --force')
 
     if last_changelist is not None:
-        if not p4_sync(last_changelist, last_changelist_label, args.force, workspace_dir):
+        if not p4_sync(last_changelist, last_changelist_label, args.force,
+                       depot_root, workspace_dir):
             return 1
 
-    if not p4_sync(changelist, changelist_label, args.force, workspace_dir):
+    if not p4_sync(changelist, changelist_label, args.force,
+                   depot_root, workspace_dir):
         return 1
 
     log.heading('Committing git changes')
@@ -315,7 +326,7 @@ def sync_command(args: argparse.Namespace) -> int:
     if dirty_files:
         git_add_all_files(workspace_dir)
 
-    commit_msg = f'git-p4son: p4 sync //...@{changelist}'
+    commit_msg = f'git-p4son: p4 sync {depot_root}/...@{changelist}'
     git_commit(commit_msg, workspace_dir, allow_empty=True)
     log.success(f'Committed {len(dirty_files)} files')
 

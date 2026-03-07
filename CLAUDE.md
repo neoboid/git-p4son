@@ -59,6 +59,14 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
 with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
 
+## Python Version
+
+When bumping the minimum Python version, update all of these locations:
+- `pyproject.toml` (`requires-python` and classifiers)
+- `README.md` (install requirements)
+- `CLAUDE.md` (this file, development commands section)
+- `.github/workflows/publish.yml` (CI test matrix)
+
 ## Code Style
 
 - Prefer short one-line docstrings. Avoid verbose Args/Returns sections when the function signature already makes the

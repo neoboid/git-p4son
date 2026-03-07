@@ -17,7 +17,7 @@ git p4son [command] [options]
 python -m git_p4son [command] [options]
 ```
 
-The project has zero external dependencies (standard library only). Python 3.10+ is required.
+The project has zero external dependencies (standard library only). Python 3.11+ is required.
 
 Run tests with:
 ```bash
@@ -50,9 +50,14 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 
 **`lib.py`** contains all reusable Perforce/git library functions: changelist creation/update, file status checking, opening files for edit, shelving, and Swarm review keyword management.
 
-**`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in `.git-p4son/changelists/<name>`.
+**`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in
+`.git-p4son/changelists/<name>`.
 
-**`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
+**`config.py`** manages per-repo configuration stored in `.git-p4son/config.toml`. Currently stores the depot root
+(the Perforce path to sync, e.g. `//my-workspace` or `//my-workspace/Engine/Source`).
+
+**`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
+with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
 
 ## Code Style
 

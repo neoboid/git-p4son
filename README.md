@@ -138,8 +138,9 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    cd /path/to/your/workspace    # or a subdirectory of it
    git p4son init
    ```
-   The command verifies that you are inside a P4 workspace with clobber enabled, runs `git init`, sets up
-   `.gitignore` (copying from `.p4ignore` if available), and creates an initial commit.
+   The command verifies that you are inside a P4 workspace with clobber enabled, prompts you to select a depot
+   root (entire workspace or current directory subtree), runs `git init`, sets up `.gitignore` (copying from
+   `.p4ignore` if available), and creates an initial commit.
 
 5. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
@@ -186,8 +187,14 @@ Initialize a git repository inside a Perforce workspace:
 git p4son init
 ```
 
-This command checks preconditions (Perforce workspace, clobber flag), runs `git init`, sets up `.gitignore`,
-and creates an initial commit. The `.gitignore` is set up using this priority:
+This command checks preconditions (Perforce workspace, clobber flag), configures the depot root, runs `git init`,
+sets up `.gitignore`, and creates an initial commit.
+
+The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
+workspace or just the current directory's subtree. The selection is saved in `.git-p4son/config.toml` and used by
+all subsequent commands.
+
+The `.gitignore` is set up using this priority:
 - If `.gitignore` already exists, it is left as is
 - If `.p4ignore` exists, it is copied to `.gitignore` as a starting point
 - Otherwise, an empty `.gitignore` is created

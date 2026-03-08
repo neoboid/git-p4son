@@ -208,8 +208,8 @@ This command checks preconditions (Perforce workspace, clobber flag), configures
 sets up `.gitignore`, and creates an initial commit.
 
 The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
-workspace or just the current directory's subtree. The selection is saved in `.git-p4son/config.toml` and used by
-all subsequent commands.
+workspace or just the directory's subtree where the git root is placed. The selection is saved in
+`.git-p4son/config.toml` and used by all subsequent commands.
 
 The `.gitignore` is set up using this priority:
 - If `.gitignore` already exists, it is left as is

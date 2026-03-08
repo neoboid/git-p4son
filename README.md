@@ -173,7 +173,7 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    ```
    This creates a commit with message that records the CL you have synced.
 
-From here, branch off `main` for local development. See the [Usage Example](#usage-example) below for a typical
+From here, branch off `main` for local development. See the [Usage Example](#usage-example) for a typical
 workflow.
 
 ## Usage

@@ -122,14 +122,14 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_with_output')
     def test_clean(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
-        self.assertEqual(p4_get_opened_files('/ws'), [])
+        self.assertEqual(p4_get_opened_files('//depot', '/ws'), [])
 
     @mock.patch('git_p4son.sync.run_with_output')
     def test_edit(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - edit default change (text)'
         ])
-        result = p4_get_opened_files('/ws')
+        result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/foo.txt', 'modify')])
 
     @mock.patch('git_p4son.sync.run_with_output')
@@ -137,7 +137,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/new.txt#1 - add change 12345 (text)'
         ])
-        result = p4_get_opened_files('/ws')
+        result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
 
     @mock.patch('git_p4son.sync.run_with_output')
@@ -145,7 +145,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/old.txt#3 - delete change 12345 (text)'
         ])
-        result = p4_get_opened_files('/ws')
+        result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/old.txt', 'delete')])
 
     @mock.patch('git_p4son.sync.run_with_output')
@@ -153,14 +153,14 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/new.txt#1 - move/add change 12345 (text)'
         ])
-        result = p4_get_opened_files('/ws')
+        result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
 
     @mock.patch('git_p4son.sync.run_with_output')
     def test_command_failure(self, mock_rwo):
         mock_rwo.side_effect = RunError('p4 opened failed')
         with self.assertRaises(RunError):
-            p4_get_opened_files('/ws')
+            p4_get_opened_files('//depot', '/ws')
 
 
 class TestGitAddAllFiles(unittest.TestCase):

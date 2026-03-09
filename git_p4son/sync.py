@@ -142,9 +142,10 @@ def p4_sync(changelist: int, label: str, force: bool, depot_root: str,
             return False
 
 
-def p4_get_opened_files(workspace_dir: str) -> list[tuple[str, str]]:
+def p4_get_opened_files(depot_root: str, workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for files opened in Perforce."""
-    res = run_with_output(['p4', 'opened'], cwd=workspace_dir)
+    res = run_with_output(
+        ['p4', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
     files = []
     for line in res.stdout:
         # Format: "//depot/path/file#rev - <action> change ..."
@@ -256,7 +257,7 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success('clean')
 
     log.heading('Checking p4 workspace')
-    opened_files = p4_get_opened_files(workspace_dir)
+    opened_files = p4_get_opened_files(depot_root, workspace_dir)
     if opened_files:
         for filename, change in opened_files:
             log.file_change(filename, change)

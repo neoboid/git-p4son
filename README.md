@@ -133,9 +133,9 @@ cloning.
 
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
-1. **Enable clobber on your Perforce workspace.** Git removes the read-only flag on files it touches, so `p4 sync`
-   needs the clobber flag to overwrite writable files. Edit the workspace in P4V to set the clobber flag, or run
-   `p4 client` and change `noclobber` to `clobber` in the Options line.
+1. **Enable clobber on your Perforce workspace.** Edit the workspace in
+   P4V to set the clobber flag, or run `p4 client` and change `noclobber` to `clobber` in the Options line.
+   See [Why clobber?](#why-clobber) for rationale.
 
 2. **Set a git editor** if you don't have one already. The `review` command opens an interactive rebase in your
    editor. If you haven't configured one, set it with:
@@ -175,6 +175,20 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
 
 From here, branch off `main` for local development. See the [Usage Example](#usage-example) for a typical
 workflow.
+
+### Why clobber?
+
+When you switch branches with `git checkout`, git overwrites the files that differ between the source and target branch.
+In doing so, it always removes the read-only flag - this is just how git works.
+
+Now imagine one of those files has also been modified in Perforce. The next time `p4 sync` runs, Perforce will complain
+that a file was changed outside its control. At that point you have two options: either force-sync the individual file
+with `p4 sync -f //path/to/file`, or enable the `clobber` flag on your workspace so that Perforce silently overwrites
+writable files.
+
+This is not specific to git-p4son - any workflow that combines git and Perforce in the same workspace will run into it.
+And in practice it is harmless: your local changes live on feature branches in git, so when you rebase onto `main` after
+a sync, your changes are reapplied on top of the latest Perforce state.
 
 ## Usage
 

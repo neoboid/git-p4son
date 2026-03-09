@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- Scope p4 opened check to depot root in sync command
+- Improve docs on depot root
+
 ## 0.2.3
 
 - Enable syncing just a sub-directory of your perforce workspace

@@ -9,53 +9,11 @@ import argparse
 import os
 import shutil
 
-from .common import CommandError, RunError, run, run_with_output
+from .common import CommandError, run, run_with_output
 from .config import get_depot_root, save_config
 from .log import log
+from .perforce import get_client_spec
 from .review import _resolve_editor
-
-
-def _get_p4_client_spec(cwd: str) -> list[str]:
-    """Get the raw p4 client spec lines."""
-    res = run(['p4', 'client', '-o'], cwd=cwd)
-    return res.stdout
-
-
-def get_p4_client_name(cwd: str) -> str | None:
-    """Get the Perforce client name by running p4 info.
-
-    Returns the client name, or None if not in a workspace.
-    """
-    try:
-        result = run(['p4', 'info'], cwd=cwd)
-    except RunError:
-        return None
-    for line in result.stdout:
-        if line.startswith('Client name:'):
-            name = line.split(':', 1)[1].strip()
-            if name != '*unknown*':
-                return name
-    return None
-
-
-def _check_clobber(spec_lines: list[str]) -> bool:
-    """Check if clobber is enabled in a client spec."""
-    for line in spec_lines:
-        stripped = line.strip()
-        if stripped.startswith('Options:'):
-            return 'clobber' in stripped.split()
-    return False
-
-
-def _get_p4_workspace_root(spec_lines: list[str]) -> str | None:
-    """Extract the Root path from a client spec."""
-    for line in spec_lines:
-        stripped = line.strip()
-        if stripped.startswith('Root:'):
-            parts = stripped.split('\t', 1)
-            if len(parts) == 2:
-                return parts[1].strip()
-    return None
 
 
 def _validate_depot_root(depot_root: str, cwd: str) -> bool:
@@ -169,39 +127,26 @@ def init_command(args: argparse.Namespace) -> int:
     cwd = os.getcwd()
 
     log.heading('Checking Perforce workspace')
-    workspace_name = get_p4_client_name(cwd)
-    if workspace_name:
-        log.success(workspace_name)
-    else:
+    spec = get_client_spec(cwd)
+    if not spec:
         log.error('Not inside a Perforce workspace. '
                   'Is Perforce installed and configured?')
         return 1
+    log.success(spec.name)
 
     log.heading('Checking clobber flag')
-    spec_lines = _get_p4_client_spec(cwd)
-    if not spec_lines:
-        log.error('Failed to get workspace spec')
-        return 1
-
-    if _check_clobber(spec_lines):
+    if spec.clobber:
         log.success('clobber is enabled')
     else:
         log.error(
-            f'clobber is not enabled on workspace "{workspace_name}".\n'
+            f'clobber is not enabled on workspace "{spec.name}".\n'
             '  Git removes read-only flags when switching branches, so p4 sync\n'
             '  will fail to overwrite those files unless clobber is enabled.\n'
-            f'  Edit "{workspace_name}" in P4V to set the clobber flag.')
+            f'  Edit "{spec.name}" in P4V to set the clobber flag.')
         return 1
-
-    log.heading('Find perforce workspace root')
-    p4_workspace_root = _get_p4_workspace_root(spec_lines)
-    if not p4_workspace_root:
-        log.error('Failed to determine workspace root from p4 client spec')
-        return 1
-    log.success(p4_workspace_root)
 
     log.heading('Configuring depot root')
-    if not _configure_depot_root(workspace_name, cwd, p4_workspace_root):
+    if not _configure_depot_root(spec.name, cwd, spec.root):
         return 1
 
     log.heading('Checking .gitignore')

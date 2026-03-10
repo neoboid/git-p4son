@@ -111,7 +111,6 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
     @mock.patch('git_p4son.init.run_with_output')
-    @mock.patch('git_p4son.init.save_config')
     @mock.patch('git_p4son.init._configure_depot_root', return_value='//my-client')
     @mock.patch('git_p4son.init._get_p4_workspace_root', return_value='/ws')
     @mock.patch('git_p4son.init._get_p4_client_spec', return_value=['Root:\t/ws'])
@@ -120,14 +119,12 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_p4, mock_clobber,
-                     mock_spec, mock_ws_root, mock_depot, mock_save,
+                     mock_spec, mock_ws_root, mock_depot,
                      mock_run, mock_gitignore, mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # Should have called git init, git add, git commit
         self.assertEqual(mock_run.call_count, 3)
-        mock_save.assert_called_once_with(
-            '/ws', {'depot': {'root': '//my-client'}})
 
     @mock.patch('git_p4son.init.get_p4_client_name', return_value=None)
     @mock.patch('os.getcwd', return_value='/ws')

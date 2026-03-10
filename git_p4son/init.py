@@ -100,20 +100,34 @@ def _select_depot_root(client_name: str, cwd: str,
 
 
 def _configure_depot_root(client_name: str, cwd: str,
-                          p4_workspace_root: str) -> str | None:
-    """Configure depot root: validate existing or prompt for new.
+                          p4_workspace_root: str) -> bool:
+    """Configure depot root: validate existing or prompt for new."""
+    log.heading('Finding git-p4son depot root')
+    depot_root = get_depot_root(cwd)
+    if depot_root:
+        log.success(f'{depot_root}/...')
+    else:
+        log.warning('no root configured')
 
-    Returns the depot root, or None if aborted.
-    """
-    existing_root = get_depot_root(cwd)
-    if existing_root:
-        if _validate_depot_root(existing_root, cwd):
-            log.success(f'{existing_root}/...')
-            return existing_root
-        log.warning(
-            f'Saved depot root {existing_root}/... is no longer valid')
+    if depot_root:
+        log.heading('Validating depot root')
+        if _validate_depot_root(depot_root, cwd):
+            log.success(f'{depot_root}/...')
+            return True
+        else:
+            log.error(f'{depot_root}/... is not valid')
+            depot_root = None
 
-    return _select_depot_root(client_name, cwd, p4_workspace_root)
+    if not depot_root:
+        log.heading('Configuring depot root')
+        depot_root = _select_depot_root(client_name, cwd, p4_workspace_root)
+        if not depot_root:
+            log.error('aborting')
+            return False
+
+    log.success(f'{depot_root}/...')
+    save_config(cwd, {'depot': {'root': depot_root}})
+    return True
 
 
 def _setup_gitignore(cwd: str) -> str:
@@ -170,11 +184,8 @@ def init_command(args: argparse.Namespace) -> int:
     log.success(p4_workspace_root)
 
     log.heading('Configuring depot root')
-    depot_root = _configure_depot_root(workspace_name, cwd, p4_workspace_root)
-    if not depot_root:
-        log.error('Aborted')
+    if not _configure_depot_root(workspace_name, cwd, p4_workspace_root):
         return 1
-    save_config(cwd, {'depot': {'root': depot_root}})
 
     log.heading('Checking .gitignore')
     result = _setup_gitignore(cwd)

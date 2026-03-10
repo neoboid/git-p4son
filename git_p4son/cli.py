@@ -451,15 +451,16 @@ def main() -> int:
         parser.print_help()
         return 1
 
-    # Handle init and completion before run_command (no workspace needed)
-    if args.command == 'init':
-        return init_command(args)
     if args.command == 'completion':
         return completion_command(args)
 
-    log.verbose_mode = args.verbose
-
     try:
+        log.verbose_mode = args.verbose
+
+        # Run init before run_command (as no workspace needed)
+        if args.command == 'init':
+            return init_command(args)
+
         exit_code = run_command(args)
 
         if exit_code == 0 and getattr(args, 'sleep', None) is not None:

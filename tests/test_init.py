@@ -19,22 +19,22 @@ from tests.helpers import make_run_result
 
 
 class TestGetP4ClientName(unittest.TestCase):
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.init.run')
     def test_returns_client_name(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Client name: my-ws\nClient root: /ws\n')
+        mock_run.return_value = make_run_result(
+            stdout=['Client name: my-ws', 'Client root: /ws'])
         self.assertEqual(get_p4_client_name('/ws'), 'my-ws')
 
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.init.run')
     def test_unknown_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Client name: *unknown*\n')
+        mock_run.return_value = make_run_result(
+            stdout=['Client name: *unknown*'])
         self.assertIsNone(get_p4_client_name('/ws'))
 
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.init.run')
     def test_no_client_line_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Server address: ssl:perforce:1666\n')
+        mock_run.return_value = make_run_result(
+            stdout=['Server address: ssl:perforce:1666'])
         self.assertIsNone(get_p4_client_name('/ws'))
 
 

@@ -9,9 +9,7 @@ import argparse
 import os
 import shutil
 
-import subprocess
-
-from .common import CommandError, run, run_with_output
+from .common import CommandError, RunError, run, run_with_output
 from .config import get_depot_root, save_config
 from .log import log
 from .review import _resolve_editor
@@ -28,10 +26,11 @@ def get_p4_client_name(cwd: str) -> str | None:
 
     Returns the client name, or None if not in a workspace.
     """
-    result = subprocess.run(
-        ['p4', 'info'], cwd=cwd,
-        capture_output=True, text=True)
-    for line in result.stdout.splitlines():
+    try:
+        result = run(['p4', 'info'], cwd=cwd)
+    except RunError:
+        return None
+    for line in result.stdout:
         if line.startswith('Client name:'):
             name = line.split(':', 1)[1].strip()
             if name != '*unknown*':

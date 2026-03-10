@@ -17,11 +17,8 @@ from .review import _resolve_editor
 
 def _get_p4_client_spec(cwd: str) -> list[str]:
     """Get the raw p4 client spec lines."""
-    try:
-        res = run(['p4', 'client', '-o'], cwd=cwd)
-        return res.stdout
-    except (CommandError, OSError):
-        return []
+    res = run(['p4', 'client', '-o'], cwd=cwd)
+    return res.stdout
 
 
 def _check_clobber(spec_lines: list[str]) -> bool:

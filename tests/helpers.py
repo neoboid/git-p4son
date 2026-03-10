@@ -25,7 +25,7 @@ class MockRunDispatcher:
 
     Usage:
         dispatcher = MockRunDispatcher({
-            ('p4', 'info'): make_run_result(stdout=['Client name: myclient']),
+            ('p4', 'changes'): make_run_result(stdout=['Change 123 on 2024/01/01']),
             ('git', 'status'): make_run_result(stdout=[]),
         })
         with mock.patch('git_p4son.common.run', side_effect=dispatcher):

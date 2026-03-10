@@ -292,7 +292,7 @@ git p4son new -m "New feature" --review -b main
 Update an existing Perforce changelist description by replacing the enumerated commit list with the current commits since the base branch. By default also opens changed files for edit.
 
 ```sh
-git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-edit] [--shelve]
+git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc] [--no-edit] [--shelve]
 ```
 
 **Arguments:**
@@ -302,6 +302,7 @@ git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-edit
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
+- `--no-desc`: Skip updating the changelist description
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done

@@ -176,6 +176,11 @@ Examples:
         help='Pretend and print what would be done, but do not execute'
     )
     update_parser.add_argument(
+        '--no-desc',
+        action='store_true',
+        help='Skip updating the changelist description'
+    )
+    update_parser.add_argument(
         '--no-edit',
         action='store_true',
         help='Skip opening changed files for edit in Perforce'

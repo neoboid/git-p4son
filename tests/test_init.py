@@ -8,6 +8,7 @@ from git_p4son.common import CommandError
 from git_p4son.init import (
     _check_clobber,
     _compute_cwd_depot_root,
+    _configure_depot_root,
     _get_p4_workspace_root,
     _setup_gitignore,
     _validate_depot_root,
@@ -102,6 +103,44 @@ class TestSetupGitignore(unittest.TestCase):
             self.assertEqual(result, 'created empty .gitignore')
             mock_file.assert_called_once_with(
                 os.path.join('/ws', '.gitignore'), 'w')
+
+
+class TestConfigureDepotRoot(unittest.TestCase):
+    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.get_depot_root', return_value='//depot')
+    @mock.patch('git_p4son.init.save_config')
+    def test_existing_valid_root_skips_save(self, mock_save, mock_get, mock_validate):
+        result = _configure_depot_root('client', '/ws', '/ws')
+        self.assertTrue(result)
+        mock_save.assert_not_called()
+
+    @mock.patch('git_p4son.init._select_depot_root', return_value='//depot/new')
+    @mock.patch('git_p4son.init._validate_depot_root', return_value=False)
+    @mock.patch('git_p4son.init.get_depot_root', return_value='//depot/old')
+    @mock.patch('git_p4son.init.save_config')
+    def test_existing_invalid_root_prompts_and_saves(self, mock_save, mock_get,
+                                                     mock_validate, mock_select):
+        result = _configure_depot_root('client', '/ws', '/ws')
+        self.assertTrue(result)
+        mock_save.assert_called_once_with(
+            '/ws', {'depot': {'root': '//depot/new'}})
+
+    @mock.patch('git_p4son.init._select_depot_root', return_value='//depot')
+    @mock.patch('git_p4son.init.get_depot_root', return_value=None)
+    @mock.patch('git_p4son.init.save_config')
+    def test_no_existing_root_prompts_and_saves(self, mock_save, mock_get, mock_select):
+        result = _configure_depot_root('client', '/ws', '/ws')
+        self.assertTrue(result)
+        mock_save.assert_called_once_with(
+            '/ws', {'depot': {'root': '//depot'}})
+
+    @mock.patch('git_p4son.init._select_depot_root', return_value=None)
+    @mock.patch('git_p4son.init.get_depot_root', return_value=None)
+    @mock.patch('git_p4son.init.save_config')
+    def test_no_existing_root_user_aborts(self, mock_save, mock_get, mock_select):
+        result = _configure_depot_root('client', '/ws', '/ws')
+        self.assertFalse(result)
+        mock_save.assert_not_called()
 
 
 class TestInitCommand(unittest.TestCase):

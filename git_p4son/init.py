@@ -146,9 +146,12 @@ def init_command(args: argparse.Namespace) -> int:
                   'Is Perforce installed and configured?')
         return 1
 
-    spec_lines = _get_p4_client_spec(cwd)
-
     log.heading('Checking clobber flag')
+    spec_lines = _get_p4_client_spec(cwd)
+    if not spec_lines:
+        log.error('Failed to get workspace spec')
+        return 1
+
     if _check_clobber(spec_lines):
         log.success('clobber is enabled')
     else:

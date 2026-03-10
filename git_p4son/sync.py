@@ -6,9 +6,64 @@ import argparse
 import re
 from typing import IO
 
-from .common import CommandError, RunError, run, run_with_output
+from .common import CommandError, RunError, run_with_output
 from .config import get_depot_root
 from .log import log
+from .perforce import (
+    get_file_count_to_sync,
+    get_latest_changelist,
+    p4_force_sync_file,
+    p4_get_opened_files,
+)
+
+
+def git_get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
+    """Return list of (filename, change_type) tuples for dirty files in git."""
+    res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
+    files = []
+    for line in res.stdout:
+        status = line[:2].strip()
+        filename = line[3:]
+        if status == 'A':
+            files.append((filename, 'add'))
+        elif status == 'D':
+            files.append((filename, 'delete'))
+        elif status == '??':
+            files.append((filename, 'untracked'))
+        else:
+            files.append((filename, 'modify'))
+    return files
+
+
+def git_add_all_files(workspace_dir: str) -> None:
+    """Add all files to git."""
+    run_with_output(['git', 'add', '.'], cwd=workspace_dir)
+
+
+def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
+    """Commit changes to git."""
+    args = ['commit', '-m', message]
+    if allow_empty:
+        args.append('--allow-empty')
+    run_with_output(['git'] + args, cwd=workspace_dir)
+
+
+def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
+    """Get the changelist number from the most recent sync commit."""
+    res = run_with_output(
+        ['git', 'log', '-1', '--pretty=%s',
+         '--grep=: p4 sync //'],
+        cwd=workspace_dir)
+    if len(res.stdout) == 0:
+        return None
+
+    msg = res.stdout[0]
+    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
+    match = re.search(pattern, msg)
+    if match:
+        return int(match.group(2))
+    else:
+        return None
 
 
 def get_writable_files(stderr_lines: list[str]) -> list[str]:
@@ -81,25 +136,6 @@ class P4SyncOutputProcessor:
         return f'synced {synced_count} files'
 
 
-def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
-    """Force sync a single file."""
-    output_processor = P4SyncOutputProcessor(-1)
-    result = run_with_output(
-        ['p4', 'sync', '-f', f'{filename}@{changelist}'],
-        cwd=workspace_dir, on_output=output_processor)
-    log.info(output_processor.get_summary())
-    if result.elapsed:
-        log.elapsed(result.elapsed)
-
-
-def get_file_count_to_sync(changelist: int, depot_root: str,
-                           workspace_dir: str) -> int:
-    """Get the number of files that need to be synced."""
-    res = run(['p4', 'sync', '-n', f'{depot_root}/...@{changelist}'],
-              cwd=workspace_dir)
-    return len(res.stdout)
-
-
 def p4_sync(changelist: int, label: str, force: bool, depot_root: str,
             workspace_dir: str) -> bool:
     """Sync files from Perforce.
@@ -140,92 +176,6 @@ def p4_sync(changelist: int, label: str, force: bool, depot_root: str,
                 log.info(filename)
             log.error('Failed to sync files from perforce')
             return False
-
-
-def p4_get_opened_files(depot_root: str, workspace_dir: str) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for files opened in Perforce."""
-    res = run_with_output(
-        ['p4', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
-    files = []
-    for line in res.stdout:
-        # Format: "//depot/path/file#rev - <action> change ..."
-        parts = line.split(' - ', 1)
-        if len(parts) < 2:
-            continue
-        depot_path = parts[0].split('#')[0]
-        action = parts[1].split()[0]
-        if action in ('add', 'move/add'):
-            change = 'add'
-        elif action in ('delete', 'move/delete'):
-            change = 'delete'
-        else:
-            change = 'modify'
-        files.append((depot_path, change))
-    return files
-
-
-def git_get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for dirty files in git."""
-    res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
-    files = []
-    for line in res.stdout:
-        status = line[:2].strip()
-        filename = line[3:]
-        if status == 'A':
-            files.append((filename, 'add'))
-        elif status == 'D':
-            files.append((filename, 'delete'))
-        elif status == '??':
-            files.append((filename, 'untracked'))
-        else:
-            files.append((filename, 'modify'))
-    return files
-
-
-def git_add_all_files(workspace_dir: str) -> None:
-    """Add all files to git."""
-    run_with_output(['git', 'add', '.'], cwd=workspace_dir)
-
-
-def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
-    """Commit changes to git."""
-    args = ['commit', '-m', message]
-    if allow_empty:
-        args.append('--allow-empty')
-    run_with_output(['git'] + args, cwd=workspace_dir)
-
-
-def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
-    """Get the changelist number from the most recent sync commit."""
-    res = run_with_output(
-        ['git', 'log', '-1', '--pretty=%s',
-         '--grep=: p4 sync //'],
-        cwd=workspace_dir)
-    if len(res.stdout) == 0:
-        return None
-
-    msg = res.stdout[0]
-    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
-    match = re.search(pattern, msg)
-    if match:
-        return int(match.group(2))
-    else:
-        return None
-
-
-def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
-    """Get the latest submitted changelist affecting the depot root."""
-    res = run(['p4', 'changes', '-m1', '-s', 'submitted',
-              f'{depot_root}/...#head'], cwd=workspace_dir)
-    if not res.stdout:
-        raise CommandError('No changelists found affecting workspace')
-
-    # Parse the changelist number from the output
-    line = res.stdout[0]
-    match = re.search(r'Change (\d+)', line)
-    if not match:
-        raise CommandError(f'Failed to parse changelist from: {line}')
-    return int(match.group(1))
 
 
 def sync_command(args: argparse.Namespace) -> int:

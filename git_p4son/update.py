@@ -7,11 +7,8 @@ and optionally re-shelves.
 
 import argparse
 from .changelist_store import load_changelist_alias
-from .lib import (
-    update_changelist,
-    open_changes_for_edit,
-    p4_shelve_changelist,
-)
+from .lib import update_changelist, open_changes_for_edit
+from .perforce import p4_shelve_changelist
 from .log import log
 
 

@@ -1,22 +1,24 @@
-"""Tests for git_p4son.sync module."""
+"""Tests for git_p4son.sync and git_p4son.perforce modules."""
 
 import sys
 import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
-from git_p4son.sync import (
+from git_p4son.perforce import (
     P4SyncOutputProcessor,
     get_file_count_to_sync,
     get_latest_changelist,
     get_writable_files,
+    p4_get_opened_files,
+    parse_p4_sync_line,
+)
+from git_p4son.sync import (
     git_add_all_files,
     git_changelist_of_last_sync,
     git_commit,
     git_get_dirty_files,
-    p4_get_opened_files,
     p4_sync,
-    parse_p4_sync_line,
     sync_command,
 )
 from tests.helpers import make_run_result
@@ -119,12 +121,12 @@ class TestGitGetDirtyFiles(unittest.TestCase):
 
 
 class TestP4GetOpenedFiles(unittest.TestCase):
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_clean(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
         self.assertEqual(p4_get_opened_files('//depot', '/ws'), [])
 
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_edit(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - edit default change (text)'
@@ -132,7 +134,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/foo.txt', 'modify')])
 
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_add(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/new.txt#1 - add change 12345 (text)'
@@ -140,7 +142,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
 
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_delete(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/old.txt#3 - delete change 12345 (text)'
@@ -148,7 +150,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/old.txt', 'delete')])
 
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_move_add(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/new.txt#1 - move/add change 12345 (text)'
@@ -156,7 +158,7 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
 
-    @mock.patch('git_p4son.sync.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_output')
     def test_command_failure(self, mock_rwo):
         mock_rwo.side_effect = RunError('p4 opened failed')
         with self.assertRaises(RunError):
@@ -267,7 +269,7 @@ class TestGitChangelistOfLastSync(unittest.TestCase):
 
 
 class TestGetLatestChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.sync.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_success(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
             "Change 54321 on 2024/01/01 by user@ws 'description'"
@@ -278,7 +280,7 @@ class TestGetLatestChangelist(unittest.TestCase):
             ['p4', 'changes', '-m1', '-s', 'submitted',
              '//myclient/...#head'], cwd='/ws')
 
-    @mock.patch('git_p4son.sync.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_no_changes_found(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
         with self.assertRaises(CommandError):
@@ -286,7 +288,7 @@ class TestGetLatestChangelist(unittest.TestCase):
 
 
 class TestGetFileCountToSync(unittest.TestCase):
-    @mock.patch('git_p4son.sync.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_returns_count(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
             '//depot/a.txt - added',
@@ -295,7 +297,7 @@ class TestGetFileCountToSync(unittest.TestCase):
         count = get_file_count_to_sync(12345, '//myclient', '/ws')
         self.assertEqual(count, 2)
 
-    @mock.patch('git_p4son.sync.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_failure(self, mock_run):
         mock_run.side_effect = RunError('p4 sync -n failed')
         with self.assertRaises(RunError):
@@ -322,22 +324,22 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
 
 class TestP4Sync(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_with_output')
-    @mock.patch('git_p4son.sync.run')
-    def test_success(self, mock_run, mock_rwo):
-        mock_run.return_value = make_run_result(stdout=['file1', 'file2'])
+    @mock.patch('git_p4son.sync.get_file_count_to_sync')
+    def test_success(self, mock_count, mock_rwo):
+        mock_count.return_value = 2
         mock_rwo.return_value = make_run_result()
         result = p4_sync(12345, 'test', False, '//myclient', '/ws')
         self.assertTrue(result)
 
-    @mock.patch('git_p4son.sync.run')
-    def test_up_to_date(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
+    @mock.patch('git_p4son.sync.get_file_count_to_sync')
+    def test_up_to_date(self, mock_count):
+        mock_count.return_value = 0
         result = p4_sync(12345, 'test', False, '//myclient', '/ws')
         self.assertTrue(result)
 
-    @mock.patch('git_p4son.sync.run')
-    def test_count_failure(self, mock_run):
-        mock_run.side_effect = RunError('p4 sync -n failed')
+    @mock.patch('git_p4son.sync.get_file_count_to_sync')
+    def test_count_failure(self, mock_count):
+        mock_count.side_effect = RunError('p4 sync -n failed')
         with self.assertRaises(RunError):
             p4_sync(12345, 'test', False, '//myclient', '/ws')
 

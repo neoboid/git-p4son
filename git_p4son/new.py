@@ -7,12 +7,8 @@ creates a Swarm review.
 
 import argparse
 from .changelist_store import alias_exists, save_changelist_alias
-from .lib import (
-    create_changelist,
-    open_changes_for_edit,
-    add_review_keyword_to_changelist,
-    p4_shelve_changelist,
-)
+from .lib import create_changelist, open_changes_for_edit
+from .perforce import add_review_keyword_to_changelist, p4_shelve_changelist
 from .log import log
 
 

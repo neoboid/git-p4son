@@ -1,4 +1,4 @@
-"""Tests for changelist functions in git_p4son.lib module."""
+"""Tests for changelist functions in git_p4son.lib and git_p4son.perforce modules."""
 
 import unittest
 from unittest import mock
@@ -6,11 +6,13 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.lib import (
     create_changelist,
+    split_description_lines,
+    update_changelist,
+)
+from git_p4son.perforce import (
     extract_description_lines,
     get_changelist_spec,
     replace_description_in_spec,
-    split_description_lines,
-    update_changelist,
 )
 from tests.helpers import make_run_result
 
@@ -149,14 +151,14 @@ class TestCreateChangelist(unittest.TestCase):
 
 
 class TestGetChangelistSpec(unittest.TestCase):
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_success(self, mock_run):
         mock_run.return_value = make_run_result(
             stdout=SAMPLE_SPEC.splitlines())
         spec = get_changelist_spec('12345', '/ws')
         self.assertEqual(spec, SAMPLE_SPEC)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     def test_failure(self, mock_run):
         mock_run.side_effect = RunError('Changelist not found')
         with self.assertRaises(RunError):

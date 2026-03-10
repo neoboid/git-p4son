@@ -52,12 +52,12 @@ def _validate_depot_root(depot_root: str, cwd: str) -> bool:
 
 
 def _compute_cwd_depot_root(client_name: str, cwd: str,
-                            workspace_root: str) -> str | None:
+                            p4_workspace_root: str) -> str | None:
     """Compute depot root for cwd relative to workspace root.
 
     Returns None if cwd is the workspace root (identical to entire workspace).
     """
-    rel = os.path.relpath(cwd, workspace_root)
+    rel = os.path.relpath(cwd, p4_workspace_root)
     if rel == '.':
         return None
     rel_posix = rel.replace(os.sep, '/')
@@ -65,10 +65,10 @@ def _compute_cwd_depot_root(client_name: str, cwd: str,
 
 
 def _select_depot_root(client_name: str, cwd: str,
-                       workspace_root: str) -> str | None:
+                       p4_workspace_root: str) -> str | None:
     """Interactive prompt for depot root selection. Returns root or None to abort."""
     entire_root = f'//{client_name}'
-    cwd_root = _compute_cwd_depot_root(client_name, cwd, workspace_root)
+    cwd_root = _compute_cwd_depot_root(client_name, cwd, p4_workspace_root)
 
     while True:
         print()
@@ -100,7 +100,7 @@ def _select_depot_root(client_name: str, cwd: str,
 
 
 def _configure_depot_root(client_name: str, cwd: str,
-                          workspace_root: str) -> str | None:
+                          p4_workspace_root: str) -> str | None:
     """Configure depot root: validate existing or prompt for new.
 
     Returns the depot root, or None if aborted.
@@ -113,7 +113,7 @@ def _configure_depot_root(client_name: str, cwd: str,
         log.warning(
             f'Saved depot root {existing_root}/... is no longer valid')
 
-    return _select_depot_root(client_name, cwd, workspace_root)
+    return _select_depot_root(client_name, cwd, p4_workspace_root)
 
 
 def _setup_gitignore(cwd: str) -> str:
@@ -159,13 +159,15 @@ def init_command(args: argparse.Namespace) -> int:
             f'  Edit "{workspace_name}" in P4V to set the clobber flag.')
         return 1
 
-    workspace_root = _get_p4_workspace_root(spec_lines)
-    if not workspace_root:
+    log.heading('Find perforce workspace root')
+    p4_workspace_root = _get_p4_workspace_root(spec_lines)
+    if not p4_workspace_root:
         log.error('Failed to determine workspace root from p4 client spec')
         return 1
+    log.success(p4_workspace_root)
 
     log.heading('Configuring depot root')
-    depot_root = _configure_depot_root(workspace_name, cwd, workspace_root)
+    depot_root = _configure_depot_root(workspace_name, cwd, p4_workspace_root)
     if not depot_root:
         log.error('Aborted')
         return 1

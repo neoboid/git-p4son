@@ -3,7 +3,9 @@
 import unittest
 from unittest import mock
 
-from git_p4son.perforce import P4ClientSpec, get_client_spec, parse_ztag_output
+from git_p4son.perforce import (
+    P4ClientSpec, get_client_spec, parse_ztag_multi_output, parse_ztag_output,
+)
 from tests.helpers import make_run_result
 
 
@@ -38,6 +40,40 @@ class TestParseZtagOutput(unittest.TestCase):
 
     def test_empty_lines(self):
         self.assertEqual(parse_ztag_output([]), {})
+
+
+class TestParseZtagMultiOutput(unittest.TestCase):
+    def test_single_record(self):
+        lines = [
+            '... depotFile //depot/foo.txt',
+            '... action edit',
+            '... change default',
+        ]
+        result = parse_ztag_multi_output(lines)
+        self.assertEqual(result, [
+            {'depotFile': '//depot/foo.txt', 'action': 'edit', 'change': 'default'},
+        ])
+
+    def test_multiple_records(self):
+        lines = [
+            '... depotFile //depot/a.txt',
+            '... action edit',
+            '',
+            '... depotFile //depot/b.txt',
+            '... action add',
+        ]
+        result = parse_ztag_multi_output(lines)
+        self.assertEqual(result, [
+            {'depotFile': '//depot/a.txt', 'action': 'edit'},
+            {'depotFile': '//depot/b.txt', 'action': 'add'},
+        ])
+
+    def test_empty_lines(self):
+        self.assertEqual(parse_ztag_multi_output([]), [])
+
+    def test_no_records(self):
+        lines = ['some other output', '']
+        self.assertEqual(parse_ztag_multi_output(lines), [])
 
 
 class TestP4ClientSpec(unittest.TestCase):

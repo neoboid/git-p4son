@@ -129,7 +129,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_edit(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            '//depot/foo.txt#1 - edit default change (text)'
+            '... depotFile //depot/foo.txt',
+            '... action edit',
+            '... change default',
         ])
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/foo.txt', 'modify')])
@@ -137,7 +139,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_add(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            '//depot/new.txt#1 - add change 12345 (text)'
+            '... depotFile //depot/new.txt',
+            '... action add',
+            '... change 12345',
         ])
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
@@ -145,7 +149,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_delete(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            '//depot/old.txt#3 - delete change 12345 (text)'
+            '... depotFile //depot/old.txt',
+            '... action delete',
+            '... change 12345',
         ])
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/old.txt', 'delete')])
@@ -153,10 +159,29 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_move_add(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            '//depot/new.txt#1 - move/add change 12345 (text)'
+            '... depotFile //depot/new.txt',
+            '... action move/add',
+            '... change 12345',
         ])
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('//depot/new.txt', 'add')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_multiple_files(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '... depotFile //depot/a.txt',
+            '... action edit',
+            '... change default',
+            '',
+            '... depotFile //depot/b.txt',
+            '... action add',
+            '... change 12345',
+        ])
+        result = p4_get_opened_files('//depot', '/ws')
+        self.assertEqual(result, [
+            ('//depot/a.txt', 'modify'),
+            ('//depot/b.txt', 'add'),
+        ])
 
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_command_failure(self, mock_rwo):
@@ -272,12 +297,15 @@ class TestGetLatestChangelist(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_success(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "Change 54321 on 2024/01/01 by user@ws 'description'"
+            '... change 54321',
+            '... time 1704067200',
+            '... user user',
+            '... client ws',
         ])
         cl = get_latest_changelist('//myclient', '/ws')
         self.assertEqual(cl, 54321)
         mock_run.assert_called_once_with(
-            ['p4', 'changes', '-m1', '-s', 'submitted',
+            ['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',
              '//myclient/...#head'], cwd='/ws')
 
     @mock.patch('git_p4son.perforce.run')

@@ -25,6 +25,24 @@ def parse_ztag_output(lines: list[str]) -> dict[str, str]:
     return fields
 
 
+def parse_ztag_multi_output(lines: list[str]) -> list[dict[str, str]]:
+    """Parse p4 -ztag output with multiple records into a list of dicts."""
+    records = []
+    current: dict[str, str] = {}
+    for line in lines:
+        if line.startswith('... '):
+            parts = line[4:].split(' ', 1)
+            key = parts[0]
+            value = parts[1] if len(parts) > 1 else ''
+            current[key] = value
+        elif current:
+            records.append(current)
+            current = {}
+    if current:
+        records.append(current)
+    return records
+
+
 # --- client spec ---
 
 @dataclass
@@ -148,41 +166,21 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
 
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
-    res = run(['p4', 'changes', '-m1', '-s', 'submitted',
+    res = run(['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',
               f'{depot_root}/...#head'], cwd=workspace_dir)
-    if not res.stdout:
+    fields = parse_ztag_output(res.stdout)
+    if 'change' not in fields:
         raise CommandError('No changelists found affecting workspace')
-
-    # Parse the changelist number from the output
-    line = res.stdout[0]
-    match = re.search(r'Change (\d+)', line)
-    if not match:
-        raise CommandError(f'Failed to parse changelist from: {line}')
-    return int(match.group(1))
+    return int(fields['change'])
 
 
 # --- file operations ---
 
 def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
     """Return the changelist a file is opened in, or None if not opened."""
-    res = run(['p4', 'opened', filename], cwd=workspace_dir)
-
-    # Check if file is not opened (p4 opened always returns 0, so check output)
-    if not res.stdout or any('file(s) not opened on this client' in line for line in res.stdout):
-        return None
-
-    # Parse the output to extract changelist number
-    # Format: "//depot/path/file#1 - <action> change 12345 (type) by user@workspace"
-    # where <action> is edit, add, delete, move/add, move/delete, etc.
-    for line in res.stdout:
-        if ' default change ' in line:
-            return 'default'
-        match = re.search(r' change (\d+) ', line)
-        if match:
-            return match.group(1)
-
-    # If we get here, file is opened but we couldn't parse the changelist
-    return None
+    res = run(['p4', '-ztag', 'opened', filename], cwd=workspace_dir)
+    fields = parse_ztag_output(res.stdout)
+    return fields.get('change')
 
 
 def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
@@ -237,15 +235,11 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
 def p4_get_opened_files(depot_root: str, workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for files opened in Perforce."""
     res = run_with_output(
-        ['p4', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
+        ['p4', '-ztag', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
     files = []
-    for line in res.stdout:
-        # Format: "//depot/path/file#rev - <action> change ..."
-        parts = line.split(' - ', 1)
-        if len(parts) < 2:
-            continue
-        depot_path = parts[0].split('#')[0]
-        action = parts[1].split()[0]
+    for record in parse_ztag_multi_output(res.stdout):
+        depot_path = record['depotFile']
+        action = record['action']
         if action in ('add', 'move/add'):
             change = 'add'
         elif action in ('delete', 'move/delete'):

@@ -20,16 +20,17 @@ from tests.helpers import make_run_result
 class TestGetChangelistForFile(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_file_not_opened(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt - file(s) not opened on this client."
-        ])
+        mock_run.return_value = make_run_result(stdout=[])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertIsNone(result)
 
     @mock.patch('git_p4son.perforce.run')
     def test_file_in_default_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#1 - edit default change (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action edit',
+            '... change default',
+            '... type text',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, 'default')
@@ -37,21 +38,20 @@ class TestGetChangelistForFile(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_file_in_numbered_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#1 - edit change 12345 (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action edit',
+            '... change 12345',
+            '... type text',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, '12345')
 
     @mock.patch('git_p4son.perforce.run')
-    def test_empty_output(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertIsNone(result)
-
-    @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_add(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#1 - add change 12345 (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action add',
+            '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, '12345')
@@ -59,7 +59,9 @@ class TestGetChangelistForFile(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_delete(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#3 - delete change 12345 (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action delete',
+            '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, '12345')
@@ -67,7 +69,9 @@ class TestGetChangelistForFile(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_move_add(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#1 - move/add change 12345 (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action move/add',
+            '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, '12345')
@@ -75,7 +79,9 @@ class TestGetChangelistForFile(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_add_in_default_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            "//depot/foo.txt#1 - add default change (text) by user@ws"
+            '... depotFile //depot/foo.txt',
+            '... action add',
+            '... change default',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
         self.assertEqual(result, 'default')

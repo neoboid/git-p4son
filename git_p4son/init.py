@@ -9,7 +9,9 @@ import argparse
 import os
 import shutil
 
-from .common import CommandError, get_p4_client_name, run, run_with_output
+import subprocess
+
+from .common import CommandError, run, run_with_output
 from .config import get_depot_root, save_config
 from .log import log
 from .review import _resolve_editor
@@ -19,6 +21,22 @@ def _get_p4_client_spec(cwd: str) -> list[str]:
     """Get the raw p4 client spec lines."""
     res = run(['p4', 'client', '-o'], cwd=cwd)
     return res.stdout
+
+
+def get_p4_client_name(cwd: str) -> str | None:
+    """Get the Perforce client name by running p4 info.
+
+    Returns the client name, or None if not in a workspace.
+    """
+    result = subprocess.run(
+        ['p4', 'info'], cwd=cwd,
+        capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if line.startswith('Client name:'):
+            name = line.split(':', 1)[1].strip()
+            if name != '*unknown*':
+                return name
+    return None
 
 
 def _check_clobber(spec_lines: list[str]) -> bool:

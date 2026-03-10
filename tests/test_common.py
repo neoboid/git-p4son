@@ -14,7 +14,6 @@ from git_p4son.common import (
     branch_to_alias,
     get_current_branch,
     get_head_subject,
-    get_p4_client_name,
     get_workspace_dir,
     is_workspace_dir,
     join_command_line,
@@ -133,26 +132,6 @@ class TestGetRebaseBranch(unittest.TestCase):
             mock_run.return_value = mock.Mock(returncode=128, stdout='')
             result = _get_rebase_branch('/ws')
         self.assertIsNone(result)
-
-
-class TestGetP4ClientName(unittest.TestCase):
-    @mock.patch('subprocess.run')
-    def test_returns_client_name(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Client name: my-ws\nClient root: /ws\n')
-        self.assertEqual(get_p4_client_name('/ws'), 'my-ws')
-
-    @mock.patch('subprocess.run')
-    def test_unknown_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Client name: *unknown*\n')
-        self.assertIsNone(get_p4_client_name('/ws'))
-
-    @mock.patch('subprocess.run')
-    def test_no_client_line_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            stdout='Server address: ssl:perforce:1666\n')
-        self.assertIsNone(get_p4_client_name('/ws'))
 
 
 class TestBranchToAlias(unittest.TestCase):

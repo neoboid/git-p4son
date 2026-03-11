@@ -13,7 +13,7 @@ from .common import CommandError, run, run_with_output
 from .config import get_depot_root, save_config
 from .log import log
 from .perforce import get_client_spec
-from .review import _resolve_editor
+from .git import resolve_editor
 
 
 def _validate_depot_root(depot_root: str, cwd: str) -> bool:
@@ -177,7 +177,7 @@ def init_command(args: argparse.Namespace) -> int:
 
     # Nudge user to set an editor if none is configured
     log.heading('Validating git editor configuration')
-    editor = _resolve_editor(cwd)
+    editor = resolve_editor(cwd)
     if editor:
         log.success(editor)
     else:

@@ -124,7 +124,7 @@ class TestInitCommand(unittest.TestCase):
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
 
-    @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
+    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
@@ -150,7 +150,7 @@ class TestInitCommand(unittest.TestCase):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 
-    @mock.patch('git_p4son.init._resolve_editor', return_value='vim')
+    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)

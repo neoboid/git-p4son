@@ -10,15 +10,17 @@ from git_p4son.common import (
     CommandError,
     RunError,
     RunResult,
-    _get_rebase_branch,
     branch_to_alias,
+    join_command_line,
+    run,
+    run_with_output,
+)
+from git_p4son.git import (
+    _get_rebase_branch,
     get_current_branch,
     get_head_subject,
     get_workspace_dir,
     is_workspace_dir,
-    join_command_line,
-    run,
-    run_with_output,
 )
 
 
@@ -35,7 +37,7 @@ class TestGetCurrentBranch(unittest.TestCase):
         )
         self.assertEqual(result, 'feat/foo')
 
-    @mock.patch('git_p4son.common._get_rebase_branch', return_value=None)
+    @mock.patch('git_p4son.git._get_rebase_branch', return_value=None)
     @mock.patch('subprocess.run')
     def test_detached_head_returns_none(self, mock_run, mock_rebase):
         mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
@@ -43,7 +45,7 @@ class TestGetCurrentBranch(unittest.TestCase):
         self.assertIsNone(result)
         mock_rebase.assert_called_once_with('/ws')
 
-    @mock.patch('git_p4son.common._get_rebase_branch', return_value='feat/my-branch')
+    @mock.patch('git_p4son.git._get_rebase_branch', return_value='feat/my-branch')
     @mock.patch('subprocess.run')
     def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
         mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')

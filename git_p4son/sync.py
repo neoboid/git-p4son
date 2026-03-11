@@ -8,6 +8,7 @@ from typing import IO
 
 from .common import CommandError, RunError, run_with_output
 from .config import get_depot_root
+from .git import add_all_files, commit, get_dirty_files
 from .log import log
 from .perforce import (
     get_file_count_to_sync,
@@ -15,37 +16,6 @@ from .perforce import (
     p4_force_sync_file,
     p4_get_opened_files,
 )
-
-
-def git_get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for dirty files in git."""
-    res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
-    files = []
-    for line in res.stdout:
-        status = line[:2].strip()
-        filename = line[3:]
-        if status == 'A':
-            files.append((filename, 'add'))
-        elif status == 'D':
-            files.append((filename, 'delete'))
-        elif status == '??':
-            files.append((filename, 'untracked'))
-        else:
-            files.append((filename, 'modify'))
-    return files
-
-
-def git_add_all_files(workspace_dir: str) -> None:
-    """Add all files to git."""
-    run_with_output(['git', 'add', '.'], cwd=workspace_dir)
-
-
-def git_commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
-    """Commit changes to git."""
-    args = ['commit', '-m', message]
-    if allow_empty:
-        args.append('--allow-empty')
-    run_with_output(['git'] + args, cwd=workspace_dir)
 
 
 def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
@@ -198,7 +168,7 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success(depot_root)
 
     log.heading('Checking git workspace')
-    dirty_files = git_get_dirty_files(workspace_dir)
+    dirty_files = get_dirty_files(workspace_dir)
     if dirty_files:
         for filename, change in dirty_files:
             log.file_change(filename, change)
@@ -273,12 +243,12 @@ def sync_command(args: argparse.Namespace) -> int:
         return 1
 
     log.heading('Committing git changes')
-    dirty_files = git_get_dirty_files(workspace_dir)
+    dirty_files = get_dirty_files(workspace_dir)
     if dirty_files:
-        git_add_all_files(workspace_dir)
+        add_all_files(workspace_dir)
 
     commit_msg = f'git-p4son: p4 sync {depot_root}/...@{changelist}'
-    git_commit(commit_msg, workspace_dir, allow_empty=True)
+    commit(commit_msg, workspace_dir, allow_empty=True)
     log.success(f'Committed {len(dirty_files)} files')
 
     return 0

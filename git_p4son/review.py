@@ -11,7 +11,7 @@ import shlex
 import subprocess
 from . import CONFIG_DIR
 from .changelist_store import alias_exists
-from .common import run
+from .git import get_commit_lines_since, resolve_editor
 from .log import log
 
 
@@ -23,26 +23,6 @@ def _reviews_dir(workspace_dir: str) -> str:
 def _todo_path(workspace_dir: str) -> str:
     """Return the path to the generated todo file."""
     return os.path.join(_reviews_dir(workspace_dir), 'todo')
-
-
-def _resolve_editor(workspace_dir: str) -> str | None:
-    """Resolve the user's editor via git var GIT_EDITOR."""
-    result = subprocess.run(
-        ['git', 'var', 'GIT_EDITOR'],
-        capture_output=True,
-        text=True,
-        cwd=workspace_dir,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip() or None
-
-
-def _get_commit_lines(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get git log --oneline lines for commits since base branch."""
-    res = run(['git', 'log', '--oneline', '--reverse',
-               f'{base_branch}..HEAD'], cwd=workspace_dir)
-    return res.stdout
 
 
 def _generate_todo(commit_lines: list[str], alias: str, message: str,
@@ -90,7 +70,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     # Validate editor is available before starting
     log.heading('Checking editor')
-    editor = _resolve_editor(workspace_dir)
+    editor = resolve_editor(workspace_dir)
     if not editor:
         log.error(
             'No git editor configured. Set one with: git config core.editor <editor>')
@@ -99,7 +79,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     # Get commits since base branch
     log.heading('Finding commits')
-    commit_lines = _get_commit_lines(args.base_branch, workspace_dir)
+    commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)
 
     if not commit_lines:
         log.error(f'No commits found since {args.base_branch}')
@@ -174,7 +154,7 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
             f.write('\n')
             f.writelines(comment_lines)
 
-    editor = _resolve_editor(workspace_dir)
+    editor = resolve_editor(workspace_dir)
     if not editor:
         log.error(
             'No git editor configured. Set one with: git config core.editor <editor>')

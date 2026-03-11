@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
-from git_p4son.common import get_head_subject
+from git_p4son.git import get_head_subject
 
 
 class TestCreateParser(unittest.TestCase):

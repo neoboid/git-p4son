@@ -3,28 +3,8 @@ List-changes command implementation for git-p4son.
 """
 
 import argparse
-from .common import run
+from .git import get_commit_subjects_since
 from .log import log
-
-
-def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get commit subjects from git log since base branch."""
-    # Run git log to get commit subjects since base branch
-    # Using --reverse to get oldest commits first
-    res = run(['git', 'log', '--oneline', '--reverse', f'{base_branch}..HEAD'],
-              cwd=workspace_dir)
-
-    # Extract just the subjects (everything after the hash and space)
-    subjects = []
-    for line in res.stdout:
-        if ' ' in line:
-            subject = line.split(' ', 1)[1]
-            subjects.append(subject)
-        else:
-            # Fallback if format is unexpected
-            subjects.append(line)
-
-    return subjects
 
 
 def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> list[str]:

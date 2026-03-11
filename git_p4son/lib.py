@@ -4,10 +4,10 @@ Bridge functions that combine git and Perforce operations.
 
 import re
 from .common import CommandError, run
+from .git import LocalChanges, get_local_changes
 from .list_changes import get_enumerated_commit_lines_since
 from .log import log
 from .perforce import (
-    LocalChanges,
     extract_description_lines,
     get_changelist_spec,
     include_changes_in_changelist,
@@ -103,44 +103,7 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     run(['p4', 'change', '-i'], cwd=workspace_dir, input=new_spec)
 
 
-def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:
-    """Find the common ancestor commit between two branches."""
-    res = run(['git', 'merge-base', branch1, branch2], cwd=workspace_dir)
-    if not res.stdout or len(res.stdout) != 1:
-        raise CommandError('git merge-base returned unexpected output')
-    return res.stdout[0].strip()
-
-
-def get_local_git_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
-    """Get local git changes between base_branch and HEAD."""
-    ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
-
-    res = run(['git', 'diff', '--name-status', f'{ancestor}..HEAD'],
-              cwd=workspace_dir)
-
-    changes = LocalChanges()
-    renamepattern = r"^r(\d+)$"
-    for line in res.stdout:
-        tokens = line.split('\t')
-        status = tokens[0].lower()
-        filename = tokens[1]
-        if status == 'm':
-            changes.mods.append(filename)
-        elif status == 'd':
-            changes.dels.append(filename)
-        elif status == 'a':
-            changes.adds.append(filename)
-        elif re.search(renamepattern, status):
-            from_filename = filename
-            to_filename = tokens[2]
-            changes.moves.append((from_filename, to_filename))
-        else:
-            raise CommandError(f'Unknown git status in "{line}"')
-
-    return changes
-
-
 def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
     """Get local git changes and open them for edit in a Perforce changelist."""
-    changes = get_local_git_changes(base_branch, workspace_dir)
+    changes = get_local_changes(base_branch, workspace_dir)
     include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)

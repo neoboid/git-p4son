@@ -9,7 +9,8 @@ Special directives (e.g. __branch__) tell the shell wrapper to use native comple
 import argparse
 
 from .changelist_store import list_changelist_aliases
-from .common import branch_to_alias, get_current_branch, get_workspace_dir
+from .common import branch_to_alias
+from .git import get_current_branch, get_workspace_dir
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
 

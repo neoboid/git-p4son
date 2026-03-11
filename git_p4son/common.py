@@ -2,8 +2,6 @@
 Common utilities shared between sync and edit commands.
 """
 
-import os
-import os.path
 import queue
 import subprocess
 import sys
@@ -15,90 +13,9 @@ from typing import IO, Callable
 from .log import log
 
 
-def get_current_branch(workspace_dir: str) -> str | None:
-    """Return the current git branch name, or None on error/detached HEAD.
-
-    When in detached HEAD during an interactive rebase, returns the
-    original branch name from git's rebase state.
-    """
-    try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        branch = result.stdout.strip()
-        if branch == 'HEAD':
-            return _get_rebase_branch(workspace_dir)
-        return branch
-    except Exception:
-        return None
-
-
-def _get_rebase_branch(workspace_dir: str) -> str | None:
-    """During interactive rebase, read the original branch from git state."""
-    try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--git-dir'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        git_dir = result.stdout.strip()
-        head_name_file = os.path.join(git_dir, 'rebase-merge', 'head-name')
-        with open(head_name_file) as f:
-            ref = f.read().strip()
-        prefix = 'refs/heads/'
-        if ref.startswith(prefix):
-            return ref[len(prefix):]
-        return ref
-    except FileNotFoundError:
-        return None
-
-
-def get_head_subject(workspace_dir: str) -> str | None:
-    """Return the subject line of the HEAD commit, or None on failure."""
-    try:
-        result = subprocess.run(
-            ['git', 'log', '-1', '--format=%s', 'HEAD'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        subject = result.stdout.strip()
-        return subject if subject else None
-    except Exception:
-        return None
-
-
 def branch_to_alias(branch_name: str) -> str:
     """Sanitize a branch name for use as an alias filename."""
     return branch_name.replace('/', '-')
-
-
-def is_workspace_dir(directory: str) -> bool:
-    """Check if a directory is a git workspace."""
-    return os.path.isdir(os.path.join(directory, '.git'))
-
-
-def get_workspace_dir() -> str | None:
-    """Find the git workspace root directory by walking up the directory tree."""
-    candidate_dir = os.getcwd()
-    while True:
-        if is_workspace_dir(candidate_dir):
-            return candidate_dir
-
-        parent_dir = os.path.dirname(candidate_dir)
-        if parent_dir == candidate_dir:
-            return None
-        candidate_dir = parent_dir
 
 
 class CommandError(Exception):

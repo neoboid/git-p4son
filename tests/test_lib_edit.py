@@ -4,13 +4,13 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
-from git_p4son.lib import (
-    find_common_ancestor,
-    open_changes_for_edit,
-    get_local_git_changes,
-)
-from git_p4son.perforce import (
+from git_p4son.git import (
     LocalChanges,
+    find_common_ancestor,
+    get_local_changes,
+)
+from git_p4son.lib import open_changes_for_edit
+from git_p4son.perforce import (
     get_changelist_for_file,
     include_changes_in_changelist,
 )
@@ -88,19 +88,19 @@ class TestGetChangelistForFile(unittest.TestCase):
 
 
 class TestFindCommonAncestor(unittest.TestCase):
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_finds_ancestor(self, mock_run):
         mock_run.return_value = make_run_result(stdout=['abc123def456'])
         ancestor = find_common_ancestor('main', 'HEAD', '/ws')
         self.assertEqual(ancestor, 'abc123def456')
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_failure(self, mock_run):
         mock_run.side_effect = RunError('merge-base failed')
         with self.assertRaises(RunError):
             find_common_ancestor('main', 'HEAD', '/ws')
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_no_output(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
         with self.assertRaises(CommandError):
@@ -108,7 +108,7 @@ class TestFindCommonAncestor(unittest.TestCase):
 
 
 class TestGetLocalGitChanges(unittest.TestCase):
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_parses_all_change_types(self, mock_run):
         mock_run.side_effect = [
             # git merge-base
@@ -121,26 +121,26 @@ class TestGetLocalGitChanges(unittest.TestCase):
                 'R100\told_name.txt\tnew_name.txt',
             ]),
         ]
-        changes = get_local_git_changes('main', '/ws')
+        changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['modified.txt'])
         self.assertEqual(changes.adds, ['added.txt'])
         self.assertEqual(changes.dels, ['deleted.txt'])
         self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_merge_base_failure(self, mock_run):
         mock_run.side_effect = RunError('merge-base failed')
         with self.assertRaises(RunError):
-            get_local_git_changes('main', '/ws')
+            get_local_changes('main', '/ws')
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.git.run')
     def test_unknown_status(self, mock_run):
         mock_run.side_effect = [
             make_run_result(stdout=['abc123']),
             make_run_result(stdout=['X\tunknown.txt']),
         ]
         with self.assertRaises(CommandError):
-            get_local_git_changes('main', '/ws')
+            get_local_changes('main', '/ws')
 
 
 class TestIncludeChangesInChangelist(unittest.TestCase):
@@ -290,14 +290,14 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
 
 class TestOpenChangesForEdit(unittest.TestCase):
     @mock.patch('git_p4son.lib.include_changes_in_changelist')
-    @mock.patch('git_p4son.lib.get_local_git_changes')
+    @mock.patch('git_p4son.lib.get_local_changes')
     def test_success(self, mock_get_changes, mock_include):
         mock_changes = mock.Mock()
         mock_get_changes.return_value = mock_changes
         open_changes_for_edit('100', 'HEAD~1', '/ws')
         mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
 
-    @mock.patch('git_p4son.lib.get_local_git_changes')
+    @mock.patch('git_p4son.lib.get_local_changes')
     def test_get_changes_failure(self, mock_get_changes):
         mock_get_changes.side_effect = RunError('get changes failed')
         with self.assertRaises(RunError):

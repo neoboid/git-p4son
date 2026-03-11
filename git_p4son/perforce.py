@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import IO
 
 from .common import CommandError, RunError, run, run_with_output
+from .git import LocalChanges
 from .log import log
 
 
@@ -198,16 +199,6 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
     elif current != changelist:
         run(['p4', 'reopen', '-c', changelist, filename],
             cwd=workspace_dir, dry_run=dry_run)
-
-
-class LocalChanges:
-    """Container for local git changes."""
-
-    def __init__(self) -> None:
-        self.adds: list[str] = []
-        self.mods: list[str] = []
-        self.dels: list[str] = []
-        self.moves: list[tuple[str, str]] = []
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,

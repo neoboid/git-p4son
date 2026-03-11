@@ -145,7 +145,6 @@ def init_command(args: argparse.Namespace) -> int:
             f'  Edit "{spec.name}" in P4V to set the clobber flag.')
         return 1
 
-    log.heading('Configuring depot root')
     if not _configure_depot_root(spec.name, cwd, spec.root):
         return 1
 

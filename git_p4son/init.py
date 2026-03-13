@@ -87,7 +87,7 @@ def _configure_depot_root(client_name: str, cwd: str,
     if depot_root:
         log.heading('Validating depot root')
         if _validate_depot_root(depot_root, cwd):
-            log.success(f'{depot_root}/...')
+            log.success('all good')
             return True
         else:
             log.error(f'{depot_root}/... is not valid')

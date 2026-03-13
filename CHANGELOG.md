@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5
+
+- Use -ztag style perforce commands
+- Polish output of commands
+- Add --no-desc option to `update` command to skip updating changelist description
+- Add a expanded section to `README.md` explaining why clobber is needed
+
 ## 0.2.4
 
 - Scope p4 opened check to depot root in sync command

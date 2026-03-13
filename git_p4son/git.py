@@ -6,9 +6,8 @@ All functions that interact directly with the git CLI live here.
 import os
 import os.path
 import re
-import subprocess
 
-from .common import CommandError, run, run_with_output
+from .common import CommandError, RunError, run, run_with_output
 
 
 # --- workspace ---
@@ -40,34 +39,23 @@ def get_current_branch(workspace_dir: str) -> str | None:
     original branch name from git's rebase state.
     """
     try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        branch = result.stdout.strip()
+        result = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                     cwd=workspace_dir)
+        branch = result.stdout[0].strip() if result.stdout else None
         if branch == 'HEAD':
             return _get_rebase_branch(workspace_dir)
         return branch
-    except Exception:
+    except (RunError, OSError):
         return None
 
 
 def _get_rebase_branch(workspace_dir: str) -> str | None:
     """During interactive rebase, read the original branch from git state."""
     try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--git-dir'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
+        result = run(['git', 'rev-parse', '--git-dir'], cwd=workspace_dir)
+        git_dir = result.stdout[0].strip() if result.stdout else None
+        if not git_dir:
             return None
-        git_dir = result.stdout.strip()
         head_name_file = os.path.join(git_dir, 'rebase-merge', 'head-name')
         with open(head_name_file) as f:
             ref = f.read().strip()
@@ -75,7 +63,7 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
         if ref.startswith(prefix):
             return ref[len(prefix):]
         return ref
-    except FileNotFoundError:
+    except (RunError, FileNotFoundError):
         return None
 
 
@@ -84,17 +72,11 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
 def get_head_subject(workspace_dir: str) -> str | None:
     """Return the subject line of the HEAD commit, or None on failure."""
     try:
-        result = subprocess.run(
-            ['git', 'log', '-1', '--format=%s', 'HEAD'],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        subject = result.stdout.strip()
+        result = run(['git', 'log', '-1', '--format=%s', 'HEAD'],
+                     cwd=workspace_dir)
+        subject = result.stdout[0].strip() if result.stdout else None
         return subject if subject else None
-    except Exception:
+    except (RunError, OSError):
         return None
 
 
@@ -210,12 +192,8 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
 
 def resolve_editor(workspace_dir: str) -> str | None:
     """Resolve the user's editor via git var GIT_EDITOR."""
-    result = subprocess.run(
-        ['git', 'var', 'GIT_EDITOR'],
-        capture_output=True,
-        text=True,
-        cwd=workspace_dir,
-    )
-    if result.returncode != 0:
+    try:
+        result = run(['git', 'var', 'GIT_EDITOR'], cwd=workspace_dir)
+        return result.stdout[0].strip() if result.stdout else None
+    except RunError:
         return None
-    return result.stdout.strip() or None

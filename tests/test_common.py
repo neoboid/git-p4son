@@ -25,71 +25,65 @@ from git_p4son.git import (
 
 
 class TestGetCurrentBranch(unittest.TestCase):
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run')
     def test_returns_branch_name(self, mock_run):
-        mock_run.return_value = mock.Mock(returncode=0, stdout='feat/foo\n')
+        mock_run.return_value = RunResult(0, ['feat/foo'], [])
         result = get_current_branch('/ws')
         mock_run.assert_called_once_with(
             ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
             cwd='/ws',
-            capture_output=True,
-            text=True,
         )
         self.assertEqual(result, 'feat/foo')
 
     @mock.patch('git_p4son.git._get_rebase_branch', return_value=None)
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run')
     def test_detached_head_returns_none(self, mock_run, mock_rebase):
-        mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
+        mock_run.return_value = RunResult(0, ['HEAD'], [])
         result = get_current_branch('/ws')
         self.assertIsNone(result)
         mock_rebase.assert_called_once_with('/ws')
 
     @mock.patch('git_p4son.git._get_rebase_branch', return_value='feat/my-branch')
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run')
     def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
-        mock_run.return_value = mock.Mock(returncode=0, stdout='HEAD\n')
+        mock_run.return_value = RunResult(0, ['HEAD'], [])
         result = get_current_branch('/ws')
         self.assertEqual(result, 'feat/my-branch')
 
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
     def test_command_failure_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(returncode=128, stdout='')
         result = get_current_branch('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('subprocess.run', side_effect=OSError('no git'))
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
     def test_exception_returns_none(self, mock_run):
         result = get_current_branch('/ws')
         self.assertIsNone(result)
 
 
 class TestGetHeadSubject(unittest.TestCase):
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run')
     def test_returns_subject(self, mock_run):
-        mock_run.return_value = mock.Mock(returncode=0, stdout='Fix bug\n')
+        mock_run.return_value = RunResult(0, ['Fix bug'], [])
         result = get_head_subject('/ws')
         mock_run.assert_called_once_with(
             ['git', 'log', '-1', '--format=%s', 'HEAD'],
             cwd='/ws',
-            capture_output=True,
-            text=True,
         )
         self.assertEqual(result, 'Fix bug')
 
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
     def test_command_failure_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(returncode=128, stdout='')
         result = get_head_subject('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('subprocess.run')
+    @mock.patch('git_p4son.git.run')
     def test_empty_output_returns_none(self, mock_run):
-        mock_run.return_value = mock.Mock(returncode=0, stdout='')
+        mock_run.return_value = RunResult(0, [], [])
         result = get_head_subject('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('subprocess.run', side_effect=OSError('no git'))
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
     def test_exception_returns_none(self, mock_run):
         result = get_head_subject('/ws')
         self.assertIsNone(result)
@@ -102,9 +96,9 @@ class TestGetRebaseBranch(unittest.TestCase):
             os.makedirs(rebase_dir)
             with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
                 f.write('refs/heads/feat/my-feature\n')
-            with mock.patch('subprocess.run') as mock_run:
-                mock_run.return_value = mock.Mock(
-                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+            with mock.patch('git_p4son.git.run') as mock_run:
+                mock_run.return_value = RunResult(
+                    0, [os.path.join(tmpdir, '.git')], [])
                 result = _get_rebase_branch(tmpdir)
             self.assertEqual(result, 'feat/my-feature')
 
@@ -114,24 +108,24 @@ class TestGetRebaseBranch(unittest.TestCase):
             os.makedirs(rebase_dir)
             with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
                 f.write('refs/heads/main\n')
-            with mock.patch('subprocess.run') as mock_run:
-                mock_run.return_value = mock.Mock(
-                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+            with mock.patch('git_p4son.git.run') as mock_run:
+                mock_run.return_value = RunResult(
+                    0, [os.path.join(tmpdir, '.git')], [])
                 result = _get_rebase_branch(tmpdir)
             self.assertEqual(result, 'main')
 
     def test_returns_none_when_no_rebase_state(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             os.makedirs(os.path.join(tmpdir, '.git'))
-            with mock.patch('subprocess.run') as mock_run:
-                mock_run.return_value = mock.Mock(
-                    returncode=0, stdout=os.path.join(tmpdir, '.git') + '\n')
+            with mock.patch('git_p4son.git.run') as mock_run:
+                mock_run.return_value = RunResult(
+                    0, [os.path.join(tmpdir, '.git')], [])
                 result = _get_rebase_branch(tmpdir)
             self.assertIsNone(result)
 
     def test_returns_none_when_git_dir_fails(self):
-        with mock.patch('subprocess.run') as mock_run:
-            mock_run.return_value = mock.Mock(returncode=128, stdout='')
+        with mock.patch('git_p4son.git.run',
+                        side_effect=RunError('failed', returncode=128)):
             result = _get_rebase_branch('/ws')
         self.assertIsNone(result)
 

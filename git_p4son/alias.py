@@ -85,26 +85,24 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         log.success('No changelist aliases to clean')
         return 0
 
-    deleted_count = 0
     response = None
-
     for name, changelist in aliases:
-        print(f'{name} -> {changelist}')
+        log.heading(f'{name} -> CL {changelist}')
 
         if response != 'all':
             response = _prompt_delete(
                 'Delete? [y]es / [n]o / [a]ll / [q]uit: ')
 
         if response is None or response == 'quit':
+            log.info('Aborting')
             break
-        if response == 'no':
+        elif response == 'no':
+            log.info('Skipped')
             continue
 
         if delete_changelist_alias(name, workspace_dir):
-            log.info('  Deleted')
-            deleted_count += 1
+            log.success('Deleted')
 
-    log.success(f'Deleted {deleted_count} alias(es)')
     return 0
 
 

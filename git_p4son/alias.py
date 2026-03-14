@@ -55,6 +55,27 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prompt_delete(prompt: str) -> str | None:
+    """Prompt until a valid y/n/a/q response is given. Returns None on EOF."""
+    while True:
+        try:
+            response = input(prompt).strip().lower()
+        except EOFError:
+            print()
+            return None
+
+        if response in ('y', 'yes'):
+            return 'yes'
+        elif response in ('n', 'no'):
+            return 'no'
+        elif response in ('a', 'all'):
+            return 'all'
+        elif response in ('q', 'quit'):
+            return 'quit'
+        else:
+            print('Please enter y, n, a, or q')
+
+
 def alias_clean_command(args: argparse.Namespace) -> int:
     """Execute the 'alias clean' command with interactive prompts."""
     workspace_dir = args.workspace_dir
@@ -64,48 +85,24 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         log.success('No changelist aliases to clean')
         return 0
 
-    delete_all = False
     deleted_count = 0
+    response = None
 
     for name, changelist in aliases:
-        # Interactive output stays as print() — it's a prompt-response UI
         print(f'{name} -> {changelist}')
 
-        if delete_all:
-            delete_changelist_alias(name, workspace_dir)
-            deleted_count += 1
-            log.info('  Deleted')
+        if response != 'all':
+            response = _prompt_delete(
+                'Delete? [y]es / [n]o / [a]ll / [q]uit: ')
+
+        if response is None or response == 'quit':
+            break
+        if response == 'no':
             continue
 
-        should_quit = False
-        while True:
-            try:
-                response = input(
-                    'Delete? [y]es / [n]o / [a]ll / [q]uit: ').strip().lower()
-            except EOFError:
-                print()
-                return 0
-
-            if response in ('y', 'yes'):
-                delete_changelist_alias(name, workspace_dir)
-                deleted_count += 1
-                log.info('  Deleted')
-                break
-            elif response in ('n', 'no'):
-                break
-            elif response in ('a', 'all'):
-                delete_all = True
-                delete_changelist_alias(name, workspace_dir)
-                deleted_count += 1
-                log.info('  Deleted')
-                break
-            elif response in ('q', 'quit'):
-                should_quit = True
-                break
-            else:
-                print('Please enter y, n, a, or q')
-        if should_quit:
-            break
+        if delete_changelist_alias(name, workspace_dir):
+            log.info('  Deleted')
+            deleted_count += 1
 
     log.success(f'Deleted {deleted_count} alias(es)')
     return 0

@@ -128,7 +128,7 @@ def _complete_positional(command, subcommand, positional_count,
             branch_candidates = _get_branch_candidates(prefix, workspace_dir)
             return branch_candidates + _filter(aliases, prefix)
 
-        if subcommand == 'set' and positional_count == 1:
+        if subcommand == 'new' and positional_count == 1:
             branch_candidates = _get_branch_candidates(prefix, workspace_dir)
             return branch_candidates + _filter(aliases, prefix)
 

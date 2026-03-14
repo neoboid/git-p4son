@@ -198,7 +198,7 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['alias', ''], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('list', names)
-        self.assertIn('set', names)
+        self.assertIn('new', names)
         self.assertIn('delete', names)
         self.assertIn('clean', names)
 
@@ -208,14 +208,14 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertEqual(names, ['myalias'])
 
-    def test_alias_set_second_positional(self, _ws, _aliases):
-        result = _complete(self.parser, ['alias', 'set', '123', ''],
+    def test_alias_new_second_positional(self, _ws, _aliases):
+        result = _complete(self.parser, ['alias', 'new', '123', ''],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertEqual(names, ['myalias'])
 
-    def test_alias_set_flags(self, _ws, _aliases):
-        result = _complete(self.parser, ['alias', 'set', '-'],
+    def test_alias_new_flags(self, _ws, _aliases):
+        result = _complete(self.parser, ['alias', 'new', '-'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('-f', names)
@@ -283,20 +283,20 @@ class TestCompleteBranchAlias(unittest.TestCase):
         self.assertIn('branch', names)
         self.assertIn('myalias', names)
 
-    def test_alias_set_branch_keyword(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', 'b'],
+    def test_alias_new_branch_keyword(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'new', '123', 'b'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('branch', names)
 
-    def test_alias_set_br_prefix(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', 'br'],
+    def test_alias_new_br_prefix(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'new', '123', 'br'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('branch', names)
 
-    def test_alias_set_branch_expand(self, _ws, _aliases, _branch):
-        result = _complete(self.parser, ['alias', 'set', '123', 'branch'],
+    def test_alias_new_branch_expand(self, _ws, _aliases, _branch):
+        result = _complete(self.parser, ['alias', 'new', '123', 'branch'],
                            workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('feat-cool', names)

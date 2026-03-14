@@ -28,8 +28,8 @@ def alias_list_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def alias_set_command(args: argparse.Namespace) -> int:
-    """Execute the 'alias set' command."""
+def alias_new_command(args: argparse.Namespace) -> int:
+    """Execute the 'alias new' command."""
     workspace_dir = args.workspace_dir
 
     if not args.changelist.isdigit():
@@ -110,8 +110,8 @@ def alias_command(args: argparse.Namespace) -> int:
     """Dispatch alias subcommands."""
     if args.alias_action == 'list':
         return alias_list_command(args)
-    elif args.alias_action == 'set':
-        return alias_set_command(args)
+    elif args.alias_action == 'new':
+        return alias_new_command(args)
     elif args.alias_action == 'delete':
         return alias_delete_command(args)
     elif args.alias_action == 'clean':

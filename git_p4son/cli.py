@@ -227,25 +227,25 @@ Examples:
         description='List all changelist aliases stored in .git-p4son/changelists/'
     )
 
-    # alias set
-    alias_set_parser = alias_subparsers.add_parser(
-        'set',
+    # alias new
+    alias_new_parser = alias_subparsers.add_parser(
+        'new',
         help='Save a changelist number under a named alias',
         description='Save a changelist number under a named alias in '
         '.git-p4son/changelists/<alias>'
     )
-    alias_set_parser.add_argument(
+    alias_new_parser.add_argument(
         'changelist',
         help='Changelist number to save'
     )
-    alias_set_parser.add_argument(
+    alias_new_parser.add_argument(
         'alias',
         nargs='?',
         default='branch',
         help='Alias name to save the changelist number under. '
              'Defaults to the current branch name'
     )
-    alias_set_parser.add_argument(
+    alias_new_parser.add_argument(
         '-f', '--force',
         action='store_true',
         help='Overwrite an existing alias file'
@@ -396,7 +396,7 @@ def run_command(args: argparse.Namespace) -> int:
     elif args.command == 'update' and args.changelist == 'branch':
         branch_attr = 'changelist'
     elif (args.command == 'alias'
-          and args.alias_action in ('set', 'delete')
+          and args.alias_action in ('new', 'delete')
           and args.alias == 'branch'):
         branch_attr = 'alias'
 

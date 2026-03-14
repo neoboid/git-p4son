@@ -395,12 +395,12 @@ git p4son alias list
 git p4son alias list
 ```
 
-#### alias set
+#### alias new
 
 Save a changelist number under a named alias:
 
 ```sh
-git p4son alias set <changelist> [alias] [--force]
+git p4son alias new <changelist> [alias] [--force]
 ```
 
 **Arguments:**
@@ -412,9 +412,9 @@ git p4son alias set <changelist> [alias] [--force]
 
 **Examples:**
 ```sh
-git p4son alias set 12345              # alias defaults to branch name
-git p4son alias set 12345 myfeature
-git p4son alias set 67890 myfeature -f
+git p4son alias new 12345              # alias defaults to branch name
+git p4son alias new 12345 myfeature
+git p4son alias new 67890 myfeature -f
 ```
 
 #### alias delete

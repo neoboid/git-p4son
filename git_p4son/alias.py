@@ -77,7 +77,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
             log.info('  Deleted')
             continue
 
-        quit = False
+        should_quit = False
         while True:
             try:
                 response = input(
@@ -100,11 +100,11 @@ def alias_clean_command(args: argparse.Namespace) -> int:
                 log.info('  Deleted')
                 break
             elif response in ('q', 'quit'):
-                quit = True
+                should_quit = True
                 break
             else:
                 print('Please enter y, n, a, or q')
-        if quit:
+        if should_quit:
             break
 
     log.success(f'Deleted {deleted_count} alias(es)')

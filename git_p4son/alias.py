@@ -19,11 +19,10 @@ def alias_list_command(args: argparse.Namespace) -> int:
     if not aliases:
         log.info('No aliases defined')
         return 0
+    log.info(f'Found {len(aliases)}')
 
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
-
-    log.success(f'{len(aliases)} listed')
 
     return 0
 

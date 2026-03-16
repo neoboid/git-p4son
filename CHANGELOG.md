@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+- Rename `alias set` command to `alias new`
+- Clean up output of alias commands
+
 ## 0.2.5
 
 - Use -ztag style perforce commands

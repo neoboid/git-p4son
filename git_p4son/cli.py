@@ -468,7 +468,7 @@ def main() -> int:
             seconds = int(args.sleep)
             log.heading(f'Sleeping for {seconds} seconds')
             time.sleep(seconds)
-            log.ok('awake again')
+            log.success('awake again')
 
         return exit_code
     except KeyboardInterrupt:

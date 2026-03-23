@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7
+
+- Fix files not reopened when p4 action mismatches git status
+For instance, if a file was opened for edit in perforce and a commit deletes the file.
+
 ## 0.2.6
 
 - Rename `alias set` command to `alias new`

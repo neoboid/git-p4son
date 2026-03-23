@@ -177,11 +177,14 @@ def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
 
 # --- file operations ---
 
-def get_changelist_for_file(filename: str, workspace_dir: str) -> str | None:
-    """Return the changelist a file is opened in, or None if not opened."""
+def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str] | None:
+    """Return (changelist, action) for an opened file, or None if not opened."""
     res = run(['p4', '-ztag', 'opened', filename], cwd=workspace_dir)
     fields = parse_ztag_output(res.stdout)
-    return fields.get('change')
+    change = fields.get('change')
+    if change is None:
+        return None
+    return (change, fields.get('action', ''))
 
 
 def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
@@ -192,13 +195,15 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
     If it's already opened in a different changelist, reopen it.
     If it's already in the correct changelist, do nothing.
     """
-    current = get_changelist_for_file(filename, workspace_dir)
-    if current is None:
+    result = get_changelist_for_file(filename, workspace_dir)
+    if result is None:
         run(['p4', p4_action, '-c', changelist, filename],
             cwd=workspace_dir, dry_run=dry_run)
-    elif current != changelist:
-        run(['p4', 'reopen', '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+    else:
+        current_cl, _current_action = result
+        if current_cl != changelist:
+            run(['p4', 'reopen', '-c', changelist, filename],
+                cwd=workspace_dir, dry_run=dry_run)
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,

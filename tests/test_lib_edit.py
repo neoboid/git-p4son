@@ -33,7 +33,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... type text',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, 'default')
+        self.assertEqual(result, ('default', 'edit'))
 
     @mock.patch('git_p4son.perforce.run')
     def test_file_in_numbered_changelist(self, mock_run):
@@ -44,7 +44,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... type text',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, '12345')
+        self.assertEqual(result, ('12345', 'edit'))
 
     @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_add(self, mock_run):
@@ -54,7 +54,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, '12345')
+        self.assertEqual(result, ('12345', 'add'))
 
     @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_delete(self, mock_run):
@@ -64,7 +64,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, '12345')
+        self.assertEqual(result, ('12345', 'delete'))
 
     @mock.patch('git_p4son.perforce.run')
     def test_file_opened_for_move_add(self, mock_run):
@@ -74,7 +74,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... change 12345',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, '12345')
+        self.assertEqual(result, ('12345', 'move/add'))
 
     @mock.patch('git_p4son.perforce.run')
     def test_add_in_default_changelist(self, mock_run):
@@ -84,7 +84,7 @@ class TestGetChangelistForFile(unittest.TestCase):
             '... change default',
         ])
         result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, 'default')
+        self.assertEqual(result, ('default', 'add'))
 
 
 class TestFindCommonAncestor(unittest.TestCase):
@@ -157,7 +157,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='200')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_added_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -169,7 +169,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='100')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_added_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -191,7 +191,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='200')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -203,7 +203,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='100')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -225,7 +225,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='200')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_deleted_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -237,7 +237,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='100')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_deleted_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -260,7 +260,8 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
                          'p4', 'delete', '-c', '100', 'old.txt'])
         self.assertEqual(calls[1][0][0], ['p4', 'add', '-c', '100', 'new.txt'])
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value='200')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+                side_effect=[('200', 'delete'), ('200', 'add')])
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_moved_files_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()

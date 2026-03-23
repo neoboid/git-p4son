@@ -189,21 +189,36 @@ def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str
 
 def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
                           workspace_dir: str, dry_run: bool) -> None:
-    """Ensure a file is opened in the given changelist.
+    """Ensure a file is opened with the correct action in the given changelist.
 
     If the file is not yet opened, run the specified p4 action (add, edit, delete).
-    If it's already opened in a different changelist, reopen it.
-    If it's already in the correct changelist, do nothing.
+    If it's already opened with a different action, revert and reopen.
+    If it's already opened with the correct action in a different changelist, reopen it.
+    If it's already in the correct changelist with the correct action, do nothing.
     """
     result = get_changelist_for_file(filename, workspace_dir)
     if result is None:
         run(['p4', p4_action, '-c', changelist, filename],
             cwd=workspace_dir, dry_run=dry_run)
-    else:
-        current_cl, _current_action = result
-        if current_cl != changelist:
-            run(['p4', 'reopen', '-c', changelist, filename],
+        return
+
+    current_cl, current_action = result
+    if current_action != p4_action:
+        # Action mismatch - revert first, then reopen with correct action.
+        # p4 revert overwrites the file on disk with the depot version,
+        # so we need git restore afterwards to get the git content back.
+        run(['p4', 'revert', filename], cwd=workspace_dir, dry_run=dry_run)
+        # For add -> delete: the file never existed in the depot, so just revert.
+        if current_action == 'add' and p4_action == 'delete':
+            return
+        run(['p4', p4_action, '-c', changelist, filename],
+            cwd=workspace_dir, dry_run=dry_run)
+        if p4_action != 'delete':
+            run(['git', 'restore', filename],
                 cwd=workspace_dir, dry_run=dry_run)
+    elif current_cl != changelist:
+        run(['p4', 'reopen', '-c', changelist, filename],
+            cwd=workspace_dir, dry_run=dry_run)
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,

@@ -207,6 +207,15 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
         # Action mismatch - revert first, then reopen with correct action.
         # p4 revert overwrites the file on disk with the depot version,
         # so we need git restore afterwards to get the git content back.
+
+        # add -> edit: the file is new to the depot, so it must stay as add.
+        # This happens when a file is added in one commit and modified in the next.
+        if current_action == 'add' and p4_action == 'edit':
+            if current_cl != changelist:
+                run(['p4', 'reopen', '-c', changelist, filename],
+                    cwd=workspace_dir, dry_run=dry_run)
+            return
+
         run(['p4', 'revert', filename], cwd=workspace_dir, dry_run=dry_run)
         # For add -> delete: the file never existed in the depot, so just revert.
         if current_action == 'add' and p4_action == 'delete':

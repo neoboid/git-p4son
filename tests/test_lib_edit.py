@@ -350,6 +350,28 @@ class TestActionMismatch(unittest.TestCase):
         self.assertEqual(calls[2][0][0],
                          ['git', 'restore', 'file.txt'])
 
+    # --- add -> edit (keep as add, file is new to depot) ---
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
+    @mock.patch('git_p4son.perforce.run')
+    def test_add_to_edit_same_cl_keeps_add(self, mock_run, mock_check):
+        mock_run.return_value = make_run_result()
+        changes = LocalChanges()
+        changes.mods = ['file.txt']
+        include_changes_in_changelist(changes, '100', '/ws')
+        mock_run.assert_not_called()
+
+    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'add'))
+    @mock.patch('git_p4son.perforce.run')
+    def test_add_to_edit_different_cl_reopens(self, mock_run, mock_check):
+        mock_run.return_value = make_run_result()
+        changes = LocalChanges()
+        changes.mods = ['file.txt']
+        include_changes_in_changelist(changes, '100', '/ws')
+        mock_run.assert_called_once_with(
+            ['p4', 'reopen', '-c', '100', 'file.txt'],
+            cwd='/ws', dry_run=False,
+        )
+
     # --- add -> delete (revert only, no reopen) ---
     @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
     @mock.patch('git_p4son.perforce.run')

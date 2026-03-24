@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.8
+
+- Fix bug when a commit first added a file and then edited it in a later commit when creating a review
+
 ## 0.2.7
 
 - Fix files not reopened when p4 action mismatches git status

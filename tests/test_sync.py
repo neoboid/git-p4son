@@ -7,7 +7,6 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     P4SyncOutputProcessor,
-    get_file_count_to_sync,
     get_latest_changelist,
     get_writable_files,
     p4_get_opened_files,
@@ -317,61 +316,30 @@ class TestGetLatestChangelist(unittest.TestCase):
             get_latest_changelist('//myclient', '/ws')
 
 
-class TestGetFileCountToSync(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run')
-    def test_returns_count(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '//depot/a.txt - added',
-            '//depot/b.txt - updating',
-        ])
-        count = get_file_count_to_sync(12345, '//myclient', '/ws')
-        self.assertEqual(count, 2)
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('p4 sync -n failed')
-        with self.assertRaises(RunError):
-            get_file_count_to_sync(12345, '//myclient', '/ws')
-
-
 class TestP4SyncOutputProcessor(unittest.TestCase):
     def test_tracks_added_file(self):
-        processor = P4SyncOutputProcessor(10)
+        processor = P4SyncOutputProcessor()
         processor('//depot/foo.txt#1 - added as /ws/foo.txt', sys.stdout)
         self.assertEqual(processor.stats['add'], 1)
         self.assertEqual(processor.synced_file_count, 1)
 
     def test_tracks_deleted_file(self):
-        processor = P4SyncOutputProcessor(10)
+        processor = P4SyncOutputProcessor()
         processor('//depot/foo.txt#2 - deleted as /ws/foo.txt', sys.stdout)
         self.assertEqual(processor.stats['del'], 1)
 
     def test_up_to_date_message(self):
-        processor = P4SyncOutputProcessor(10)
+        processor = P4SyncOutputProcessor()
         processor('//...@12345 - file(s) up-to-date.', sys.stdout)
         self.assertEqual(processor.synced_file_count, 0)
 
 
 class TestP4Sync(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_with_output')
-    @mock.patch('git_p4son.sync.get_file_count_to_sync')
-    def test_success(self, mock_count, mock_rwo):
-        mock_count.return_value = 2
+    def test_success(self, mock_rwo):
         mock_rwo.return_value = make_run_result()
         result = p4_sync(12345, 'test', False, '//myclient', '/ws')
         self.assertTrue(result)
-
-    @mock.patch('git_p4son.sync.get_file_count_to_sync')
-    def test_up_to_date(self, mock_count):
-        mock_count.return_value = 0
-        result = p4_sync(12345, 'test', False, '//myclient', '/ws')
-        self.assertTrue(result)
-
-    @mock.patch('git_p4son.sync.get_file_count_to_sync')
-    def test_count_failure(self, mock_count):
-        mock_count.side_effect = RunError('p4 sync -n failed')
-        with self.assertRaises(RunError):
-            p4_sync(12345, 'test', False, '//myclient', '/ws')
 
 
 class TestSyncCommand(unittest.TestCase):

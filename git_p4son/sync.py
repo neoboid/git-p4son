@@ -11,7 +11,6 @@ from .config import get_depot_root
 from .git import add_all_files, commit, get_dirty_files
 from .log import log
 from .perforce import (
-    get_file_count_to_sync,
     get_latest_changelist,
     p4_force_sync_file,
     p4_get_opened_files,
@@ -62,9 +61,8 @@ def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
 class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
-    def __init__(self, file_count_to_sync: int) -> None:
+    def __init__(self) -> None:
         self.synced_file_count: int = 0
-        self.file_count_to_sync: int = file_count_to_sync
         self.stats: dict[str, int] = {
             mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
@@ -75,17 +73,11 @@ class P4SyncOutputProcessor:
 
         mode, filename = parse_p4_sync_line(line)
         if not mode or not filename:
-            log.verbose(f'Unparsable line: {line}')
+            log.warning(f'Unparsable line: {line}')
             return
 
         self.stats[mode] += 1
         self.synced_file_count += 1
-
-        if self.file_count_to_sync >= 0:
-            log.verbose(
-                f'{mode}: {filename}  ({self.synced_file_count}/{self.file_count_to_sync})')
-        else:
-            log.verbose(f'{mode}: {filename}')
 
     def get_summary(self) -> str:
         """Get a one-line sync summary."""
@@ -114,14 +106,8 @@ def p4_sync(changelist: int, label: str, force: bool, depot_root: str,
     Raises CommandError on actual command failures.
     """
     log.heading(f'Syncing to {label} CL ({changelist})')
-    file_count_to_sync = get_file_count_to_sync(changelist, depot_root,
-                                                workspace_dir)
-    if file_count_to_sync == 0:
-        log.success('All files up to date')
-        return True
-    log.info(f'{file_count_to_sync} files to sync')
 
-    output_processor = P4SyncOutputProcessor(file_count_to_sync)
+    output_processor = P4SyncOutputProcessor()
     try:
         result = run_with_output(
             ['p4', 'sync', f'{depot_root}/...@{changelist}'],

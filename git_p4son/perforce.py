@@ -306,9 +306,8 @@ def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
 class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
-    def __init__(self, file_count_to_sync: int) -> None:
+    def __init__(self) -> None:
         self.synced_file_count: int = 0
-        self.file_count_to_sync: int = file_count_to_sync
         self.stats: dict[str, int] = {
             mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
@@ -319,17 +318,11 @@ class P4SyncOutputProcessor:
 
         mode, filename = parse_p4_sync_line(line)
         if not mode or not filename:
-            log.verbose(f'Unparsable line: {line}')
+            log.warning(f'Unparsable line: {line}')
             return
 
         self.stats[mode] += 1
         self.synced_file_count += 1
-
-        if self.file_count_to_sync >= 0:
-            log.verbose(
-                f'{mode}: {filename}  ({self.synced_file_count}/{self.file_count_to_sync})')
-        else:
-            log.verbose(f'{mode}: {filename}')
 
     def get_summary(self) -> str:
         """Get a one-line sync summary."""
@@ -352,18 +345,10 @@ class P4SyncOutputProcessor:
 
 def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
     """Force sync a single file."""
-    output_processor = P4SyncOutputProcessor(-1)
+    output_processor = P4SyncOutputProcessor()
     result = run_with_output(
         ['p4', 'sync', '-f', f'{filename}@{changelist}'],
         cwd=workspace_dir, on_output=output_processor)
     log.info(output_processor.get_summary())
     if result.elapsed:
         log.elapsed(result.elapsed)
-
-
-def get_file_count_to_sync(changelist: int, depot_root: str,
-                           workspace_dir: str) -> int:
-    """Get the number of files that need to be synced."""
-    res = run(['p4', 'sync', '-n', f'{depot_root}/...@{changelist}'],
-              cwd=workspace_dir)
-    return len(res.stdout)

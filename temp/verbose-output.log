@@ -1,0 +1,592 @@
+D:\p4\games\Games [main]> git p4son sync 1205602
+# Finding workspace directory
+[ok] D:\p4\games\Games
+
+# Finding depot root
+[ok] //andreas.andersson-DC1-WS15-games-programmer
+
+# Checking git workspace
+>  git status --porcelain
+[ok] clean
+
+# Checking p4 workspace
+>  p4 -ztag fstat -Ro -Op -T depotFile,path,clientFile,action //andreas.andersson-DC1-WS15-games-programmer/...
+>  git ls-files --error-unmatch -- Discovery/Content/Discovery/UI/FrontEnd/PlayerCardCustomization/WBP_PlayerCardRenameModal.uasset
+>  git ls-files --error-unmatch -- Discovery/Content/Discovery/UI/FrontEnd/PlayerCardCustomization/WBP_PlayerCardRenameTextInput.uasset
+>  git ls-files --error-unmatch -- Discovery/Content/Discovery/UI/Localization/ST_Customization.uasset
+>  git ls-files --error-unmatch -- Discovery/Content/Discovery/UI/Notifications/DA_UIModalWidgetConfiguration.uasset
+[warn] Ignoring 4 p4-opened files not tracked by git
+
+# Finding last synced changelist
+>  git log -1 "--pretty=%H %s" "--grep=: p4 sync //"
+[ok] CL 1205068
+
+# Finding HEAD commit
+>  git rev-parse HEAD
+[ok] 23159049d97c55a48b9fc9ba7a19da9f7f2168cd
+>  p4 -ztag client -o
+
+# Previewing sync to CL 1205068
+>  p4 sync -n //andreas.andersson-DC1-WS15-games-programmer/...@1205068
+elapsed: 0:00:14.202715
+[ok] 3 files would be synced
+>  git check-ignore --stdin
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionScreen.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionScreen.as
+>  git rev-parse --verify --quiet f3c359ce3042cb26ee349fbe6c8f9f08937689ee:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionScreen.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionViewModel.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionViewModel.as
+>  git rev-parse --verify --quiet f3c359ce3042cb26ee349fbe6c8f9f08937689ee:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCollectionViewModel.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCustomizationLocalSubsystem.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCustomizationLocalSubsystem.as
+>  git rev-parse --verify --quiet f3c359ce3042cb26ee349fbe6c8f9f08937689ee:Discovery/Script/Discovery/UI/FrontEnd/Screens/PlayerCardCustomization/PlayerCardCustomizationLocalSubsystem.as
+[ok] 3 writable files unchanged, skipping merge
+
+# Syncing to last synced CL (1205068)
+>  p4 sync //andreas.andersson-DC1-WS15-games-programmer/...@1205068
+elapsed: 0:00:08.422621
+[ok] synced 3 files (upd: 3)
+
+# Previewing sync to CL 1205602
+>  p4 sync -n //andreas.andersson-DC1-WS15-games-programmer/...@1205602
+elapsed: 0:00:06.914998
+[ok] 1603 files would be synced
+>  git check-ignore --stdin
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Config/DefaultFeatureFlags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Config/DefaultFeatureFlags.ini
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Config/DefaultFeatureFlags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Config/DefaultGameplayTags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Config/DefaultGameplayTags.ini
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Config/DefaultGameplayTags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Config/Tags/DialogueTags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Config/Tags/DialogueTags.ini
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Config/Tags/DialogueTags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Config/Tags/StoreTags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Config/Tags/StoreTags.ini
+>  git rev-parse --verify --quiet abf530c66ea294443c99cb8262ebb67825370ca0:Discovery/Config/Tags/StoreTags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Config/Tags/UINavigationTags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Config/Tags/UINavigationTags.ini
+>  git rev-parse --verify --quiet 479b1c12d28d855e3060d898d31ba68038b4a520:Discovery/Config/Tags/UINavigationTags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/ContestantPacks/ContestantPackManager.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/ContestantPacks/ContestantPackManager.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/ContestantPacks/ContestantPackManager.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/GameMode/GameModeTelemetry.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/GameMode/GameModeTelemetry.as
+>  git rev-parse --verify --quiet 1794e148636c5472afc3aa409d18c456b156df9a:Discovery/Script/Discovery/GameMode/GameModeTelemetry.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/GameMode/Push/Objective/PushArmObjective.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/GameMode/Push/Objective/PushArmObjective.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/GameMode/Push/Objective/PushArmObjective.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/GameMode/States/DiscoveryPlayerState.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/GameMode/States/DiscoveryPlayerState.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/GameMode/States/DiscoveryPlayerState.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/Gameplay/Character/Abilities/ProtectiveBubble.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/Gameplay/Character/Abilities/ProtectiveBubble.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Discovery/Script/Discovery/Gameplay/Character/Abilities/ProtectiveBubble.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/Gameplay/Items/Editor/DiscoveryItemCaptureActorHandler.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/Gameplay/Items/Editor/DiscoveryItemCaptureActorHandler.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/Gameplay/Items/Editor/DiscoveryItemCaptureActorHandler.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/Gameplay/Items/ItemStyle/ItemEffectsComponents/WeaponEffectsStyleComponent.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/Gameplay/Items/ItemStyle/ItemEffectsComponents/WeaponEffectsStyleComponent.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Discovery/Script/Discovery/Gameplay/Items/ItemStyle/ItemEffectsComponents/WeaponEffectsStyleComponent.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/Academy/AcademyBaseTabWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/Academy/AcademyBaseTabWidget.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Discovery/Script/Discovery/UI/Academy/AcademyBaseTabWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/Academy/AcademyRookieContractsTab.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/Academy/AcademyRookieContractsTab.as
+>  git rev-parse --verify --quiet b8f0fd90746022002808d522d0091d09079f14d0:Discovery/Script/Discovery/UI/Academy/AcademyRookieContractsTab.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/Academy/AcademyScreen.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/Academy/AcademyScreen.as
+>  git rev-parse --verify --quiet c78716cf96dbfd9b5ede8961f1d6cba39dcbc483:Discovery/Script/Discovery/UI/Academy/AcademyScreen.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Backstage/ContestantPacks/ContestantPackListWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Backstage/ContestantPacks/ContestantPackListWidget.as
+>  git rev-parse --verify --quiet d62dc90e404779527aedaa0e9529773358796253:Discovery/Script/Discovery/UI/FrontEnd/Backstage/ContestantPacks/ContestantPackListWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Backstage/CustomizationPacks/CustomizationPackHelper.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Backstage/CustomizationPacks/CustomizationPackHelper.as
+>  git rev-parse --verify --quiet c02d89ff8d232cd32fcd6a080e6c3059da6eee10:Discovery/Script/Discovery/UI/FrontEnd/Backstage/CustomizationPacks/CustomizationPackHelper.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/EndOfRound/EndOfRoundPersonalPerformanceRatingWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/EndOfRound/EndOfRoundPersonalPerformanceRatingWidget.as
+>  git rev-parse --verify --quiet c02d89ff8d232cd32fcd6a080e6c3059da6eee10:Discovery/Script/Discovery/UI/FrontEnd/EndOfRound/EndOfRoundPersonalPerformanceRatingWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/FrontendItemActor.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/FrontendItemActor.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/UI/FrontEnd/FrontendItemActor.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/InspectScreen.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/InspectScreen.as
+>  git rev-parse --verify --quiet 1794e148636c5472afc3aa409d18c456b156df9a:Discovery/Script/Discovery/UI/FrontEnd/InspectScreen.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/UI/FrontEnd/Screens/MainMenu/MainMenuEarlyTalentProgramButtonViewModel.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/UI/FrontEnd/Screens/MainMenu/MainMenuEarlyTalentProgramButtonViewModel.as
+>  git rev-parse --verify --quiet ab450c1e046d5fd5b8f8944a58327d73c62f8828:Discovery/Script/Discovery/UI/FrontEnd/Screens/MainMenu/MainMenuEarlyTalentProgramButtonViewModel.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Discovery/Script/Discovery/Utils/DiscoveryFeatureFlags.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Discovery/Script/Discovery/Utils/DiscoveryFeatureFlags.as
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Discovery/Script/Discovery/Utils/DiscoveryFeatureFlags.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Private/AntiCheatConfig.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Private/AntiCheatConfig.cpp
+>  git rev-parse --verify --quiet 0e45fd7874da8bcd5cbf77e495b1fd78057504bc:Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Private/AntiCheatConfig.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Public/AntiCheatConfig.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Public/AntiCheatConfig.h
+>  git rev-parse --verify --quiet 0e45fd7874da8bcd5cbf77e495b1fd78057504bc:Engine/Plugins/Embark/AntiCheat/Source/AntiCheatConfig/Public/AntiCheatConfig.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/ConstructableAIControllerBase.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/ConstructableAIControllerBase.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/ConstructableAIControllerBase.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAgentInfo.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAgentInfo.cpp
+>  git rev-parse --verify --quiet 9a94b563963fff434b9d87f5af7bb488033db99b:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAgentInfo.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIKnowledgeBase.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIKnowledgeBase.cpp
+>  git rev-parse --verify --quiet a1d9205d8e35adeae92ed9da6bea238d8ea03630:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIKnowledgeBase.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIPositionQueryBase.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIPositionQueryBase.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Plugins/Embark/Embark/Source/EmbarkAI/Private/EmbarkAIPositionQueryBase.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Private/EmbarkWavePool.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Private/EmbarkWavePool.cpp
+>  git rev-parse --verify --quiet abf530c66ea294443c99cb8262ebb67825370ca0:Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Private/EmbarkWavePool.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Public/EmbarkWavePool.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Public/EmbarkWavePool.h
+>  git rev-parse --verify --quiet abf530c66ea294443c99cb8262ebb67825370ca0:Engine/Plugins/Embark/Embark/Source/EmbarkAudio/Public/EmbarkWavePool.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/AbilitySystem/ConstructableAbilitySystemComponent.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/AbilitySystem/ConstructableAbilitySystemComponent.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/AbilitySystem/ConstructableAbilitySystemComponent.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ConstructableBase.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ConstructableBase.cpp
+>  git rev-parse --verify --quiet d62dc90e404779527aedaa0e9529773358796253:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ConstructableBase.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ReplicatedPartForceMovementComponent.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ReplicatedPartForceMovementComponent.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Plugins/Embark/Embark/Source/EmbarkConstructable/Private/ReplicatedPartForceMovementComponent.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Private/ActorWithEditorTick.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Private/ActorWithEditorTick.cpp
+>  git rev-parse --verify --quiet 07026d22f7bfb2f6b517e9bee7386c325afb1b42:Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Private/ActorWithEditorTick.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Public/ActorWithEditorTick.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Public/ActorWithEditorTick.h
+>  git rev-parse --verify --quiet 07026d22f7bfb2f6b517e9bee7386c325afb1b42:Engine/Plugins/Embark/Embark/Source/EmbarkEngine/Public/ActorWithEditorTick.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkUI/Private/Widgets/EmbarkDynamicEntryBox.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkUI/Private/Widgets/EmbarkDynamicEntryBox.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Plugins/Embark/Embark/Source/EmbarkUI/Private/Widgets/EmbarkDynamicEntryBox.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Plugins/Embark/Embark/Source/EmbarkUI/Public/Widgets/EmbarkDynamicEntryBox.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Plugins/Embark/Embark/Source/EmbarkUI/Public/Widgets/EmbarkDynamicEntryBox.h
+>  git rev-parse --verify --quiet e54d699afc41559c8e5abb39e5bf3925b2438485:Engine/Plugins/Embark/Embark/Source/EmbarkUI/Public/Widgets/EmbarkDynamicEntryBox.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.h
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/StateMachine.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Programs/Embark/EmbarkGameBoot/Private/States/LaunchGameState.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/States/LaunchGameState.cpp
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Source/Programs/Embark/EmbarkGameBoot/Private/States/LaunchGameState.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Runtime/Embark/EmbarkEngineFeatures/Public/EmbarkBootArguments.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Runtime/Embark/EmbarkEngineFeatures/Public/EmbarkBootArguments.h
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Engine/Source/Runtime/Embark/EmbarkEngineFeatures/Public/EmbarkBootArguments.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Runtime/Embark/LibLighthouse/Private/Windows/LighthouseModule.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Runtime/Embark/LibLighthouse/Private/Windows/LighthouseModule.cpp
+>  git rev-parse --verify --quiet 3f9c78747b69ced871b44fd7d108fe514fc77133:Engine/Source/Runtime/Embark/LibLighthouse/Private/Windows/LighthouseModule.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Engine/Source/Runtime/Hapki/Sidecar/Source/SidecarSystem/Source/SidecarSystem/SidecarTrust.inl
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Engine/Source/Runtime/Hapki/Sidecar/Source/SidecarSystem/Source/SidecarSystem/SidecarTrust.inl
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Engine/Source/Runtime/Hapki/Sidecar/Source/SidecarSystem/Source/SidecarSystem/SidecarTrust.inl
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Config/Tags/OnlinePersistenceTags.ini
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Config/Tags/OnlinePersistenceTags.ini
+>  git rev-parse --verify --quiet 1bce197c76291fed76436eda698daf01ecb48b17:Pioneer/Config/Tags/OnlinePersistenceTags.ini
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Extra/FirearmAnalysis/firearm-analysis.html
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Extra/FirearmAnalysis/firearm-analysis.html
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Pioneer/Extra/FirearmAnalysis/firearm-analysis.html
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Extra/FirearmAnalysis/firearm-ui.js
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Extra/FirearmAnalysis/firearm-ui.js
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Pioneer/Extra/FirearmAnalysis/firearm-ui.js
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Extra/FirearmAnalysis/ue-bridge.js
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Extra/FirearmAnalysis/ue-bridge.js
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Pioneer/Extra/FirearmAnalysis/ue-bridge.js
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Plugins/Pioneer/Source/PioneerUI/Private/PLR/PLRScreenEmulator.cpp
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Plugins/Pioneer/Source/PioneerUI/Private/PLR/PLRScreenEmulator.cpp
+>  git rev-parse --verify --quiet da31265aa730ed4a67e2d8f2251deed78bc14048:Pioneer/Plugins/Pioneer/Source/PioneerUI/Private/PLR/PLRScreenEmulator.cpp
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Plugins/Pioneer/Source/PioneerUI/Public/PLR/PLRScreenEmulator.h
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Plugins/Pioneer/Source/PioneerUI/Public/PLR/PLRScreenEmulator.h
+>  git rev-parse --verify --quiet da31265aa730ed4a67e2d8f2251deed78bc14048:Pioneer/Plugins/Pioneer/Source/PioneerUI/Public/PLR/PLRScreenEmulator.h
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Animation/SimpleAnimationSequenceComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Animation/SimpleAnimationSequenceComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Animation/SimpleAnimationSequenceComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Animation/SimpleAnimationSequenceController_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Animation/SimpleAnimationSequenceController_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Animation/SimpleAnimationSequenceController_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Animation/SimpleAnimationSequenceDebug_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Animation/SimpleAnimationSequenceDebug_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Animation/SimpleAnimationSequenceDebug_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/AssetLayout/Editor/PioneerAssetLayout.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/AssetLayout/Editor/PioneerAssetLayout.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/AssetLayout/Editor/PioneerAssetLayout.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Debris/DebrisActor_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Debris/DebrisActor_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Debris/DebrisActor_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/AbilitySystem/GameplayAbilities/PioneerProjectileGameplayAbility_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/AbilitySystem/GameplayAbilities/PioneerProjectileGameplayAbility_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/AbilitySystem/GameplayAbilities/PioneerProjectileGameplayAbility_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Actors/AISmartObjectActor.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Actors/AISmartObjectActor.as
+>  git rev-parse --verify --quiet 75e272b647e15d76820f31c1c58cf4a5017d8ff3:Pioneer/Script/Pioneer/Actors/AISmartObjectActor.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBase_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBase_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBase_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBaseTarget_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBaseTarget_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/AI/System/Knowledge/AIKnowledgeBaseTarget_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/AI/System/Reasoning/AITargetFilter_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/AI/System/Reasoning/AITargetFilter_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/AI/System/Reasoning/AITargetFilter_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/AI/System/Tests/AISystem_TestHelpers.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/AI/System/Tests/AISystem_TestHelpers.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/AI/System/Tests/AISystem_TestHelpers.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Animation/SkeletalMeshServerTickInhibitorComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Animation/SkeletalMeshServerTickInhibitorComponent_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Animation/SkeletalMeshServerTickInhibitorComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Autobots/BrainClusters/AutobotBrainClusterHealth_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Autobots/BrainClusters/AutobotBrainClusterHealth_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Autobots/BrainClusters/AutobotBrainClusterHealth_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Services/Gait/Gait_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Services/Gait/Gait_Test.as
+>  git rev-parse --verify --quiet abf530c66ea294443c99cb8262ebb67825370ca0:Pioneer/Script/Pioneer/Constructable/Services/Gait/Gait_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitAnimations_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitAnimations_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitAnimations_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegplacementTestAnchor.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegplacementTestAnchor.as
+>  git rev-parse --verify --quiet 75e272b647e15d76820f31c1c58cf4a5017d8ff3:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegplacementTestAnchor.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegService_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegService_Test.as
+>  git rev-parse --verify --quiet 479b1c12d28d855e3060d898d31ba68038b4a520:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitLegService_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitPlayAnimationTask_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitPlayAnimationTask_Test.as
+>  git rev-parse --verify --quiet df784a9ffceb6ce4b1556c3553072b1b664ab768:Pioneer/Script/Pioneer/Constructable/Services/Gait/GaitPlayAnimationTask_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Tests/ConstructableSkeletalMeshStyleComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableSkeletalMeshStyleComponent_Test.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableSkeletalMeshStyleComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStaticMeshStyleComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStaticMeshStyleComponent_Test.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStaticMeshStyleComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStyleSharedContract_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStyleSharedContract_Test.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Constructable/Tests/ConstructableStyleSharedContract_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Tests/DebrisStyleDriverContract_Test.a
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Tests/DebrisStyleDriverContract_Test.as
+>  git rev-parse --verify --quiet da31265aa730ed4a67e2d8f2251deed78bc14048:Pioneer/Script/Pioneer/Constructable/Tests/DebrisStyleDriverContract_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Constructable/Tests/NuConstructable_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Constructable/Tests/NuConstructable_Test.as
+>  git rev-parse --verify --quiet da31265aa730ed4a67e2d8f2251deed78bc14048:Pioneer/Script/Pioneer/Constructable/Tests/NuConstructable_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Editor/WebExport/Collectors/GenericMediaCollector.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Editor/WebExport/Collectors/GenericMediaCollector.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Editor/WebExport/Collectors/GenericMediaCollector.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Effects/DBNOFlareActor_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Effects/DBNOFlareActor_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Effects/DBNOFlareActor_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Enemy/EncounterWatcher_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Enemy/EncounterWatcher_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Enemy/EncounterWatcher_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/FrontEnd/BackgroundManager_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/FrontEnd/BackgroundManager_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/FrontEnd/BackgroundManager_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/FrontEnd/FrontEndPlayerController_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/FrontEnd/FrontEndPlayerController_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/FrontEnd/FrontEndPlayerController_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostSlotComponent.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostSlotComponent.as
+>  git rev-parse --verify --quiet c02d89ff8d232cd32fcd6a080e6c3059da6eee10:Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostSlotComponent.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostUtils.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostUtils.as
+>  git rev-parse --verify --quiet c02d89ff8d232cd32fcd6a080e6c3059da6eee10:Pioneer/Script/Pioneer/FrontEnd/Outpost/OutpostUtils.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/FrontEnd/RaiderDen/RaiderDenItemActor.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/FrontEnd/RaiderDen/RaiderDenItemActor.as
+>  git rev-parse --verify --quiet 39e66bc218c5a27af70f073f99cb6b64dff8ed6e:Pioneer/Script/Pioneer/FrontEnd/RaiderDen/RaiderDenItemActor.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameMode/MainObjective/MainObjectiveComponent_Test.a
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameMode/MainObjective/MainObjectiveComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/GameMode/MainObjective/MainObjectiveComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameMode/PioneerGameModeBase_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameMode/PioneerGameModeBase_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/GameMode/PioneerGameModeBase_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameMode/PioneerSquadsInitializerComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameMode/PioneerSquadsInitializerComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/GameMode/PioneerSquadsInitializerComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameMode/Salvage/SalvageExtractionPoint_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameMode/Salvage/SalvageExtractionPoint_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/GameMode/Salvage/SalvageExtractionPoint_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameMode/States/PioneerPlayerState.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameMode/States/PioneerPlayerState.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/GameMode/States/PioneerPlayerState.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameplayObjects/Door_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameplayObjects/Door_Test.as
+>  git rev-parse --verify --quiet 75e272b647e15d76820f31c1c58cf4a5017d8ff3:Pioneer/Script/Pioneer/GameplayObjects/Door_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameplayObjects/SignalComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameplayObjects/SignalComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/GameplayObjects/SignalComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameplayObjects/SoundTrap_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameplayObjects/SoundTrap_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/GameplayObjects/SoundTrap_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/GameplayObjects/SpawnOrchestration/MultiStageSpawnOrchestrator_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/GameplayObjects/SpawnOrchestration/MultiStageSpawnOrchestrator_Test.a
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/GameplayObjects/SpawnOrchestration/MultiStageSpawnOrchestrator_Test.a
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Interaction/BaseInteractionComponent.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Interaction/BaseInteractionComponent.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Interaction/BaseInteractionComponent.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Interaction/EmoteComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Interaction/EmoteComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Interaction/EmoteComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Inventory/InventoryComponent.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Inventory/InventoryComponent.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Inventory/InventoryComponent.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/AdjustableEnergyShotgun_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/AdjustableEnergyShotgun_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Items/AdjustableEnergyShotgun_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/ArmorItemBase.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/ArmorItemBase.as
+>  git rev-parse --verify --quiet c02d89ff8d232cd32fcd6a080e6c3059da6eee10:Pioneer/Script/Pioneer/Items/ArmorItemBase.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Editor/CombatTuning/CombatTuningWebPanel.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Editor/CombatTuning/CombatTuningWebPanel.as
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Pioneer/Script/Pioneer/Items/Editor/CombatTuning/CombatTuningWebPanel.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Editor/CombatTuning/ExportFirearmTuningCSVs.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Editor/CombatTuning/ExportFirearmTuningCSVs.as
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Pioneer/Script/Pioneer/Items/Editor/CombatTuning/ExportFirearmTuningCSVs.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Gadgets/Zipline_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Gadgets/Zipline_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Items/Gadgets/Zipline_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Gadgets/ZiplineDeployables_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Gadgets/ZiplineDeployables_Test.as
+>  git rev-parse --verify --quiet f970f431b672472b09ad90606b62c6f067e2c7f6:Pioneer/Script/Pioneer/Items/Gadgets/ZiplineDeployables_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Overlapper_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Overlapper_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Items/Overlapper_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Pickup_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Pickup_Test.as
+>  git rev-parse --verify --quiet 75e272b647e15d76820f31c1c58cf4a5017d8ff3:Pioneer/Script/Pioneer/Items/Pickup_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/ThrowableItem_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/ThrowableItem_Test.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Items/ThrowableItem_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/Weapon_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/Weapon_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Items/Weapon_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Items/WorldItem/Components/GiveItemWorldItemComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Items/WorldItem/Components/GiveItemWorldItemComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Items/WorldItem/Components/GiveItemWorldItemComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/OwnershipComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/OwnershipComponent_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/OwnershipComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/PerfTests/ReplicationPerformanceTest.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/PerfTests/ReplicationPerformanceTest.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/PerfTests/ReplicationPerformanceTest.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Ping/PioneerPingInfoComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Ping/PioneerPingInfoComponent_Test.as
+>  git rev-parse --verify --quiet 3a423d8dc07d2bccc17eb5245a252b28ad7efde7:Pioneer/Script/Pioneer/Ping/PioneerPingInfoComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Player/Abilities/CharacterAbilityInteract_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Player/Abilities/CharacterAbilityInteract_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Player/Abilities/CharacterAbilityInteract_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Player/MoodState_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Player/MoodState_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Player/MoodState_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Session/Modifiers/SessionModifier_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Session/Modifiers/SessionModifier_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Session/Modifiers/SessionModifier_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Spawning/Editor/SpawningPreviewWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Spawning/Editor/SpawningPreviewWidget.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Spawning/Editor/SpawningPreviewWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Squads/SquadMonitor_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Squads/SquadMonitor_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Squads/SquadMonitor_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Squads/SquadTest_Helper.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Squads/SquadTest_Helper.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Squads/SquadTest_Helper.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Testing/Combinations/NuConstructable_Attachment_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Testing/Combinations/NuConstructable_Attachment_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/Testing/Combinations/NuConstructable_Attachment_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Testing/MakeTestPlayer.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Testing/MakeTestPlayer.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Testing/MakeTestPlayer.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Testing/Player.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Testing/Player.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Pioneer/Script/Pioneer/Testing/Player.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Testing/Squads.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Testing/Squads.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Testing/Squads.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/FrontEnd/FrontendItemActor.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/FrontEnd/FrontendItemActor.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/UI/FrontEnd/FrontendItemActor.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/HUDSubsystem.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/HUDSubsystem.as
+>  git rev-parse --verify --quiet 0ca3e3e077014c0a4c82bf6dc303e1c5ca84598a:Pioneer/Script/Pioneer/UI/Ingame/HUD/HUDSubsystem.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Pioneer/Script/Pioneer/UI/Ingame/HUD/PioneerHUD_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/Player/HealthBarWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/Player/HealthBarWidget.as
+>  git rev-parse --verify --quiet ab450c1e046d5fd5b8f8944a58327d73c62f8828:Pioneer/Script/Pioneer/UI/Ingame/HUD/Player/HealthBarWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/IngameItemPowerWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/IngameItemPowerWidget.as
+>  git rev-parse --verify --quiet e54d699afc41559c8e5abb39e5bf3925b2438485:Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/IngameItemPowerWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/LinearHealthBarWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/LinearHealthBarWidget.as
+>  git rev-parse --verify --quiet b5171e407c0e328566a49ad6efafcad7e0dfd6d3:Pioneer/Script/Pioneer/UI/Ingame/HUD/Widgets/LinearHealthBarWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/UI/Ingame/PLR/PLRDemo.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/UI/Ingame/PLR/PLRDemo.as
+>  git rev-parse --verify --quiet da31265aa730ed4a67e2d8f2251deed78bc14048:Pioneer/Script/Pioneer/UI/Ingame/PLR/PLRDemo.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Pioneer/Script/Pioneer/Utils/ComponentOrStyle_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Pioneer/Script/Pioneer/Utils/ComponentOrStyle_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Pioneer/Script/Pioneer/Utils/ComponentOrStyle_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Dev/GenerateBoxes.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Dev/GenerateBoxes.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Dev/GenerateBoxes.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/MLHiveManager_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/MLHiveManager_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/MLHiveManager_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/MLMockObservedComponents_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/MLMockObservedComponents_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/MLMockObservedComponents_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/ApproachingReward_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/ApproachingReward_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Modules/ApproachingReward_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/ConstraintActuationModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/ConstraintActuationModule_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/ConstraintActuationModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/JointLimitPenalty_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/JointLimitPenalty_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/JointLimitPenalty_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/LiftFootPenaltyModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/LiftFootPenaltyModule_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/LiftFootPenaltyModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/LinearConstraintActuationModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/LinearConstraintActuationModule_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/LinearConstraintActuationModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/NonZeroActionPenalty_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/NonZeroActionPenalty_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Modules/NonZeroActionPenalty_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/PartVelocityRewardModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/PartVelocityRewardModule_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Modules/PartVelocityRewardModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/PathBenchmark_Test.a
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/PathBenchmark_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Modules/PathBenchmark_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnFallOver_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnFallOver_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnFallOver_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnTooSlow_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnTooSlow_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/Resetters/ResetOnTooSlow_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/SpatialGoalModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/SpatialGoalModule_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/SpatialGoalModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/StayInPlaceModule_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/StayInPlaceModule_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/AIScript/Script/MachineLearning/Modules/StayInPlaceModule_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetAngularVelocity_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetAngularVelocity_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetAngularVelocity_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetVelocityReward_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetVelocityReward_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/AIScript/Script/MachineLearning/Modules/TargetVelocityReward_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/AIScript/Script/MachineLearning/Training/Tasks/MovingTargetTrainingTask.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/AIScript/Script/MachineLearning/Training/Tasks/MovingTargetTrainingTask.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Shared/Plugins/AIScript/Script/MachineLearning/Training/Tasks/MovingTargetTrainingTask.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Actors/BallisticMovement/BallisticMovementBehaviour_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Actors/BallisticMovement/BallisticMovementBehaviour_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Actors/BallisticMovement/BallisticMovementBehaviour_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Animation/AnimNotifyStateSpawnProp/AnimNotifyStateSpawnProp_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Animation/AnimNotifyStateSpawnProp/AnimNotifyStateSpawnProp_Test.as
+>  git rev-parse --verify --quiet eca03078d8370b75fcd94ae8e12a0f058ee6489b:Shared/Plugins/EmbarkScript/Script/Animation/AnimNotifyStateSpawnProp/AnimNotifyStateSpawnProp_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Animation/PredictiveMovement_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Animation/PredictiveMovement_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Animation/PredictiveMovement_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/AssetLayout/AssetLayout.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/AssetLayout/AssetLayout.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/AssetLayout/AssetLayout.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Audio/Ambience/AmbienceVolumeAudioComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Audio/Ambience/AmbienceVolumeAudioComponent_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Audio/Ambience/AmbienceVolumeAudioComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Audio/AudioManager.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Audio/AudioManager.as
+>  git rev-parse --verify --quiet 0ca3e3e077014c0a4c82bf6dc303e1c5ca84598a:Shared/Plugins/EmbarkScript/Script/Audio/AudioManager.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Audio/DialogueStateMachine.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Audio/DialogueStateMachine.as
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Shared/Plugins/EmbarkScript/Script/Audio/DialogueStateMachine.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Debug/AudioSoundListWidget.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Debug/AudioSoundListWidget.as
+>  git rev-parse --verify --quiet 0e45fd7874da8bcd5cbf77e495b1fd78057504bc:Shared/Plugins/EmbarkScript/Script/Debug/AudioSoundListWidget.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Editor/EmbarkLevelValidator_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Editor/EmbarkLevelValidator_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Editor/EmbarkLevelValidator_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/EmbarkPlayerState/EmbarkPlayerState_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/EmbarkPlayerState/EmbarkPlayerState_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/EmbarkPlayerState/EmbarkPlayerState_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/GameMode/EmbarkGameModeLobby_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/GameMode/EmbarkGameModeLobby_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/GameMode/EmbarkGameModeLobby_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AI/AutobotStateMachine_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AI/AutobotStateMachine_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AI/AutobotStateMachine_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AutobotActionManager_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AutobotActionManager_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Gameplay/Autobots/AutobotActionManager_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Input/InputAbilityHelperComponent_Test.a
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Input/InputAbilityHelperComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Input/InputAbilityHelperComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Items/Editor/Tools/ItemCaptureHandler.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Items/Editor/Tools/ItemCaptureHandler.as
+>  git rev-parse --verify --quiet 0461370e2482a93126b3144d80961cffc83f1d12:Shared/Plugins/EmbarkScript/Script/Items/Editor/Tools/ItemCaptureHandler.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Online/PersistenceHelper_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Online/PersistenceHelper_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Online/PersistenceHelper_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Physics/ObjectHistorySystem_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Physics/ObjectHistorySystem_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Physics/ObjectHistorySystem_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Sky/EmbarkSkyActor_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Sky/EmbarkSkyActor_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Sky/EmbarkSkyActor_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Spawning/PawnManagerComponent_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Spawning/PawnManagerComponent_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Spawning/PawnManagerComponent_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/SplineTools/SplineUtils_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/SplineTools/SplineUtils_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/SplineTools/SplineUtils_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/TelemetryViewer/Editor/TelemetryHeatmapVisualizer.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/TelemetryViewer/Editor/TelemetryHeatmapVisualizer.as
+>  git rev-parse --verify --quiet 479b1c12d28d855e3060d898d31ba68038b4a520:Shared/Plugins/EmbarkScript/Script/TelemetryViewer/Editor/TelemetryHeatmapVisualizer.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Testing/MakeTestPlayer_Shared.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Testing/MakeTestPlayer_Shared.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Testing/MakeTestPlayer_Shared.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Testing/TickingComponents_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Testing/TickingComponents_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/Testing/TickingComponents_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/UI/System/EmbarkCommonScreenRouter_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/UI/System/EmbarkCommonScreenRouter_Test.as
+>  git rev-parse --verify --quiet d3cf610082aa36ae71b732b6a76ab5c68904e04c:Shared/Plugins/EmbarkScript/Script/UI/System/EmbarkCommonScreenRouter_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/UI/System/UITestHelpers.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/UI/System/UITestHelpers.as
+>  git rev-parse --verify --quiet 0ca3e3e077014c0a4c82bf6dc303e1c5ca84598a:Shared/Plugins/EmbarkScript/Script/UI/System/UITestHelpers.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/UI/Utils/WidgetTestUtil.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/UI/Utils/WidgetTestUtil.as
+>  git rev-parse --verify --quiet 0ca3e3e077014c0a4c82bf6dc303e1c5ca84598a:Shared/Plugins/EmbarkScript/Script/UI/Utils/WidgetTestUtil.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Shared/Plugins/EmbarkScript/Script/Utils/Component_Test.as
+>  git rev-parse --verify --quiet 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Shared/Plugins/EmbarkScript/Script/Utils/Component_Test.as
+>  git rev-parse --verify --quiet bafac8d0b696b8b59720731b39f7c3b27acdda37:Shared/Plugins/EmbarkScript/Script/Utils/Component_Test.as
+>  git log -1 --pretty=%H "--grep=: p4 sync //" 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Tools/Autoplay/autoplay.exe
+>  git log --diff-filter=A -1 --pretty=%H 23159049d97c55a48b9fc9ba7a19da9f7f2168cd -- Tools/Autoplay/autoplay.exe
+>  p4 -x - -ztag fstat -T clientFile,headType
+>  git show 23159049d97c55a48b9fc9ba7a19da9f7f2168cd:Tools/Autoplay/autoplay.exe
+[ok] 170 writable files unchanged, skipping merge
+[warn] 1 file has local changes, will merge after sync
+Tools\Autoplay\autoplay.exe
+
+# Syncing to specified CL (1205602)
+>  p4 sync //andreas.andersson-DC1-WS15-games-programmer/...@1205602
+elapsed: 0:00:10.565794
+[ok] synced 1517 files (add: 431, upd: 1086, del: 86)
+
+# Committing git changes
+>  git status --porcelain
+>  git add .
+>  git commit -m "git-p4son: p4 sync //andreas.andersson-DC1-WS15-games-programmer/...@1205602" --allow-empty
+[ok] Committed 175 files
+
+# Merging local changes
+Tools\Autoplay\autoplay.exe: base = (none)
+[warn] 1 file deleted locally but modified in Perforce
+Tools\Autoplay\autoplay.exe
+
+Manually review changes and commit when ready.
+D:\p4\games\Games [main]> git s
+On branch main
+nothing to commit, working tree clean

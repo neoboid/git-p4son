@@ -133,41 +133,37 @@ cloning.
 
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
-1. **Enable clobber on your Perforce workspace.** Edit the workspace in
-   P4V to set the clobber flag, or run `p4 client` and change `noclobber` to `clobber` in the Options line.
-   See [Why clobber?](#why-clobber) for rationale.
-
-2. **Set a git editor** if you don't have one already. The `review` command opens an interactive rebase in your
+1. **Set a git editor** if you don't have one already. The `review` command opens an interactive rebase in your
    editor. If you haven't configured one, set it with:
    ```sh
    git config --global core.editor <editor>   # e.g. vim, nano, code --wait
    ```
 
-3. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
+2. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
    history:
    ```sh
    p4 sync //...@12345
    ```
 
-4. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace — it doesn't have to be at the
+3. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace - it doesn't have to be at the
    root:
    ```sh
    cd /path/to/your/workspace    # or a subdirectory of it
    git p4son init
    ```
-   The command verifies that you are inside a P4 workspace with clobber enabled, prompts you to select a depot
+   The command verifies that you are inside a P4 workspace, prompts you to select a depot
    root (entire workspace or current directory subtree), runs `git init`, sets up `.gitignore` (copying from
    `.p4ignore` if available), and creates an initial commit.
 
-5. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
+4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-6. **Add and commit all files manually the first time**
+5. **Add and commit all files manually the first time**
    ```sh
    git add .
    git commit -m "Initial submit all files"
    ```
 
-7. **Run `git p4son sync`** to get your first official sync commit
+6. **Run `git p4son sync`** to get your first official sync commit
    ```sh
    git p4son sync
    ```
@@ -176,19 +172,36 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
 From here, branch off `main` for local development. See the [Usage Example](#usage-example) for a typical
 workflow.
 
-### Why clobber?
+### How sync handles writable files
 
-When you switch branches with `git checkout`, git overwrites the files that differ between the source and target branch.
-In doing so, it always removes the read-only flag - this is just how git works.
+When you switch branches with `git checkout`, git removes the read-only flag on every file it writes. This means
+that when you switch back to `main` for a sync, Perforce may report "Can't clobber writable file" errors. git-p4son
+handles these automatically by classifying each writable file:
 
-Now imagine one of those files has also been modified in Perforce. The next time `p4 sync` runs, Perforce will complain
-that a file was changed outside its control. At that point you have two options: either force-sync the individual file
-with `p4 sync -f //path/to/file`, or enable the `clobber` flag on your workspace so that Perforce silently overwrites
-writable files.
+**writable-unchanged** - The file on disk is identical to what Perforce expects (only the read-only flag was removed
+by git). This is the common case after switching branches. git-p4son force-syncs these files automatically using MD5
+checksum comparison.
 
-This is not specific to git-p4son - any workflow that combines git and Perforce in the same workspace will run into it.
-And in practice it is harmless: your local changes live on feature branches in git, so when you rebase onto `main` after
-a sync, your changes are reapplied on top of the latest Perforce state.
+**writable-changed** - The file on disk differs from what Perforce has. This happens when you manually edit a file
+on `main` and commit it to git without submitting to Perforce. git-p4son force-syncs the file, includes it in the
+sync commit (so the commit reflects pure Perforce state), then three-way merges your local changes on top of the
+new Perforce content - similar to a `git rebase`. If the merge is clean, the result appears as an unstaged change.
+If there are conflicts, standard conflict markers are inserted for you to resolve.
+
+**binary files** - Binary files that have local changes cannot be three-way merged. git-p4son restores your local
+version to disk after the sync commit so it shows up in `git status` for you to handle manually.
+
+**added locally, deleted upstream** - A file you added to git was deleted in Perforce. git-p4son restores your
+version to disk and warns you.
+
+**deleted locally, added upstream** - A file you deleted from git was modified in Perforce. The Perforce version is
+kept in the sync commit. You can delete it again if you want.
+
+**ignored** - Files ignored by `.gitignore` are skipped with a warning. These are outside git's domain and should
+be managed manually or via Perforce directly.
+
+After syncing, git-p4son prints a summary of how each writable file was handled, and instructs you to review and
+commit any files that need attention.
 
 ## Usage
 
@@ -218,7 +231,7 @@ Initialize a git repository inside a Perforce workspace:
 git p4son init
 ```
 
-This command checks preconditions (Perforce workspace, clobber flag), configures the depot root, runs `git init`,
+This command checks preconditions (Perforce workspace), configures the depot root, runs `git init`,
 sets up `.gitignore`, and creates an initial commit.
 
 The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
@@ -243,7 +256,7 @@ git p4son sync [changelist] [--force]
   sync to the latest changelist affecting the workspace.
 
 **Options:**
-- `-f, --force`: Force sync encountered writable files and allow syncing to older changelists.
+- `-f, --force`: Allow syncing to changelists older than the current one.
 
 **Examples:**
 ```sh

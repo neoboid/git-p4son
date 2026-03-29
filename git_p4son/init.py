@@ -134,17 +134,6 @@ def init_command(args: argparse.Namespace) -> int:
         return 1
     log.success(spec.name)
 
-    log.heading('Checking clobber flag')
-    if spec.clobber:
-        log.success('clobber is enabled')
-    else:
-        log.error(
-            f'clobber is not enabled on workspace "{spec.name}".\n'
-            '  Git removes read-only flags when switching branches, so p4 sync\n'
-            '  will fail to overwrite those files unless clobber is enabled.\n'
-            f'  Edit "{spec.name}" in P4V to set the clobber flag.')
-        return 1
-
     if not _configure_depot_root(spec.name, cwd, spec.root):
         return 1
 

@@ -115,10 +115,6 @@ _MOCK_SPEC = P4ClientSpec(
     name='my-client', root='/ws',
     options=['noallwrite', 'clobber', 'nocompress'], stream=None)
 
-_MOCK_SPEC_NO_CLOBBER = P4ClientSpec(
-    name='my-client', root='/ws',
-    options=['noallwrite', 'noclobber', 'nocompress'], stream=None)
-
 
 class TestInitCommand(unittest.TestCase):
     def _make_args(self):
@@ -141,12 +137,6 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('git_p4son.init.get_client_spec', return_value=None)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_not_p4_workspace(self, mock_cwd, mock_spec):
-        result = init_command(self._make_args())
-        self.assertEqual(result, 1)
-
-    @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC_NO_CLOBBER)
-    @mock.patch('os.getcwd', return_value='/ws')
-    def test_no_clobber(self, mock_cwd, mock_spec):
         result = init_command(self._make_args())
         self.assertEqual(result, 1)
 

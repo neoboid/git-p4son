@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Remove the clobber workspace requirement from `init`
+- Sync command now handles writable files automatically without `--force`:
+  - Unchanged files (read-only flag removed by git) are force-synced automatically via MD5 comparison
+  - Changed files (local edits not submitted to Perforce) are three-way merged after syncing
+  - Binary files with local changes have their local version restored to disk
+  - Git-ignored files are skipped with a warning
+  - Add/delete asymmetry between git and Perforce is detected and reported
+- The `--force` flag on `sync` now only controls syncing to older changelists
+
 ## 0.2.10
 
 - Add support for git style post-sync hooks

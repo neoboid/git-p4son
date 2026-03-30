@@ -169,6 +169,6 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
     # so we need to split it
     editor_cmd = shlex.split(editor) + [args.filename]
     editor_cmd_joined = ' '.join(editor_cmd)
-    log.info('Running editor command: {editor_cmd_joined}')
+    log.info(f'Running editor command: {editor_cmd_joined}')
     editor_result = subprocess.run(editor_cmd, cwd=workspace_dir)
     return editor_result.returncode

@@ -143,10 +143,12 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
         original_lines = f.readlines()
     comment_lines = [line for line in original_lines if line.startswith('#')]
 
+    log.info(f'Reading rebase todo file {todo_file}')
     # Read our generated todo
     with open(todo_file, 'r') as f:
         todo_content = f.read()
 
+    log.info(f'Rewriting rebase todo file {todo_file}')
     # Overwrite the rebase todo file with our version plus git's comments
     with open(args.filename, 'w') as f:
         f.write(todo_content)
@@ -160,9 +162,13 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
             'No git editor configured. Set one with: git config core.editor <editor>')
         return 1
 
+    log.info(f'Using git editor: {editor}')
+
     # Open the editor on the todo file
     # The editor command may contain arguments (e.g. "code --wait"),
     # so we need to split it
     editor_cmd = shlex.split(editor) + [args.filename]
+    editor_cmd_joined = ' '.join(editor_cmd)
+    log.info('Running editor command: {editor_cmd_joined}')
     editor_result = subprocess.run(editor_cmd, cwd=workspace_dir)
     return editor_result.returncode

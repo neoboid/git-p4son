@@ -2,6 +2,7 @@
 Common utilities shared between sync and edit commands.
 """
 
+import hashlib
 import queue
 import subprocess
 import sys
@@ -16,6 +17,15 @@ from .log import log
 def branch_to_alias(branch_name: str) -> str:
     """Sanitize a branch name for use as an alias filename."""
     return branch_name.replace('/', '-')
+
+
+def compute_local_md5(filepath: str) -> str:
+    """Compute the MD5 hex digest of a local file."""
+    md5 = hashlib.md5()
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            md5.update(chunk)
+    return md5.hexdigest().upper()
 
 
 class CommandError(Exception):

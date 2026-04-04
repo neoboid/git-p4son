@@ -11,6 +11,7 @@ from git_p4son.common import (
     RunError,
     RunResult,
     branch_to_alias,
+    compute_local_md5,
     join_command_line,
     run,
     run_with_output,
@@ -128,6 +129,30 @@ class TestGetRebaseBranch(unittest.TestCase):
                         side_effect=RunError('failed', returncode=128)):
             result = _get_rebase_branch('/ws')
         self.assertIsNone(result)
+
+
+class TestComputeLocalMd5(unittest.TestCase):
+    def test_returns_correct_digest(self):
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b'hello world')
+            f.flush()
+            try:
+                result = compute_local_md5(f.name)
+                # md5("hello world") = 5eb63bbbe01eeed093cb22bb8f5acdc3
+                self.assertEqual(result, '5EB63BBBE01EEED093CB22BB8F5ACDC3')
+            finally:
+                os.unlink(f.name)
+
+    def test_returns_uppercase_32_char_hex(self):
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b'test')
+            f.flush()
+            try:
+                result = compute_local_md5(f.name)
+                self.assertEqual(len(result), 32)
+                self.assertEqual(result, result.upper())
+            finally:
+                os.unlink(f.name)
 
 
 class TestBranchToAlias(unittest.TestCase):

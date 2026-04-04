@@ -37,11 +37,13 @@ class RunError(CommandError):
 class RunResult:
     """Result of a command execution."""
 
-    def __init__(self, returncode: int, stdout: list[str], stderr: list[str],
+    def __init__(self, returncode: int,
+                 stdout: list[str] | bytes,
+                 stderr: list[str] | bytes,
                  elapsed: timedelta | None = None) -> None:
         self.returncode: int = returncode
-        self.stdout: list[str] = stdout
-        self.stderr: list[str] = stderr
+        self.stdout: list[str] | bytes = stdout
+        self.stderr: list[str] | bytes = stderr
         self.elapsed: timedelta | None = elapsed
 
 
@@ -56,24 +58,18 @@ def join_command_line(command: list[str]) -> str:
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
-        input: str | None = None) -> RunResult:
-    """
-    Run a command and return the result.
+        input: str | None = None, text: bool = True,
+        fail_on_returncode: bool = True) -> RunResult:
+    """Run a command and return the result.
 
-    Args:
-        command: List of command arguments
-        cwd: Working directory to run the command in
-        dry_run: If True, only print the command without executing
-        input: Optional string to pass to the subprocess via stdin
-
-    Returns:
-        RunResult object with returncode, stdout, and stderr
+    Set text=False to get raw bytes instead of decoded lines.
+    Set fail_on_returncode=False to not raise on non-zero return codes.
     """
     log.command(join_command_line(command))
 
     if dry_run:
         log.end_command()
-        return RunResult(0, [], [])
+        return RunResult(0, [] if text else b'', [] if text else b'')
 
     if input is not None:
         log.end_command()
@@ -86,7 +82,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     result = subprocess.run(command,
                             cwd=cwd,
                             capture_output=True,
-                            text=True,
+                            text=text,
                             input=input)
 
     end_timestamp = timer()
@@ -94,15 +90,19 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     log.stop_spinner()
 
-    if result.returncode != 0:
+    if fail_on_returncode and result.returncode != 0:
+        stderr = result.stderr.splitlines() if text else []
         raise RunError(
             join_command_line(command),
             returncode=result.returncode,
-            stderr=result.stderr.splitlines(),
+            stderr=stderr,
         )
 
-    return RunResult(result.returncode, result.stdout.splitlines(),
-                     result.stderr.splitlines(), elapsed=elapsed)
+    if text:
+        return RunResult(result.returncode, result.stdout.splitlines(),
+                         result.stderr.splitlines(), elapsed=elapsed)
+    return RunResult(result.returncode, result.stdout,
+                     result.stderr, elapsed=elapsed)
 
 
 def enqueue_lines(stream: IO[str], output_queue: queue.Queue[str]) -> None:

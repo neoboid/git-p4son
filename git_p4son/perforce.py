@@ -381,6 +381,29 @@ def is_binary_file_type(head_type: str) -> bool:
     return base_type in ('binary', 'ubinary')
 
 
+def p4_sync_preview(changelist: int, depot_root: str,
+                    workspace_dir: str) -> list[str]:
+    """Preview which files would be synced without actually syncing.
+
+    Returns list of local file paths that would be affected.
+    """
+    log.heading(f'Previewing sync to CL {changelist}')
+    output_processor = P4SyncOutputProcessor()
+    result = run_with_output(
+        ['p4', 'sync', '-n', f'{depot_root}/...@{changelist}'],
+        cwd=workspace_dir, on_output=output_processor)
+    if result.elapsed:
+        log.elapsed(result.elapsed)
+
+    files = []
+    for line in result.stdout:
+        _mode, filename = parse_p4_sync_line(line)
+        if filename:
+            files.append(filename)
+    log.success(f'{len(files)} files would be synced')
+    return files
+
+
 def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
     """Force sync a single file."""
     output_processor = P4SyncOutputProcessor()

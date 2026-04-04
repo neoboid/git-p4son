@@ -402,14 +402,3 @@ def p4_sync_preview(changelist: int, depot_root: str,
             files.append(filename)
     log.success(f'{len(files)} files would be synced')
     return files
-
-
-def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
-    """Force sync a single file."""
-    output_processor = P4SyncOutputProcessor()
-    result = run_with_output(
-        ['p4', 'sync', '-f', f'{filename}@{changelist}'],
-        cwd=workspace_dir, on_output=output_processor)
-    log.info(output_processor.get_summary())
-    if result.elapsed:
-        log.elapsed(result.elapsed)

@@ -18,22 +18,35 @@ from .perforce import (
 )
 
 
-def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
-    """Get the changelist number from the most recent sync commit."""
+@dataclass
+class LastSync:
+    """Info about the most recent p4son sync commit."""
+    changelist: int
+    commit: str
+
+
+def git_last_sync(workspace_dir: str) -> LastSync | None:
+    """Get the changelist number and commit SHA of the most recent sync commit."""
     res = run_with_output(
-        ['git', 'log', '-1', '--pretty=%s',
+        ['git', 'log', '-1', '--pretty=%H %s',
          '--grep=: p4 sync //'],
         cwd=workspace_dir)
     if len(res.stdout) == 0:
         return None
 
-    msg = res.stdout[0]
-    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
-    match = re.search(pattern, msg)
-    if match:
-        return int(match.group(2))
-    else:
+    line = res.stdout[0]
+    # Format: "<commit_hash> <subject>"
+    parts = line.split(' ', 1)
+    if len(parts) != 2:
         return None
+
+    commit_hash, subject = parts
+    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
+    match = re.search(pattern, subject)
+    if not match:
+        return None
+
+    return LastSync(changelist=int(match.group(2)), commit=commit_hash)
 
 
 def get_writable_files(stderr_lines: list[str]) -> list[str]:
@@ -118,17 +131,17 @@ def sync_command(args: argparse.Namespace) -> int:
 
     last_changelist_label = 'last synced'
     log.heading(f'Finding {last_changelist_label} changelist')
-    last_changelist = git_changelist_of_last_sync(workspace_dir)
-    if last_changelist is not None:
-        log.success(f'CL {last_changelist}')
+    last_sync = git_last_sync(workspace_dir)
+    if last_sync:
+        log.success(f'CL {last_sync.changelist}')
     else:
         log.warning('No previous sync found')
 
     if args.changelist is not None and args.changelist.lower() == 'last-synced':
-        if last_changelist is None:
+        if not last_sync:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
-        if not p4_sync(last_changelist, last_changelist_label, args.force,
+        if not p4_sync(last_sync.changelist, last_changelist_label, args.force,
                        depot_root, workspace_dir):
             return 1
         return 0
@@ -141,31 +154,31 @@ def sync_command(args: argparse.Namespace) -> int:
         changelist_label = 'latest'
     else:
         changelist_label = 'specified'
-        # Convert changelist string to integer
         try:
             changelist = int(args.changelist)
         except ValueError:
             log.error(f'Invalid changelist number: {args.changelist}')
             return 1
 
+    last_changelist = last_sync.changelist if last_sync else None
     if last_changelist == changelist:
         log.info(f'Already at CL {last_changelist}, nothing to do.')
         return 0
 
     # Check if trying to sync to an older changelist
-    if last_changelist is not None and changelist < last_changelist:
+    if last_sync and changelist < last_sync.changelist:
         if not args.force:
             log.error(
                 f'Cannot sync to CL {changelist} '
-                f'(currently at CL {last_changelist}) without --force.')
+                f'(currently at CL {last_sync.changelist}) without --force.')
             return 1
         else:
             log.warning(
                 f'Syncing to older CL {changelist} '
-                f'(currently at CL {last_changelist}) with --force')
+                f'(currently at CL {last_sync.changelist}) with --force')
 
-    if last_changelist is not None:
-        if not p4_sync(last_changelist, last_changelist_label, args.force,
+    if last_sync:
+        if not p4_sync(last_sync.changelist, last_changelist_label, args.force,
                        depot_root, workspace_dir):
             return 1
 

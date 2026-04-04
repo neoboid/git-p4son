@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from git_p4son.git import (
+    get_file_at_commit,
     get_ignored_files,
 )
 
@@ -63,6 +64,45 @@ class TestGetIgnoredFiles(GitRepoTestCase):
     def test_empty_input(self):
         result = get_ignored_files([], self.tmpdir)
         self.assertEqual(result, set())
+
+
+class TestGetFileAtCommit(GitRepoTestCase):
+    def test_returns_file_content(self):
+        self._write_file('foo.txt', 'hello world')
+        self._commit()
+        content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
+        self.assertEqual(content, b'hello world')
+
+    def test_returns_none_for_missing_file(self):
+        self._write_file('foo.txt', 'hello')
+        self._commit()
+        content = get_file_at_commit('nonexistent.txt', 'HEAD', self.tmpdir)
+        self.assertIsNone(content)
+
+    def test_backslash_paths_normalized(self):
+        self._write_file('src/engine/test.cpp', 'hello')
+        self._commit()
+        content = get_file_at_commit(
+            'src\\engine\\test.cpp', 'HEAD', self.tmpdir)
+        self.assertEqual(content, b'hello')
+
+    def test_retrieves_from_specific_commit(self):
+        self._write_file('foo.txt', 'version 1')
+        self._commit('first')
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'], cwd=self.tmpdir,
+            capture_output=True, text=True)
+        first_sha = result.stdout.strip()
+
+        self._write_file('foo.txt', 'version 2')
+        self._commit('second')
+
+        content = get_file_at_commit('foo.txt', first_sha, self.tmpdir)
+        self.assertEqual(content, b'version 1')
+
+        content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
+        self.assertEqual(content, b'version 2')
+
 
 if __name__ == '__main__':
     unittest.main()

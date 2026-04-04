@@ -208,6 +208,8 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
     return subjects
 
 
+# --- ignore ---
+
 def get_ignored_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     """Return the subset of filepaths that are ignored by git."""
     if not filepaths:
@@ -217,6 +219,20 @@ def get_ignored_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     result = run(['git', 'check-ignore', '--stdin'], cwd=workspace_dir,
                  input='\n'.join(filepaths), fail_on_returncode=False)
     return set(line.strip() for line in result.stdout if line.strip())
+
+
+# --- file retrieval ---
+
+def get_file_at_commit(filepath: str, commit: str,
+                       workspace_dir: str) -> bytes | None:
+    """Retrieve file content at a specific commit. Returns None if the file doesn't exist."""
+    # Git uses forward slashes in tree paths, even on Windows
+    git_path = filepath.replace('\\', '/')
+    result = run(['git', 'show', f'{commit}:{git_path}'],
+                 cwd=workspace_dir, text=False, fail_on_returncode=False)
+    if result.returncode != 0:
+        return None
+    return result.stdout
 
 
 # --- editor ---

@@ -7,6 +7,7 @@ import unittest
 
 from git_p4son.git import (
     get_file_at_commit,
+    get_head_commit,
     get_ignored_files,
 )
 
@@ -102,6 +103,15 @@ class TestGetFileAtCommit(GitRepoTestCase):
 
         content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
         self.assertEqual(content, b'version 2')
+
+
+class TestGetHeadCommit(GitRepoTestCase):
+    def test_returns_sha(self):
+        self._write_file('foo.txt', 'hello')
+        self._commit()
+        sha = get_head_commit(self.tmpdir)
+        self.assertEqual(len(sha), 40)
+        self.assertTrue(all(c in '0123456789abcdef' for c in sha))
 
 
 if __name__ == '__main__':

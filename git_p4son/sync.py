@@ -14,6 +14,7 @@ from .perforce import (
     get_latest_changelist,
     p4_force_sync_file,
     p4_get_opened_files,
+    P4SyncOutputProcessor,
 )
 
 
@@ -40,62 +41,6 @@ def get_writable_files(stderr_lines: list[str]) -> list[str]:
     prefix = "Can't clobber writable file "
     return [line[len(prefix):].rstrip()
             for line in stderr_lines if line.startswith(prefix)]
-
-
-def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
-    """Parse a line from p4 sync output."""
-    patterns = [
-        ('add', ' - added as '),
-        ('del', ' - deleted as '),
-        ('upd', ' - updating '),
-        ('clb', "Can't clobber writable file ")
-    ]
-    for mode, pattern in patterns:
-        tokens = line.split(pattern)
-        if len(tokens) == 2:
-            return (mode, tokens[1])
-
-    return (None, None)
-
-
-class P4SyncOutputProcessor:
-    """Process p4 sync output in real-time."""
-
-    def __init__(self) -> None:
-        self.synced_file_count: int = 0
-        self.stats: dict[str, int] = {
-            mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
-
-    def __call__(self, line: str, stream: IO[str]) -> None:
-        if re.search(r"@\d+ - file\(s\) up-to-date\.", line):
-            log.info('all files up to date')
-            return
-
-        mode, filename = parse_p4_sync_line(line)
-        if not mode or not filename:
-            log.warning(f'Unparsable line: {line}')
-            return
-
-        self.stats[mode] += 1
-        self.synced_file_count += 1
-
-    def get_summary(self) -> str:
-        """Get a one-line sync summary."""
-        synced_count = self.stats['add'] + \
-            self.stats['upd'] - self.stats['clb']
-        parts = []
-        if self.stats['add']:
-            parts.append(f"add: {self.stats['add']}")
-        if self.stats['upd']:
-            parts.append(f"upd: {self.stats['upd']}")
-        if self.stats['del']:
-            parts.append(f"del: {self.stats['del']}")
-        if self.stats['clb']:
-            parts.append(f"clb: {self.stats['clb']}")
-        detail = ', '.join(parts)
-        if detail:
-            return f'synced {synced_count} files ({detail})'
-        return f'synced {synced_count} files'
 
 
 def p4_sync(changelist: int, label: str, force: bool, depot_root: str,

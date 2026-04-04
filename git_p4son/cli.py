@@ -65,7 +65,7 @@ Examples:
         'init',
         help='Initialize a git repository inside a Perforce workspace',
         description='Set up a new git repository inside a Perforce workspace. '
-        'Checks preconditions (P4 workspace, clobber flag), initializes git, '
+        'Checks preconditions (P4 workspace), initializes git, '
         'sets up .gitignore, and creates an initial commit.'
     )
 
@@ -85,10 +85,7 @@ Examples:
     sync_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Force sync encountered writable files and allow syncing to older changelists. '
-             'When clobber is not enabled on your workspace, p4 will fail to sync files that '
-             'are read-only. git removes the readonly flag on touched files. Also allows '
-             'syncing to changelists older than the current one.'
+        help='Allow syncing to changelists older than the current one.'
     )
 
     # New subcommand

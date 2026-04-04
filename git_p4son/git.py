@@ -6,6 +6,7 @@ All functions that interact directly with the git CLI live here.
 import os
 import os.path
 import re
+import tempfile
 
 from .common import CommandError, RunError, run, run_with_output
 
@@ -221,6 +222,39 @@ def get_head_commit(workspace_dir: str) -> str:
     """Return the SHA of HEAD."""
     result = run(['git', 'rev-parse', 'HEAD'], cwd=workspace_dir)
     return result.stdout[0].strip()
+
+
+# --- merge ---
+
+def merge_file(current: bytes, base: bytes, other: bytes,
+               filepath: str) -> tuple[bool, bytes]:
+    """Three-way merge using git merge-file.
+
+    Returns (clean, merged_content) where clean is True if no conflicts.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        current_path = os.path.join(tmpdir, 'current')
+        base_path = os.path.join(tmpdir, 'base')
+        other_path = os.path.join(tmpdir, 'other')
+
+        with open(current_path, 'wb') as f:
+            f.write(current)
+        with open(base_path, 'wb') as f:
+            f.write(base)
+        with open(other_path, 'wb') as f:
+            f.write(other)
+
+        result = run(
+            ['git', 'merge-file', '-p',
+             '--marker-size=7',
+             f'-L=Perforce', f'-L=base', f'-L=local',
+             current_path, base_path, other_path],
+            text=False, fail_on_returncode=False)
+
+        # git merge-file -p: exit 0 = clean, >0 = conflicts (count), <0 = error
+        merged = result.stdout
+        clean = result.returncode == 0
+        return (clean, merged)
 
 
 # --- editor ---

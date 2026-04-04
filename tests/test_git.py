@@ -9,6 +9,7 @@ from git_p4son.git import (
     get_file_at_commit,
     get_head_commit,
     get_ignored_files,
+    merge_file,
 )
 
 
@@ -112,6 +113,28 @@ class TestGetHeadCommit(GitRepoTestCase):
         sha = get_head_commit(self.tmpdir)
         self.assertEqual(len(sha), 40)
         self.assertTrue(all(c in '0123456789abcdef' for c in sha))
+
+
+class TestMergeFile(unittest.TestCase):
+    def test_clean_merge(self):
+        base = b'aaa\nbbb\nccc\nddd\neee\nfff\nggg\n'
+        current = b'aaa\nbbb changed by p4\nccc\nddd\neee\nfff\nggg\n'
+        other = b'aaa\nbbb\nccc\nddd\neee\nfff changed locally\nggg\n'
+
+        clean, merged = merge_file(current, base, other, 'test.txt')
+        self.assertTrue(clean)
+        self.assertIn(b'changed by p4', merged)
+        self.assertIn(b'changed locally', merged)
+
+    def test_conflict(self):
+        base = b'line1\noriginal\nline3\n'
+        current = b'line1\np4 version\nline3\n'
+        other = b'line1\nlocal version\nline3\n'
+
+        clean, merged = merge_file(current, base, other, 'test.txt')
+        self.assertFalse(clean)
+        self.assertIn(b'<<<<<<<', merged)
+        self.assertIn(b'>>>>>>>', merged)
 
 
 if __name__ == '__main__':

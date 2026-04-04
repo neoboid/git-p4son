@@ -1,0 +1,68 @@
+"""Tests for new git helper functions."""
+
+import os
+import subprocess
+import tempfile
+import unittest
+
+from git_p4son.git import (
+    get_ignored_files,
+)
+
+
+class GitRepoTestCase(unittest.TestCase):
+    """Base class that creates a temporary git repo for each test."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        subprocess.run(['git', 'init'], cwd=self.tmpdir,
+                       capture_output=True, check=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'],
+                       cwd=self.tmpdir, capture_output=True, check=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'],
+                       cwd=self.tmpdir, capture_output=True, check=True)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def _write_file(self, name, content):
+        path = os.path.join(self.tmpdir, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _commit(self, message='test commit'):
+        subprocess.run(['git', 'add', '.'], cwd=self.tmpdir,
+                       capture_output=True, check=True)
+        subprocess.run(['git', 'commit', '-m', message],
+                       cwd=self.tmpdir, capture_output=True, check=True)
+
+
+class TestGetIgnoredFiles(GitRepoTestCase):
+    def test_returns_ignored_files(self):
+        self._write_file('.gitignore', '*.log\nbuild/\n')
+        self._commit()
+        self._write_file('build/out.o', '')
+        self._write_file('app.log', '')
+        self._write_file('src/main.py', '')
+
+        result = get_ignored_files(
+            ['build/out.o', 'app.log', 'src/main.py'], self.tmpdir)
+        self.assertIn('build/out.o', result)
+        self.assertIn('app.log', result)
+        self.assertNotIn('src/main.py', result)
+
+    def test_no_matches_returns_empty(self):
+        self._write_file('.gitignore', '*.log\n')
+        self._commit()
+        result = get_ignored_files(['src/main.py'], self.tmpdir)
+        self.assertEqual(result, set())
+
+    def test_empty_input(self):
+        result = get_ignored_files([], self.tmpdir)
+        self.assertEqual(result, set())
+
+if __name__ == '__main__':
+    unittest.main()

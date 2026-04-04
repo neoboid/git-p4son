@@ -188,6 +188,19 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
     return subjects
 
 
+def get_ignored_files(filepaths: list[str], workspace_dir: str) -> set[str]:
+    """Return the subset of filepaths that are ignored by git."""
+    if not filepaths:
+        return set()
+    try:
+        result = run_with_output(
+            ['git', 'check-ignore'] + filepaths, cwd=workspace_dir)
+        return set(line.strip() for line in result.stdout if line.strip())
+    except RunError:
+        # Exit code 1 means no paths matched - that's fine
+        return set()
+
+
 # --- editor ---
 
 def resolve_editor(workspace_dir: str) -> str | None:

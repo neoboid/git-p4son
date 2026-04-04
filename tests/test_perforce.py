@@ -4,7 +4,8 @@ import unittest
 from unittest import mock
 
 from git_p4son.perforce import (
-    P4ClientSpec, get_client_spec, parse_ztag_multi_output, parse_ztag_output,
+    P4ClientSpec, P4FileInfo, get_client_spec, is_binary_file_type,
+    p4_fstat_file_info, parse_ztag_multi_output, parse_ztag_output,
 )
 from tests.helpers import make_run_result
 
@@ -88,6 +89,43 @@ class TestP4ClientSpec(unittest.TestCase):
             name='ws', root='/ws',
             options=['noallwrite', 'noclobber', 'nocompress'], stream=None)
         self.assertFalse(spec.clobber)
+
+
+class TestIsBinaryFileType(unittest.TestCase):
+    def test_text_types(self):
+        self.assertFalse(is_binary_file_type('text'))
+        self.assertFalse(is_binary_file_type('text+x'))
+        self.assertFalse(is_binary_file_type('text+kx'))
+        self.assertFalse(is_binary_file_type('unicode'))
+
+    def test_binary_types(self):
+        self.assertTrue(is_binary_file_type('binary'))
+        self.assertTrue(is_binary_file_type('binary+l'))
+        self.assertTrue(is_binary_file_type('binary+Swl'))
+        self.assertTrue(is_binary_file_type('ubinary'))
+        self.assertTrue(is_binary_file_type('ubinary+x'))
+
+
+class TestP4FstatFileInfo(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_returns_type_and_digest(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... clientFile /ws/foo.txt',
+            '... headType text',
+            '... digest ABC123',
+            '',
+            '... clientFile /ws/bar.bin',
+            '... headType binary+l',
+        ])
+        result = p4_fstat_file_info(['/ws/foo.txt', '/ws/bar.bin'], '/ws')
+        self.assertEqual(result['/ws/foo.txt'].head_type, 'text')
+        self.assertEqual(result['/ws/foo.txt'].digest, 'ABC123')
+        self.assertEqual(result['/ws/bar.bin'].head_type, 'binary+l')
+        self.assertIsNone(result['/ws/bar.bin'].digest)
+
+    def test_empty_input(self):
+        result = p4_fstat_file_info([], '/ws')
+        self.assertEqual(result, {})
 
 
 class TestGetClientSpec(unittest.TestCase):

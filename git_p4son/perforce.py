@@ -343,6 +343,44 @@ class P4SyncOutputProcessor:
         return f'synced {synced_count} files'
 
 
+@dataclass
+class P4FileInfo:
+    """Perforce file metadata from fstat."""
+    head_type: str
+    digest: str | None
+
+
+def p4_fstat_file_info(filenames: list[str],
+                       workspace_dir: str) -> dict[str, P4FileInfo]:
+    """Get Perforce file type and MD5 digest for a list of files.
+
+    Returns a mapping of local path to P4FileInfo. Files not found are omitted.
+    The digest field is None for binary files (Perforce does not store digests
+    for them).
+    """
+    if not filenames:
+        return {}
+    args = ['p4', '-ztag', 'fstat', '-T', 'clientFile,headType,digest']
+    args.extend(filenames)
+    result = run(args, cwd=workspace_dir)
+    info = {}
+    for record in parse_ztag_multi_output(result.stdout):
+        client_file = record.get('clientFile')
+        head_type = record.get('headType')
+        if client_file and head_type:
+            info[client_file] = P4FileInfo(
+                head_type=head_type,
+                digest=record.get('digest'),
+            )
+    return info
+
+
+def is_binary_file_type(head_type: str) -> bool:
+    """Check if a Perforce headType indicates a binary file."""
+    base_type = head_type.split('+')[0]
+    return base_type in ('binary', 'ubinary')
+
+
 def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
     """Force sync a single file."""
     output_processor = P4SyncOutputProcessor()

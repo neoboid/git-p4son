@@ -241,6 +241,59 @@ def get_head_commit(workspace_dir: str) -> str:
     return result.stdout[0].strip()
 
 
+def find_last_sync_commit_for_file(filepath: str, before_commit: str,
+                                   workspace_dir: str) -> str | None:
+    """SHA of the most recent sync commit reachable from before_commit
+    (inclusive) that modified filepath, or None. filepath is repo-relative."""
+    git_path = filepath.replace('\\', '/')
+    result = run(
+        ['git', 'log', '-1', '--pretty=%H',
+         '--grep=: p4 sync //',
+         before_commit, '--', git_path],
+        cwd=workspace_dir, fail_on_returncode=False)
+    if result.returncode != 0 or not result.stdout:
+        return None
+    sha = result.stdout[0].strip()
+    return sha or None
+
+
+def find_introducing_commit_for_file(filepath: str, before_commit: str,
+                                     workspace_dir: str) -> str | None:
+    """SHA of the most recent commit reachable from before_commit (inclusive)
+    that added filepath, or None. Used as a fallback baseline when no sync
+    commit has ever touched the file (e.g. files brought in via an initial
+    bulk import committed with a non-sync subject). If the file was deleted
+    and re-added, the most recent add starts the current lineage."""
+    git_path = filepath.replace('\\', '/')
+    result = run(
+        ['git', 'log', '--diff-filter=A', '-1', '--pretty=%H',
+         before_commit, '--', git_path],
+        cwd=workspace_dir, fail_on_returncode=False)
+    if result.returncode != 0 or not result.stdout:
+        return None
+    sha = result.stdout[0].strip()
+    return sha or None
+
+
+# --- merge ---
+
+def merge_file(current_path: str, base_path: str,
+               other_path: str) -> tuple[bool, bytes]:
+    """Three-way merge using git merge-file.
+
+    All three inputs are file paths read by git directly. Returns
+    (clean, merged_content) where clean is True if no conflicts.
+    """
+    result = run(
+        ['git', 'merge-file', '-p',
+         '--marker-size=7',
+         '-L=Perforce', '-L=base', '-L=local',
+         current_path, base_path, other_path],
+        text=False, fail_on_returncode=False)
+    # git merge-file -p: exit 0 = clean, >0 = conflicts (count), <0 = error
+    return (result.returncode == 0, result.stdout)
+
+
 # --- editor ---
 
 def resolve_editor(workspace_dir: str) -> str | None:

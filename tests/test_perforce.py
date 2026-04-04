@@ -4,7 +4,9 @@ import unittest
 from unittest import mock
 
 from git_p4son.perforce import (
-    P4ClientSpec, get_client_spec, parse_ztag_multi_output, parse_ztag_output,
+    P4ClientSpec, P4FileInfo, get_client_spec, is_binary_file_type,
+    p4_fstat_file_info, p4_sync_preview,
+    parse_ztag_multi_output, parse_ztag_output,
 )
 from tests.helpers import make_run_result
 
@@ -118,6 +120,76 @@ class TestP4ClientSpec(unittest.TestCase):
             name='ws', root='/ws', options=[], stream=None,
             line_end='unix')
         self.assertFalse(spec.uses_crlf)
+
+
+class TestP4SyncPreview(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_returns_local_file_paths(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '//depot/foo.txt#1 - added as /ws/foo.txt',
+            '//depot/bar.txt#3 - updating /ws/bar.txt',
+            '//depot/old.txt#2 - deleted as /ws/old.txt',
+        ])
+        result = p4_sync_preview(100, '//depot', '/ws')
+        self.assertEqual(result, ['/ws/foo.txt', '/ws/bar.txt', '/ws/old.txt'])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_empty_sync(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '//depot/...@100 - file(s) up-to-date.',
+        ])
+        result = p4_sync_preview(100, '//depot', '/ws')
+        self.assertEqual(result, [])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_passes_sync_n_flag(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[])
+        p4_sync_preview(100, '//depot', '/ws')
+        cmd = mock_rwo.call_args[0][0]
+        self.assertEqual(cmd, ['p4', 'sync', '-n', '//depot/...@100'])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_skips_unparsable_lines(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '//depot/foo.txt#1 - added as /ws/foo.txt',
+            'some random output',
+        ])
+        result = p4_sync_preview(100, '//depot', '/ws')
+        self.assertEqual(result, ['/ws/foo.txt'])
+
+
+class TestIsBinaryFileType(unittest.TestCase):
+    def test_text_types(self):
+        self.assertFalse(is_binary_file_type('text'))
+        self.assertFalse(is_binary_file_type('text+x'))
+        self.assertFalse(is_binary_file_type('text+kx'))
+        self.assertFalse(is_binary_file_type('unicode'))
+
+    def test_binary_types(self):
+        self.assertTrue(is_binary_file_type('binary'))
+        self.assertTrue(is_binary_file_type('binary+l'))
+        self.assertTrue(is_binary_file_type('binary+Swl'))
+        self.assertTrue(is_binary_file_type('ubinary'))
+        self.assertTrue(is_binary_file_type('ubinary+x'))
+
+
+class TestP4FstatFileInfo(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_returns_head_type(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... clientFile /ws/foo.txt',
+            '... headType text',
+            '',
+            '... clientFile /ws/bar.bin',
+            '... headType binary+l',
+        ])
+        result = p4_fstat_file_info(['/ws/foo.txt', '/ws/bar.bin'], '/ws')
+        self.assertEqual(result['/ws/foo.txt'].head_type, 'text')
+        self.assertEqual(result['/ws/bar.bin'].head_type, 'binary+l')
+
+    def test_empty_input(self):
+        result = p4_fstat_file_info([], '/ws')
+        self.assertEqual(result, {})
 
 
 class TestGetClientSpec(unittest.TestCase):

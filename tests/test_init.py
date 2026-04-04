@@ -116,6 +116,7 @@ _MOCK_SPEC = P4ClientSpec(
     options=['noallwrite', 'clobber', 'nocompress'], stream=None,
     line_end='local')
 
+
 class TestInitCommand(unittest.TestCase):
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])

@@ -217,6 +217,12 @@ def get_file_at_commit(filepath: str, commit: str,
     return result.stdout
 
 
+def get_head_commit(workspace_dir: str) -> str:
+    """Return the SHA of HEAD."""
+    result = run(['git', 'rev-parse', 'HEAD'], cwd=workspace_dir)
+    return result.stdout[0].strip()
+
+
 # --- editor ---
 
 def resolve_editor(workspace_dir: str) -> str | None:

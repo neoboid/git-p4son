@@ -13,6 +13,7 @@ from .hooks import run_hooks
 from .log import log
 from .perforce import (
     get_latest_changelist,
+    get_writable_files,
     p4_force_sync_file,
     p4_get_opened_files,
     P4SyncOutputProcessor,
@@ -35,13 +36,6 @@ def git_changelist_of_last_sync(workspace_dir: str) -> int | None:
         return int(match.group(2))
     else:
         return None
-
-
-def get_writable_files(stderr_lines: list[str]) -> list[str]:
-    """Extract writable files from p4 sync stderr output."""
-    prefix = "Can't clobber writable file "
-    return [line[len(prefix):].rstrip()
-            for line in stderr_lines if line.startswith(prefix)]
 
 
 def p4_sync(changelist: int, label: str, force: bool, depot_root: str,

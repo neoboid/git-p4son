@@ -360,9 +360,10 @@ def p4_fstat_file_info(filenames: list[str],
     """
     if not filenames:
         return {}
-    args = ['p4', '-ztag', 'fstat', '-T', 'clientFile,headType,digest']
-    args.extend(filenames)
-    result = run(args, cwd=workspace_dir)
+    # Use -x - so the path list doesn't hit the command-line length limit.
+    args = ['p4', '-x', '-', '-ztag', 'fstat',
+            '-T', 'clientFile,headType,digest']
+    result = run(args, cwd=workspace_dir, input='\n'.join(filenames))
     info = {}
     for record in parse_ztag_multi_output(result.stdout):
         client_file = record.get('clientFile')

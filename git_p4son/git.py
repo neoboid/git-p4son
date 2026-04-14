@@ -195,13 +195,11 @@ def get_ignored_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     """Return the subset of filepaths that are ignored by git."""
     if not filepaths:
         return set()
-    try:
-        result = run_with_output(
-            ['git', 'check-ignore'] + filepaths, cwd=workspace_dir)
-        return set(line.strip() for line in result.stdout if line.strip())
-    except RunError:
-        # Exit code 1 means no paths matched - that's fine
-        return set()
+    # Use --stdin so the path list doesn't hit the command-line length limit.
+    # check-ignore exits 1 when no paths match, which is not an error for us.
+    result = run(['git', 'check-ignore', '--stdin'], cwd=workspace_dir,
+                 input='\n'.join(filepaths), fail_on_returncode=False)
+    return set(line.strip() for line in result.stdout if line.strip())
 
 
 # --- file retrieval ---

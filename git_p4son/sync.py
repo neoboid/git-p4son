@@ -161,6 +161,11 @@ def _merge_changed_files(changed_files: list[str], user_commit: str,
     if not changed_files:
         return
 
+    # If the user hasn't committed anything since the last sync, ours == base,
+    # so a three-way merge would just yield theirs - which is already on disk.
+    if last_sync_commit == user_commit:
+        return
+
     log.heading('Merging local changes')
 
     merged_clean = []

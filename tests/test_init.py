@@ -113,7 +113,8 @@ class TestConfigureDepotRoot(unittest.TestCase):
 
 _MOCK_SPEC = P4ClientSpec(
     name='my-client', root='/ws',
-    options=['noallwrite', 'clobber', 'nocompress'], stream=None)
+    options=['noallwrite', 'clobber', 'nocompress'], stream=None,
+    line_end='local')
 
 
 class TestInitCommand(unittest.TestCase):

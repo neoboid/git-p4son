@@ -82,14 +82,44 @@ class TestP4ClientSpec(unittest.TestCase):
     def test_clobber_enabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['noallwrite', 'clobber', 'nocompress'], stream=None)
+            options=['noallwrite', 'clobber', 'nocompress'], stream=None,
+            line_end='local')
         self.assertTrue(spec.clobber)
 
     def test_clobber_disabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['noallwrite', 'noclobber', 'nocompress'], stream=None)
+            options=['noallwrite', 'noclobber', 'nocompress'], stream=None,
+            line_end='local')
         self.assertFalse(spec.clobber)
+
+    @mock.patch('git_p4son.perforce.sys')
+    def test_uses_crlf_local_on_windows(self, mock_sys):
+        mock_sys.platform = 'win32'
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='local')
+        self.assertTrue(spec.uses_crlf)
+
+    @mock.patch('git_p4son.perforce.sys')
+    def test_uses_crlf_local_on_unix(self, mock_sys):
+        mock_sys.platform = 'linux'
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='local')
+        self.assertFalse(spec.uses_crlf)
+
+    def test_uses_crlf_win(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='win')
+        self.assertTrue(spec.uses_crlf)
+
+    def test_uses_crlf_unix(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='unix')
+        self.assertFalse(spec.uses_crlf)
 
 
 class TestP4SyncPreview(unittest.TestCase):
@@ -173,6 +203,7 @@ class TestGetClientSpec(unittest.TestCase):
             '... Update 2026/02/28 09:26:06',
             '... Root /home/user/workspace',
             '... Options noallwrite clobber nocompress',
+            '... LineEnd local',
             '... Stream //projects/main',
         ])
         spec = get_client_spec('/ws')
@@ -181,6 +212,7 @@ class TestGetClientSpec(unittest.TestCase):
         self.assertEqual(spec.root, '/home/user/workspace')
         self.assertTrue(spec.clobber)
         self.assertEqual(spec.stream, '//projects/main')
+        self.assertEqual(spec.line_end, 'local')
 
     @mock.patch('git_p4son.perforce.run')
     def test_no_stream(self, mock_run):

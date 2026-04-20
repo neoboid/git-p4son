@@ -17,6 +17,7 @@ from .git import (
 )
 from .log import log
 from .perforce import (
+    get_client_spec,
     get_latest_changelist,
     get_writable_files,
     is_binary_file_type,
@@ -67,7 +68,8 @@ class WritableSyncFileSet:
 
 
 def prepare_writable_files(preview_files: list[str],
-                           workspace_dir: str) -> WritableSyncFileSet:
+                           workspace_dir: str,
+                           normalize_newlines: bool = False) -> WritableSyncFileSet:
     """Check which preview files are writable on disk and prepare them for sync.
 
     For tracked writable files, queries Perforce for file type and MD5 digest.
@@ -110,7 +112,8 @@ def prepare_writable_files(preview_files: list[str],
 
         info = file_info.get(f)
         if info and info.digest:
-            is_text = not is_binary_file_type(info.head_type)
+            is_text = normalize_newlines and not is_binary_file_type(
+                info.head_type)
             local_md5 = compute_local_md5(f, normalize_newlines=is_text)
             if local_md5 == info.digest:
                 unchanged_count += 1
@@ -347,6 +350,9 @@ def sync_command(args: argparse.Namespace) -> int:
         return 1
     log.success(depot_root)
 
+    spec = get_client_spec(workspace_dir)
+    normalize_newlines = spec.uses_crlf if spec else False
+
     log.heading('Checking git workspace')
     dirty_files = get_dirty_files(workspace_dir)
     if dirty_files:
@@ -427,7 +433,8 @@ def sync_command(args: argparse.Namespace) -> int:
     if last_changelist is not None:
         preview = p4_sync_preview(
             last_changelist, depot_root, workspace_dir)
-        prep = prepare_writable_files(preview, workspace_dir)
+        prep = prepare_writable_files(preview, workspace_dir,
+                                      normalize_newlines)
         all_changed.extend(prep.changed)
         all_ignored.extend(prep.ignored)
         all_binary |= prep.binary
@@ -436,7 +443,8 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # Second sync pass: to target CL
     preview = p4_sync_preview(changelist, depot_root, workspace_dir)
-    prep = prepare_writable_files(preview, workspace_dir)
+    prep = prepare_writable_files(preview, workspace_dir,
+                                  normalize_newlines)
     all_changed.extend(prep.changed)
     all_ignored.extend(prep.ignored)
     all_binary |= prep.binary

@@ -19,12 +19,15 @@ def branch_to_alias(branch_name: str) -> str:
     return branch_name.replace('/', '-')
 
 
-def compute_local_md5(filepath: str) -> str:
+def compute_local_md5(filepath: str, normalize_newlines: bool = False) -> str:
     """Compute the MD5 hex digest of a local file."""
     md5 = hashlib.md5()
     with open(filepath, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
-            md5.update(chunk)
+        if normalize_newlines:
+            md5.update(f.read().replace(b'\r\n', b'\n'))
+        else:
+            for chunk in iter(lambda: f.read(8192), b''):
+                md5.update(chunk)
     return md5.hexdigest().upper()
 
 

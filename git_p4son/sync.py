@@ -110,7 +110,8 @@ def prepare_writable_files(preview_files: list[str],
 
         info = file_info.get(f)
         if info and info.digest:
-            local_md5 = compute_local_md5(f)
+            is_text = not is_binary_file_type(info.head_type)
+            local_md5 = compute_local_md5(f, normalize_newlines=is_text)
             if local_md5 == info.digest:
                 unchanged_count += 1
                 continue

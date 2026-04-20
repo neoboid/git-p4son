@@ -133,7 +133,7 @@ def prepare_writable_files(preview_files: list[str],
         label = 'file has' if count == 1 else 'files have'
         log.warning(f'{count} {label} local changes, will merge after sync')
         for f in result.changed:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     if result.ignored:
         count = len(result.ignored)
@@ -141,7 +141,7 @@ def prepare_writable_files(preview_files: list[str],
         log.warning(
             f'{count} git-ignored writable {label} will not be synced')
         for f in result.ignored:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     return result
 
@@ -250,21 +250,21 @@ def _merge_changed_files(changed_files: list[str], user_commit: str,
         label = 'file' if count == 1 else 'files'
         log.success(f'{count} {label} merged successfully')
         for f in merged_clean:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     if merged_conflicts:
         count = len(merged_conflicts)
         label = 'file' if count == 1 else 'files'
         log.warning(f'{count} {label} merged with conflicts')
         for f in merged_conflicts:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     if binary_file_list:
         count = len(binary_file_list)
         label = 'binary file has' if count == 1 else 'binary files have'
         log.warning(f'{count} {label} local changes, local version restored')
         for f in binary_file_list:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     if added_local_deleted_upstream:
         count = len(added_local_deleted_upstream)
@@ -273,7 +273,7 @@ def _merge_changed_files(changed_files: list[str], user_commit: str,
             f'{count} {label} deleted in Perforce but modified locally, '
             'local version restored')
         for f in added_local_deleted_upstream:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     if deleted_local_added_upstream:
         count = len(deleted_local_added_upstream)
@@ -281,7 +281,7 @@ def _merge_changed_files(changed_files: list[str], user_commit: str,
         log.warning(
             f'{count} {label} deleted locally but modified in Perforce')
         for f in deleted_local_added_upstream:
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     needs_attention = (merged_clean or merged_conflicts or binary_file_list
                        or added_local_deleted_upstream
@@ -462,6 +462,6 @@ def sync_command(args: argparse.Namespace) -> int:
     if all_ignored:
         log.heading('Files not synced (git-ignored and writable)')
         for f in sorted(set(all_ignored)):
-            log.info(f)
+            log.info(os.path.relpath(f, workspace_dir))
 
     return 0

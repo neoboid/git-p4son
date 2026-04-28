@@ -569,19 +569,40 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=['/ws/a.txt'])
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_last_synced(self, _depot, _git_clean, _p4clean,
-                         mock_last_sync, mock_p4sync, _spec):
+                         mock_last_sync, _preview, mock_prep,
+                         mock_p4sync, _spec):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist='last-synced',
                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_called_once_with(
-            100, 'last synced', '//myclient', '/ws')
+            100, 'last synced', '//myclient', '/ws',
+            expected_clobber=set())
+
+    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
+    def test_last_synced_skips_sync_when_preview_empty(
+            self, _depot, _git_clean, _p4clean, mock_last_sync,
+            _preview, mock_p4sync, _spec):
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        args = mock.Mock(changelist='last-synced',
+                         force=False, workspace_dir='/ws')
+        rc = sync_command(args)
+        self.assertEqual(rc, 0)
+        mock_p4sync.assert_not_called()
 
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')

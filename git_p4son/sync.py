@@ -383,8 +383,13 @@ def sync_command(args: argparse.Namespace) -> int:
         if not last_sync:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
-        p4_sync(last_sync.changelist, last_changelist_label, depot_root,
-                workspace_dir)
+        preview = p4_sync_preview(
+            last_sync.changelist, depot_root, workspace_dir)
+        if preview:
+            prep = prepare_writable_files(preview, workspace_dir,
+                                          normalize_newlines)
+            p4_sync(last_sync.changelist, last_changelist_label, depot_root,
+                    workspace_dir, expected_clobber=set(prep.ignored))
         return 0
 
     # No argument means sync to latest
@@ -438,8 +443,9 @@ def sync_command(args: argparse.Namespace) -> int:
         all_changed.extend(prep.changed)
         all_ignored.extend(prep.ignored)
         all_binary |= prep.binary
-        p4_sync(last_changelist, last_changelist_label, depot_root,
-                workspace_dir, expected_clobber=set(prep.ignored))
+        if preview:
+            p4_sync(last_changelist, last_changelist_label, depot_root,
+                    workspace_dir, expected_clobber=set(prep.ignored))
 
     # Second sync pass: to target CL
     preview = p4_sync_preview(changelist, depot_root, workspace_dir)
@@ -448,8 +454,9 @@ def sync_command(args: argparse.Namespace) -> int:
     all_changed.extend(prep.changed)
     all_ignored.extend(prep.ignored)
     all_binary |= prep.binary
-    p4_sync(changelist, changelist_label, depot_root,
-            workspace_dir, expected_clobber=set(prep.ignored))
+    if preview:
+        p4_sync(changelist, changelist_label, depot_root,
+                workspace_dir, expected_clobber=set(prep.ignored))
 
     # Commit (pure Perforce state)
     log.heading('Committing git changes')

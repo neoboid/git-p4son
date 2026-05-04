@@ -5,12 +5,32 @@ Stores named aliases for changelist numbers in .git-p4son/changelists/<name>.
 """
 
 import os
+import re
 
 from . import CONFIG_DIR
 from .log import log
 
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'branch'})
+
+# Allowed characters: ASCII letters, digits, hyphen, underscore, dot.
+# Must not start or end with a dot, so "." and ".." are rejected and the
+# filename does not collide with hidden files or platform-specific quirks
+# (Windows disallows trailing dots).
+_ALIAS_NAME_RE = re.compile(r'^[A-Za-z0-9_-]([A-Za-z0-9._-]*[A-Za-z0-9_-])?$')
+
+
+def validate_alias_name(name: str) -> str | None:
+    """Return an error message if alias name is invalid, else None."""
+    if not name:
+        return 'Alias name cannot be empty'
+    if name in RESERVED_KEYWORDS:
+        return f'Alias name "{name}" is a reserved keyword'
+    if not _ALIAS_NAME_RE.match(name):
+        return (
+            f'Invalid alias name "{name}": must contain only letters, digits, '
+            'hyphens, underscores, and dots, and must not start or end with a dot')
+    return None
 
 
 def _changelists_dir(workspace_dir: str) -> str:
@@ -26,8 +46,9 @@ def alias_exists(name: str, workspace_dir: str) -> bool:
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """Save a changelist number under a named alias."""
-    if name in RESERVED_KEYWORDS:
-        log.error(f'Alias name "{name}" is a reserved keyword')
+    error = validate_alias_name(name)
+    if error:
+        log.error(error)
         return False
 
     changelists_dir = _changelists_dir(workspace_dir)

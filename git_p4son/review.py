@@ -10,7 +10,7 @@ import os
 import shlex
 import subprocess
 from . import CONFIG_DIR
-from .changelist_store import alias_exists
+from .changelist_store import alias_exists, validate_alias_name
 from .git import get_commit_lines_since, resolve_editor
 from .log import log
 
@@ -57,6 +57,14 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
 def review_command(args: argparse.Namespace) -> int:
     """Execute the review command."""
     workspace_dir = args.workspace_dir
+
+    # Validate alias name before starting
+    log.heading(f'Validating alias "{args.alias}"')
+    error = validate_alias_name(args.alias)
+    if error:
+        log.error(error)
+        return 1
+    log.success('Done')
 
     # Check alias availability before starting
     if not args.force:

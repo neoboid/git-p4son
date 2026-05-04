@@ -6,7 +6,11 @@ creates a Swarm review.
 """
 
 import argparse
-from .changelist_store import alias_exists, save_changelist_alias
+from .changelist_store import (
+    alias_exists,
+    save_changelist_alias,
+    validate_alias_name,
+)
 from .lib import create_changelist, open_changes_for_edit
 from .perforce import add_review_keyword_to_changelist, p4_shelve_changelist
 from .log import log
@@ -16,8 +20,12 @@ def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
 
-    # Check alias availability before creating the changelist
+    # Validate alias name and availability before creating the changelist
     if args.alias and not args.dry_run:
+        error = validate_alias_name(args.alias)
+        if error:
+            log.error(error)
+            return 1
         if alias_exists(args.alias, workspace_dir) and not args.force:
             log.error(
                 f'Alias "{args.alias}" already exists '

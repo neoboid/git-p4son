@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.9
+
+- Set PWD env var for subprocesses to match the requested cwd
+- Validate alias names to ensure they are usable as filenames
+- Remove p4 sync -n dry run to speed up sync
+
 ## 0.2.8
 
 - Fix bug when a commit first added a file and then edited it in a later commit when creating a review

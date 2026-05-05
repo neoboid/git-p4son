@@ -141,6 +141,25 @@ class TestBranchToAlias(unittest.TestCase):
         self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
 
 
+class TestRunSetsPWD(unittest.TestCase):
+    @mock.patch('subprocess.run')
+    def test_pwd_overrides_inherited_value(self, mock_subprocess_run):
+        mock_subprocess_run.return_value = mock.Mock(
+            returncode=0, stdout='', stderr='')
+        with mock.patch.dict(os.environ, {'PWD': '/some/other/dir'}):
+            run(['p4', 'add', 'foo.txt'], cwd='/workspace')
+        env = mock_subprocess_run.call_args.kwargs['env']
+        self.assertEqual(env['PWD'], '/workspace')
+
+    @mock.patch('subprocess.run')
+    def test_pwd_uses_absolute_path(self, mock_subprocess_run):
+        mock_subprocess_run.return_value = mock.Mock(
+            returncode=0, stdout='', stderr='')
+        run(['p4', 'add', 'foo.txt'], cwd='.')
+        env = mock_subprocess_run.call_args.kwargs['env']
+        self.assertEqual(env['PWD'], os.path.abspath('.'))
+
+
 class TestJoinCommandLine(unittest.TestCase):
     def test_simple_command(self):
         result = join_command_line(['git', 'status'])
@@ -210,13 +229,13 @@ class TestRun(unittest.TestCase):
             stderr='',
         )
         result = run(['git', 'status'], cwd='/tmp')
-        mock_subprocess_run.assert_called_once_with(
-            ['git', 'status'],
-            cwd='/tmp',
-            capture_output=True,
-            text=True,
-            input=None,
-        )
+        call = mock_subprocess_run.call_args
+        self.assertEqual(call.args, (['git', 'status'],))
+        self.assertEqual(call.kwargs['cwd'], '/tmp')
+        self.assertEqual(call.kwargs['capture_output'], True)
+        self.assertEqual(call.kwargs['text'], True)
+        self.assertEqual(call.kwargs['input'], None)
+        self.assertEqual(call.kwargs['env']['PWD'], '/tmp')
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, ['line1', 'line2'])
         self.assertEqual(result.stderr, [])
@@ -254,13 +273,13 @@ class TestRunWithOutput(unittest.TestCase):
         mock_popen_cls.return_value = mock_process
 
         result = run_with_output(['git', 'status'], cwd='/tmp')
-        mock_popen_cls.assert_called_once_with(
-            ['git', 'status'],
-            cwd='/tmp',
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        call = mock_popen_cls.call_args
+        self.assertEqual(call.args, (['git', 'status'],))
+        self.assertEqual(call.kwargs['cwd'], '/tmp')
+        self.assertEqual(call.kwargs['stdout'], subprocess.PIPE)
+        self.assertEqual(call.kwargs['stderr'], subprocess.PIPE)
+        self.assertEqual(call.kwargs['text'], True)
+        self.assertEqual(call.kwargs['env']['PWD'], '/tmp')
         self.assertEqual(result.returncode, 0)
 
     @mock.patch('subprocess.Popen')

@@ -2,6 +2,7 @@
 Common utilities shared between sync and edit commands.
 """
 
+import os
 import queue
 import subprocess
 import sys
@@ -11,6 +12,19 @@ from datetime import timedelta
 from typing import IO, Callable
 
 from .log import log
+
+
+def _env_with_pwd(cwd: str) -> dict[str, str]:
+    """Return a copy of os.environ with PWD set to abspath(cwd).
+
+    subprocess only changes the child's kernel cwd; PWD is inherited from
+    the parent. Tools that read PWD for relative-path resolution (notably
+    'p4 add') would otherwise resolve paths against the wrong directory
+    when git-p4son is invoked from a subdirectory of the workspace.
+    """
+    env = os.environ.copy()
+    env['PWD'] = os.path.abspath(cwd)
+    return env
 
 
 def branch_to_alias(branch_name: str) -> str:
@@ -85,6 +99,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     result = subprocess.run(command,
                             cwd=cwd,
+                            env=_env_with_pwd(cwd),
                             capture_output=True,
                             text=True,
                             input=input)
@@ -136,6 +151,7 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
 
     with subprocess.Popen(command,
                           cwd=cwd,
+                          env=_env_with_pwd(cwd),
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,
                           text=True) as process:

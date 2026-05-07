@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from . import CONFIG_DIR
-from .common import RunResult, run_with_output
+from .common import RunResult, run
 from .config import load_config
 from .log import log
 
@@ -73,6 +73,12 @@ def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
     return [str(path)]
 
 
+def _print_stdout(result: RunResult) -> None:
+    """Print stdout from a completed hook."""
+    for line in result.stdout:
+        print(line)
+
+
 def run_hooks(hook_name: str, workspace_dir: str,
               invocation_dir: str) -> list[RunResult]:
     """Run all executable files for a named hook."""
@@ -99,7 +105,8 @@ def run_hooks(hook_name: str, workspace_dir: str,
             log.warning(f'Skipping non-executable hook: {display_path}')
             continue
 
-        result = run_with_output(command, cwd=cwd, env=env)
+        result = run(command, cwd=cwd, env=env)
+        _print_stdout(result)
         results.append(result)
 
     return results

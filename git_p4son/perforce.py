@@ -7,7 +7,13 @@ import re
 from dataclasses import dataclass
 from typing import IO
 
-from .common import CommandError, RunError, run, run_with_output
+from .common import (
+    CommandError,
+    RunError,
+    normalize_workspace_path,
+    run,
+    run_with_output,
+)
 from .git import LocalChanges
 from .log import log
 
@@ -252,21 +258,31 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                               changelist, workspace_dir, dry_run)
 
 
-def p4_get_opened_files(depot_root: str, workspace_dir: str) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for files opened in Perforce."""
+def _p4_action_to_change(action: str) -> str:
+    """Convert a p4 action to a git-p4son change label."""
+    if action in ('add', 'move/add'):
+        return 'add'
+    if action in ('delete', 'move/delete'):
+        return 'delete'
+    return 'modify'
+
+
+def p4_get_opened_files(depot_root: str,
+                        workspace_dir: str) -> list[tuple[str, str]]:
+    """Return client paths and change types for files opened in Perforce."""
     res = run_with_output(
-        ['p4', '-ztag', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
+        ['p4', '-ztag', 'fstat', '-Ro', '-Op', '-T',
+         'depotFile,path,clientFile,action', f'{depot_root}/...'],
+        cwd=workspace_dir)
     files = []
     for record in parse_ztag_multi_output(res.stdout):
-        depot_path = record['depotFile']
-        action = record['action']
-        if action in ('add', 'move/add'):
-            change = 'add'
-        elif action in ('delete', 'move/delete'):
-            change = 'delete'
-        else:
-            change = 'modify'
-        files.append((depot_path, change))
+        client_path = record.get('path') or record.get('clientFile')
+        if not client_path:
+            client_path = record['depotFile']
+        filename = normalize_workspace_path(
+            client_path, workspace_dir, allow_outside=True)
+        change = _p4_action_to_change(record['action'])
+        files.append((filename, change))
     return files
 
 

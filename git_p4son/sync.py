@@ -8,7 +8,7 @@ from typing import IO
 
 from .common import CommandError, RunError, run_with_output
 from .config import get_depot_root
-from .git import add_all_files, commit, get_dirty_files
+from .git import add_all_files, commit, get_dirty_files, is_file_tracked
 from .log import log
 from .perforce import (
     get_latest_changelist,
@@ -164,12 +164,21 @@ def sync_command(args: argparse.Namespace) -> int:
 
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
-    if opened_files:
-        for filename, change in opened_files:
+    tracked_opened_files = [
+        (filename, change)
+        for filename, change in opened_files
+        if is_file_tracked(filename, workspace_dir)
+    ]
+    if tracked_opened_files:
+        for filename, change in tracked_opened_files:
             log.file_change(filename, change)
-        log.error('Workspace is not clean')
+        log.error('Workspace has p4-opened files tracked by git')
         return 1
-    log.success('Clean')
+    if opened_files:
+        log.warning(
+            f'Ignoring {len(opened_files)} p4-opened files not tracked by git')
+    else:
+        log.success('Clean')
 
     last_changelist_label = 'last synced'
     log.heading(f'Finding {last_changelist_label} changelist')

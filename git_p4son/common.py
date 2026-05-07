@@ -2,8 +2,11 @@
 Common utilities shared between sync and edit commands.
 """
 
+import ntpath
 import os
+import posixpath
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -30,6 +33,43 @@ def _env_with_pwd(cwd: str) -> dict[str, str]:
 def branch_to_alias(branch_name: str) -> str:
     """Sanitize a branch name for use as an alias filename."""
     return branch_name.replace('/', '-')
+
+
+def _path_module_for(*paths: str):
+    """Choose a path module that matches the given path strings."""
+    if any('\\' in path or re.match(r'^[A-Za-z]:', path) for path in paths):
+        return ntpath
+    return posixpath
+
+
+def normalize_workspace_path(filename: str, workspace_dir: str,
+                             allow_outside: bool = False) -> str | None:
+    """Return filename as a workspace-relative slash path."""
+    pathmod = _path_module_for(filename, workspace_dir)
+    normalized_workspace = pathmod.normpath(workspace_dir)
+    normalized_filename = pathmod.normpath(filename)
+
+    if pathmod.isabs(normalized_filename):
+        try:
+            common = pathmod.commonpath([
+                pathmod.normcase(normalized_workspace),
+                pathmod.normcase(normalized_filename),
+            ])
+        except ValueError:
+            common = None
+
+        if common == pathmod.normcase(normalized_workspace):
+            normalized_filename = pathmod.relpath(
+                normalized_filename, normalized_workspace)
+        elif not allow_outside:
+            return None
+
+    if not allow_outside:
+        parts = normalized_filename.split(pathmod.sep)
+        if parts and parts[0] == '..':
+            return None
+
+    return normalized_filename.replace('\\', '/')
 
 
 class CommandError(Exception):

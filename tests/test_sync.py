@@ -9,8 +9,7 @@ from git_p4son.perforce import (
     P4SyncOutputProcessor,
     get_latest_changelist,
     get_writable_files,
-    p4_get_opened_files_client,
-    p4_get_opened_files_depot,
+    p4_get_opened_files,
     parse_p4_sync_line,
 )
 from git_p4son.git import (
@@ -126,73 +125,8 @@ class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_clean(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
-        self.assertEqual(p4_get_opened_files_depot('//depot', '/ws'), [])
+        self.assertEqual(p4_get_opened_files('//depot', '/ws'), [])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_edit(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... action edit',
-            '... change default',
-        ])
-        result = p4_get_opened_files_depot('//depot', '/ws')
-        self.assertEqual(result, [('//depot/foo.txt', 'modify')])
-
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_add(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            '... depotFile //depot/new.txt',
-            '... action add',
-            '... change 12345',
-        ])
-        result = p4_get_opened_files_depot('//depot', '/ws')
-        self.assertEqual(result, [('//depot/new.txt', 'add')])
-
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_delete(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            '... depotFile //depot/old.txt',
-            '... action delete',
-            '... change 12345',
-        ])
-        result = p4_get_opened_files_depot('//depot', '/ws')
-        self.assertEqual(result, [('//depot/old.txt', 'delete')])
-
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_move_add(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            '... depotFile //depot/new.txt',
-            '... action move/add',
-            '... change 12345',
-        ])
-        result = p4_get_opened_files_depot('//depot', '/ws')
-        self.assertEqual(result, [('//depot/new.txt', 'add')])
-
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_multiple_files(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            '... depotFile //depot/a.txt',
-            '... action edit',
-            '... change default',
-            '',
-            '... depotFile //depot/b.txt',
-            '... action add',
-            '... change 12345',
-        ])
-        result = p4_get_opened_files_depot('//depot', '/ws')
-        self.assertEqual(result, [
-            ('//depot/a.txt', 'modify'),
-            ('//depot/b.txt', 'add'),
-        ])
-
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_command_failure(self, mock_rwo):
-        mock_rwo.side_effect = RunError('p4 opened failed')
-        with self.assertRaises(RunError):
-            p4_get_opened_files_depot('//depot', '/ws')
-
-
-class TestP4GetOpenedFilesClient(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_returns_workspace_relative_client_path(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
@@ -200,8 +134,55 @@ class TestP4GetOpenedFilesClient(unittest.TestCase):
             '... path /ws/foo.txt',
             '... action edit',
         ])
-        result = p4_get_opened_files_client('//depot', '/ws')
+        result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('foo.txt', 'modify')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_add(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '... depotFile //depot/new.txt',
+            '... path /ws/new.txt',
+            '... action add',
+        ])
+        result = p4_get_opened_files('//depot', '/ws')
+        self.assertEqual(result, [('new.txt', 'add')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_delete(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '... depotFile //depot/old.txt',
+            '... path /ws/old.txt',
+            '... action delete',
+        ])
+        result = p4_get_opened_files('//depot', '/ws')
+        self.assertEqual(result, [('old.txt', 'delete')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_move_add(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '... depotFile //depot/new.txt',
+            '... path /ws/new.txt',
+            '... action move/add',
+        ])
+        result = p4_get_opened_files('//depot', '/ws')
+        self.assertEqual(result, [('new.txt', 'add')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_multiple_files(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            '... depotFile //depot/a.txt',
+            '... path /ws/a.txt',
+            '... action edit',
+            '',
+            '... depotFile //depot/b.txt',
+            '... path /ws/b.txt',
+            '... action add',
+        ])
+        result = p4_get_opened_files('//depot', '/ws')
+        self.assertEqual(result, [
+            ('a.txt', 'modify'),
+            ('b.txt', 'add'),
+        ])
 
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_normalizes_slashes(self, mock_rwo):
@@ -210,8 +191,14 @@ class TestP4GetOpenedFilesClient(unittest.TestCase):
             r'... path C:\ws\dir\foo.txt',
             '... action add',
         ])
-        result = p4_get_opened_files_client('//depot', r'C:\ws')
+        result = p4_get_opened_files('//depot', r'C:\ws')
         self.assertEqual(result, [('dir/foo.txt', 'add')])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_command_failure(self, mock_rwo):
+        mock_rwo.side_effect = RunError('p4 opened failed')
+        with self.assertRaises(RunError):
+            p4_get_opened_files('//depot', '/ws')
 
 
 class TestGitAddAllFiles(unittest.TestCase):
@@ -371,7 +358,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_dirty_files')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=10000)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_sync_specific_cl(self, _depot, _p4clean, _last_cl, _p4sync,
                               mock_git_clean, _git_add, _git_commit):
@@ -397,7 +384,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client',
+    @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('foo.txt', 'modify')])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_dirty_p4_workspace_aborts(self, _depot, _p4clean, _git_clean,
@@ -412,7 +399,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
     @mock.patch('git_p4son.sync.is_file_tracked', return_value=False)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client',
+    @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('ignored.bin', 'modify')])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_untracked_p4_opened_files_are_allowed(
@@ -424,7 +411,7 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=200)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_older_cl_without_force_aborts(self, _depot, _git_clean,
@@ -438,7 +425,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_dirty_files')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=200)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_older_cl_with_force_proceeds(self, _depot, _p4clean, _last_cl,
                                           _p4sync, mock_git_clean,
@@ -450,7 +437,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_same_cl_is_noop(self, _depot, _git_clean, _p4clean,
@@ -461,7 +448,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_last_synced(self, _depot, _git_clean, _p4clean,
@@ -478,7 +465,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_dirty_files')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
-    @mock.patch('git_p4son.sync.p4_get_opened_files_client', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_latest_keyword(self, _depot, _p4clean, _last_cl, _p4sync,
                             mock_git_clean, _commit, mock_get_latest):

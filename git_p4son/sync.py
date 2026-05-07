@@ -13,7 +13,7 @@ from .log import log
 from .perforce import (
     get_latest_changelist,
     p4_force_sync_file,
-    p4_get_opened_files_client,
+    p4_get_opened_files,
 )
 
 
@@ -163,7 +163,7 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success('clean')
 
     log.heading('Checking p4 workspace')
-    opened_files = p4_get_opened_files_client(depot_root, workspace_dir)
+    opened_files = p4_get_opened_files(depot_root, workspace_dir)
     tracked_opened_files = [
         (filename, change)
         for filename, change in opened_files

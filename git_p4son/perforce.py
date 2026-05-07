@@ -267,21 +267,8 @@ def _p4_action_to_change(action: str) -> str:
     return 'modify'
 
 
-def p4_get_opened_files_depot(depot_root: str,
-                              workspace_dir: str) -> list[tuple[str, str]]:
-    """Return depot paths and change types for files opened in Perforce."""
-    res = run_with_output(
-        ['p4', '-ztag', 'opened', f'{depot_root}/...'], cwd=workspace_dir)
-    files = []
-    for record in parse_ztag_multi_output(res.stdout):
-        depot_path = record['depotFile']
-        change = _p4_action_to_change(record['action'])
-        files.append((depot_path, change))
-    return files
-
-
-def p4_get_opened_files_client(depot_root: str,
-                               workspace_dir: str) -> list[tuple[str, str]]:
+def p4_get_opened_files(depot_root: str,
+                        workspace_dir: str) -> list[tuple[str, str]]:
     """Return client paths and change types for files opened in Perforce."""
     res = run_with_output(
         ['p4', '-ztag', 'fstat', '-Ro', '-Op', '-T',

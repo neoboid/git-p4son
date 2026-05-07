@@ -9,6 +9,7 @@ from typing import IO
 from .common import CommandError, RunError, run_with_output
 from .config import get_depot_root
 from .git import add_all_files, commit, get_dirty_files, is_file_tracked
+from .hooks import run_hooks
 from .log import log
 from .perforce import (
     get_latest_changelist,
@@ -145,6 +146,7 @@ def sync_command(args: argparse.Namespace) -> int:
         Exit code (0 for success, non-zero for failure)
     """
     workspace_dir = args.workspace_dir
+    invocation_dir = vars(args).get('invocation_dir', workspace_dir)
 
     log.heading('Finding depot root')
     depot_root = get_depot_root(workspace_dir)
@@ -195,6 +197,7 @@ def sync_command(args: argparse.Namespace) -> int:
         if not p4_sync(last_changelist, last_changelist_label, args.force,
                        depot_root, workspace_dir):
             return 1
+        run_hooks('post-sync', workspace_dir, invocation_dir)
         return 0
 
     # No argument means sync to latest
@@ -214,6 +217,7 @@ def sync_command(args: argparse.Namespace) -> int:
 
     if last_changelist == changelist:
         log.info(f'Already at CL {last_changelist}, nothing to do.')
+        log.heading('Skipping post-sync hooks')
         return 0
 
     # Check if trying to sync to an older changelist
@@ -245,5 +249,7 @@ def sync_command(args: argparse.Namespace) -> int:
     commit_msg = f'git-p4son: p4 sync {depot_root}/...@{changelist}'
     commit(commit_msg, workspace_dir, allow_empty=True)
     log.success(f'Committed {len(dirty_files)} files')
+
+    run_hooks('post-sync', workspace_dir, invocation_dir)
 
     return 0

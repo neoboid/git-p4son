@@ -253,6 +253,11 @@ git p4son sync last-synced
 git p4son sync 12345 --force
 ```
 
+#### post-sync hook
+
+After a successful `git-p4son sync` that actually performs sync work, git-p4son runs [hooks](#hooks)
+from `.git-p4son/hooks/post-sync/`.
+
 ### New Command
 
 Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits since the base branch.
@@ -477,6 +482,32 @@ Most commands that accept an alias or changelist argument default to the current
 The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new` and `review`) or supply an
 explicit alias name instead.
 
+## Hooks
+
+Hooks work similarly to git hooks. They are executables (unix)/scripts (windows) that you place in
+the `.git-p4son/hooks/[hook-name]/` directory. These scripts will be called to add or modify behavior
+at defined times during git-p4son operations. Scripts get run in filename (lexicographically) sorted
+order.
+
+The hook process CWD is the directory where git-p4son was invoked, and `GIT_P4SON_REPO_ROOT_DIR` is
+set to the git-p4son repository root.
+
+On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with `powershell.exe`, `nushell.exe`, `bash.exe`, and
+`python.exe` respectively. Customize or add Windows script associations in `.git-p4son/config.toml`:
+
+```toml
+[hooks.extension-associations]
+".ps1" = ["pwsh.exe", "-NoProfile", "-File"]
+".py" = "python.exe"
+```
+
+Non-executable or unrecognized hook files are skipped with a warning.
+
+### post-sync hook
+
+After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
+`.git-p4son/hooks/post-sync/`.
+
 ## Shell Completions
 
 Tab completion is available for bash, zsh, and PowerShell, including commands, flags, and dynamic alias names.
@@ -507,3 +538,4 @@ Add the following to your PowerShell profile (`$PROFILE`):
 ```
 
 All three enable completion for `git p4son <TAB>` and `git-p4son <TAB>`.
+

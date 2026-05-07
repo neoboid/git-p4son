@@ -435,30 +435,36 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
+    @mock.patch('git_p4son.sync.log')
+    @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_same_cl_is_noop(self, _depot, _git_clean, _p4clean,
-                             _last_cl, _p4sync):
+                             _last_cl, _p4sync, mock_run_hooks, mock_log):
         args = mock.Mock(changelist='100', force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
+        mock_run_hooks.assert_not_called()
+        mock_log.heading.assert_any_call('Skipping post-sync hooks')
 
+    @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_sync', return_value=True)
     @mock.patch('git_p4son.sync.git_changelist_of_last_sync', return_value=100)
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
     def test_last_synced(self, _depot, _git_clean, _p4clean,
-                         _last_cl, mock_p4sync):
-        args = mock.Mock(changelist='last-synced',
-                         force=False, workspace_dir='/ws')
+                         _last_cl, mock_p4sync, mock_run_hooks):
+        args = mock.Mock(changelist='last-synced', force=False,
+                         workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_called_once_with(
             100, 'last synced', False, '//myclient', '/ws')
+        mock_run_hooks.assert_called_once_with('post-sync', '/ws', '/invoked')
 
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')

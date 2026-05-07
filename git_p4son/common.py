@@ -110,7 +110,8 @@ def join_command_line(command: list[str]) -> str:
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
-        input: str | None = None) -> RunResult:
+        input: str | None = None,
+        env: dict[str, str] | None = None) -> RunResult:
     """
     Run a command and return the result.
 
@@ -119,6 +120,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         cwd: Working directory to run the command in
         dry_run: If True, only print the command without executing
         input: Optional string to pass to the subprocess via stdin
+        env: Optional environment variables to add or override
 
     Returns:
         RunResult object with returncode, stdout, and stderr
@@ -137,9 +139,13 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     start_timestamp = timer()
 
+    command_env = _env_with_pwd(cwd)
+    if env:
+        command_env.update(env)
+
     result = subprocess.run(command,
                             cwd=cwd,
-                            env=_env_with_pwd(cwd),
+                            env=command_env,
                             capture_output=True,
                             text=True,
                             input=input)

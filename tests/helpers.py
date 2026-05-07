@@ -43,7 +43,8 @@ class MockRunDispatcher:
             returncode=1, stderr=['unmatched command'])
         self.calls = []
 
-    def __call__(self, command, cwd='.', dry_run=False, input=None):
+    def __call__(self, command, cwd='.', dry_run=False, input=None,
+                 env=None):
         self.calls.append((command, cwd, dry_run))
         for prefix, result in self.mapping.items():
             if tuple(command[:len(prefix)]) == prefix:

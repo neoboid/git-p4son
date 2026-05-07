@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from . import CONFIG_DIR
-from .common import RunResult, run
+from .common import RunResult, run_with_output
 from .config import load_config
 from .log import log
 
@@ -99,7 +99,7 @@ def run_hooks(hook_name: str, workspace_dir: str,
             log.warning(f'Skipping non-executable hook: {display_path}')
             continue
 
-        result = run(command, cwd=cwd, env=env)
+        result = run_with_output(command, cwd=cwd, env=env)
         results.append(result)
 
     return results

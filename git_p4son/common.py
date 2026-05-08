@@ -110,7 +110,8 @@ def join_command_line(command: list[str]) -> str:
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
-        input: str | None = None) -> RunResult:
+        input: str | None = None,
+        env: dict[str, str] | None = None) -> RunResult:
     """
     Run a command and return the result.
 
@@ -119,11 +120,14 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         cwd: Working directory to run the command in
         dry_run: If True, only print the command without executing
         input: Optional string to pass to the subprocess via stdin
+        env: Optional environment variables to add or override
 
     Returns:
         RunResult object with returncode, stdout, and stderr
     """
-    log.command(join_command_line(command))
+    use_spinner = input is None and not dry_run
+    log.command(join_command_line(command),
+                truncate_for_spinner=use_spinner)
 
     if dry_run:
         log.end_command()
@@ -137,9 +141,13 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     start_timestamp = timer()
 
+    command_env = _env_with_pwd(cwd)
+    if env:
+        command_env.update(env)
+
     result = subprocess.run(command,
                             cwd=cwd,
-                            env=_env_with_pwd(cwd),
+                            env=command_env,
                             capture_output=True,
                             text=True,
                             input=input)
@@ -166,7 +174,9 @@ def enqueue_lines(stream: IO[str], output_queue: queue.Queue[str]) -> None:
         output_queue.put(line.rstrip())
 
 
-def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[..., None] | None = None) -> RunResult:
+def run_with_output(command: list[str], cwd: str = '.',
+                    on_output: Callable[..., None] | None = None,
+                    env: dict[str, str] | None = None) -> RunResult:
     """
     Run a command with real-time output processing.
 
@@ -176,11 +186,12 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
         on_output: Callback function for processing output lines
                    If set the funciton will be called with each
                    line and stream (stdout/stderr) as they are written.
+        env: Optional environment variables to add or override
 
     Returns:
         RunResult object with returncode, stdout, and stderr
     """
-    log.command(join_command_line(command))
+    log.command(join_command_line(command), truncate_for_spinner=True)
     log.start_spinner()
 
     start_timestamp = timer()
@@ -189,9 +200,13 @@ def run_with_output(command: list[str], cwd: str = '.', on_output: Callable[...,
     stderr_lines: list[str] = []
     returncode: int | None = None
 
+    command_env = _env_with_pwd(cwd)
+    if env:
+        command_env.update(env)
+
     with subprocess.Popen(command,
                           cwd=cwd,
-                          env=_env_with_pwd(cwd),
+                          env=command_env,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,
                           text=True) as process:

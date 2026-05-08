@@ -3,6 +3,7 @@ Main CLI entry point for git-p4son.
 """
 
 import argparse
+import os
 import sys
 import time
 from importlib.resources import files
@@ -378,6 +379,8 @@ def completion_command(args: argparse.Namespace) -> int:
 
 
 def run_command(args: argparse.Namespace) -> int:
+    args.invocation_dir = os.getcwd()
+
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
     if not args.workspace_dir:

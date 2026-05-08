@@ -5,6 +5,7 @@ All user-facing output goes through the module-level `log` singleton.
 This centralises formatting, verbosity filtering, and future color support.
 """
 
+import shutil
 import sys
 import threading
 from datetime import timedelta
@@ -57,6 +58,21 @@ def _color_status(status: str, color: str, stream) -> str:
     return f'[{colored_status}]'
 
 
+def _truncate_to_terminal_width(line: str) -> str:
+    """Return line shortened to one terminal row if needed."""
+    width = shutil.get_terminal_size(fallback=(120, 20)).columns
+    # Leave room for the spinner character appended by _spin.
+    max_len = max(20, width - 2)
+    if len(line) <= max_len:
+        return line
+
+    placeholder = ' ... '
+    keep = max_len - len(placeholder)
+    prefix_len = keep // 2
+    suffix_len = keep - prefix_len
+    return f'{line[:prefix_len]}{placeholder}{line[-suffix_len:]}'
+
+
 # Spinner characters — simple ASCII set.
 _SPINNER_CHARS = '|/-\\'
 _SPINNER_INTERVAL = 0.1  # seconds between frames
@@ -71,6 +87,7 @@ class Log:
         self._spinner_thread: threading.Thread | None = None
         self._spinner_stop: threading.Event = threading.Event()
         self._spinner_line: str = ''
+        self._spinner_final_line: str = ''
 
     def heading(self, text: str) -> None:
         """Print a section heading."""
@@ -95,11 +112,16 @@ class Log:
         error = _color_status('err', Color.ERROR, sys.stderr)
         print(f'{error} {text}', file=sys.stderr)
 
-    def command(self, cmd: str) -> None:
+    def command(self, cmd: str, truncate_for_spinner: bool = False) -> None:
         """Print a subprocess command line."""
-        prompt = _color('>', Color.COMMAND, sys.stdout)
-        print(f'{prompt} {cmd}', end='', flush=True)
-        self._spinner_line = f'> {cmd}'
+        full_line = f'> {cmd}'
+        line = full_line
+        if truncate_for_spinner:
+            line = _truncate_to_terminal_width(full_line)
+
+        print(self._format_command_line(line), end='', flush=True)
+        self._spinner_line = line
+        self._spinner_final_line = full_line
 
     def end_command(self) -> None:
         """Finish the command line (print newline)."""
@@ -164,13 +186,18 @@ class Log:
         self._spinner_stop.set()
         self._spinner_thread.join()
         self._spinner_thread = None
-        # Clear the spinner character by reprinting the line with color
-        line = self._spinner_line
-        if _use_color(sys.stdout) and line.startswith('> '):
-            line = f'{Color.COMMAND}>{_RESET} {line[2:]}'
-        sys.stdout.write(f'\r{line}{_CLEAR_TO_EOL}')
+        # Clear the spinner line, then print the full command once.
+        sys.stdout.write(f'\r{_CLEAR_TO_EOL}')
+        line = self._format_command_line(self._spinner_final_line)
+        sys.stdout.write(f'{line}{_CLEAR_TO_EOL}')
         sys.stdout.write('\n')
         sys.stdout.flush()
+
+    def _format_command_line(self, line: str) -> str:
+        """Return a command line with a colored prompt when supported."""
+        if _use_color(sys.stdout) and line.startswith('> '):
+            return f'{Color.COMMAND}>{_RESET} {line[2:]}'
+        return line
 
     def _spin(self) -> None:
         """Background thread: animate the spinner."""

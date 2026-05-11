@@ -91,6 +91,34 @@ class TestP4ClientSpec(unittest.TestCase):
             line_end='local')
         self.assertFalse(spec.clobber)
 
+    @mock.patch('git_p4son.perforce.sys')
+    def test_uses_crlf_local_on_windows(self, mock_sys):
+        mock_sys.platform = 'win32'
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='local')
+        self.assertTrue(spec.uses_crlf)
+
+    @mock.patch('git_p4son.perforce.sys')
+    def test_uses_crlf_local_on_unix(self, mock_sys):
+        mock_sys.platform = 'linux'
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='local')
+        self.assertFalse(spec.uses_crlf)
+
+    def test_uses_crlf_win(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='win')
+        self.assertTrue(spec.uses_crlf)
+
+    def test_uses_crlf_unix(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws', options=[], stream=None,
+            line_end='unix')
+        self.assertFalse(spec.uses_crlf)
+
 
 class TestGetClientSpec(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')

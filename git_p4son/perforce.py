@@ -67,6 +67,14 @@ class P4ClientSpec:
     def clobber(self) -> bool:
         return 'clobber' in self.options
 
+    @property
+    def uses_crlf(self) -> bool:
+        if self.line_end == 'win':
+            return True
+        if self.line_end == 'local' and sys.platform == 'win32':
+            return True
+        return False
+
 
 def get_client_spec(cwd: str) -> P4ClientSpec | None:
     """Get the client spec, or None if not in a valid workspace.

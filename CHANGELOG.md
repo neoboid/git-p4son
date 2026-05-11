@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.10
+
+- Add support for git style post-sync hooks
+Could be used with [git-p4son-chmod](https://github.com/fu5ha/git-p4son-chmod) to remove read-only flag set by p4
+of git managed files.
+- Allow p4 opened files if they're not tracked by git repository during sync
+
 ## 0.2.9
 
 - Set PWD env var for subprocesses to match the requested cwd

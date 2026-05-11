@@ -4,6 +4,7 @@ All functions that interact directly with the p4 CLI live here.
 """
 
 import re
+import sys
 from dataclasses import dataclass
 from typing import IO
 
@@ -60,6 +61,7 @@ class P4ClientSpec:
     root: str
     options: list[str]
     stream: str | None
+    line_end: str
 
     @property
     def clobber(self) -> bool:
@@ -81,6 +83,7 @@ def get_client_spec(cwd: str) -> P4ClientSpec | None:
         root=fields['Root'],
         options=fields['Options'].split(),
         stream=fields.get('Stream'),
+        line_end=fields.get('LineEnd', 'local'),
     )
 
 

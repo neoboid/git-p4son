@@ -8,6 +8,7 @@ import unittest
 from git_p4son.git import (
     find_introducing_commit_for_file,
     find_last_sync_commit_for_file,
+    get_blob_oid,
     get_file_at_commit,
     get_head_commit,
     get_ignored_files,
@@ -106,6 +107,53 @@ class TestGetFileAtCommit(GitRepoTestCase):
 
         content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
         self.assertEqual(content, b'version 2')
+
+
+class TestGetBlobOid(GitRepoTestCase):
+    def test_returns_oid_for_existing_file(self):
+        self._write_file('foo.txt', 'hello world')
+        self._commit()
+        oid = get_blob_oid('foo.txt', 'HEAD', self.tmpdir)
+        expected = subprocess.run(
+            ['git', 'rev-parse', 'HEAD:foo.txt'], cwd=self.tmpdir,
+            capture_output=True, text=True).stdout.strip()
+        self.assertEqual(oid, expected)
+
+    def test_returns_none_for_missing_file(self):
+        self._write_file('foo.txt', 'hello')
+        self._commit()
+        self.assertIsNone(
+            get_blob_oid('nonexistent.txt', 'HEAD', self.tmpdir))
+
+    def test_equal_content_yields_equal_oid(self):
+        self._write_file('a.txt', 'same bytes')
+        self._write_file('b.txt', 'same bytes')
+        self._commit()
+        self.assertEqual(
+            get_blob_oid('a.txt', 'HEAD', self.tmpdir),
+            get_blob_oid('b.txt', 'HEAD', self.tmpdir))
+
+    def test_changed_content_yields_different_oid(self):
+        self._write_file('foo.txt', 'version 1')
+        self._commit('first')
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'], cwd=self.tmpdir,
+            capture_output=True, text=True)
+        first_sha = result.stdout.strip()
+
+        self._write_file('foo.txt', 'version 2')
+        self._commit('second')
+
+        self.assertNotEqual(
+            get_blob_oid('foo.txt', first_sha, self.tmpdir),
+            get_blob_oid('foo.txt', 'HEAD', self.tmpdir))
+
+    def test_backslash_paths_normalized(self):
+        self._write_file('src/engine/test.cpp', 'hello')
+        self._commit()
+        self.assertEqual(
+            get_blob_oid('src\\engine\\test.cpp', 'HEAD', self.tmpdir),
+            get_blob_oid('src/engine/test.cpp', 'HEAD', self.tmpdir))
 
 
 class TestGetHeadCommit(GitRepoTestCase):

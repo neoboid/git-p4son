@@ -235,6 +235,22 @@ def get_file_at_commit(filepath: str, commit: str,
     return result.stdout
 
 
+def get_blob_oid(filepath: str, commit: str,
+                 workspace_dir: str) -> str | None:
+    """Return the blob OID for filepath at commit, or None if it doesn't exist.
+
+    Equal OIDs mean byte-identical content (git content-addresses blobs), so
+    this answers "did the content change?" without transferring the blob."""
+    git_path = filepath.replace('\\', '/')
+    result = run(
+        ['git', 'rev-parse', '--verify', '--quiet',
+         f'{commit}:{git_path}'],
+        cwd=workspace_dir, fail_on_returncode=False)
+    if result.returncode != 0 or not result.stdout:
+        return None
+    return result.stdout[0].strip() or None
+
+
 def get_head_commit(workspace_dir: str) -> str:
     """Return the SHA of HEAD."""
     result = run(['git', 'rev-parse', 'HEAD'], cwd=workspace_dir)

@@ -15,13 +15,14 @@ from .common import RunError, run_with_output
 from .config import get_depot_root
 from .git import (
     add_all_files, commit, find_introducing_commit_for_file,
-    find_last_sync_commit_for_file, get_dirty_files,
+    find_last_sync_commit_for_file, get_blob_oid, get_dirty_files,
     get_file_at_commit, get_head_commit, get_ignored_files, is_file_tracked,
     merge_file,
 )
 from .hooks import run_hooks
 from .log import log
 from .perforce import (
+    get_client_spec,
     get_latest_changelist,
     get_writable_files,
     is_binary_file_type,
@@ -77,6 +78,15 @@ class ChangedFile:
 
 
 @dataclass
+class _ChangedFileMeta:
+    """A file the user modified since its baseline, identified by blob OID
+    comparison without reading content. Staged to disk only after the binary
+    verdict is known."""
+    filepath: str
+    base_commit: str | None
+
+
+@dataclass
 class WritableSyncFileSet:
     """Writable files found during sync preview, classified."""
     changed: list[ChangedFile] = field(default_factory=list)
@@ -109,44 +119,77 @@ def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
     return temp_path
 
 
+def _to_crlf(content: bytes) -> bytes:
+    """Convert content to CRLF line endings. Normalizes to LF first so blobs
+    that already contain CRLF (or mixed endings) don't get doubled \\r."""
+    return content.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+
+
 def _classify_writable_file(filepath: str, pre_sync_head_commit: str,
-                            workspace_dir: str,
-                            temp_root: str) -> ChangedFile | None:
-    """Classify a writable tracked file. Returns None when the file's HEAD
-    content matches the baseline (no merge needed). Otherwise stages HEAD
-    and baseline content to temp files and returns a ChangedFile pointing
-    at them.
+                            workspace_dir: str) -> _ChangedFileMeta | None:
+    """Classify a writable tracked file by blob identity alone, transferring
+    no content. Returns None when the file's HEAD blob matches the baseline
+    (the user has not modified it; no merge needed). Otherwise returns the
+    metadata needed to stage it once the binary verdict is known.
 
     Since sync_command verifies the workspace is clean, "HEAD content" also
     means "on-disk content"; equality with the baseline means the user has
-    not modified the file since the baseline."""
+    not modified the file since the baseline. Equal blob OIDs mean identical
+    bytes, so this is exactly the content comparison without the bytes."""
     rel_path = os.path.relpath(filepath, workspace_dir)
     base_commit = _find_base_commit(
         rel_path, pre_sync_head_commit, workspace_dir)
     if base_commit == pre_sync_head_commit:
         return None
 
+    if base_commit is not None:
+        ours_oid = get_blob_oid(
+            rel_path, pre_sync_head_commit, workspace_dir)
+        base_oid = get_blob_oid(rel_path, base_commit, workspace_dir)
+        if ours_oid is not None and ours_oid == base_oid:
+            return None
+
+    return _ChangedFileMeta(filepath=filepath, base_commit=base_commit)
+
+
+def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
+                        workspace_dir: str, temp_root: str,
+                        is_binary: bool, uses_crlf: bool) -> ChangedFile:
+    """Read HEAD and baseline content for a changed file and stage it.
+
+    Text content is converted to the workspace line ending before the single
+    write: git blobs are LF, but a Perforce workspace with LineEnd win/local
+    writes files to disk as CRLF, and without matching endings the post-sync
+    merge sees every line as changed and conflicts the whole file. Binary
+    files are staged verbatim; their ours blob is restored byte-for-byte."""
+    rel_path = os.path.relpath(meta.filepath, workspace_dir)
     ours = get_file_at_commit(
         rel_path, pre_sync_head_commit, workspace_dir)
-
     base = None
-    if base_commit is not None:
-        base = get_file_at_commit(rel_path, base_commit, workspace_dir)
-        if ours is not None and ours == base:
-            return None
+    if meta.base_commit is not None:
+        base = get_file_at_commit(
+            rel_path, meta.base_commit, workspace_dir)
+
+    if uses_crlf and not is_binary:
+        if ours is not None:
+            ours = _to_crlf(ours)
+        if base is not None:
+            base = _to_crlf(base)
 
     ours_path = (_stage_temp_content(temp_root, rel_path, '.ours', ours)
                  if ours is not None else None)
     base_path = (_stage_temp_content(temp_root, rel_path, '.base', base)
                  if base is not None else None)
-    return ChangedFile(filepath=filepath, base_commit=base_commit,
-                       ours_path=ours_path, base_path=base_path)
+    return ChangedFile(filepath=meta.filepath, base_commit=meta.base_commit,
+                       ours_path=ours_path, base_path=base_path,
+                       is_binary=is_binary)
 
 
 def prepare_writable_files(preview_files: list[str],
                            workspace_dir: str,
                            pre_sync_head_commit: str,
-                           temp_root: str) -> WritableSyncFileSet:
+                           temp_root: str,
+                           uses_crlf: bool = False) -> WritableSyncFileSet:
     """Check which preview files are writable on disk and prepare them for sync.
 
     For tracked writable files, queries Perforce for the file type (binary
@@ -178,33 +221,38 @@ def prepare_writable_files(preview_files: list[str],
     if not tracked:
         return result
 
-    # Decide which files need merging by asking git whether the user
-    # modified them since the baseline. Classification reads ours/base so
-    # the merge step doesn't need to repeat the work.
+    # Pass 1: decide which files the user modified since their baseline by
+    # comparing git blob OIDs, transferring no content. Most preview files
+    # are unchanged, so this stays cheap.
     unchanged_count = 0
+    metas: list[_ChangedFileMeta] = []
     for f in tracked:
         # Make read-only regardless of whether changed or not
         mode = os.stat(f).st_mode
         os.chmod(f, mode & ~stat.S_IWUSR)
 
-        changed = _classify_writable_file(
-            f, pre_sync_head_commit, workspace_dir, temp_root)
-        if changed is None:
+        meta = _classify_writable_file(
+            f, pre_sync_head_commit, workspace_dir)
+        if meta is None:
             unchanged_count += 1
             continue
 
-        result.changed.append(changed)
+        metas.append(meta)
 
-    # Query Perforce for file type only on the files we'll actually merge,
-    # then stamp is_binary on each. Most preview files are unchanged and
-    # never need a binary check, so we avoid fstat'ing them.
-    if result.changed:
+    # Pass 2: query Perforce for file type only on the changed subset. The
+    # binary verdict must be known before staging so text content can be
+    # written once in the workspace line ending (its only authoritative
+    # source is p4's headType, and the merge step restores binary ours blobs
+    # byte-for-byte). Pass 3: read content once, convert, stage.
+    if metas:
         file_info = p4_fstat_file_info(
-            [cf.filepath for cf in result.changed], workspace_dir)
-        for cf in result.changed:
-            info = file_info.get(cf.filepath)
-            cf.is_binary = bool(
-                info and is_binary_file_type(info.head_type))
+            [m.filepath for m in metas], workspace_dir)
+        for m in metas:
+            info = file_info.get(m.filepath)
+            is_binary = bool(info and is_binary_file_type(info.head_type))
+            result.changed.append(_stage_changed_file(
+                m, pre_sync_head_commit, workspace_dir, temp_root,
+                is_binary, uses_crlf))
 
     # Log what we found
     if unchanged_count:
@@ -292,6 +340,8 @@ def _merge_changed_files(changed_files: list[ChangedFile],
             continue
 
         # Three-way merge using git merge-file directly on the staged paths.
+        # Staged ours/base already carry the workspace line ending (handled in
+        # prepare_writable_files), so no conversion is needed here.
         # When no baseline commit exists, fall back to a shared empty file.
         base_path = cf.base_path
         if base_path is None:
@@ -452,6 +502,11 @@ def sync_command(args: argparse.Namespace) -> int:
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
 
+    # Workspace line ending governs how staged git content is normalized so
+    # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
+    client_spec = get_client_spec(workspace_dir)
+    uses_crlf = bool(client_spec and client_spec.uses_crlf)
+
     # Temp root for staging HEAD/baseline file content between classification
     # and the post-sync merge. Cleaned up automatically on exit.
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
@@ -464,7 +519,8 @@ def sync_command(args: argparse.Namespace) -> int:
                 last_sync.changelist, depot_root, workspace_dir)
             if preview:
                 prep = prepare_writable_files(preview, workspace_dir,
-                                              pre_sync_head_commit, temp_root)
+                                              pre_sync_head_commit, temp_root,
+                                              uses_crlf=uses_crlf)
                 if not p4_sync(last_sync.changelist, last_changelist_label,
                                depot_root, workspace_dir,
                                expected_clobber=set(prep.ignored)):
@@ -512,7 +568,8 @@ def sync_command(args: argparse.Namespace) -> int:
             preview = p4_sync_preview(
                 last_changelist, depot_root, workspace_dir)
             prep = prepare_writable_files(preview, workspace_dir,
-                                          pre_sync_head_commit, temp_root)
+                                          pre_sync_head_commit, temp_root,
+                                          uses_crlf=uses_crlf)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             if preview:
@@ -522,7 +579,8 @@ def sync_command(args: argparse.Namespace) -> int:
         # Second sync pass: to target CL
         preview = p4_sync_preview(changelist, depot_root, workspace_dir)
         prep = prepare_writable_files(preview, workspace_dir,
-                                      pre_sync_head_commit, temp_root)
+                                      pre_sync_head_commit, temp_root,
+                                      uses_crlf=uses_crlf)
         all_changed.extend(prep.changed)
         all_ignored.extend(prep.ignored)
         if preview:

@@ -409,19 +409,24 @@ class TestPrepareWritableFiles(unittest.TestCase):
         with open(path, 'rb') as f:
             return f.read()
 
+    @mock.patch('git_p4son.sync.get_blob_oid')
     @mock.patch('git_p4son.sync.get_file_at_commit')
     @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
                 return_value='sync456')
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
     @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
     def test_user_modified_file_added_to_changed(self, _ignored, mock_fstat,
-                                                 _find_base, mock_get_file):
+                                                 _find_base, mock_get_file,
+                                                 mock_oid):
         """File modified by the user since last sync is queued for merge."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
                 path: P4FileInfo(head_type='text')}
+
+            mock_oid.side_effect = lambda rel, commit, _ws: (
+                'oid_head' if commit == 'head123' else 'oid_base')
 
             def fake_get_file(rel, commit, _ws):
                 return b'head content' if commit == 'head123' \
@@ -440,15 +445,16 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertFalse(mode & stat.S_IWUSR)
 
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'identical content')
+    @mock.patch('git_p4son.sync.get_blob_oid', return_value='same_oid')
+    @mock.patch('git_p4son.sync.get_file_at_commit')
     @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
                 return_value='sync456')
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
     @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
     def test_user_unchanged_file_not_in_changed(self, _ignored, mock_fstat,
-                                                _find_base, _get_file):
-        """File whose HEAD content matches its content at the last sync that
+                                                _find_base, _get_file,
+                                                _oid):
+        """File whose HEAD blob matches its blob at the last sync that
         touched it is unchanged from the user's perspective."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
@@ -491,8 +497,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertIsNone(cf.base_path)
             self.assertEqual(self._read(cf.ours_path), b'head content')
 
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'identical content')
+    @mock.patch('git_p4son.sync.get_blob_oid', return_value='same_oid')
+    @mock.patch('git_p4son.sync.get_file_at_commit')
     @mock.patch('git_p4son.sync.find_introducing_commit_for_file',
                 return_value='intro789')
     @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
@@ -500,8 +506,9 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
     @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
     def test_no_sync_falls_back_to_introducing_commit_unchanged(
-            self, _ignored, mock_fstat, _find_sync, _find_intro, _get_file):
-        """When no sync commit touched the file but HEAD content matches the
+            self, _ignored, mock_fstat, _find_sync, _find_intro, _get_file,
+            _oid):
+        """When no sync commit touched the file but the HEAD blob matches the
         file's introducing commit, treat as unchanged (e.g. files from an
         initial bulk import that haven't been modified since)."""
         from git_p4son.perforce import P4FileInfo
@@ -515,6 +522,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             self.assertEqual(result.changed, [])
 
+    @mock.patch('git_p4son.sync.get_blob_oid')
     @mock.patch('git_p4son.sync.get_file_at_commit')
     @mock.patch('git_p4son.sync.find_introducing_commit_for_file',
                 return_value='intro789')
@@ -524,14 +532,17 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
     def test_no_sync_falls_back_to_introducing_commit_changed(
             self, _ignored, mock_fstat, _find_sync, _find_intro,
-            mock_get_file):
-        """When no sync commit touched the file and HEAD content differs from
+            mock_get_file, mock_oid):
+        """When no sync commit touched the file and the HEAD blob differs from
         the file's introducing commit, the file has been modified locally."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
                 path: P4FileInfo(head_type='text')}
+
+            mock_oid.side_effect = lambda rel, commit, _ws: (
+                'oid_head' if commit == 'head123' else 'oid_intro')
 
             def fake_get_file(rel, commit, _ws):
                 return b'head content' if commit == 'head123' \
@@ -568,6 +579,96 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             self.assertTrue(result.changed[0].is_binary)
+
+    @mock.patch('git_p4son.sync.get_blob_oid')
+    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
+                return_value='sync456')
+    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
+    def test_crlf_workspace_stages_text_content_as_crlf(
+            self, _ignored, mock_fstat, _find_base, mock_get_file,
+            mock_oid):
+        """With uses_crlf, staged ours/base (git LF blobs) are written as
+        CRLF so the post-sync merge doesn't conflict on endings alone."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'a.txt')
+            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+
+            mock_oid.side_effect = lambda rel, commit, _ws: (
+                'oid_head' if commit == 'head123' else 'oid_base')
+
+            def fake_get_file(rel, commit, _ws):
+                return b'a\nb\n' if commit == 'head123' else b'c\nd\n'
+            mock_get_file.side_effect = fake_get_file
+
+            result = prepare_writable_files([path], ws, 'head123',
+                                            self.temp_root, uses_crlf=True)
+
+            cf = result.changed[0]
+            self.assertEqual(self._read(cf.ours_path), b'a\r\nb\r\n')
+            self.assertEqual(self._read(cf.base_path), b'c\r\nd\r\n')
+
+    @mock.patch('git_p4son.sync.get_blob_oid')
+    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
+                return_value='sync456')
+    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
+    def test_crlf_conversion_does_not_double_existing_crlf(
+            self, _ignored, mock_fstat, _find_base, mock_get_file,
+            mock_oid):
+        """A git blob that already contains CRLF must not gain doubled \\r."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'a.txt')
+            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+
+            mock_oid.side_effect = lambda rel, commit, _ws: (
+                'oid_head' if commit == 'head123' else 'oid_base')
+
+            def fake_get_file(rel, commit, _ws):
+                return b'a\r\nb\r\n' if commit == 'head123' else b'c\nd\n'
+            mock_get_file.side_effect = fake_get_file
+
+            result = prepare_writable_files([path], ws, 'head123',
+                                            self.temp_root, uses_crlf=True)
+
+            cf = result.changed[0]
+            self.assertEqual(self._read(cf.ours_path), b'a\r\nb\r\n')
+            self.assertEqual(self._read(cf.base_path), b'c\r\nd\r\n')
+
+    @mock.patch('git_p4son.sync.get_blob_oid')
+    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.find_last_sync_commit_for_file',
+                return_value='sync456')
+    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.get_ignored_files', return_value=set())
+    def test_crlf_workspace_leaves_binary_content_untouched(
+            self, _ignored, mock_fstat, _find_base, mock_get_file,
+            mock_oid):
+        """Binary ours blobs are restored verbatim, so CRLF normalization
+        must skip them even when the workspace uses CRLF."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'image.png')
+            mock_fstat.return_value = {path: P4FileInfo(head_type='binary')}
+
+            mock_oid.side_effect = lambda rel, commit, _ws: (
+                'oid_head' if commit == 'head123' else 'oid_base')
+
+            def fake_get_file(rel, commit, _ws):
+                return b'\x00a\nb\n' if commit == 'head123' \
+                    else b'\x00c\nd\n'
+            mock_get_file.side_effect = fake_get_file
+
+            result = prepare_writable_files([path], ws, 'head123',
+                                            self.temp_root, uses_crlf=True)
+
+            cf = result.changed[0]
+            self.assertTrue(cf.is_binary)
+            self.assertEqual(self._read(cf.ours_path), b'\x00a\nb\n')
 
     def test_readonly_files_skipped(self):
         with tempfile.TemporaryDirectory() as ws:
@@ -607,6 +708,14 @@ class TestPrepareWritableFiles(unittest.TestCase):
 class TestSyncCommand(unittest.TestCase):
 
     _last_sync = LastSync(changelist=10000, commit='abc123')
+
+    def setUp(self):
+        # sync_command queries the client spec for line-ending handling;
+        # default to "no spec" so these tests never shell out to p4.
+        patcher = mock.patch('git_p4son.sync.get_client_spec',
+                             return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _empty_prep(self):
         return WritableSyncFileSet()

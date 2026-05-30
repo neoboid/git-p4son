@@ -200,7 +200,7 @@ def prepare_writable_files(preview_files: list[str],
     """
     result = WritableSyncFileSet()
 
-    # Find files that exist on disk and are writable
+    log.heading(f'Detecting writeable files')
     writable = []
     for f in preview_files:
         try:
@@ -210,13 +210,15 @@ def prepare_writable_files(preview_files: list[str],
         except OSError:
             pass
 
+    log.success(f'{len(writable)}/{len(preview_files)} is writable')
     if not writable:
         return result
 
-    # Split into ignored vs tracked
+    log.heading(f'Spliting writable files into tracked and ignored')
     ignored_set = get_ignored_files(writable, workspace_dir)
     result.ignored = [f for f in writable if f in ignored_set]
     tracked = [f for f in writable if f not in ignored_set]
+    log.success(f'{len(tracked)} tracked, {len(ignored_set)} ignored')
 
     if not tracked:
         return result
@@ -224,6 +226,7 @@ def prepare_writable_files(preview_files: list[str],
     # Pass 1: decide which files the user modified since their baseline by
     # comparing git blob OIDs, transferring no content. Most preview files
     # are unchanged, so this stays cheap.
+    log.heading('Detecting modified tracked writable files')
     unchanged_count = 0
     metas: list[_ChangedFileMeta] = []
     for f in tracked:
@@ -239,22 +242,30 @@ def prepare_writable_files(preview_files: list[str],
 
         metas.append(meta)
 
+    log.success('{len(metas)} changed, {unchanged_count} unchanged')
+
     # Pass 2: query Perforce for file type only on the changed subset. The
     # binary verdict must be known before staging so text content can be
     # written once in the workspace line ending (its only authoritative
     # source is p4's headType, and the merge step restores binary ours blobs
     # byte-for-byte). Pass 3: read content once, convert, stage.
     if metas:
+        log.heading('Finding file types (text/binary)')
         file_info = p4_fstat_file_info(
             [m.filepath for m in metas], workspace_dir)
+        log.success('')
+
+        log.heading('Staging tracked changed files for post-sync merge')
         for m in metas:
             info = file_info.get(m.filepath)
             is_binary = bool(info and is_binary_file_type(info.head_type))
             result.changed.append(_stage_changed_file(
                 m, pre_sync_head_commit, workspace_dir, temp_root,
                 is_binary, uses_crlf))
+        log.success('')
 
     # Log what we found
+    log.heading('Prepare sync summary')
     if unchanged_count:
         label = 'file' if unchanged_count == 1 else 'files'
         log.success(

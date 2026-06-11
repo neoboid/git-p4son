@@ -54,44 +54,45 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _prompt_delete(prompt: str) -> str | None:
-    """Prompt until a valid y/n/a/q response is given. Returns None on EOF."""
+def _prompt_choice(prefix: str, options: list[str]) -> str | None:
+    """Prompt until the response matches an option or its first letter.
+
+    The choices are rendered from the options, e.g. "[y]es / [n]o", so the
+    prompt and the accepted keys cannot drift apart. Options must have
+    unique first letters. Returns the chosen option, or None on EOF.
+    """
+    shorthands = {option[0]: option for option in options}
+    rendered = ' / '.join(f'[{option[0]}]{option[1:]}' for option in options)
+    keys = list(shorthands)
     while True:
         try:
-            response = input(prompt).strip().lower()
+            response = input(f'{prefix} {rendered}: ').strip().lower()
         except EOFError:
             print()
             return None
 
-        if response in ('y', 'yes'):
-            return 'yes'
-        elif response in ('n', 'no'):
-            return 'no'
-        elif response in ('a', 'all'):
-            return 'all'
-        elif response in ('q', 'quit'):
-            return 'quit'
+        if response in shorthands:
+            return shorthands[response]
+        elif response in options:
+            return response
         else:
-            print('Please enter y, n, a, or q')
+            print('Please enter ' + ', '.join(keys[:-1]) + f' or {keys[-1]}')
 
 
-def alias_clean_command(args: argparse.Namespace) -> int:
-    """Execute the 'alias clean' command with interactive prompts."""
-    workspace_dir = args.workspace_dir
+def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
+    """Delete every alias without further prompting."""
+    for name, _changelist in aliases:
+        if delete_changelist_alias(name, workspace_dir):
+            log.success(f'Deleted "{name}"')
 
-    aliases = list_changelist_aliases(workspace_dir)
-    if not aliases:
-        log.success('No changelist aliases to clean')
-        return 0
 
-    response = None
+def _clean_interactive(aliases: list[tuple[str, str]],
+                       workspace_dir: str) -> None:
+    """Review each alias in turn with yes/no/quit prompts."""
     for name, changelist in aliases:
         log.heading(f'{name} -> CL {changelist}')
 
-        if response != 'all':
-            response = _prompt_delete(
-                'Delete? [y]es / [n]o / [a]ll / [q]uit: ')
-
+        response = _prompt_choice('Delete?', ['yes', 'no', 'quit'])
         if response is None or response == 'quit':
             log.info('Aborting')
             break
@@ -101,6 +102,30 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
         if delete_changelist_alias(name, workspace_dir):
             log.success('Deleted')
+
+
+def alias_clean_command(args: argparse.Namespace) -> int:
+    """Execute the 'alias clean' command."""
+    workspace_dir = args.workspace_dir
+
+    aliases = list_changelist_aliases(workspace_dir)
+    if not aliases:
+        log.success('No changelist aliases to clean')
+        return 0
+
+    log.info(f'Found {len(aliases)}')
+    for name, changelist in aliases:
+        log.info(f'{name} -> {changelist}')
+
+    mode = _prompt_choice('Delete?', ['all', 'interactive', 'quit'])
+    if mode is None or mode == 'quit':
+        log.info('Aborting')
+        return 0
+
+    if mode == 'all':
+        _clean_all(aliases, workspace_dir)
+    else:
+        _clean_interactive(aliases, workspace_dir)
 
     return 0
 

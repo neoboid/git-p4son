@@ -268,9 +268,9 @@ Examples:
     # alias clean
     alias_subparsers.add_parser(
         'clean',
-        help='Interactive cleanup of changelist aliases',
-        description='Interactively review and delete changelist aliases with '
-        'yes/no/all/quit prompts'
+        help='Clean up changelist aliases',
+        description='List all changelist aliases, then delete all of them '
+        'or review each one interactively with yes/no/quit prompts'
     )
 
     # Review subcommand

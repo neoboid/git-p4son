@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `alias clean` now lists all aliases first and asks whether to delete all of them, review each one
+  interactively (the previous flow), or quit
+
 ## 0.2.10
 
 - Add support for git style post-sync hooks

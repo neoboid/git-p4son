@@ -441,16 +441,20 @@ git p4son alias delete myfeature
 
 #### alias clean
 
-Interactively review and delete changelist aliases:
+Clean up changelist aliases:
 
 ```sh
 git p4son alias clean
 ```
 
-This command iterates through each alias, displays it, and prompts for action:
+The command lists all aliases and asks how to proceed:
+- `a` (all): Delete all aliases
+- `i` (interactive): Review each alias one by one
+- `q` (quit): Exit without deleting anything
+
+In interactive mode, each alias is displayed in turn with a prompt:
 - `y` (yes): Delete this alias
 - `n` (no): Keep this alias
-- `a` (all): Delete this and all remaining aliases
 - `q` (quit): Stop and keep remaining aliases
 
 **Examples:**

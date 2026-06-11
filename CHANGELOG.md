@@ -4,6 +4,15 @@
 
 - `new`/`update`/`review` no longer abort when p4 refuses to open a file, e.g. git-tracked files matching
   `.p4ignore` ("ignored file can't be added"); the file is skipped with a warning showing p4's reason
+- Remove the clobber workspace requirement from `init`
+- Sync command now handles writable files automatically without `--force`:
+  - Unchanged files (read-only flag removed by git) are detected via git blob comparison and synced normally
+  - Changed files (local edits not submitted to Perforce) are three-way merged after syncing
+  - Files added both locally and in Perforce are merged against an empty baseline, surfacing both versions
+  - Binary files with local changes have their local version restored to disk
+  - Git-ignored files are skipped with a warning
+  - Add/delete asymmetry between git and Perforce is detected and reported
+- The `--force` flag on `sync` now only controls syncing to older changelists
 
 ## 0.2.11
 

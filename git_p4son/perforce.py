@@ -412,17 +412,6 @@ class P4SyncOutputProcessor:
         return f'synced {synced_count} files'
 
 
-def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> None:
-    """Force sync a single file."""
-    output_processor = P4SyncOutputProcessor()
-    result = run_with_output(
-        ['p4', 'sync', '-f', f'{filename}@{changelist}'],
-        cwd=workspace_dir, on_output=output_processor)
-    log.info(output_processor.get_summary())
-    if result.elapsed:
-        log.elapsed(result.elapsed)
-
-
 @dataclass
 class P4FileInfo:
     """Perforce file metadata from fstat."""

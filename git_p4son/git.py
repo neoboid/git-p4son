@@ -234,6 +234,199 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
     return subjects
 
 
+# --- tracking ---
+
+def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
+    """Return the subset of filepaths that are tracked by git, batched.
+
+    Tracking status decides whether a file is git's to manage: a tracked
+    file matching a .gitignore pattern (common when .gitignore was copied
+    from .p4ignore) is still tracked. Returned paths are the input paths."""
+    if not filepaths:
+        return set()
+    by_git_path: dict[str, str] = {}
+    for filepath in filepaths:
+        git_path = normalize_workspace_path(filepath, workspace_dir)
+        if git_path is not None:
+            by_git_path[git_path] = filepath
+    tracked: set[str] = set()
+    chunks = _chunk_paths_by_length(
+        list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
+    for chunk in chunks:
+        # -z output is NUL-separated and verbatim; without it paths with
+        # non-ASCII characters are C-quoted and would never match.
+        result = run(['git', 'ls-files', '-z', '--'] + chunk,
+                     cwd=workspace_dir)
+        for line in result.stdout:
+            for git_path in line.split('\0'):
+                if git_path in by_git_path:
+                    tracked.add(by_git_path[git_path])
+    return tracked
+
+
+# --- file retrieval ---
+
+def get_file_at_commit(filepath: str, commit: str,
+                       workspace_dir: str) -> bytes | None:
+    """Retrieve file content at a specific commit. Returns None if the file doesn't exist."""
+    # Git uses forward slashes in tree paths, even on Windows
+    git_path = filepath.replace('\\', '/')
+    result = run(['git', 'show', f'{commit}:{git_path}'],
+                 cwd=workspace_dir, text=False, fail_on_returncode=False)
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def get_blob_oids(items: list[tuple[str, str]],
+                  workspace_dir: str) -> dict[tuple[str, str], str | None]:
+    """Blob OIDs for (commit, filepath) pairs, resolved in one git call.
+
+    Returns a mapping of (commit, filepath) to OID, or None when the file
+    doesn't exist at that commit. Equal OIDs mean byte-identical content
+    (git content-addresses blobs), so this answers "did the content change?"
+    without transferring the blobs."""
+    if not items:
+        return {}
+    queries = []
+    for commit, filepath in items:
+        # Git uses forward slashes in tree paths, even on Windows
+        git_path = filepath.replace('\\', '/')
+        queries.append(f'{commit}:{git_path}')
+    # cat-file --batch-check reads object names from stdin and emits exactly
+    # one line per input line, so results map back to items by position.
+    result = run(['git', 'cat-file', '--batch-check'], cwd=workspace_dir,
+                 input='\n'.join(queries) + '\n')
+    oids: dict[tuple[str, str], str | None] = {}
+    for item, line in zip(items, result.stdout):
+        # Found objects print "<oid> <type> <size>"; anything else
+        # (missing, ambiguous) means no blob at that commit.
+        parts = line.split()
+        if len(parts) == 3 and parts[2].isdigit():
+            oids[item] = parts[0]
+        else:
+            oids[item] = None
+    return oids
+
+
+def get_head_commit(workspace_dir: str) -> str:
+    """Return the SHA of HEAD."""
+    result = run(['git', 'rev-parse', 'HEAD'], cwd=workspace_dir)
+    return result.stdout[0].strip()
+
+
+# Substring identifying git-p4son sync commit subjects.
+SYNC_SUBJECT_MARKER = ': p4 sync //'
+
+# Conservative limit for pathspec arguments per git invocation; Windows
+# caps the whole command line at 32767 characters.
+_PATHSPEC_LENGTH_BUDGET = 20000
+
+
+def _chunk_paths_by_length(paths: list[str], budget: int) -> list[list[str]]:
+    """Split paths into chunks whose total argument length stays in budget."""
+    chunks: list[list[str]] = []
+    chunk: list[str] = []
+    used = 0
+    for path in paths:
+        cost = len(path) + 1
+        if chunk and used + cost > budget:
+            chunks.append(chunk)
+            chunk = []
+            used = 0
+        chunk.append(path)
+        used += cost
+    if chunk:
+        chunks.append(chunk)
+    return chunks
+
+
+def find_base_commits(filepaths: list[str], before_commit: str,
+                      workspace_dir: str) -> dict[str, str | None]:
+    """Baseline commit for each repo-relative path, batched.
+
+    The baseline is the most recent sync commit reachable from before_commit
+    (inclusive) that touched the file, falling back to the most recent commit
+    that added it when no sync commit ever touched it (e.g. files brought in
+    via an initial bulk import committed with a non-sync subject; if the file
+    was deleted and re-added, the most recent add starts the current
+    lineage), or None when neither exists.
+
+    All paths are resolved in a single history walk per pathspec chunk
+    instead of one git log per file."""
+    result: dict[str, str | None] = {}
+    if not filepaths:
+        return result
+    # Git uses forward slashes in tree paths, even on Windows
+    by_git_path = {fp.replace('\\', '/'): fp for fp in filepaths}
+    chunks = _chunk_paths_by_length(
+        list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
+    for chunk in chunks:
+        chunk_result = _find_base_commits_chunk(
+            chunk, before_commit, workspace_dir)
+        for git_path, sha in chunk_result.items():
+            result[by_git_path[git_path]] = sha
+    return result
+
+
+def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
+                             workspace_dir: str) -> dict[str, str | None]:
+    """One newest-first history walk resolving baselines for git_paths.
+
+    The first sync commit seen touching a path is its baseline (the most
+    recent one). The first add seen is remembered as the fallback for paths
+    no sync commit ever touched. core.quotePath is disabled so non-ASCII
+    paths in --name-status output match the input verbatim."""
+    result: dict[str, str | None] = dict.fromkeys(git_paths)
+    res = run(
+        ['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
+         '--name-status', '--pretty=format:%x01%H%x01%s',
+         before_commit, '--'] + git_paths,
+        cwd=workspace_dir, fail_on_returncode=False)
+    if res.returncode != 0:
+        return result
+
+    remaining = set(git_paths)
+    fallback_add: dict[str, str] = {}
+    current_sha = ''
+    current_is_sync = False
+    for line in res.stdout:
+        if line.startswith('\x01'):
+            _, current_sha, subject = line.split('\x01', 2)
+            current_is_sync = SYNC_SUBJECT_MARKER in subject
+            continue
+        status, sep, path = line.partition('\t')
+        if not sep or path not in remaining:
+            continue
+        if current_is_sync:
+            result[path] = current_sha
+            remaining.discard(path)
+        elif status.startswith('A') and path not in fallback_add:
+            fallback_add[path] = current_sha
+    for path in remaining:
+        result[path] = fallback_add.get(path)
+    return result
+
+
+# --- merge ---
+
+def merge_file(current_path: str, base_path: str,
+               other_path: str) -> tuple[bool, bytes]:
+    """Three-way merge using git merge-file.
+
+    All three inputs are file paths read by git directly. Returns
+    (clean, merged_content) where clean is True if no conflicts.
+    """
+    result = run(
+        ['git', 'merge-file', '-p',
+         '--marker-size=7',
+         '-L', 'Perforce', '-L', 'base', '-L', 'local',
+         current_path, base_path, other_path],
+        text=False, fail_on_returncode=False)
+    # git merge-file -p: exit 0 = clean, >0 = conflicts (count), <0 = error
+    return (result.returncode == 0, result.stdout)
+
+
 # --- editor ---
 
 def resolve_editor(workspace_dir: str) -> str | None:

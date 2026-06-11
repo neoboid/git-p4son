@@ -77,6 +77,14 @@ class P4ClientSpec:
     def clobber(self) -> bool:
         return 'clobber' in self.options
 
+    @property
+    def uses_crlf(self) -> bool:
+        if self.line_end == 'win':
+            return True
+        if self.line_end == 'local' and sys.platform == 'win32':
+            return True
+        return False
+
 
 def get_client_spec(cwd: str) -> P4ClientSpec | None:
     """Get the client spec, or None if not in a valid workspace.
@@ -413,3 +421,69 @@ def p4_force_sync_file(changelist: int, filename: str, workspace_dir: str) -> No
     log.info(output_processor.get_summary())
     if result.elapsed:
         log.elapsed(result.elapsed)
+
+
+@dataclass
+class P4FileInfo:
+    """Perforce file metadata from fstat."""
+    head_type: str
+
+
+def p4_fstat_file_info(filenames: list[str],
+                       workspace_dir: str) -> dict[str, P4FileInfo]:
+    """Get the Perforce file type for a list of files.
+
+    Returns a mapping of local path to P4FileInfo. Files not found are omitted.
+    """
+    if not filenames:
+        return {}
+    # Use -x - so the path list doesn't hit the command-line length limit.
+    args = ['p4', '-x', '-', '-ztag', 'fstat',
+            '-T', 'clientFile,headType']
+    result = run(args, cwd=workspace_dir, input='\n'.join(filenames))
+    info = {}
+    for record in parse_ztag_multi_output(result.stdout):
+        client_file = record.get('clientFile')
+        head_type = record.get('headType')
+        if client_file and head_type:
+            info[client_file] = P4FileInfo(head_type=head_type)
+    return info
+
+
+def is_binary_file_type(head_type: str) -> bool:
+    """Check if a Perforce headType indicates a binary file."""
+    base_type = head_type.split('+')[0]
+    return base_type in ('binary', 'ubinary')
+
+
+@dataclass
+class P4SyncPreviewFile:
+    """A file a sync would affect, from p4 sync -n output.
+
+    mode reflects p4's have-list: 'add' means the client has never had the
+    file, 'upd' an update of a file the client has, 'del' a delete."""
+    mode: str
+    filepath: str
+
+
+def p4_sync_preview(changelist: int, depot_root: str,
+                    workspace_dir: str) -> list[P4SyncPreviewFile]:
+    """Preview which files would be synced without actually syncing.
+
+    Returns the affected files as P4SyncPreviewFile with local paths.
+    """
+    log.heading(f'Previewing sync to CL {changelist}')
+    output_processor = P4SyncOutputProcessor()
+    result = run_with_output(
+        ['p4', 'sync', '-n', f'{depot_root}/...@{changelist}'],
+        cwd=workspace_dir, on_output=output_processor)
+    if result.elapsed:
+        log.elapsed(result.elapsed)
+
+    files = []
+    for line in result.stdout:
+        mode, filename = parse_p4_sync_line(line)
+        if mode and filename:
+            files.append(P4SyncPreviewFile(mode=mode, filepath=filename))
+    log.success(f'{len(files)} files would be synced')
+    return files

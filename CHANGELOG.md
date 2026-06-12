@@ -12,6 +12,8 @@
 - Decode subprocess output as UTF-8 on all platforms; Windows previously used the ANSI code page, garbling
   non-ASCII filenames and commit subjects
 - Fix `new`/`update` mangling non-ASCII filenames into quoted escape sequences before passing them to p4
+- Alias names are now validated on lookup and delete, not only on save; `alias delete ../../somefile` could
+  previously delete a file outside the alias store
 
 ## 0.2.10
 

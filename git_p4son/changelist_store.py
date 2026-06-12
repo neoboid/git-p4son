@@ -38,6 +38,18 @@ def _changelists_dir(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, CONFIG_DIR, 'changelists')
 
 
+def _alias_path(name: str, workspace_dir: str) -> str | None:
+    """Validate name and return its store path, or None if invalid.
+
+    Validating on every lookup, not just on save, keeps raw user input
+    (e.g. "../../somefile") from escaping the store directory."""
+    error = validate_alias_name(name)
+    if error:
+        log.error(error)
+        return None
+    return os.path.join(_changelists_dir(workspace_dir), name)
+
+
 def alias_exists(name: str, workspace_dir: str) -> bool:
     """Check whether a changelist alias exists."""
     alias_path = os.path.join(_changelists_dir(workspace_dir), name)
@@ -46,13 +58,11 @@ def alias_exists(name: str, workspace_dir: str) -> bool:
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """Save a changelist number under a named alias."""
-    error = validate_alias_name(name)
-    if error:
-        log.error(error)
+    alias_path = _alias_path(name, workspace_dir)
+    if alias_path is None:
         return False
 
     changelists_dir = _changelists_dir(workspace_dir)
-    alias_path = os.path.join(changelists_dir, name)
 
     if os.path.exists(alias_path) and not force:
         log.error(
@@ -71,7 +81,9 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
 
 def load_changelist_alias(name: str, workspace_dir: str) -> str | None:
     """Load a changelist number from a named alias, or None if not found."""
-    alias_path = os.path.join(_changelists_dir(workspace_dir), name)
+    alias_path = _alias_path(name, workspace_dir)
+    if alias_path is None:
+        return None
 
     if not os.path.exists(alias_path):
         log.error(f'No changelist alias found: {name}')
@@ -108,7 +120,9 @@ def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
 
 def delete_changelist_alias(name: str, workspace_dir: str) -> bool:
     """Delete a changelist alias file."""
-    alias_path = os.path.join(_changelists_dir(workspace_dir), name)
+    alias_path = _alias_path(name, workspace_dir)
+    if alias_path is None:
+        return False
 
     if not os.path.exists(alias_path):
         log.error(f'No changelist alias found: {name}')

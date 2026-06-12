@@ -4,6 +4,8 @@
 
 - `alias clean` now lists all aliases first and asks whether to delete all of them, review each one
   interactively (the previous flow), or quit
+- Fix commands occasionally losing the tail of subprocess output, e.g. sync missing writable-file errors
+  from `p4 sync` or opened files from `p4 fstat`
 
 ## 0.2.10
 

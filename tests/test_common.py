@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -265,9 +266,7 @@ class TestRunWithOutput(unittest.TestCase):
         mock_process = mock.MagicMock()
         mock_process.stdout.readline = mock.Mock(side_effect=['out1\n', ''])
         mock_process.stderr.readline = mock.Mock(side_effect=['err1\n', ''])
-        mock_process.poll = mock.Mock(side_effect=[None, 0])
-        mock_process.returncode = 0
-        mock_process.communicate.return_value = ('', '')
+        mock_process.wait.return_value = 0
         mock_process.__enter__ = mock.Mock(return_value=mock_process)
         mock_process.__exit__ = mock.Mock(return_value=False)
         mock_popen_cls.return_value = mock_process
@@ -287,9 +286,7 @@ class TestRunWithOutput(unittest.TestCase):
         mock_process = mock.MagicMock()
         mock_process.stdout.readline = mock.Mock(side_effect=['hello\n', ''])
         mock_process.stderr.readline = mock.Mock(side_effect=[''])
-        mock_process.poll = mock.Mock(side_effect=[None, 0])
-        mock_process.returncode = 0
-        mock_process.communicate.return_value = ('', '')
+        mock_process.wait.return_value = 0
         mock_process.__enter__ = mock.Mock(return_value=mock_process)
         mock_process.__exit__ = mock.Mock(return_value=False)
         mock_popen_cls.return_value = mock_process
@@ -299,6 +296,31 @@ class TestRunWithOutput(unittest.TestCase):
         callback_lines = [call.kwargs.get('line', call.args[0] if call.args else None)
                           for call in callback.call_args_list]
         self.assertIn('hello', callback_lines)
+
+    def test_captures_all_output_from_fast_exiting_process(self):
+        """A process that bursts output and exits must not lose tail lines.
+
+        The drain loop used to poll process.poll() and could break while the
+        reader threads still held undrained lines, silently dropping them."""
+        code = (
+            'import sys\n'
+            'sys.stdout.write("".join(f"line{i}\\n" for i in range(5000)))\n'
+            'sys.stderr.write("".join(f"err{i}\\n" for i in range(500)))\n'
+        )
+        callback_lines = []
+
+        def callback(line, stream):
+            callback_lines.append(line)
+
+        result = run_with_output([sys.executable, '-c', code],
+                                 on_output=callback)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(len(result.stdout), 5000)
+        self.assertEqual(result.stdout[-1], 'line4999')
+        self.assertEqual(len(result.stderr), 500)
+        self.assertEqual(result.stderr[-1], 'err499')
+        self.assertEqual(len(callback_lines), 5500)
 
 
 class TestCommandError(unittest.TestCase):

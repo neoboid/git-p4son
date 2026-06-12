@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from timeit import default_timer as timer
 from datetime import timedelta
 from typing import IO, Callable
@@ -246,33 +247,24 @@ def run_with_output(command: list[str], cwd: str = '.',
                 pass
 
         try:
-            while True:
+            # The reader threads own the pipes and exit at EOF, so they are
+            # the source of truth for "no more output is coming". Looping on
+            # process.poll() instead would race: the process can exit while
+            # lines are still in the pipe buffer, and anything enqueued after
+            # the last drain would be lost.
+            while out_thread.is_alive() or err_thread.is_alive():
                 drain_queue(output_queue, stdout_lines, sys.stdout)
                 drain_queue(error_queue, stderr_lines, sys.stderr)
-                if process.poll() is not None:
-                    if output_queue.empty() and error_queue.empty():
-                        break
+                time.sleep(0.05)
 
-            # Wait for threads to finish
             out_thread.join()
             err_thread.join()
 
-            (final_stdout, final_stderr) = process.communicate()
-            returncode = process.returncode
+            # Final drain for lines enqueued after the last pass above.
+            drain_queue(output_queue, stdout_lines, sys.stdout)
+            drain_queue(error_queue, stderr_lines, sys.stderr)
 
-            if final_stdout:
-                final_stdout_lines = final_stdout.splitlines()
-                stdout_lines = stdout_lines + final_stdout_lines
-                for line in final_stdout_lines:
-                    if on_output:
-                        on_output(line=line, stream=sys.stdout)
-
-            if final_stderr:
-                final_stderr_lines = final_stderr.splitlines()
-                stderr_lines = stderr_lines + final_stderr_lines
-                for line in final_stderr_lines:
-                    if on_output:
-                        on_output(line=line, stream=sys.stderr)
+            returncode = process.wait()
 
         except KeyboardInterrupt:
             log.stop_spinner()

@@ -78,7 +78,8 @@ class TestGetCommitLines(unittest.TestCase):
         self.assertEqual(
             lines, ['abc1234 First commit', 'def5678 Second commit'])
         mock_run.assert_called_once_with(
-            ['git', 'log', '--oneline', '--reverse', 'main..HEAD'],
+            ['git', 'log', '--oneline', '--reverse', '--no-merges',
+             'main..HEAD'],
             cwd='/workspace',
         )
 
@@ -123,6 +124,20 @@ class TestReviewCommand(unittest.TestCase):
             call_args[1]['env']['GIT_SEQUENCE_EDITOR'],
             'git-p4son _sequence-editor',
         )
+
+    def test_multiline_message_rejected(self):
+        """The rebase todo is line-based; an embedded newline in the
+        message would split the exec line."""
+        args = mock.Mock(
+            alias='my-feature',
+            message='Line one\nLine two',
+            base_branch='main',
+            force=False,
+            dry_run=False,
+            workspace_dir='/workspace',
+        )
+        rc = review_command(args)
+        self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.review.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.get_commit_lines_since')

@@ -23,7 +23,8 @@ class TestGetCommitSubjectsSince(unittest.TestCase):
         subjects = get_commit_subjects_since('HEAD~1', '/workspace')
         self.assertEqual(subjects, ['First commit', 'Second commit'])
         mock_run.assert_called_once_with(
-            ['git', 'log', '--oneline', '--reverse', 'HEAD~1..HEAD'],
+            ['git', 'log', '--oneline', '--reverse', '--no-merges',
+             'HEAD~1..HEAD'],
             cwd='/workspace',
         )
 

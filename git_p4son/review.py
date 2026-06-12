@@ -58,6 +58,12 @@ def review_command(args: argparse.Namespace) -> int:
     """Execute the review command."""
     workspace_dir = args.workspace_dir
 
+    # The generated rebase todo is line-based, so an embedded newline in
+    # the message would split the exec line and break the rebase.
+    if args.message and '\n' in args.message:
+        log.error('Review message must be a single line')
+        return 1
+
     # Validate alias name before starting
     log.heading(f'Validating alias "{args.alias}"')
     error = validate_alias_name(args.alias)

@@ -22,6 +22,9 @@
   existing entries (matched by subject), entries outside the range are kept, and the list is renumbered
 - `new`/`update` now warn when p4 declines to open a file (e.g. "can't add existing file" or "file(s) not
   in client view") instead of silently leaving it out of the changelist
+- `review` no longer fails the rebase when the branch contains merge commits (they are skipped; the merged
+  commits themselves are still included), and a multiline `-m` message is rejected up front instead of
+  producing a broken rebase todo
 
 ## 0.2.10
 

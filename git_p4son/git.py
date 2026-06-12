@@ -194,8 +194,12 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 # --- log ---
 
 def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get git log --oneline lines for commits since base branch."""
-    res = run(['git', 'log', '--oneline', '--reverse',
+    """Get git log --oneline lines for commits since base branch.
+
+    Merge commits are skipped: as rebase todo picks they fail the rebase
+    ("is a merge but no -m option was given"), and the merged branch's own
+    commits are already in the range."""
+    res = run(['git', 'log', '--oneline', '--reverse', '--no-merges',
                f'{base_branch}..HEAD'], cwd=workspace_dir)
     return res.stdout
 

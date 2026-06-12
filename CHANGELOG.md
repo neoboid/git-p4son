@@ -29,6 +29,8 @@
   deleted in a later one) do not linger in the review as stale shelved entries
 - `new`/`update` no longer abort on typechanges (treated as edits) or copies (treated as adds of the
   destination) in the git diff
+- Fix branch detection during an interactive rebase when the command is run from a subdirectory of the
+  workspace
 
 ## 0.2.10
 

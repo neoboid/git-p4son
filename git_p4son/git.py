@@ -65,7 +65,10 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
         git_dir = result.stdout[0].strip() if result.stdout else None
         if not git_dir:
             return None
-        head_name_file = os.path.join(git_dir, 'rebase-merge', 'head-name')
+        # git prints the dir relative to its cwd (usually just ".git");
+        # resolve it against the workspace, not the process cwd.
+        head_name_file = os.path.join(workspace_dir, git_dir,
+                                      'rebase-merge', 'head-name')
         with open(head_name_file) as f:
             ref = f.read().strip()
         prefix = 'refs/heads/'

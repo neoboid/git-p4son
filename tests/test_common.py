@@ -91,6 +91,20 @@ class TestGetHeadSubject(unittest.TestCase):
 
 
 class TestGetRebaseBranch(unittest.TestCase):
+    def test_relative_git_dir_resolved_against_workspace(self):
+        """git prints the dir relative to its own cwd (usually just
+        '.git'); it must resolve against the workspace, not the process
+        cwd."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
+            os.makedirs(rebase_dir)
+            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
+                f.write('refs/heads/feature\n')
+            with mock.patch('git_p4son.git.run') as mock_run:
+                mock_run.return_value = RunResult(0, ['.git'], [])
+                result = _get_rebase_branch(tmpdir)
+            self.assertEqual(result, 'feature')
+
     def test_reads_branch_from_rebase_merge_state(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')

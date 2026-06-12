@@ -25,6 +25,8 @@
 - `review` no longer fails the rebase when the branch contains merge commits (they are skipped; the merged
   commits themselves are still included), and a multiline `-m` message is rejected up front instead of
   producing a broken rebase todo
+- Re-shelving now clears the previous shelf first, so files no longer open (e.g. added in one commit and
+  deleted in a later one) do not linger in the review as stale shelved entries
 
 ## 0.2.10
 

@@ -312,7 +312,15 @@ def p4_get_opened_files(depot_root: str,
 # --- shelving ---
 
 def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """Shelve a changelist to make it available for review."""
+    """Shelve a changelist to make it available for review.
+
+    Existing shelved files are deleted first so the shelf mirrors the
+    currently open files: shelve -f only overwrites files still open and
+    would leave stale entries for files no longer open (e.g. a file added
+    in one commit and deleted in a later one). The delete exits non-zero
+    when nothing is shelved yet, which is not an error here."""
+    run(['p4', 'shelve', '-d', '-c', changelist],
+        cwd=workspace_dir, dry_run=dry_run, fail_on_returncode=False)
     run(['p4', 'shelve', '-f', '-Af', '-c', changelist],
         cwd=workspace_dir, dry_run=dry_run)
 

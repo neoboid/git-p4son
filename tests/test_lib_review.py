@@ -13,17 +13,32 @@ from tests.helpers import make_run_result
 
 class TestP4ShelveChangelist(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    def test_success(self, mock_run):
+    def test_deletes_stale_shelf_then_shelves(self, mock_run):
+        """The shelf is cleared first so it mirrors the open files;
+        shelve -f alone leaves stale entries for files no longer open."""
         mock_run.return_value = make_run_result()
         p4_shelve_changelist('100', '/ws')
-        mock_run.assert_called_once_with(
-            ['p4', 'shelve', '-f', '-Af', '-c', '100'],
-            cwd='/ws', dry_run=False,
-        )
+        self.assertEqual(mock_run.call_args_list, [
+            mock.call(['p4', 'shelve', '-d', '-c', '100'],
+                      cwd='/ws', dry_run=False, fail_on_returncode=False),
+            mock.call(['p4', 'shelve', '-f', '-Af', '-c', '100'],
+                      cwd='/ws', dry_run=False),
+        ])
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_empty_shelf_delete_failure_is_tolerated(self, mock_run):
+        """shelve -d exits non-zero when nothing is shelved yet."""
+        mock_run.side_effect = [
+            make_run_result(returncode=1),
+            make_run_result(),
+        ]
+        p4_shelve_changelist('100', '/ws')
+        self.assertEqual(mock_run.call_count, 2)
 
     @mock.patch('git_p4son.perforce.run')
     def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('shelve failed')
+        mock_run.side_effect = [make_run_result(),
+                                RunError('shelve failed')]
         with self.assertRaises(RunError):
             p4_shelve_changelist('100', '/ws')
 
@@ -31,7 +46,7 @@ class TestP4ShelveChangelist(unittest.TestCase):
     def test_dry_run(self, mock_run):
         mock_run.return_value = make_run_result()
         p4_shelve_changelist('100', '/ws', dry_run=True)
-        mock_run.assert_called_once_with(
+        mock_run.assert_called_with(
             ['p4', 'shelve', '-f', '-Af', '-c', '100'],
             cwd='/ws', dry_run=True,
         )

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.11
 
 - `alias clean` now lists all aliases first and asks whether to delete all of them, review each one
   interactively (the previous flow), or quit

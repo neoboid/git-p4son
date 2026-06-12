@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `new`/`update`/`review` no longer abort when p4 refuses to open a file, e.g. git-tracked files matching
+  `.p4ignore` ("ignored file can't be added"); the file is skipped with a warning showing p4's reason
+
 ## 0.2.11
 
 - `alias clean` now lists all aliases first and asks whether to delete all of them, review each one

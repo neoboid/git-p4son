@@ -212,11 +212,15 @@ def _open_in_changelist(filename: str, p4_action: str, changelist: str,
                         workspace_dir: str, dry_run: bool) -> None:
     """Run a p4 open action (add/edit/delete) and warn if it did not open.
 
-    p4 exits 0 for per-file problems ("can't add existing file", "file(s)
-    not in client view") and only prints the reason, so a successful open
-    is confirmed by its "opened for" output line."""
+    Per-file problems must not abort the whole command: p4 exits 0 for
+    some ("can't add existing file", "file(s) not in client view") and
+    non-zero for others ("ignored file can't be added" for files matching
+    .p4ignore), only printing the reason either way. A successful open is
+    confirmed by its "opened for" output line; anything else is surfaced
+    as a warning with p4's message so the user can act on it."""
     result = run(['p4', p4_action, '-c', changelist, filename],
-                 cwd=workspace_dir, dry_run=dry_run)
+                 cwd=workspace_dir, dry_run=dry_run,
+                 fail_on_returncode=False)
     if dry_run:
         return
     output = result.stdout + result.stderr

@@ -45,6 +45,7 @@
   rebase todos
 - `update` no longer mistakes a numbered list inside the user's own message for the commit list; the list
   is anchored on the "Changes included:" heading
+- The spinner no longer garbles the error message when an executable (e.g. `p4`) is not on PATH
 
 ## 0.2.10
 

@@ -361,6 +361,20 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(len(callback_lines), 5500)
 
 
+class TestMissingExecutable(unittest.TestCase):
+    def test_run_stops_spinner_and_raises(self):
+        with mock.patch('git_p4son.common.log') as mock_log:
+            with self.assertRaises(FileNotFoundError):
+                run(['definitely-not-a-real-binary-p4son'])
+        mock_log.stop_spinner.assert_called_once()
+
+    def test_run_with_output_stops_spinner_and_raises(self):
+        with mock.patch('git_p4son.common.log') as mock_log:
+            with self.assertRaises(FileNotFoundError):
+                run_with_output(['definitely-not-a-real-binary-p4son'])
+        mock_log.stop_spinner.assert_called_once()
+
+
 class TestSubprocessEncoding(unittest.TestCase):
     """Output must decode as UTF-8 on every platform; Windows would
     otherwise use the ANSI code page and garble non-ASCII output."""

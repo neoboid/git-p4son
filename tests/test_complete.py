@@ -1,6 +1,10 @@
 """Tests for git_p4son.complete module."""
 
 import argparse
+import contextlib
+import io
+import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -10,7 +14,43 @@ from git_p4son.complete import (
     _filter,
     _flag_takes_value,
     _get_flags,
+    run_complete,
 )
+from git_p4son.log import log
+
+
+class TestRunCompleteOutput(unittest.TestCase):
+    def tearDown(self):
+        # run_complete enables quiet mode on the log singleton.
+        log.quiet_mode = False
+
+    def test_emits_only_candidates(self):
+        """Completion stdout must contain nothing but candidates.
+
+        get_current_branch runs a real git subprocess; its command echo
+        and spinner used to leak to stdout and be offered by the shell
+        as completion candidates."""
+        with tempfile.TemporaryDirectory() as ws:
+            for cmd in (['git', 'init'],
+                        ['git', 'config', 'user.email', 't@t'],
+                        ['git', 'config', 'user.name', 'T'],
+                        ['git', 'commit', '--allow-empty', '-m', 'x']):
+                subprocess.run(cmd, cwd=ws, capture_output=True, check=True)
+
+            buffer = io.StringIO()
+            with mock.patch('git_p4son.complete.get_workspace_dir',
+                            return_value=ws), \
+                    contextlib.redirect_stdout(buffer):
+                rc = run_complete(['update', 'b'])
+
+        self.assertEqual(rc, 0)
+        lines = buffer.getvalue().splitlines()
+        self.assertIn('branch\tUse current branch name', lines)
+        for line in lines:
+            self.assertFalse(line.startswith('>'),
+                             f'command echo leaked to stdout: {line!r}')
+            self.assertNotIn('\r', line)
+            self.assertNotIn('\x1b', line)
 
 
 class TestGetFlags(unittest.TestCase):

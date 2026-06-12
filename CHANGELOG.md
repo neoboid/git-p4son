@@ -6,6 +6,7 @@
   interactively (the previous flow), or quit
 - Fix commands occasionally losing the tail of subprocess output, e.g. sync missing writable-file errors
   from `p4 sync` or opened files from `p4 fstat`
+- Fix shell completion offering command echo and spinner control characters as completion candidates
 
 ## 0.2.10
 

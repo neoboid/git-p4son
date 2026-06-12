@@ -11,6 +11,7 @@ import argparse
 from .changelist_store import list_changelist_aliases
 from .common import branch_to_alias
 from .git import get_current_branch, get_workspace_dir
+from .log import log
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
 
@@ -220,6 +221,10 @@ def _complete(parser, words, workspace_dir=None):
 def run_complete(words):
     """Execute the complete command with the given word list."""
     from .cli import create_parser
+    # stdout is reserved for completion candidates: any status line or
+    # command echo from helpers (e.g. get_current_branch running git)
+    # would be offered to the user as a candidate by the shell.
+    log.quiet_mode = True
     parser = create_parser()
     workspace_dir = get_workspace_dir()
     candidates = _complete(parser, words, workspace_dir)

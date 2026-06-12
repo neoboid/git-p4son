@@ -83,6 +83,10 @@ class Log:
 
     def __init__(self) -> None:
         self.verbose_mode: bool = False
+        # Suppresses all stdout-facing output (status lines, command
+        # echoes, spinner). Used by shell completion, where stdout is
+        # reserved for completion candidates.
+        self.quiet_mode: bool = False
         self._heading_count: int = 0
         self._spinner_thread: threading.Thread | None = None
         self._spinner_stop: threading.Event = threading.Event()
@@ -91,6 +95,8 @@ class Log:
 
     def heading(self, text: str) -> None:
         """Print a section heading."""
+        if self.quiet_mode:
+            return
         if self._heading_count > 0:
             print()
         self._heading_count += 1
@@ -99,11 +105,15 @@ class Log:
 
     def success(self, text: str) -> None:
         """Print an success message to stdout."""
+        if self.quiet_mode:
+            return
         ok = _color_status('ok', Color.SUCCESS, sys.stdout)
         print(f'{ok} {text}', file=sys.stdout)
 
     def warning(self, text: str) -> None:
         """Print an warning message to stdout."""
+        if self.quiet_mode:
+            return
         warn = _color_status('warn', Color.WARNING, sys.stdout)
         print(f'{warn} {text}', file=sys.stdout)
 
@@ -114,6 +124,8 @@ class Log:
 
     def command(self, cmd: str, truncate_for_spinner: bool = False) -> None:
         """Print a subprocess command line."""
+        if self.quiet_mode:
+            return
         full_line = f'> {cmd}'
         line = full_line
         if truncate_for_spinner:
@@ -125,24 +137,30 @@ class Log:
 
     def end_command(self) -> None:
         """Finish the command line (print newline)."""
+        if self.quiet_mode:
+            return
         print()
 
     def detail(self, key: str, value: object) -> None:
         """Print a key-value result."""
+        if self.quiet_mode:
+            return
         print(f'{key}: {value}')
 
     def info(self, text: str) -> None:
         """Print an informational status line."""
+        if self.quiet_mode:
+            return
         print(text)
 
     def verbose(self, text: str) -> None:
         """Print verbose-only text (suppressed at normal verbosity)."""
-        if self.verbose_mode:
+        if self.verbose_mode and not self.quiet_mode:
             print(text)
 
     def stdin(self, text: str) -> None:
         """Print stdin input sent to a command (verbose only)."""
-        if not self.verbose_mode:
+        if not self.verbose_mode or self.quiet_mode:
             return
         print('stdin:')
         for line in text.splitlines():
@@ -150,6 +168,8 @@ class Log:
 
     def elapsed(self, duration: timedelta) -> None:
         """Print elapsed time."""
+        if self.quiet_mode:
+            return
         print(f'elapsed: {duration}')
 
     def file_change(self, filename: str, change: str) -> None:
@@ -157,6 +177,8 @@ class Log:
 
         change is one of 'add', 'delete', 'modify', 'untracked'.
         """
+        if self.quiet_mode:
+            return
         prefixes = {
             'add': ('+', Color.ADD),
             'delete': ('-', Color.DELETE),
@@ -174,6 +196,8 @@ class Log:
 
     def start_spinner(self) -> None:
         """Start the spinner at the end of the current command line."""
+        if self.quiet_mode:
+            return
         self._spinner_stop.clear()
         self._spinner_thread = threading.Thread(
             target=self._spin, daemon=True)

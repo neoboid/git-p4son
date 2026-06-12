@@ -148,6 +148,12 @@ def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
 def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
                                      dry_run: bool = False) -> None:
     """Add the #review keyword to a changelist description."""
+    if dry_run:
+        # Checked first: a dry run must not query the server, and the
+        # changelist may be a placeholder from a dry-run create.
+        log.info(f"Would add #review keyword to changelist {changelist}")
+        return
+
     # Get current changelist description
     res = run(['p4', 'change', '-o', changelist], cwd=workspace_dir)
 
@@ -161,10 +167,6 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
     # Check if #review is already in the description
     if any('#review' in line for line in lines[desc_start:desc_end]):
         log.info(f'Changelist {changelist} already has #review keyword')
-        return
-
-    if dry_run:
-        log.info(f"Would add #review keyword to changelist {changelist}")
         return
 
     # Insert #review at the end of the description, preceded by a blank line

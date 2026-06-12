@@ -20,8 +20,10 @@ def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
 
-    # Validate alias name and availability before creating the changelist
-    if args.alias and not args.dry_run:
+    # Validate alias name and availability before creating the changelist.
+    # Also runs on dry run, so it reports the same alias problems the real
+    # run would hit.
+    if args.alias:
         error = validate_alias_name(args.alias)
         if error:
             log.error(error)

@@ -39,8 +39,11 @@ def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], lis
     return (lines[:start], lines[start:end], lines[end:])
 
 
-def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str | None:
-    """Create a new Perforce changelist with the given message and enumerated git commits."""
+def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str:
+    """Create a new Perforce changelist with the given message and enumerated git commits.
+
+    On dry run, returns the placeholder '<changelist>' so downstream
+    commands can be rendered without a real changelist number."""
     # Build description: user message + enumerated commits
     commit_lines = get_enumerated_commit_lines_since(
         base_branch, workspace_dir)
@@ -52,7 +55,7 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     if dry_run:
         log.info("Would create new changelist with description:")
         log.info('\n'.join(description_lines))
-        return None
+        return '<changelist>'
 
     # Prepare the changelist spec content
     tabbed_description = "\n\t".join(description_lines)

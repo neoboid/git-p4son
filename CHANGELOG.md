@@ -7,6 +7,8 @@
 - Fix commands occasionally losing the tail of subprocess output, e.g. sync missing writable-file errors
   from `p4 sync` or opened files from `p4 fstat`
 - Fix shell completion offering command echo and spinner control characters as completion candidates
+- Fix `new --dry-run` crashing when opening files for edit or combined with `--review`/`--shelve`; dry run
+  no longer queries the server for the review keyword and now reports alias problems
 
 ## 0.2.10
 

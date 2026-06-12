@@ -153,11 +153,15 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     if env:
         command_env.update(env)
 
+    # Decode output as UTF-8 regardless of locale: git emits UTF-8, but
+    # Windows would otherwise decode with the ANSI code page (cp1252).
     result = subprocess.run(command,
                             cwd=cwd,
                             env=command_env,
                             capture_output=True,
                             text=text,
+                            encoding='utf-8' if text else None,
+                            errors='replace' if text else None,
                             input=input)
 
     end_timestamp = timer()
@@ -216,12 +220,16 @@ def run_with_output(command: list[str], cwd: str = '.',
     if env:
         command_env.update(env)
 
+    # UTF-8 for the same reason as in run(); a decode error would
+    # otherwise kill the reader threads silently.
     with subprocess.Popen(command,
                           cwd=cwd,
                           env=command_env,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,
-                          text=True) as process:
+                          text=True,
+                          encoding='utf-8',
+                          errors='replace') as process:
 
         output_queue: queue.Queue[str] = queue.Queue()
         out_thread = threading.Thread(

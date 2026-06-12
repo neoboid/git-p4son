@@ -323,6 +323,21 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(len(callback_lines), 5500)
 
 
+class TestSubprocessEncoding(unittest.TestCase):
+    """Output must decode as UTF-8 on every platform; Windows would
+    otherwise use the ANSI code page and garble non-ASCII output."""
+
+    _CODE = 'import sys; sys.stdout.buffer.write("bäck\\n".encode("utf-8"))'
+
+    def test_run_decodes_utf8(self):
+        result = run([sys.executable, '-c', self._CODE])
+        self.assertEqual(result.stdout, ['bäck'])
+
+    def test_run_with_output_decodes_utf8(self):
+        result = run_with_output([sys.executable, '-c', self._CODE])
+        self.assertEqual(result.stdout, ['bäck'])
+
+
 class TestCommandError(unittest.TestCase):
     def test_message_and_returncode(self):
         e = CommandError('something went wrong', returncode=2)

@@ -68,7 +68,7 @@ class TestRunHooks(unittest.TestCase):
         self.assertEqual(commands, [
             ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
              '-File', ps1],
-            ['nushell.exe', nu],
+            ['nu.exe', nu],
             ['python.exe', py],
             ['bash.exe', sh],
         ])
@@ -128,6 +128,49 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_called_once()
         mock_print.assert_any_call('hook output')
 
+    @mock.patch('git_p4son.hooks.log')
+    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.hooks.run')
+    def test_failing_hook_does_not_stop_remaining_hooks(
+            self, mock_run, _is_windows, mock_log):
+        """Hooks are independent: one failure is reported but the rest
+        still run."""
+        mock_run.side_effect = [
+            make_run_result(returncode=1, stderr=['boom']),
+            make_run_result(),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks',
+                                    'post-sync')
+            os.makedirs(hook_dir)
+            for name in ('a.py', 'b.py'):
+                with open(os.path.join(hook_dir, name), 'w') as f:
+                    f.write('')
+
+            results = run_hooks('post-sync', tmpdir, tmpdir)
+
+        self.assertEqual(mock_run.call_count, 2)
+        self.assertEqual(len(results), 2)
+        mock_log.error.assert_called_once()
+
+    @mock.patch('builtins.print')
+    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.hooks.run')
+    def test_prints_hook_stderr(self, mock_run, _is_windows, mock_print):
+        mock_run.return_value = make_run_result(stderr=['a warning'])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks',
+                                    'post-sync')
+            os.makedirs(hook_dir)
+            with open(os.path.join(hook_dir, 'script.py'), 'w') as f:
+                f.write('')
+
+            run_hooks('post-sync', tmpdir, tmpdir)
+
+        stderr_calls = [call for call in mock_print.call_args_list
+                        if call.args and call.args[0] == 'a warning']
+        self.assertEqual(len(stderr_calls), 1)
+
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_hooks_run_in_sorted_order(self, mock_run, _is_windows):
@@ -145,8 +188,8 @@ class TestRunHooks(unittest.TestCase):
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         self.assertEqual(commands, [
-            ['nushell.exe', first],
-            ['nushell.exe', second],
+            ['nu.exe', first],
+            ['nu.exe', second],
         ])
 
 

@@ -1,6 +1,7 @@
 """User hook discovery and execution."""
 
 import os
+import sys
 from pathlib import Path
 
 from . import CONFIG_DIR
@@ -12,7 +13,7 @@ DEFAULT_WINDOWS_ASSOCIATIONS: dict[str, list[str]] = {
     '.ps1': [
         'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'
     ],
-    '.nu': ['nushell.exe'],
+    '.nu': ['nu.exe'],
     '.sh': ['bash.exe'],
     '.py': ['python.exe'],
 }
@@ -73,10 +74,12 @@ def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
     return [str(path)]
 
 
-def _print_stdout(result: RunResult) -> None:
-    """Print stdout from a completed hook."""
+def _print_output(result: RunResult) -> None:
+    """Print stdout and stderr from a completed hook."""
     for line in result.stdout:
         print(line)
+    for line in result.stderr:
+        print(line, file=sys.stderr)
 
 
 def run_hooks(hook_name: str, workspace_dir: str,
@@ -105,8 +108,14 @@ def run_hooks(hook_name: str, workspace_dir: str,
             log.warning(f'Skipping non-executable hook: {display_path}')
             continue
 
-        result = run(command, cwd=cwd, env=env)
-        _print_stdout(result)
+        # One failing hook must not prevent the remaining hooks from
+        # running; hooks are independent of each other.
+        result = run(command, cwd=cwd, env=env, fail_on_returncode=False)
+        _print_output(result)
+        if result.returncode != 0:
+            log.error(
+                f'Hook {display_path} failed '
+                f'with return code {result.returncode}')
         results.append(result)
 
     return results

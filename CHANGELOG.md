@@ -31,6 +31,8 @@
   destination) in the git diff
 - Fix branch detection during an interactive rebase when the command is run from a subdirectory of the
   workspace
+- A failing post-sync hook no longer prevents the remaining hooks from running; hook stderr is now printed,
+  and the default Windows association for `.nu` hooks points at `nu.exe` (Nushell's actual binary)
 
 ## 0.2.10
 

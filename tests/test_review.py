@@ -78,8 +78,8 @@ class TestGetCommitLines(unittest.TestCase):
         self.assertEqual(
             lines, ['abc1234 First commit', 'def5678 Second commit'])
         mock_run.assert_called_once_with(
-            ['git', 'log', '--oneline', '--reverse', '--no-merges',
-             'main..HEAD'],
+            ['git', 'log', '--format=%h %s', '--no-decorate',
+             '--reverse', '--no-merges', 'main..HEAD'],
             cwd='/workspace',
         )
 

@@ -41,6 +41,8 @@
   already did its work
 - Alias validation now rejects all-digit names (they always parse as changelist numbers, so such an alias
   could never be referenced) and Windows reserved device names (`CON`, `NUL`, `COM1`, ...)
+- A `log.decorate` git config no longer leaks branch decorations into changelist descriptions and review
+  rebase todos
 
 ## 0.2.10
 

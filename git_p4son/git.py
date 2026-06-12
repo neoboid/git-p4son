@@ -210,7 +210,11 @@ def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
     Merge commits are skipped: as rebase todo picks they fail the rebase
     ("is a merge but no -m option was given"), and the merged branch's own
     commits are already in the range."""
-    res = run(['git', 'log', '--oneline', '--reverse', '--no-merges',
+    # Explicit format instead of --oneline: a user's log.decorate=short
+    # config would otherwise prepend "(HEAD -> branch)" decorations to
+    # every subject in pick lines and changelist descriptions.
+    res = run(['git', 'log', '--format=%h %s', '--no-decorate',
+               '--reverse', '--no-merges',
                f'{base_branch}..HEAD'], cwd=workspace_dir)
     return res.stdout
 

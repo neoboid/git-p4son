@@ -18,6 +18,8 @@
   a directory
 - Re-running `init` no longer deletes unrelated sections (e.g. `[hooks]`) from config.toml, and config
   values containing quotes or backslashes are now written as valid TOML
+- `update` no longer duplicates the enumerated commit list: commits in the base branch range replace their
+  existing entries (matched by subject), entries outside the range are kept, and the list is renumbered
 
 ## 0.2.10
 

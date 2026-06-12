@@ -167,48 +167,87 @@ class TestGetChangelistSpec(unittest.TestCase):
 
 
 class TestUpdateChangelist(unittest.TestCase):
+    def _spec_input(self, mock_run):
+        return mock_run.call_args.kwargs.get('input')
+
     @mock.patch('git_p4son.lib.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
-    def test_appends_new_commits(self, mock_get_spec, mock_get_lines, mock_run):
+    def test_appends_commits_outside_the_range(self, mock_get_spec,
+                                               mock_subjects, mock_run):
+        """Subjects not in the old list append after it (the review rebase
+        flow updates with -b HEAD~1 per picked commit)."""
         mock_get_spec.return_value = SAMPLE_SPEC
-        # New commits should be numbered 3 and 4 (continuing from existing 1, 2)
-        mock_get_lines.return_value = ['3. New commit A', '4. New commit B']
+        mock_subjects.return_value = ['New commit A', 'New commit B']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
         update_changelist('12345', 'HEAD~1', '/ws')
-        # Verify start_number was passed correctly (2 existing commits -> start at 3)
-        mock_get_lines.assert_called_once_with('HEAD~1', '/ws', start_number=3)
-        # Verify the new spec was passed
-        call_kwargs = mock_run.call_args
-        spec_input = call_kwargs.kwargs.get('input')
-        # Old commits preserved
+
+        spec_input = self._spec_input(mock_run)
         self.assertIn('1. Add validation', spec_input)
         self.assertIn('2. Fix redirect', spec_input)
-        # New commits appended
         self.assertIn('3. New commit A', spec_input)
         self.assertIn('4. New commit B', spec_input)
         # user message preserved
         self.assertIn('Fix the login bug', spec_input)
 
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
-    @mock.patch('git_p4son.lib.get_changelist_spec')
-    def test_dry_run(self, mock_get_spec, mock_get_lines):
-        mock_get_spec.return_value = SAMPLE_SPEC
-        mock_get_lines.return_value = ['3. New commit']
-        update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
-
     @mock.patch('git_p4son.lib.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
-    def test_no_existing_commits_starts_at_one(self, mock_get_spec, mock_get_lines, mock_run):
-        mock_get_spec.return_value = SAMPLE_SPEC_NO_COMMITS
-        mock_get_lines.return_value = ['1. First commit']
+    def test_replaces_entries_covered_by_the_range(self, mock_get_spec,
+                                                   mock_subjects, mock_run):
+        """An old entry whose subject is in the range is replaced, not
+        duplicated; entries outside the range are kept."""
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_subjects.return_value = ['Fix redirect', 'New commit A']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
         update_changelist('12345', 'HEAD~1', '/ws')
-        # Should start at 1 since no existing commits
-        mock_get_lines.assert_called_once_with('HEAD~1', '/ws', start_number=1)
+
+        spec_input = self._spec_input(mock_run)
+        self.assertIn('1. Add validation', spec_input)
+        self.assertIn('2. Fix redirect', spec_input)
+        self.assertIn('3. New commit A', spec_input)
+        self.assertEqual(spec_input.count('Fix redirect'), 1)
+
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_rerunning_same_update_is_idempotent(self, mock_get_spec,
+                                                 mock_subjects, mock_run):
+        """Running update again with the same range must not duplicate
+        the commit list."""
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_subjects.return_value = ['Add validation', 'Fix redirect']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'main', '/ws')
+
+        spec_input = self._spec_input(mock_run)
+        self.assertIn('1. Add validation', spec_input)
+        self.assertIn('2. Fix redirect', spec_input)
+        self.assertNotIn('3. ', spec_input)
+        self.assertEqual(spec_input.count('Add validation'), 1)
+        self.assertEqual(spec_input.count('Fix redirect'), 1)
+
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_dry_run(self, mock_get_spec, mock_subjects):
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_subjects.return_value = ['New commit']
+        update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
+
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_no_existing_commits_starts_at_one(self, mock_get_spec,
+                                               mock_subjects, mock_run):
+        mock_get_spec.return_value = SAMPLE_SPEC_NO_COMMITS
+        mock_subjects.return_value = ['First commit']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws')
+        self.assertIn('1. First commit', self._spec_input(mock_run))
 
 
 if __name__ == '__main__':

@@ -156,9 +156,11 @@ Examples:
     update_parser = subparsers.add_parser(
         'update',
         help='Update an existing changelist description and open files for edit',
-        description='Update an existing Perforce changelist description by '
-        'replacing the enumerated commit list with the current commits '
-        'since the base branch. By default also opens changed files for edit.'
+        description='Update an existing Perforce changelist description: '
+        'commits since the base branch replace their existing entries in '
+        'the enumerated commit list and new ones are appended; entries '
+        'outside the range are kept. By default also opens changed files '
+        'for edit.'
     )
     update_parser.add_argument(
         'changelist',

@@ -3,8 +3,10 @@ Bridge functions that combine git and Perforce operations.
 """
 
 import re
+from collections import Counter
+
 from .common import CommandError, run
-from .git import LocalChanges, get_local_changes
+from .git import LocalChanges, get_commit_subjects_since, get_local_changes
 from .list_changes import get_enumerated_commit_lines_since
 from .log import log
 from .perforce import (
@@ -78,7 +80,13 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
 
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """Update an existing changelist by appending new commits to the description."""
+    """Update the enumerated commit list in a changelist description.
+
+    Commits in base_branch..HEAD replace their existing entries in the
+    list (matched by subject) and new ones are appended; entries outside
+    the range are kept. The whole list is renumbered. So `-b main`
+    rebuilds the full list without duplicating it, while the review
+    rebase flow (`-b HEAD~1` per picked commit) keeps appending."""
     # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
@@ -87,14 +95,25 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     message_lines, old_commit_lines, trailing_lines = split_description_lines(
         description_lines)
 
-    # Generate new commit list, continuing from existing count
-    start_number = len(old_commit_lines) + 1
-    new_commit_lines = get_enumerated_commit_lines_since(
-        base_branch, workspace_dir, start_number=start_number)
+    old_subjects = [re.sub(r'^\d+\. ', '', line)
+                    for line in old_commit_lines]
+    new_subjects = get_commit_subjects_since(base_branch, workspace_dir)
 
-    # Rebuild description: message + old commits + new commits + trailing
-    new_description_lines = message_lines + \
-        old_commit_lines + new_commit_lines + trailing_lines
+    # Drop old entries covered by the new range. Counted, not a set, so
+    # repeated subjects (e.g. two "fixup" commits) replace one-for-one.
+    replaced = Counter(new_subjects)
+    kept_subjects = []
+    for subject in old_subjects:
+        if replaced[subject] > 0:
+            replaced[subject] -= 1
+        else:
+            kept_subjects.append(subject)
+
+    commit_lines = [f'{number}. {subject}' for number, subject
+                    in enumerate(kept_subjects + new_subjects, 1)]
+
+    # Rebuild description: message + commit list + trailing
+    new_description_lines = message_lines + commit_lines + trailing_lines
 
     if dry_run:
         log.info(f"Would update changelist {changelist_nr} with description:")

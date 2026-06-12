@@ -294,7 +294,11 @@ git p4son new -m "New feature" --review -b main
 
 ### Update Command
 
-Update an existing Perforce changelist description by replacing the enumerated commit list with the current commits since the base branch. By default also opens changed files for edit.
+Update an existing Perforce changelist description. Commits since the base branch replace their existing
+entries in the enumerated commit list (matched by subject) and new ones are appended; entries outside the
+range are kept and the list is renumbered. So `update -b main` rebuilds the whole list without duplicating
+it, while `update -b HEAD~3` only refreshes the last three entries. By default also opens changed files for
+edit.
 
 ```sh
 git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc] [--no-edit] [--shelve]

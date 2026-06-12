@@ -270,7 +270,7 @@ Examples:
         'clean',
         help='Clean up changelist aliases',
         description='List all changelist aliases, then delete all of them '
-        'or review each one interactively with yes/no/quit prompts'
+        'or review each one interactively with yes/no/all/quit prompts'
     )
 
     # Review subcommand

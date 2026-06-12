@@ -455,6 +455,7 @@ The command lists all aliases and asks how to proceed:
 In interactive mode, each alias is displayed in turn with a prompt:
 - `y` (yes): Delete this alias
 - `n` (no): Keep this alias
+- `a` (all): Delete this and all remaining aliases (handy for keeping the first few and sweeping the rest)
 - `q` (quit): Stop and keep remaining aliases
 
 **Examples:**

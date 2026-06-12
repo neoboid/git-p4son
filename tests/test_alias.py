@@ -82,15 +82,18 @@ class TestAliasCleanCommand(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_delete.assert_called_once_with('feature-a', '/ws')
 
-    def test_interactive_rejects_all(self, _list, mock_delete):
-        """The per-alias prompt has no all option; quitting and rerunning
-        the command reaches the outer prompt where all is available."""
+    def test_interactive_all_deletes_remaining(self, _list, mock_delete):
+        """Answering no through the aliases worth keeping and then all
+        sweeps the remainder without further prompts."""
         with mock.patch('builtins.input',
-                        side_effect=['i', 'a', 'q']) as mock_input:
+                        side_effect=['i', 'n', 'a']) as mock_input:
             rc = alias_clean_command(_args())
         self.assertEqual(rc, 0)
         self.assertEqual(mock_input.call_count, 3)
-        mock_delete.assert_not_called()
+        self.assertEqual(
+            mock_delete.call_args_list,
+            [mock.call('feature-b', '/ws'),
+             mock.call('feature-c', '/ws')])
 
     def test_interactive_eof_aborts(self, _list, mock_delete):
         with mock.patch('builtins.input', side_effect=['i', 'y', EOFError]):

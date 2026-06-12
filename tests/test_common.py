@@ -385,6 +385,12 @@ class TestSubprocessEncoding(unittest.TestCase):
         result = run([sys.executable, '-c', self._CODE])
         self.assertEqual(result.stdout, ['bäck'])
 
+    def test_bytes_mode_failure_still_carries_stderr(self):
+        code = 'import sys; sys.stderr.write("the reason"); sys.exit(1)'
+        with self.assertRaises(RunError) as ctx:
+            run([sys.executable, '-c', code], text=False)
+        self.assertEqual(ctx.exception.stderr, ['the reason'])
+
     def test_run_with_output_decodes_utf8(self):
         result = run_with_output([sys.executable, '-c', self._CODE])
         self.assertEqual(result.stdout, ['bäck'])

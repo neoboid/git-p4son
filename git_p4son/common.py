@@ -176,7 +176,11 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     log.stop_spinner()
 
     if fail_on_returncode and result.returncode != 0:
-        stderr = result.stderr.splitlines() if text else []
+        if text:
+            stderr = result.stderr.splitlines()
+        else:
+            # Bytes mode: decode so the error still carries the reason.
+            stderr = result.stderr.decode('utf-8', 'replace').splitlines()
         raise RunError(
             join_command_line(command),
             returncode=result.returncode,

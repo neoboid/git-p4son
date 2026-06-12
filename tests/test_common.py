@@ -189,6 +189,14 @@ class TestIsWorkspaceDir(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             self.assertFalse(is_workspace_dir(tmpdir))
 
+    def test_returns_true_when_git_is_a_file(self):
+        """In linked worktrees and submodules .git is a file pointing at
+        the real git dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, '.git'), 'w') as f:
+                f.write('gitdir: /repo/.git/worktrees/feature\n')
+            self.assertTrue(is_workspace_dir(tmpdir))
+
 
 class TestGetWorkspaceDir(unittest.TestCase):
     def test_finds_workspace_from_subdirectory(self):
@@ -205,6 +213,22 @@ class TestGetWorkspaceDir(unittest.TestCase):
             with mock.patch('os.getcwd', return_value=tmpdir):
                 result = get_workspace_dir()
             self.assertIsNone(result)
+
+    def test_stops_at_worktree_root_inside_another_repo(self):
+        """Detection must stop at a linked worktree root (.git file)
+        instead of walking up to an enclosing unrelated repo."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, '.git'))
+            worktree = os.path.join(tmpdir, 'wt')
+            os.makedirs(worktree)
+            with open(os.path.join(worktree, '.git'), 'w') as f:
+                f.write('gitdir: /repo/.git/worktrees/wt\n')
+            subdir = os.path.join(worktree, 'src')
+            os.makedirs(subdir)
+
+            with mock.patch('os.getcwd', return_value=subdir):
+                result = get_workspace_dir()
+            self.assertEqual(result, worktree)
 
 
 class TestRunResult(unittest.TestCase):

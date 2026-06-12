@@ -19,8 +19,11 @@ from .common import (
 # --- workspace ---
 
 def is_workspace_dir(directory: str) -> bool:
-    """Check if a directory is a git workspace."""
-    return os.path.isdir(os.path.join(directory, '.git'))
+    """Check if a directory is a git workspace.
+
+    .git is a directory in a regular repo, but a file pointing at the real
+    git dir in linked worktrees and submodules."""
+    return os.path.exists(os.path.join(directory, '.git'))
 
 
 def get_workspace_dir() -> str | None:

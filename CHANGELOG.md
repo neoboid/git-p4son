@@ -14,6 +14,8 @@
 - Fix `new`/`update` mangling non-ASCII filenames into quoted escape sequences before passing them to p4
 - Alias names are now validated on lookup and delete, not only on save; `alias delete ../../somefile` could
   previously delete a file outside the alias store
+- Fix workspace detection walking past git worktree and submodule roots, where `.git` is a file rather than
+  a directory
 
 ## 0.2.10
 

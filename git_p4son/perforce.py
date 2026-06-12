@@ -34,18 +34,28 @@ def parse_ztag_output(lines: list[str]) -> dict[str, str]:
 
 
 def parse_ztag_multi_output(lines: list[str]) -> list[dict[str, str]]:
-    """Parse p4 -ztag output with multiple records into a list of dicts."""
+    """Parse p4 -ztag output with multiple records into a list of dicts.
+
+    Records are separated by blank lines. A non-blank line without the
+    '... ' prefix is a continuation of the previous field's value (e.g.
+    a multiline desc), not a record boundary."""
     records = []
     current: dict[str, str] = {}
+    last_key: str | None = None
     for line in lines:
         if line.startswith('... '):
             parts = line[4:].split(' ', 1)
             key = parts[0]
             value = parts[1] if len(parts) > 1 else ''
             current[key] = value
-        elif current:
-            records.append(current)
-            current = {}
+            last_key = key
+        elif not line.strip():
+            if current:
+                records.append(current)
+                current = {}
+            last_key = None
+        elif last_key is not None:
+            current[last_key] += f'\n{line}'
     if current:
         records.append(current)
     return records

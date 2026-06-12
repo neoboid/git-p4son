@@ -68,6 +68,21 @@ class TestParseZtagMultiOutput(unittest.TestCase):
             {'depotFile': '//depot/b.txt', 'action': 'add'},
         ])
 
+    def test_multiline_value_is_continuation_not_record_boundary(self):
+        lines = [
+            '... change 12345',
+            '... desc Fix the bug',
+            'with a second line',
+            '',
+            '... change 12346',
+            '... desc Other',
+        ]
+        result = parse_ztag_multi_output(lines)
+        self.assertEqual(result, [
+            {'change': '12345', 'desc': 'Fix the bug\nwith a second line'},
+            {'change': '12346', 'desc': 'Other'},
+        ])
+
     def test_empty_lines(self):
         self.assertEqual(parse_ztag_multi_output([]), [])
 

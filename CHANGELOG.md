@@ -33,6 +33,8 @@
   workspace
 - A failing post-sync hook no longer prevents the remaining hooks from running; hook stderr is now printed,
   and the default Windows association for `.nu` hooks points at `nu.exe` (Nushell's actual binary)
+- Re-running `init` now recovers a repo whose initial commit failed (e.g. missing `user.email`) instead of
+  treating it as already initialized; Ctrl-D at the depot root prompt aborts cleanly
 
 ## 0.2.10
 

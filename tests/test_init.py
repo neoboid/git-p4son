@@ -73,6 +73,14 @@ class TestSetupGitignore(unittest.TestCase):
                 os.path.join('/ws', '.gitignore'), 'w')
 
 
+class TestSelectDepotRoot(unittest.TestCase):
+    @mock.patch('builtins.input', side_effect=EOFError)
+    def test_eof_aborts_cleanly(self, _input):
+        from git_p4son.init import _select_depot_root
+        result = _select_depot_root('client', '/ws/sub', '/ws')
+        self.assertIsNone(result)
+
+
 class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot')
@@ -128,13 +136,15 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
+    @mock.patch('git_p4son.init._has_commits', return_value=False)
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_spec, mock_depot,
-                     mock_run, mock_gitignore, mock_editor):
+                     mock_run, mock_has_commits, mock_gitignore,
+                     mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # Should have called git init, git add, git commit
@@ -154,15 +164,40 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
+    @mock.patch('git_p4son.init._has_commits', return_value=True)
+    @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_skips_git_init(self, mock_cwd, mock_exists,
-                                          mock_spec, mock_depot,
-                                          mock_gitignore, mock_editor):
+                                          mock_spec, mock_depot, mock_run,
+                                          mock_has_commits, mock_gitignore,
+                                          mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
+        mock_run.assert_not_called()
+
+    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
+    @mock.patch('git_p4son.init._has_commits', return_value=False)
+    @mock.patch('git_p4son.init.run_with_output')
+    @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)
+    @mock.patch('os.path.exists', return_value=True)
+    @mock.patch('os.getcwd', return_value='/ws')
+    def test_existing_repo_without_commits_creates_initial_commit(
+            self, mock_cwd, mock_exists, mock_spec, mock_depot, mock_run,
+            mock_has_commits, mock_gitignore, mock_editor):
+        """A previous init may have failed at the commit step (e.g.
+        user.email not configured); re-running init must recover instead
+        of treating the unborn repo as fully initialized."""
+        result = init_command(self._make_args())
+        self.assertEqual(result, 0)
+        # git add + git commit, but no git init
+        self.assertEqual(mock_run.call_count, 2)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        self.assertNotIn(['git', 'init'], commands)
 
     @mock.patch('git_p4son.init._configure_depot_root', return_value=False)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)

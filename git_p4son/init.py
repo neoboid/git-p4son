@@ -57,7 +57,11 @@ def _select_depot_root(client_name: str, cwd: str,
         print(f'  {abort_num}. Abort')
         print()
 
-        choice = input('Choice [1]: ').strip()
+        try:
+            choice = input('Choice [1]: ').strip()
+        except EOFError:
+            print()
+            return None
         if choice == '' or choice == '1':
             depot_root = entire_root
         elif choice == '2' and cwd_root:
@@ -103,6 +107,13 @@ def _configure_depot_root(client_name: str, cwd: str,
     log.success(f'{depot_root}/...')
     save_config(cwd, {'depot': {'root': depot_root}})
     return True
+
+
+def _has_commits(cwd: str) -> bool:
+    """Return whether the git repo has any commit (HEAD resolves)."""
+    result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
+                 cwd=cwd, fail_on_returncode=False)
+    return result.returncode == 0
 
 
 def _setup_gitignore(cwd: str) -> str:
@@ -161,7 +172,10 @@ def init_command(args: argparse.Namespace) -> int:
         run_with_output(['git', 'init'], cwd=cwd)
         log.success('created new git repository')
 
-    if not existing_repo:
+    # An existing repo without commits also needs the initial commit: a
+    # previous init may have failed at the commit step (e.g. user.email
+    # not configured), and sync cannot work on an unborn HEAD.
+    if not _has_commits(cwd):
         log.heading('Creating initial commit')
         run_with_output(['git', 'add', '.gitignore'], cwd=cwd)
         run_with_output(

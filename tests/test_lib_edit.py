@@ -215,6 +215,27 @@ class TestOpenWarnings(unittest.TestCase):
     @mock.patch('git_p4son.perforce.get_changelist_for_file',
                 return_value=None)
     @mock.patch('git_p4son.perforce.run')
+    def test_p4_ignored_file_warns_and_continues(self, mock_run, _check,
+                                                 mock_log):
+        """p4 add exits non-zero for files matching .p4ignore; the file
+        is skipped with a warning and the remaining files still open."""
+        mock_run.side_effect = [
+            make_run_result(
+                returncode=1,
+                stderr=["generated.cs - ignored file can't be added."]),
+            make_run_result(
+                stdout=['//depot/real.txt#1 - opened for add']),
+        ]
+        changes = LocalChanges()
+        changes.adds = ['generated.cs', 'real.txt']
+        include_changes_in_changelist(changes, '100', '/ws')
+        self.assertEqual(mock_run.call_count, 2)
+        mock_log.warning.assert_called_once()
+
+    @mock.patch('git_p4son.perforce.log')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+                return_value=None)
+    @mock.patch('git_p4son.perforce.run')
     def test_no_warning_when_opened(self, mock_run, _check, mock_log):
         mock_run.return_value = make_run_result(
             stdout=['//depot/new.txt#1 - opened for add'])
@@ -235,7 +256,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'add', '-c', '100', 'new_file.txt'],
-            cwd='/ws', dry_run=False,
+            cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
     @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'add'))
@@ -269,7 +290,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'edit', '-c', '100', 'mod.txt'],
-            cwd='/ws', dry_run=False,
+            cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
     @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'edit'))
@@ -303,7 +324,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_called_with(
             ['p4', 'delete', '-c', '100', 'old.txt'],
-            cwd='/ws', dry_run=False,
+            cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
     @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'delete'))
@@ -366,7 +387,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
         mock_run.assert_called_with(
             ['p4', 'add', '-c', '100', 'new.txt'],
-            cwd='/ws', dry_run=True,
+            cwd='/ws', dry_run=True, fail_on_returncode=False,
         )
 
 

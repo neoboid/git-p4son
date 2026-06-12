@@ -16,6 +16,8 @@
   previously delete a file outside the alias store
 - Fix workspace detection walking past git worktree and submodule roots, where `.git` is a file rather than
   a directory
+- Re-running `init` no longer deletes unrelated sections (e.g. `[hooks]`) from config.toml, and config
+  values containing quotes or backslashes are now written as valid TOML
 
 ## 0.2.10
 

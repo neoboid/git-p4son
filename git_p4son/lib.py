@@ -17,14 +17,36 @@ from .perforce import (
 )
 
 
+# Heading written above the enumerated commit list in descriptions.
+COMMIT_LIST_MARKER = 'Changes included:'
+
+
 def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """Split description into (message_lines, commit_lines, trailing_lines)."""
-    # Find start of numbered list
+    """Split description into (message_lines, commit_lines, trailing_lines).
+
+    The commit list is located via the COMMIT_LIST_MARKER heading written
+    above it, so a numbered list inside the user's own message is not
+    mistaken for it. Descriptions without the marker fall back to the
+    first '1. ' line."""
     start = None
     for i, line in enumerate(lines):
-        if line.startswith('1. '):
-            start = i
+        if line.strip() != COMMIT_LIST_MARKER:
+            continue
+        for j in range(i + 1, len(lines)):
+            if lines[j].startswith('1. '):
+                start = j
+                break
+            if lines[j].strip():
+                break  # something other than the list follows this marker
+        if start is not None:
             break
+
+    if start is None:
+        # Fallback for descriptions written without the marker.
+        for i, line in enumerate(lines):
+            if line.startswith('1. '):
+                start = i
+                break
     if start is None:
         return (lines, [], [])
 
@@ -52,7 +74,7 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
     description_lines = message.splitlines()
     if commit_lines:
-        description_lines += ['', 'Changes included:'] + commit_lines
+        description_lines += ['', COMMIT_LIST_MARKER] + commit_lines
 
     if dry_run:
         log.info("Would create new changelist with description:")
@@ -111,6 +133,12 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
 
     commit_lines = [f'{number}. {subject}' for number, subject
                     in enumerate(kept_subjects + new_subjects, 1)]
+
+    # Add the marker for descriptions that did not have it yet (e.g.
+    # created with no commits), so later splits anchor on it.
+    if commit_lines and not any(line.strip() == COMMIT_LIST_MARKER
+                                for line in message_lines):
+        message_lines = message_lines + ['', COMMIT_LIST_MARKER]
 
     # Rebuild description: message + commit list + trailing
     new_description_lines = message_lines + commit_lines + trailing_lines

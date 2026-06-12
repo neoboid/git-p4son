@@ -43,6 +43,8 @@
   could never be referenced) and Windows reserved device names (`CON`, `NUL`, `COM1`, ...)
 - A `log.decorate` git config no longer leaks branch decorations into changelist descriptions and review
   rebase todos
+- `update` no longer mistakes a numbered list inside the user's own message for the commit list; the list
+  is anchored on the "Changes included:" heading
 
 ## 0.2.10
 

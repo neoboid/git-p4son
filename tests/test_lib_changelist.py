@@ -110,6 +110,27 @@ class TestSplitDescriptionLines(unittest.TestCase):
         self.assertEqual(commits, ['1. Commit one'])
         self.assertEqual(trailing, [])
 
+    def test_numbered_list_in_user_message_not_mistaken_for_commits(self):
+        """A numbered list inside the user's own message must stay in the
+        message; the commit list is anchored on the marker heading."""
+        lines = [
+            'Reasons for this change:',
+            '1. performance',
+            '2. simplicity',
+            '',
+            'Changes included:',
+            '1. Add cache',
+            '2. Remove old path',
+        ]
+        msg, commits, trailing = split_description_lines(lines)
+        self.assertEqual(msg, ['Reasons for this change:',
+                               '1. performance',
+                               '2. simplicity',
+                               '',
+                               'Changes included:'])
+        self.assertEqual(commits, ['1. Add cache', '2. Remove old path'])
+        self.assertEqual(trailing, [])
+
 
 class TestCreateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.lib.run')

@@ -171,6 +171,36 @@ class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
         self.assertEqual(changes.adds, ['bäck.txt'])
 
 
+class TestOpenWarnings(unittest.TestCase):
+    """p4 exits 0 for per-file problems and only prints the reason, so a
+    file that did not open must be surfaced as a warning."""
+
+    @mock.patch('git_p4son.perforce.log')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+                return_value=None)
+    @mock.patch('git_p4son.perforce.run')
+    def test_warns_when_p4_declines_to_open(self, mock_run, _check,
+                                            mock_log):
+        mock_run.return_value = make_run_result(
+            stdout=["//depot/existing.txt - can't add existing file"])
+        changes = LocalChanges()
+        changes.adds = ['existing.txt']
+        include_changes_in_changelist(changes, '100', '/ws')
+        mock_log.warning.assert_called_once()
+
+    @mock.patch('git_p4son.perforce.log')
+    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+                return_value=None)
+    @mock.patch('git_p4son.perforce.run')
+    def test_no_warning_when_opened(self, mock_run, _check, mock_log):
+        mock_run.return_value = make_run_result(
+            stdout=['//depot/new.txt#1 - opened for add'])
+        changes = LocalChanges()
+        changes.adds = ['new.txt']
+        include_changes_in_changelist(changes, '100', '/ws')
+        mock_log.warning.assert_not_called()
+
+
 class TestIncludeChangesInChangelist(unittest.TestCase):
     # --- added files ---
     @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)

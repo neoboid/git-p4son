@@ -20,6 +20,8 @@
   values containing quotes or backslashes are now written as valid TOML
 - `update` no longer duplicates the enumerated commit list: commits in the base branch range replace their
   existing entries (matched by subject), entries outside the range are kept, and the list is renumbered
+- `new`/`update` now warn when p4 declines to open a file (e.g. "can't add existing file" or "file(s) not
+  in client view") instead of silently leaving it out of the changelist
 
 ## 0.2.10
 

@@ -198,6 +198,24 @@ def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str
     return (change, fields.get('action', ''))
 
 
+def _open_in_changelist(filename: str, p4_action: str, changelist: str,
+                        workspace_dir: str, dry_run: bool) -> None:
+    """Run a p4 open action (add/edit/delete) and warn if it did not open.
+
+    p4 exits 0 for per-file problems ("can't add existing file", "file(s)
+    not in client view") and only prints the reason, so a successful open
+    is confirmed by its "opened for" output line."""
+    result = run(['p4', p4_action, '-c', changelist, filename],
+                 cwd=workspace_dir, dry_run=dry_run)
+    if dry_run:
+        return
+    output = result.stdout + result.stderr
+    if not any('opened for' in line for line in output):
+        log.warning(f'p4 {p4_action} did not open {filename}:')
+        for line in output:
+            log.info(f'  {line}')
+
+
 def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
                           workspace_dir: str, dry_run: bool) -> None:
     """Ensure a file is opened with the correct action in the given changelist.
@@ -209,8 +227,8 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
     """
     result = get_changelist_for_file(filename, workspace_dir)
     if result is None:
-        run(['p4', p4_action, '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+        _open_in_changelist(filename, p4_action, changelist,
+                            workspace_dir, dry_run)
         return
 
     current_cl, current_action = result
@@ -231,8 +249,8 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
         # For add -> delete: the file never existed in the depot, so just revert.
         if current_action == 'add' and p4_action == 'delete':
             return
-        run(['p4', p4_action, '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+        _open_in_changelist(filename, p4_action, changelist,
+                            workspace_dir, dry_run)
         if p4_action != 'delete':
             run(['git', 'restore', filename],
                 cwd=workspace_dir, dry_run=dry_run)

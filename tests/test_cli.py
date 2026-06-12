@@ -1,5 +1,7 @@
 """Tests for git_p4son.cli module."""
 
+import contextlib
+import io
 import unittest
 from unittest import mock
 
@@ -99,7 +101,12 @@ class TestCreateParser(unittest.TestCase):
 
     def test_sleep_option(self):
         args = self.parser.parse_args(['update', '100', '-s', '5'])
-        self.assertEqual(args.sleep, '5')
+        self.assertEqual(args.sleep, 5)
+
+    def test_invalid_sleep_rejected_at_parse_time(self):
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.parser.parse_args(['update', '100', '-s', 'abc'])
 
     def test_version_flag(self):
         with self.assertRaises(SystemExit) as ctx:

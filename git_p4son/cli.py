@@ -149,6 +149,7 @@ Examples:
     )
     new_parser.add_argument(
         '-s', '--sleep',
+        type=int,
         help='Sleep for the specified number of seconds after the command is done'
     )
 
@@ -196,6 +197,7 @@ Examples:
     )
     update_parser.add_argument(
         '-s', '--sleep',
+        type=int,
         help='Sleep for the specified number of seconds after the command is done'
     )
 
@@ -470,7 +472,7 @@ def main() -> int:
         exit_code = run_command(args)
 
         if exit_code == 0 and getattr(args, 'sleep', None) is not None:
-            seconds = int(args.sleep)
+            seconds = args.sleep
             log.heading(f'Sleeping for {seconds} seconds')
             time.sleep(seconds)
             log.success('awake again')

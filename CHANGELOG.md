@@ -37,6 +37,8 @@
   treating it as already initialized; Ctrl-D at the depot root prompt aborts cleanly
 - Redirected output (e.g. `git p4son sync > log.txt`) no longer contains spinner frames, carriage returns,
   and ANSI escape sequences; the spinner only runs on an interactive terminal
+- An invalid `--sleep` value is now rejected by argument parsing instead of erroring after the command
+  already did its work
 
 ## 0.2.10
 

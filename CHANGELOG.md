@@ -39,6 +39,8 @@
   and ANSI escape sequences; the spinner only runs on an interactive terminal
 - An invalid `--sleep` value is now rejected by argument parsing instead of erroring after the command
   already did its work
+- Alias validation now rejects all-digit names (they always parse as changelist numbers, so such an alias
+  could never be referenced) and Windows reserved device names (`CON`, `NUL`, `COM1`, ...)
 
 ## 0.2.10
 

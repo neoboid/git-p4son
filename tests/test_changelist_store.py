@@ -112,6 +112,18 @@ class TestValidateAliasName(unittest.TestCase):
     def test_double_dot_rejected(self):
         self.assertIsNotNone(validate_alias_name('..'))
 
+    def test_all_digit_rejected(self):
+        """Digit strings always parse as changelist numbers, so an
+        all-digit alias could never be referenced."""
+        self.assertIsNotNone(validate_alias_name('12345'))
+
+    def test_digits_with_letters_allowed(self):
+        self.assertIsNone(validate_alias_name('feature123'))
+
+    def test_windows_reserved_names_rejected(self):
+        for name in ('CON', 'aux', 'NUL', 'com1', 'LPT9', 'con.txt'):
+            self.assertIsNotNone(validate_alias_name(name), name)
+
     def test_special_chars_rejected(self):
         for ch in ['*', '?', ':', '"', '|', '<', '>', '\'', '(', ')', '!']:
             with self.subTest(ch=ch):

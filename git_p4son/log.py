@@ -39,9 +39,14 @@ class Color:
     RESET = _RESET
 
 
+def _is_tty(stream) -> bool:
+    """Return True if the stream is an interactive terminal."""
+    return hasattr(stream, 'isatty') and stream.isatty()
+
+
 def _use_color(stream) -> bool:
     """Return True if the stream is a TTY and supports color."""
-    return hasattr(stream, 'isatty') and stream.isatty()
+    return _is_tty(stream)
 
 
 def _color(text: str, color: str, stream) -> str:
@@ -88,6 +93,7 @@ class Log:
         # reserved for completion candidates.
         self.quiet_mode: bool = False
         self._heading_count: int = 0
+        self._command_line_open: bool = False
         self._spinner_thread: threading.Thread | None = None
         self._spinner_stop: threading.Event = threading.Event()
         self._spinner_line: str = ''
@@ -127,11 +133,19 @@ class Log:
         if self.quiet_mode:
             return
         full_line = f'> {cmd}'
+        if not _is_tty(sys.stdout):
+            # No spinner or line rewriting without a terminal; print the
+            # full line at once so redirected output stays clean.
+            print(self._format_command_line(full_line))
+            self._command_line_open = False
+            return
+
         line = full_line
         if truncate_for_spinner:
             line = _truncate_to_terminal_width(full_line)
 
         print(self._format_command_line(line), end='', flush=True)
+        self._command_line_open = True
         self._spinner_line = line
         self._spinner_final_line = full_line
 
@@ -139,7 +153,9 @@ class Log:
         """Finish the command line (print newline)."""
         if self.quiet_mode:
             return
-        print()
+        if self._command_line_open:
+            print()
+            self._command_line_open = False
 
     def detail(self, key: str, value: object) -> None:
         """Print a key-value result."""
@@ -196,7 +212,7 @@ class Log:
 
     def start_spinner(self) -> None:
         """Start the spinner at the end of the current command line."""
-        if self.quiet_mode:
+        if self.quiet_mode or not _is_tty(sys.stdout):
             return
         self._spinner_stop.clear()
         self._spinner_thread = threading.Thread(
@@ -206,6 +222,9 @@ class Log:
     def stop_spinner(self) -> None:
         """Stop the spinner and reprint the clean command line."""
         if self._spinner_thread is None:
+            # No spinner ran (non-TTY, quiet mode, or never started); the
+            # command line, if any, may still need its newline.
+            self.end_command()
             return
         self._spinner_stop.set()
         self._spinner_thread.join()
@@ -216,6 +235,7 @@ class Log:
         sys.stdout.write(f'{line}{_CLEAR_TO_EOL}')
         sys.stdout.write('\n')
         sys.stdout.flush()
+        self._command_line_open = False
 
     def _format_command_line(self, line: str) -> str:
         """Return a command line with a colored prompt when supported."""

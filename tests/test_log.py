@@ -1,10 +1,42 @@
 """Tests for git_p4son.log module."""
 
+import contextlib
+import io
 import os
 import unittest
 from unittest import mock
 
 from git_p4son.log import Log, _truncate_to_terminal_width
+
+
+class TestNonTtyOutput(unittest.TestCase):
+    def test_command_output_is_clean_when_redirected(self):
+        """Redirected output (git p4son sync > log.txt) must not contain
+        spinner frames, carriage returns, or escape sequences."""
+        log = Log()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            log.command('git status', truncate_for_spinner=True)
+            log.start_spinner()
+            log.stop_spinner()
+        self.assertEqual(buffer.getvalue(), '> git status\n')
+
+    def test_spinner_not_started_without_tty(self):
+        log = Log()
+        with contextlib.redirect_stdout(io.StringIO()):
+            log.start_spinner()
+            self.assertIsNone(log._spinner_thread)
+            log.stop_spinner()
+
+    def test_input_command_line_not_doubled(self):
+        """The input path calls end_command explicitly; the line is
+        already terminated in non-TTY mode."""
+        log = Log()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            log.command('p4 change -i')
+            log.end_command()
+        self.assertEqual(buffer.getvalue(), '> p4 change -i\n')
 
 
 class TestCommandTruncation(unittest.TestCase):

@@ -171,11 +171,15 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 
     changes = LocalChanges()
     renamepattern = r"^r(\d+)$"
+    copypattern = r"^c(\d+)$"
     for line in res.stdout:
         tokens = line.split('\t')
         status = tokens[0].lower()
         filename = tokens[1]
         if status == 'm':
+            changes.mods.append(filename)
+        elif status == 't':
+            # Typechange (e.g. symlink to regular file): content changed.
             changes.mods.append(filename)
         elif status == 'd':
             changes.dels.append(filename)
@@ -185,6 +189,10 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
             from_filename = filename
             to_filename = tokens[2]
             changes.moves.append((from_filename, to_filename))
+        elif re.search(copypattern, status):
+            # Copy (with diff.renames=copies): the source is untouched,
+            # only the destination is a new file.
+            changes.adds.append(tokens[2])
         else:
             raise CommandError(f'Unknown git status in "{line}"')
 

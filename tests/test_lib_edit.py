@@ -131,6 +131,29 @@ class TestGetLocalGitChanges(unittest.TestCase):
         self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
 
     @mock.patch('git_p4son.git.run')
+    def test_typechange_treated_as_modify(self, mock_run):
+        """T (e.g. symlink to regular file) is a content change."""
+        mock_run.side_effect = [
+            make_run_result(stdout=['abc123']),
+            make_run_result(stdout=['T\tlink.txt']),
+        ]
+        changes = get_local_changes('main', '/ws')
+        self.assertEqual(changes.mods, ['link.txt'])
+
+    @mock.patch('git_p4son.git.run')
+    def test_copy_treated_as_add_of_destination(self, mock_run):
+        """C### (with diff.renames=copies) leaves the source untouched;
+        only the destination is a new file."""
+        mock_run.side_effect = [
+            make_run_result(stdout=['abc123']),
+            make_run_result(stdout=['C100\tsrc.txt\tcopy.txt']),
+        ]
+        changes = get_local_changes('main', '/ws')
+        self.assertEqual(changes.adds, ['copy.txt'])
+        self.assertEqual(changes.mods, [])
+        self.assertEqual(changes.dels, [])
+
+    @mock.patch('git_p4son.git.run')
     def test_merge_base_failure(self, mock_run):
         mock_run.side_effect = RunError('merge-base failed')
         with self.assertRaises(RunError):

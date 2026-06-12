@@ -27,6 +27,8 @@
   producing a broken rebase todo
 - Re-shelving now clears the previous shelf first, so files no longer open (e.g. added in one commit and
   deleted in a later one) do not linger in the review as stale shelved entries
+- `new`/`update` no longer abort on typechanges (treated as edits) or copies (treated as adds of the
+  destination) in the git diff
 
 ## 0.2.10
 

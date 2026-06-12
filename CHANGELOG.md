@@ -11,6 +11,7 @@
   no longer queries the server for the review keyword and now reports alias problems
 - Decode subprocess output as UTF-8 on all platforms; Windows previously used the ANSI code page, garbling
   non-ASCII filenames and commit subjects
+- Fix `new`/`update` mangling non-ASCII filenames into quoted escape sequences before passing them to p4
 
 ## 0.2.10
 

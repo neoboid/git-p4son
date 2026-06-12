@@ -1,5 +1,8 @@
 """Tests for edit functions in git_p4son.lib and git_p4son.perforce modules."""
 
+import os
+import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -141,6 +144,31 @@ class TestGetLocalGitChanges(unittest.TestCase):
         ]
         with self.assertRaises(CommandError):
             get_local_changes('main', '/ws')
+
+
+class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
+    def test_non_ascii_filename_returned_verbatim(self):
+        """git C-quotes non-ASCII paths by default ("b\\303\\244ck.txt");
+        such a string would never match a file on disk or in p4."""
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+            git('init')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            git('commit', '--allow-empty', '-m', 'base')
+            base = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=ws,
+                capture_output=True, text=True, check=True).stdout.strip()
+            with open(os.path.join(ws, 'bäck.txt'), 'w') as f:
+                f.write('content')
+            git('add', '.')
+            git('commit', '-m', 'add file')
+
+            changes = get_local_changes(base, ws)
+
+        self.assertEqual(changes.adds, ['bäck.txt'])
 
 
 class TestIncludeChangesInChangelist(unittest.TestCase):

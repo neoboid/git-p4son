@@ -159,7 +159,11 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     """Get local git changes between base_branch and HEAD."""
     ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
 
-    res = run(['git', 'diff', '--name-status', f'{ancestor}..HEAD'],
+    # quotepath off: non-ASCII filenames are emitted verbatim instead of
+    # C-quoted octal escapes ("b\303\244ck.txt") that would never match a
+    # file on disk or in p4.
+    res = run(['git', '-c', 'core.quotepath=off', 'diff', '--name-status',
+               f'{ancestor}..HEAD'],
               cwd=workspace_dir)
 
     changes = LocalChanges()

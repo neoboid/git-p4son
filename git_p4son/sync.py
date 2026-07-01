@@ -152,7 +152,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            workspace_dir: str,
                            pre_sync_head_commit: str,
                            temp_root: str,
-                           uses_crlf: bool = False) -> WritableSyncFileSet:
+                           uses_crlf: bool = False,
+                           clobber: bool = False) -> WritableSyncFileSet:
     """Check which preview files are writable on disk and prepare them for sync.
 
     For tracked writable files, queries Perforce for the file type (binary
@@ -161,6 +162,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     are just made read-only. Modified files are made read-only and added
     to the changed list for post-sync merging. Files p4 will add over local
     content (add/add) are always queued for merge against an empty base.
+
+    clobber reflects the workspace clobber option. git-ignored writable files
+    are left writable and rely on p4 refusing to overwrite them, which only
+    holds when clobber is off; with clobber on p4 overwrites them, so the
+    reported outcome differs.
     """
     result = WritableSyncFileSet()
 
@@ -289,8 +295,15 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     if result.ignored:
         count = len(result.ignored)
         label = 'file' if count == 1 else 'files'
-        log.warning(
-            f'{count} git-ignored writable {label} will not be synced')
+        if clobber:
+            # These files are left writable, so with clobber enabled p4
+            # overwrites them during sync rather than refusing to.
+            log.warning(
+                f'{count} git-ignored writable {label} will be overwritten '
+                'by p4 (clobber is enabled on the workspace)')
+        else:
+            log.warning(
+                f'{count} git-ignored writable {label} will not be synced')
         for f in result.ignored:
             log.info(os.path.relpath(f, workspace_dir))
 
@@ -535,8 +548,11 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # Workspace line ending governs how staged git content is normalized so
     # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
+    # The clobber option changes whether git-ignored writable files survive
+    # the sync, which the prepare summary needs to report accurately.
     client_spec = get_client_spec(workspace_dir)
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
+    clobber = bool(client_spec and client_spec.clobber)
 
     # Temp root for staging HEAD/baseline file content between classification
     # and the post-sync merge. Cleaned up automatically on exit.
@@ -551,7 +567,7 @@ def sync_command(args: argparse.Namespace) -> int:
             if preview:
                 prep = prepare_writable_files(preview, workspace_dir,
                                               pre_sync_head_commit, temp_root,
-                                              uses_crlf=uses_crlf)
+                                              uses_crlf=uses_crlf, clobber=clobber)
                 p4_sync(last_sync.changelist, last_changelist_label,
                         depot_root, workspace_dir,
                         expected_clobber=set(prep.ignored))
@@ -599,7 +615,7 @@ def sync_command(args: argparse.Namespace) -> int:
                 last_changelist, depot_root, workspace_dir)
             prep = prepare_writable_files(preview, workspace_dir,
                                           pre_sync_head_commit, temp_root,
-                                          uses_crlf=uses_crlf)
+                                          uses_crlf=uses_crlf, clobber=clobber)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             if preview:
@@ -610,7 +626,7 @@ def sync_command(args: argparse.Namespace) -> int:
         preview = p4_sync_preview(changelist, depot_root, workspace_dir)
         prep = prepare_writable_files(preview, workspace_dir,
                                       pre_sync_head_commit, temp_root,
-                                      uses_crlf=uses_crlf)
+                                      uses_crlf=uses_crlf, clobber=clobber)
         all_changed.extend(prep.changed)
         all_ignored.extend(prep.ignored)
         if preview:
@@ -635,9 +651,16 @@ def sync_command(args: argparse.Namespace) -> int:
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         _merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        # Report git-ignored files that could not be synced
+        # Report git-ignored writable files. Left writable, they are only
+        # preserved because p4 refuses to clobber them; with clobber on p4
+        # overwrites them during the sync instead.
         if all_ignored:
-            log.heading('Files not synced (git-ignored and writable)')
+            if clobber:
+                log.heading(
+                    'Git-ignored writable files overwritten by p4 '
+                    '(clobber enabled)')
+            else:
+                log.heading('Files not synced (git-ignored and writable)')
             for f in sorted(set(all_ignored)):
                 log.info(os.path.relpath(f, workspace_dir))
 

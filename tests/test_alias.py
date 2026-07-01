@@ -3,20 +3,21 @@
 import unittest
 from unittest import mock
 
-from git_p4son.alias import _prompt_choice, alias_clean_command
+from git_p4son.alias import alias_clean_command
+from git_p4son.common import prompt_choice
 
 
 class TestPromptChoice(unittest.TestCase):
     def test_renders_prompt_from_options(self):
         with mock.patch('builtins.input', return_value='n') as mock_input:
-            result = _prompt_choice('Delete?', ['yes', 'no'])
+            result = prompt_choice('Delete?', ['yes', 'no'])
         self.assertEqual(result, 'no')
         mock_input.assert_called_once_with('Delete? [y]es / [n]o: ')
 
     def test_accepts_full_word(self):
         with mock.patch('builtins.input', return_value='quit'):
             self.assertEqual(
-                _prompt_choice('Delete', ['all', 'quit']), 'quit')
+                prompt_choice('Delete', ['all', 'quit']), 'quit')
 
 
 def _args(workspace_dir='/ws'):

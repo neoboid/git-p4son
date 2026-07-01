@@ -8,6 +8,7 @@ from .changelist_store import (
     list_changelist_aliases,
     delete_changelist_alias,
 )
+from .common import prompt_choice
 from .log import log
 
 
@@ -54,31 +55,6 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _prompt_choice(prefix: str, options: list[str]) -> str | None:
-    """Prompt until the response matches an option or its first letter.
-
-    The choices are rendered from the options, e.g. "[y]es / [n]o", so the
-    prompt and the accepted keys cannot drift apart. Options must have
-    unique first letters. Returns the chosen option, or None on EOF.
-    """
-    shorthands = {option[0]: option for option in options}
-    rendered = ' / '.join(f'[{option[0]}]{option[1:]}' for option in options)
-    keys = list(shorthands)
-    while True:
-        try:
-            response = input(f'{prefix} {rendered}: ').strip().lower()
-        except EOFError:
-            print()
-            return None
-
-        if response in shorthands:
-            return shorthands[response]
-        elif response in options:
-            return response
-        else:
-            print('Please enter ' + ', '.join(keys[:-1]) + f' or {keys[-1]}')
-
-
 def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
     """Delete every alias without further prompting."""
     for name, _changelist in aliases:
@@ -98,7 +74,7 @@ def _clean_interactive(aliases: list[tuple[str, str]],
         log.heading(f'{name} -> CL {changelist}')
 
         if response != 'all':
-            response = _prompt_choice(
+            response = prompt_choice(
                 'Delete?', ['yes', 'no', 'all', 'quit'])
 
         if response is None or response == 'quit':
@@ -125,7 +101,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
 
-    mode = _prompt_choice('Delete?', ['all', 'interactive', 'quit'])
+    mode = prompt_choice('Delete?', ['all', 'interactive', 'quit'])
     if mode is None or mode == 'quit':
         log.info('Aborting')
         return 0

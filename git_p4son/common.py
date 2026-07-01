@@ -36,6 +36,31 @@ def branch_to_alias(branch_name: str) -> str:
     return branch_name.replace('/', '-')
 
 
+def prompt_choice(prefix: str, options: list[str]) -> str | None:
+    """Prompt until the response matches an option or its first letter.
+
+    The choices are rendered from the options, e.g. "[y]es / [n]o", so the
+    prompt and the accepted keys cannot drift apart. Options must have
+    unique first letters. Returns the chosen option, or None on EOF.
+    """
+    shorthands = {option[0]: option for option in options}
+    rendered = ' / '.join(f'[{option[0]}]{option[1:]}' for option in options)
+    keys = list(shorthands)
+    while True:
+        try:
+            response = input(f'{prefix} {rendered}: ').strip().lower()
+        except EOFError:
+            print()
+            return None
+
+        if response in shorthands:
+            return shorthands[response]
+        elif response in options:
+            return response
+        else:
+            print('Please enter ' + ', '.join(keys[:-1]) + f' or {keys[-1]}')
+
+
 def _path_module_for(*paths: str):
     """Choose a path module that matches the given path strings."""
     if any('\\' in path or re.match(r'^[A-Za-z]:', path) for path in paths):

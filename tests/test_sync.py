@@ -25,12 +25,73 @@ from git_p4son.sync import (
     ChangedFile,
     LastSync,
     WritableSyncFileSet,
+    _handle_clobber_warning,
     git_last_sync,
     p4_sync,
     prepare_writable_files,
     sync_command,
 )
 from tests.helpers import make_run_result
+
+
+class TestHandleClobberWarning(unittest.TestCase):
+    """The clobber warning is interactive, so it must never block
+    automation and must respect a permanent dismissal."""
+
+    def test_no_prompt_when_clobber_off(self):
+        with mock.patch('git_p4son.sync.prompt_choice') as mock_prompt:
+            self.assertTrue(_handle_clobber_warning(False, '/ws'))
+        mock_prompt.assert_not_called()
+
+    @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
+                return_value=True)
+    def test_no_prompt_when_dismissed(self, _dismissed):
+        with mock.patch('git_p4son.sync.prompt_choice') as mock_prompt:
+            self.assertTrue(_handle_clobber_warning(True, '/ws'))
+        mock_prompt.assert_not_called()
+
+    @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
+                return_value=False)
+    def test_no_prompt_when_not_a_tty(self, _dismissed):
+        with mock.patch('git_p4son.sync.sys.stdin') as mock_stdin, \
+                mock.patch('git_p4son.sync.prompt_choice') as mock_prompt:
+            mock_stdin.isatty.return_value = False
+            self.assertTrue(_handle_clobber_warning(True, '/ws'))
+        mock_prompt.assert_not_called()
+
+    @mock.patch('git_p4son.sync.dismiss_clobber_warning')
+    @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
+                return_value=False)
+    def test_continue_persists_and_proceeds(self, _dismissed, mock_dismiss):
+        """Choosing to continue implies acceptance, so it also dismisses
+        the warning permanently."""
+        with mock.patch('git_p4son.sync.sys.stdin') as mock_stdin, \
+                mock.patch('git_p4son.sync.prompt_choice',
+                           return_value='continue'):
+            mock_stdin.isatty.return_value = True
+            self.assertTrue(_handle_clobber_warning(True, '/ws'))
+        mock_dismiss.assert_called_once_with('/ws')
+
+    @mock.patch('git_p4son.sync.dismiss_clobber_warning')
+    @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
+                return_value=False)
+    def test_abort_stops_sync(self, _dismissed, mock_dismiss):
+        with mock.patch('git_p4son.sync.sys.stdin') as mock_stdin, \
+                mock.patch('git_p4son.sync.prompt_choice',
+                           return_value='abort'):
+            mock_stdin.isatty.return_value = True
+            self.assertFalse(_handle_clobber_warning(True, '/ws'))
+        mock_dismiss.assert_not_called()
+
+    @mock.patch('git_p4son.sync.dismiss_clobber_warning')
+    @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
+                return_value=False)
+    def test_eof_continues_without_persisting(self, _dismissed, mock_dismiss):
+        with mock.patch('git_p4son.sync.sys.stdin') as mock_stdin, \
+                mock.patch('git_p4son.sync.prompt_choice', return_value=None):
+            mock_stdin.isatty.return_value = True
+            self.assertTrue(_handle_clobber_warning(True, '/ws'))
+        mock_dismiss.assert_not_called()
 
 
 def _upd(path):
@@ -834,6 +895,19 @@ class TestSyncCommand(unittest.TestCase):
         args = mock.Mock(changelist='100', force=True, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
+
+    @mock.patch('git_p4son.sync._handle_clobber_warning', return_value=False)
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync', return_value=None)
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
+    def test_aborts_when_clobber_warning_declined(
+            self, _depot, _git_clean, _p4clean, _last_sync, _head,
+            _warn):
+        args = mock.Mock(changelist=None, force=False, workspace_dir='/ws')
+        rc = sync_command(args)
+        self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.sync.log')
     @mock.patch('git_p4son.sync.run_hooks')

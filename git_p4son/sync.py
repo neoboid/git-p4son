@@ -7,12 +7,14 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from typing import IO
 
-from .common import RunError, run_with_output
+from .common import RunError, prompt_choice, run_with_output
 from .config import get_depot_root
+from .state import dismiss_clobber_warning, is_clobber_warning_dismissed
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
@@ -495,6 +497,32 @@ def p4_sync(changelist: int, label: str, depot_root: str,
         )
 
 
+def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
+    """Warn interactively that clobber is no longer needed.
+
+    Returns True to continue the sync, False to abort. Skipped silently when
+    clobber is off, when the user permanently dismissed the warning, or when
+    stdin is not a terminal (automation must never block on a prompt).
+    """
+    if not clobber or is_clobber_warning_dismissed(workspace_dir):
+        return True
+    if not sys.stdin.isatty():
+        return True
+
+    log.heading('Clobber option enabled')
+    log.warning(
+        'Clobber is enabled on your workspace but git-p4son no longer needs '
+        'it. You can safely disable it in perforce.')
+    choice = prompt_choice('How to proceed?', ['continue', 'abort'])
+    if choice == 'abort':
+        log.info('Aborting')
+        return False
+    if choice == 'continue':
+        dismiss_clobber_warning(workspace_dir)
+        log.success('Will not warn about clobber again')
+    return True
+
+
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
@@ -553,6 +581,9 @@ def sync_command(args: argparse.Namespace) -> int:
     client_spec = get_client_spec(workspace_dir)
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)
+
+    if not _handle_clobber_warning(clobber, workspace_dir):
+        return 1
 
     # Temp root for staging HEAD/baseline file content between classification
     # and the post-sync merge. Cleaned up automatically on exit.

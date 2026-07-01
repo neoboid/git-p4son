@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0
+
 - `new`/`update`/`review` no longer abort when p4 refuses to open a file, e.g. git-tracked files matching
   `.p4ignore` ("ignored file can't be added"); the file is skipped with a warning showing p4's reason
 - Remove the clobber workspace requirement from `init`

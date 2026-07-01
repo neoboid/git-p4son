@@ -13,6 +13,9 @@
   - Git-ignored files are skipped with a warning
   - Add/delete asymmetry between git and Perforce is detected and reported
 - The `--force` flag on `sync` now only controls syncing to older changelists
+- `sync` warns interactively when the workspace still has the clobber option enabled (no longer needed),
+  offering to continue or abort. Continuing dismisses the warning permanently, stored per-user in a
+  gitignored `.git-p4son/state.toml`; the prompt is skipped in non-interactive runs
 
 ## 0.2.11
 

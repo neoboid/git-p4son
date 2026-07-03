@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add support for `pre-sync` hooks in `.git-p4son/hooks/pre-sync/`, run before any changelist is
+  synced; a non-zero exit code aborts the sync. When a sequence of changelists is synced, the hooks
+  run once, before the first sync
 - `sync` accepts an explicit `head` keyword (`git p4son sync head`), equivalent to omitting the
   changelist argument
 - `sync` accepts multiple strictly increasing changelist numbers (`git p4son sync 123 156 178`), syncing

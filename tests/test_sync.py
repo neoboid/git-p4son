@@ -942,6 +942,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         mock_p4sync.return_value = None
+        mock_run_hooks.return_value = []
         args = mock.Mock(changelist=['last-synced'], force=False,
                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
@@ -949,7 +950,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_p4sync.assert_called_once_with(
             100, 'last synced', '//myclient', '/ws',
             expected_clobber=set())
-        mock_run_hooks.assert_called_once_with('post-sync', '/ws', '/invoked')
+        mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
+        mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_sync')
@@ -963,12 +965,69 @@ class TestSyncCommand(unittest.TestCase):
             self, _depot, _git_clean, _p4clean, mock_last_sync,
             _head, _preview, mock_p4sync, mock_run_hooks):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_run_hooks.return_value = []
         args = mock.Mock(changelist=['last-synced'], force=False,
                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_not_called()
-        mock_run_hooks.assert_called_once_with('post-sync', '/ws', '/invoked')
+        mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
+        mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview',
+                return_value=[_upd('/ws/a.txt')])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
+    def test_failing_pre_sync_hook_aborts(
+            self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
+            _preview, mock_prep, mock_p4sync, mock_run_hooks):
+        """A non-zero pre-sync hook aborts before any changelist is synced."""
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_prep.return_value = self._empty_prep()
+        mock_run_hooks.return_value = [make_run_result(returncode=1)]
+        args = mock.Mock(changelist=['200'], force=False,
+                         workspace_dir='/ws', invocation_dir='/invoked')
+        rc = sync_command(args)
+        self.assertEqual(rc, 1)
+        mock_p4sync.assert_not_called()
+        mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
+
+    @mock.patch('git_p4son.sync._merge_changed_files')
+    @mock.patch('git_p4son.sync.commit')
+    @mock.patch('git_p4son.sync.add_all_files')
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview',
+                return_value=[_upd('/ws/a.txt')])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
+    def test_pre_sync_hook_runs_once_for_multiple_changelists(
+            self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
+            _preview, mock_prep, mock_p4sync, mock_run_hooks, _add, _commit,
+            _merge):
+        """Pre-sync hooks run once, not per changelist, for a CL sequence."""
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_prep.return_value = self._empty_prep()
+        mock_run_hooks.return_value = []
+        args = mock.Mock(changelist=['150', '200'], force=False,
+                         workspace_dir='/ws', invocation_dir='/invoked')
+        rc = sync_command(args)
+        self.assertEqual(rc, 0)
+        pre_sync_calls = [
+            call for call in mock_run_hooks.call_args_list
+            if call.args[0] == 'pre-sync'
+        ]
+        self.assertEqual(len(pre_sync_calls), 1)
 
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')

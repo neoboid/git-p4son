@@ -31,6 +31,7 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   git-p4son sync                # Sync to the latest changelist
+  git-p4son sync head           # Sync to the latest changelist (explicit)
   git-p4son sync 12345          # Sync to changelist 12345
   git-p4son sync last-synced    # Re-sync the last synced changelist
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
@@ -80,8 +81,9 @@ Examples:
         'changelist',
         nargs='?',
         default=None,
-        help='Changelist number to sync, or "last-synced" to re-sync the last synced changelist. '
-             'Omit to sync to the latest changelist affecting the workspace'
+        help='Changelist number to sync, "last-synced" to re-sync the last synced changelist, or '
+             '"head" to sync to the latest changelist. Omit to sync to the latest changelist '
+             'affecting the workspace'
     )
     sync_parser.add_argument(
         '-f', '--force',

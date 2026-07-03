@@ -605,8 +605,8 @@ def sync_command(args: argparse.Namespace) -> int:
             run_hooks('post-sync', workspace_dir, invocation_dir)
             return 0
 
-        # No argument means sync to latest
-        if args.changelist is None:
+        # No argument (or the explicit "head" keyword) means sync to latest
+        if args.changelist is None or args.changelist.lower() == 'head':
             log.heading('Finding latest changelist')
             changelist = get_latest_changelist(depot_root, workspace_dir)
             log.success(f'CL {changelist}')

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `sync` accepts an explicit `head` keyword (`git p4son sync head`), equivalent to omitting the
+  changelist argument
+
 ## 0.3.0
 
 - `new`/`update`/`review` no longer abort when p4 refuses to open a file, e.g. git-tracked files matching

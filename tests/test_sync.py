@@ -990,6 +990,30 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
+    @mock.patch('git_p4son.sync.get_latest_changelist')
+    @mock.patch('git_p4son.sync.commit')
+    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')
+    def test_explicit_head_keyword(self, _depot, _p4clean, mock_last_sync,
+                                   _head, _preview, mock_prep, _p4sync,
+                                   mock_git_clean, _commit, mock_get_latest):
+        """An explicit "head" argument syncs to the latest changelist, same
+        as omitting the argument."""
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_get_latest.return_value = 200
+        mock_prep.return_value = self._empty_prep()
+        mock_git_clean.side_effect = [[], []]  # clean before and after
+        args = mock.Mock(changelist='head', force=False, workspace_dir='/ws')
+        rc = sync_command(args)
+        self.assertEqual(rc, 0)
+        mock_get_latest.assert_called_once()
+
 
 class TestMergeChangedFiles(unittest.TestCase):
     """Tests for _merge_changed_files."""

@@ -18,16 +18,16 @@ from tests.helpers import make_run_result
 
 class TestComputeCwdDepotRoot(unittest.TestCase):
     def test_subdirectory(self):
-        result = _compute_cwd_depot_root('my-ws', '/ws/Engine/Source', '/ws')
-        self.assertEqual(result, '//my-ws/Engine/Source')
+        result = _compute_cwd_depot_root('/ws/Engine/Source', '/ws')
+        self.assertEqual(result, '//$(workspace)/Engine/Source')
 
     def test_at_workspace_root(self):
-        result = _compute_cwd_depot_root('my-ws', '/ws', '/ws')
+        result = _compute_cwd_depot_root('/ws', '/ws')
         self.assertIsNone(result)
 
     def test_nested_subdirectory(self):
-        result = _compute_cwd_depot_root('my-ws', '/ws/a/b/c', '/ws')
-        self.assertEqual(result, '//my-ws/a/b/c')
+        result = _compute_cwd_depot_root('/ws/a/b/c', '/ws')
+        self.assertEqual(result, '//$(workspace)/a/b/c')
 
 
 class TestValidateDepotRoot(unittest.TestCase):
@@ -80,6 +80,25 @@ class TestSelectDepotRoot(unittest.TestCase):
         result = _select_depot_root('client', '/ws/sub', '/ws')
         self.assertIsNone(result)
 
+    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('builtins.input', return_value='1')
+    def test_entire_workspace_stores_template(self, _input, mock_validate):
+        from git_p4son.init import _select_depot_root
+        result = _select_depot_root('my-ws', '/ws/sub', '/ws')
+        # The stored root keeps the placeholder; validation uses the resolved
+        # path so p4 sees a real depot.
+        self.assertEqual(result, '//$(workspace)')
+        mock_validate.assert_called_once_with('//my-ws', '/ws/sub')
+
+    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('builtins.input', return_value='2')
+    def test_current_directory_stores_template(self, _input, mock_validate):
+        from git_p4son.init import _select_depot_root
+        result = _select_depot_root('my-ws', '/ws/Engine/Source', '/ws')
+        self.assertEqual(result, '//$(workspace)/Engine/Source')
+        mock_validate.assert_called_once_with(
+            '//my-ws/Engine/Source', '/ws/Engine/Source')
+
 
 class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
@@ -116,6 +135,19 @@ class TestConfigureDepotRoot(unittest.TestCase):
     def test_no_existing_root_user_aborts(self, mock_save, mock_get, mock_select):
         result = _configure_depot_root('client', '/ws', '/ws')
         self.assertFalse(result)
+        mock_save.assert_not_called()
+
+    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.get_depot_root',
+                return_value='//$(workspace)/Engine')
+    @mock.patch('git_p4son.init.save_config')
+    def test_existing_template_root_validated_resolved(self, mock_save,
+                                                       mock_get, mock_validate):
+        """An existing $(workspace) root is validated against the resolved
+        path, not the literal placeholder."""
+        result = _configure_depot_root('my-ws', '/ws', '/ws')
+        self.assertTrue(result)
+        mock_validate.assert_called_once_with('//my-ws/Engine', '/ws')
         mock_save.assert_not_called()
 
 

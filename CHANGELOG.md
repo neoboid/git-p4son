@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The depot root in `config.toml` may use a `$(workspace)` placeholder (e.g. `root = "//$(workspace)/Engine"`),
+  substituted with the live workspace name on each run so renaming the Perforce workspace no longer breaks the
+  config. `init` now writes this form by default; existing concrete roots keep working
 - Add support for `pre-sync` hooks in `.git-p4son/hooks/pre-sync/`, run before any changelist is
   synced; a non-zero exit code aborts the sync. When a sequence of changelists is synced, the hooks
   run once, before the first sync

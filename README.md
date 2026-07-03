@@ -243,6 +243,11 @@ The depot root determines which part of the Perforce workspace git-p4son syncs. 
 workspace or just the directory's subtree where the git root is placed. The selection is saved in
 `.git-p4son/config.toml` and used by all subsequent commands.
 
+The saved root uses a `$(workspace)` placeholder for the workspace (client) name, e.g.
+`root = "//$(workspace)/Engine"`. git-p4son substitutes the live workspace name each time it runs, so renaming
+the Perforce workspace does not break the config. You can still store a concrete name (e.g. `//my-workspace/Engine`)
+by hand-editing `config.toml`; both forms work.
+
 The `.gitignore` is set up using this priority:
 - If `.gitignore` already exists, it is left as is
 - If `.p4ignore` exists, it is copied to `.gitignore` as a starting point

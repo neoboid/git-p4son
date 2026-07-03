@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import IO
 
 from .common import RunError, prompt_choice, run_with_output
-from .config import get_depot_root
+from .config import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .state import dismiss_clobber_warning, is_clobber_warning_dismissed
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
@@ -564,6 +564,17 @@ def sync_command(args: argparse.Namespace) -> int:
     if not depot_root:
         log.error('No depot root configured. Run "git p4son init" first.')
         return 1
+
+    # The client spec is queried once here: its name resolves a $(workspace)
+    # placeholder in the depot root, and its line-ending/clobber options feed
+    # the writable-file handling further down.
+    client_spec = get_client_spec(workspace_dir)
+    if WORKSPACE_PLACEHOLDER in depot_root and not client_spec:
+        log.error('Cannot resolve $(workspace) in depot root: not inside a '
+                  'Perforce workspace')
+        return 1
+    if client_spec:
+        depot_root = expand_depot_root(depot_root, client_spec.name)
     log.success(depot_root)
 
     log.heading('Checking git workspace')
@@ -609,7 +620,7 @@ def sync_command(args: argparse.Namespace) -> int:
     # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
     # The clobber option changes whether git-ignored writable files survive
     # the sync, which the prepare summary needs to report accurately.
-    client_spec = get_client_spec(workspace_dir)
+    # (client_spec was fetched above to resolve the depot root.)
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)
 

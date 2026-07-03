@@ -10,7 +10,12 @@ import os
 import shutil
 
 from .common import CommandError, run, run_with_output
-from .config import get_depot_root, save_config
+from .config import (
+    WORKSPACE_PLACEHOLDER,
+    expand_depot_root,
+    get_depot_root,
+    save_config,
+)
 from .log import log
 from .perforce import get_client_spec
 from .git import resolve_editor
@@ -26,31 +31,38 @@ def _validate_depot_root(depot_root: str, cwd: str) -> bool:
         return False
 
 
-def _compute_cwd_depot_root(client_name: str, cwd: str,
-                            p4_workspace_root: str) -> str | None:
-    """Compute depot root for cwd relative to workspace root.
+def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
+    """Compute the depot root template for cwd relative to workspace root.
 
-    Returns None if cwd is the workspace root (identical to entire workspace).
+    Uses the $(workspace) placeholder in place of the client name so the stored
+    root survives a workspace rename. Returns None if cwd is the workspace root
+    (identical to the entire workspace).
     """
     rel = os.path.relpath(cwd, p4_workspace_root)
     if rel == '.':
         return None
     rel_posix = rel.replace(os.sep, '/')
-    return f'//{client_name}/{rel_posix}'
+    return f'//{WORKSPACE_PLACEHOLDER}/{rel_posix}'
 
 
 def _select_depot_root(client_name: str, cwd: str,
                        p4_workspace_root: str) -> str | None:
-    """Interactive prompt for depot root selection. Returns root or None to abort."""
-    entire_root = f'//{client_name}'
-    cwd_root = _compute_cwd_depot_root(client_name, cwd, p4_workspace_root)
+    """Interactive prompt for depot root selection.
+
+    Returns a depot root template (with the $(workspace) placeholder) to store,
+    or None to abort. Menu entries and validation use the resolved path.
+    """
+    entire_root = f'//{WORKSPACE_PLACEHOLDER}'
+    cwd_root = _compute_cwd_depot_root(cwd, p4_workspace_root)
 
     while True:
         print()
         print('Select the depot path that git-p4son should sync:')
-        print(f'  1. Entire workspace: {entire_root}/...')
+        print(f'  1. Entire workspace: '
+              f'{expand_depot_root(entire_root, client_name)}/...')
         if cwd_root:
-            print(f'  2. Current directory: {cwd_root}/...')
+            print(f'  2. Current directory: '
+                  f'{expand_depot_root(cwd_root, client_name)}/...')
             abort_num = '3'
         else:
             abort_num = '2'
@@ -72,10 +84,11 @@ def _select_depot_root(client_name: str, cwd: str,
             print(f'Invalid choice: {choice}')
             continue
 
-        if _validate_depot_root(depot_root, cwd):
+        resolved = expand_depot_root(depot_root, client_name)
+        if _validate_depot_root(resolved, cwd):
             return depot_root
 
-        log.error(f'Depot root {depot_root}/... is not valid')
+        log.error(f'Depot root {resolved}/... is not valid')
 
 
 def _configure_depot_root(client_name: str, cwd: str,
@@ -84,17 +97,18 @@ def _configure_depot_root(client_name: str, cwd: str,
     log.heading('Finding git-p4son depot root')
     depot_root = get_depot_root(cwd)
     if depot_root:
-        log.success(f'{depot_root}/...')
+        log.success(f'{expand_depot_root(depot_root, client_name)}/...')
     else:
         log.warning('no root configured')
 
     if depot_root:
         log.heading('Validating depot root')
-        if _validate_depot_root(depot_root, cwd):
+        resolved = expand_depot_root(depot_root, client_name)
+        if _validate_depot_root(resolved, cwd):
             log.success('all good')
             return True
         else:
-            log.error(f'{depot_root}/... is not valid')
+            log.error(f'{resolved}/... is not valid')
             depot_root = None
 
     if not depot_root:
@@ -104,7 +118,7 @@ def _configure_depot_root(client_name: str, cwd: str,
             log.error('aborting')
             return False
 
-    log.success(f'{depot_root}/...')
+    log.success(f'{expand_depot_root(depot_root, client_name)}/...')
     save_config(cwd, {'depot': {'root': depot_root}})
     return True
 

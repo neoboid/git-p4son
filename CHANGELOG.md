@@ -4,6 +4,9 @@
 
 - `sync` accepts an explicit `head` keyword (`git p4son sync head`), equivalent to omitting the
   changelist argument
+- `sync` accepts multiple strictly increasing changelist numbers (`git p4son sync 123 156 178`), syncing
+  each in sequence with its own commit; a trailing `head` (`git p4son sync 123 156 head`) closes out the
+  sequence at the latest changelist
 
 ## 0.3.0
 

@@ -37,8 +37,12 @@ project must stay PEP 8 compliant at all times.
 The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(args)` entry point:
 
 - **`sync.py`** — Syncs git repo with a Perforce changelist. Validates both git and p4 workspaces are clean, performs
-  `p4 sync`, then creates a git commit. Accepts an explicit CL number or `last-synced`; omitting the argument syncs to
-  the latest changelist. Uses threaded real-time output processing (`P4SyncOutputProcessor`) to parse p4 sync progress.
+  `p4 sync`, then creates a git commit. Accepts one or more explicit CL numbers, `last-synced`, or `head`; omitting the
+  argument syncs to the latest changelist. Multiple strictly increasing CL numbers are synced in sequence with one
+  commit each (a trailing `head` may close out the sequence). Changelist arguments are numeric-only: `sync` does not
+  resolve changelist aliases (those name pending CLs from `new`/`review`, which Perforce renumbers on submit), only
+  submitted CL numbers are meaningful. Uses threaded real-time output processing (`P4SyncOutputProcessor`) to parse p4
+  sync progress.
 
 - **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, and optionally creates a Swarm
   review (with `--review` flag) or shelves (with `--shelve` flag). Alias defaults to the current branch name; use

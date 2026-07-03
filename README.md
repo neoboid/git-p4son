@@ -253,12 +253,14 @@ The `.gitignore` is set up using this priority:
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync [changelist] [--force]
+git p4son sync [changelist ...] [--force]
 ```
 
 **Arguments:**
 - `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
-  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace.
+  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace. Several
+  strictly increasing changelist numbers may be given to sync each in sequence, producing one commit per
+  changelist. A trailing `head` may close out such a sequence to finish at the latest changelist.
 
 **Options:**
 - `-f, --force`: Allow syncing to changelists older than the current one.
@@ -268,6 +270,8 @@ git p4son sync [changelist] [--force]
 git p4son sync              # sync to latest
 git p4son sync head         # sync to latest (explicit)
 git p4son sync 12345
+git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
+git p4son sync 123 156 head # sync 123, 156, then the latest changelist
 git p4son sync last-synced
 git p4son sync 12345 --force
 ```

@@ -33,6 +33,8 @@ Examples:
   git-p4son sync                # Sync to the latest changelist
   git-p4son sync head           # Sync to the latest changelist (explicit)
   git-p4son sync 12345          # Sync to changelist 12345
+  git-p4son sync 123 156 178    # Sync each changelist in sequence, one commit each
+  git-p4son sync 123 156 head   # Sync 123, 156, then the latest changelist
   git-p4son sync last-synced    # Re-sync the last synced changelist
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
   git-p4son new -m "Fix bug" --review  # Create changelist, create Swarm review
@@ -79,11 +81,14 @@ Examples:
     )
     sync_parser.add_argument(
         'changelist',
-        nargs='?',
-        default=None,
-        help='Changelist number to sync, "last-synced" to re-sync the last synced changelist, or '
-             '"head" to sync to the latest changelist. Omit to sync to the latest changelist '
-             'affecting the workspace'
+        nargs='*',
+        default=[],
+        metavar='CHANGELIST',
+        help='Changelist number(s) to sync, "last-synced" to re-sync the last synced changelist, '
+             'or "head" to sync to the latest changelist. Give several strictly increasing '
+             'changelist numbers to sync each in sequence, one commit per changelist; "head" may '
+             'close out such a sequence as a trailing target. Omit to sync to the latest '
+             'changelist affecting the workspace'
     )
     sync_parser.add_argument(
         '-f', '--force',

@@ -16,17 +16,21 @@ class TestCreateParser(unittest.TestCase):
     def test_sync_command_basic(self):
         args = self.parser.parse_args(['sync', '12345'])
         self.assertEqual(args.command, 'sync')
-        self.assertEqual(args.changelist, '12345')
+        self.assertEqual(args.changelist, ['12345'])
         self.assertFalse(args.force)
 
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
-        self.assertIsNone(args.changelist)
+        self.assertEqual(args.changelist, [])
         self.assertFalse(args.force)
+
+    def test_sync_command_multiple_changelists(self):
+        args = self.parser.parse_args(['sync', '123', '156', '178'])
+        self.assertEqual(args.changelist, ['123', '156', '178'])
 
     def test_sync_command_with_force(self):
         args = self.parser.parse_args(['sync', '12345', '--force'])
-        self.assertEqual(args.changelist, '12345')
+        self.assertEqual(args.changelist, ['12345'])
         self.assertTrue(args.force)
 
     def test_sync_command_short_force(self):

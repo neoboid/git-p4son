@@ -187,6 +187,13 @@ class TestComplete(unittest.TestCase):
         self.assertIn('head', names)
         self.assertNotIn('last-synced', names)
 
+    def test_sync_later_positional_offers_head_only(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync', '123', ''],
+                           workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('head', names)
+        self.assertNotIn('last-synced', names)
+
     def test_sync_flags(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', '-'], workspace_dir='/ws')
         names = self._names(result)

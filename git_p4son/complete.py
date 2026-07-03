@@ -106,12 +106,16 @@ def _complete_positional(command, subcommand, positional_count,
     """Complete a positional argument."""
     aliases = _get_alias_names(workspace_dir)
 
-    if command == 'sync' and positional_count == 0:
-        candidates = [
-            ('head', 'Sync to the latest changelist'),
-            ('last-synced', 'Re-sync last synced changelist'),
-        ]
-        return _filter(candidates, prefix)
+    if command == 'sync':
+        if positional_count == 0:
+            candidates = [
+                ('head', 'Sync to the latest changelist'),
+                ('last-synced', 'Re-sync last synced changelist'),
+            ]
+            return _filter(candidates, prefix)
+        # "head" may also close out a sequence of changelist numbers.
+        return _filter(
+            [('head', 'Sync to the latest changelist')], prefix)
 
     if command == 'update' and positional_count == 0:
         branch_candidates = _get_branch_candidates(prefix, workspace_dir)

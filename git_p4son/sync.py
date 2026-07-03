@@ -523,6 +523,19 @@ def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
     return True
 
 
+def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
+    """Run pre-sync hooks; return False when any hook fails, aborting the sync.
+
+    Runs once before any changelist is synced. All hooks run (they are
+    independent), then the sync is aborted if any returned a non-zero code.
+    """
+    results = run_hooks('pre-sync', workspace_dir, invocation_dir)
+    if any(result.returncode != 0 for result in results):
+        log.error('Aborting sync because a pre-sync hook failed')
+        return False
+    return True
+
+
 def _sync_pass(changelist: int, label: str, depot_root: str,
                workspace_dir: str, pre_sync_head_commit: str, temp_root: str,
                uses_crlf: bool, clobber: bool) -> WritableSyncFileSet:
@@ -618,6 +631,8 @@ def sync_command(args: argparse.Namespace) -> int:
             if not last_sync:
                 log.error('No previous sync found, cannot use "last-synced"')
                 return 1
+            if not _run_pre_sync_hooks(workspace_dir, invocation_dir):
+                return 1
             _sync_pass(last_sync.changelist, last_changelist_label, depot_root,
                        workspace_dir, pre_sync_head_commit, temp_root,
                        uses_crlf, clobber)
@@ -689,6 +704,11 @@ def sync_command(args: argparse.Namespace) -> int:
             log.info('Already synced, nothing to do.')
             log.heading('Skipping post-sync hooks')
             return 0
+
+        # Pre-sync hooks run once, before syncing any changelist (including the
+        # catch-up pass), and abort the whole sync if any of them fail.
+        if not _run_pre_sync_hooks(workspace_dir, invocation_dir):
+            return 1
 
         all_changed: list[ChangedFile] = []
         all_ignored: list[str] = []

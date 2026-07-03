@@ -276,6 +276,12 @@ git p4son sync last-synced
 git p4son sync 12345 --force
 ```
 
+#### pre-sync hook
+
+Before `git-p4son sync` syncs any changelist, git-p4son runs [hooks](#hooks) from
+`.git-p4son/hooks/pre-sync/`. If any hook exits non-zero the sync is aborted. When a sequence of
+changelists is given, the pre-sync hooks run once, before the first sync.
+
 #### post-sync hook
 
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs [hooks](#hooks)
@@ -534,6 +540,13 @@ On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with `powershell.exe`,
 ```
 
 Non-executable or unrecognized hook files are skipped with a warning.
+
+### pre-sync hook
+
+Before `git-p4son sync` syncs any changelist, git-p4son runs executable hooks from
+`.git-p4son/hooks/pre-sync/`. If any hook exits with a non-zero code the sync is aborted before any
+changelist is synced. When a sequence of changelists is synced, the pre-sync hooks run only once,
+before the first sync.
 
 ### post-sync hook
 

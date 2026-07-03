@@ -257,8 +257,8 @@ git p4son sync [changelist] [--force]
 ```
 
 **Arguments:**
-- `changelist` (optional): Changelist number, or `last-synced` to re-sync the last synced changelist. Omit to
-  sync to the latest changelist affecting the workspace.
+- `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
+  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace.
 
 **Options:**
 - `-f, --force`: Allow syncing to changelists older than the current one.
@@ -266,6 +266,7 @@ git p4son sync [changelist] [--force]
 **Examples:**
 ```sh
 git p4son sync              # sync to latest
+git p4son sync head         # sync to latest (explicit)
 git p4son sync 12345
 git p4son sync last-synced
 git p4son sync 12345 --force

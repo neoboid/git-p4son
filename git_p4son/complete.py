@@ -108,6 +108,7 @@ def _complete_positional(command, subcommand, positional_count,
 
     if command == 'sync' and positional_count == 0:
         candidates = [
+            ('head', 'Sync to the latest changelist'),
             ('last-synced', 'Re-sync last synced changelist'),
         ]
         return _filter(candidates, prefix)

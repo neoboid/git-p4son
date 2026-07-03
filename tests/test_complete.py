@@ -171,13 +171,21 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['sync', ''], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('last-synced', names)
+        self.assertIn('head', names)
         self.assertNotIn('myalias', names)
 
     def test_sync_positional_prefix(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', 'la'], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('last-synced', names)
+        self.assertNotIn('head', names)
         self.assertNotIn('myalias', names)
+
+    def test_sync_positional_head_prefix(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync', 'he'], workspace_dir='/ws')
+        names = self._names(result)
+        self.assertIn('head', names)
+        self.assertNotIn('last-synced', names)
 
     def test_sync_flags(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', '-'], workspace_dir='/ws')

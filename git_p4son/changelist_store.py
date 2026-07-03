@@ -11,7 +11,7 @@ from . import CONFIG_DIR
 from .log import log
 
 
-RESERVED_KEYWORDS = frozenset({'last-synced', 'branch'})
+RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
 
 # Allowed characters: ASCII letters, digits, hyphen, underscore, dot.
 # Must not start or end with a dot, so "." and ".." are rejected and the

@@ -85,6 +85,11 @@ class TestValidateAliasName(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertIn('reserved', error)
 
+    def test_reserved_head_rejected(self):
+        error = validate_alias_name('head')
+        self.assertIsNotNone(error)
+        self.assertIn('reserved', error)
+
     def test_spaces_rejected(self):
         error = validate_alias_name('Fix a couple of small bugs')
         self.assertIsNotNone(error)

@@ -822,6 +822,50 @@ class TestSyncCommand(unittest.TestCase):
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
+    @mock.patch('git_p4son.sync.commit')
+    @mock.patch('git_p4son.sync.add_all_files')
+    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_client_spec')
+    @mock.patch('git_p4son.sync.get_depot_root',
+                return_value='//$(workspace)/Engine')
+    def test_workspace_placeholder_resolved(self, _depot, mock_spec,
+                                            _p4clean, mock_last_sync, _head,
+                                            mock_preview, mock_prep, _p4sync,
+                                            mock_git_clean, _git_add,
+                                            _git_commit):
+        spec = mock.Mock()
+        spec.name = 'real-client'
+        spec.uses_crlf = False
+        spec.clobber = False
+        mock_spec.return_value = spec
+        mock_last_sync.return_value = self._last_sync
+        mock_prep.return_value = self._empty_prep()
+        mock_git_clean.side_effect = [[], [('file.txt', 'modify')]]
+        args = mock.Mock(changelist=['12345'],
+                         force=False, workspace_dir='/ws')
+        rc = sync_command(args)
+        self.assertEqual(rc, 0)
+        # The $(workspace) placeholder is resolved to the live client name
+        # before any p4 command runs against the depot.
+        self.assertEqual(
+            mock_preview.call_args.args[1], '//real-client/Engine')
+
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_client_spec', return_value=None)
+    @mock.patch('git_p4son.sync.get_depot_root',
+                return_value='//$(workspace)/Engine')
+    def test_workspace_placeholder_without_client_spec_aborts(
+            self, _depot, _spec, _p4clean):
+        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        rc = sync_command(args)
+        self.assertEqual(rc, 1)
+
     @mock.patch('git_p4son.sync.get_dirty_files',
                 return_value=[('file.txt', 'modify')])
     @mock.patch('git_p4son.sync.get_depot_root', return_value='//myclient')

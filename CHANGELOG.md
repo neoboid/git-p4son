@@ -5,6 +5,9 @@
 - `sync` no longer warns that a git-ignored writable file "will not be synced" when the file's Perforce type
   carries the `+w` (always writable) modifier. Such files are meant to be writable in the workspace and p4
   overwrites them on sync regardless of the clobber option, so they are reported as synced normally
+- `sync` now respects the `allwrite` workspace option: files it finds unchanged keep their write bit instead of
+  being made read-only for the sync. Only files with local changes are made read-only, since those are the ones
+  Perforce refuses to overwrite.
 
 ## 0.3.3
 

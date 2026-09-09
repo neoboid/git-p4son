@@ -5,7 +5,8 @@ from unittest import mock
 
 from git_p4son.perforce import (
     P4ClientSpec, P4FileInfo, P4SyncPreviewFile, get_client_spec,
-    get_p4_user, get_submitted_changes, is_binary_file_type,
+    get_p4_user, get_submitted_changes, is_always_writable_file_type,
+    is_binary_file_type,
     p4_fstat_file_info, p4_sync_preview, parse_ztag_multi_output,
     parse_ztag_output,
 )
@@ -193,6 +194,20 @@ class TestIsBinaryFileType(unittest.TestCase):
         self.assertTrue(is_binary_file_type('binary+Swl'))
         self.assertTrue(is_binary_file_type('ubinary'))
         self.assertTrue(is_binary_file_type('ubinary+x'))
+
+
+class TestIsAlwaysWritableFileType(unittest.TestCase):
+    def test_without_w_modifier(self):
+        self.assertFalse(is_always_writable_file_type('text'))
+        self.assertFalse(is_always_writable_file_type('binary'))
+        self.assertFalse(is_always_writable_file_type('binary+x'))
+        self.assertFalse(is_always_writable_file_type('text+kx'))
+
+    def test_with_w_modifier(self):
+        self.assertTrue(is_always_writable_file_type('text+w'))
+        self.assertTrue(is_always_writable_file_type('binary+w'))
+        self.assertTrue(is_always_writable_file_type('binary+Swl'))
+        self.assertTrue(is_always_writable_file_type('binary+xw'))
 
 
 class TestP4FstatFileInfo(unittest.TestCase):

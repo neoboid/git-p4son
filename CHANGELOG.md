@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `sync` no longer warns that a git-ignored writable file "will not be synced" when the file's Perforce type
+  carries the `+w` (always writable) modifier. Such files are meant to be writable in the workspace and p4
+  overwrites them on sync regardless of the clobber option, so they are reported as synced normally
+
 ## 0.3.3
 
 - `sync-split` now checks that the git and Perforce workspaces are clean and runs the `pre-sync` hooks

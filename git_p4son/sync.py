@@ -201,7 +201,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            pre_sync_head_commit: str,
                            temp_root: str,
                            uses_crlf: bool = False,
-                           clobber: bool = False) -> WritableSyncFileSet:
+                           clobber: bool = False,
+                           allwrite: bool = False) -> WritableSyncFileSet:
     """Check which preview files are writable on disk and prepare them for sync.
 
     For tracked writable files, queries Perforce for the file type (binary
@@ -217,6 +218,9 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     reported outcome differs. Ignored files whose Perforce type is +w
     (always writable) are exempt: p4 overwrites those regardless, so they
     sync normally and are reported separately.
+
+    allwrite reflects the workspace allwrite option, which narrows how many
+    files have their write bit stripped (see _clear_write_bits).
     """
     result = WritableSyncFileSet()
 
@@ -275,8 +279,12 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     # one cat-file); with hundreds of writable files after a branch switch,
     # per-file process spawning dominated the entire sync.
     log.heading('Detecting modified tracked writable files')
-    # Make read-only regardless of whether changed or not
-    _clear_write_bits(tracked)
+    if not allwrite:
+        # Without allwrite, noclobber makes p4 refuse to overwrite any
+        # writable file, so every tracked file goes read-only whether it
+        # changed or not. The modified ones get their local content back
+        # from the post-sync merge.
+        _clear_write_bits(tracked)
 
     rel_paths = {f: os.path.relpath(f, workspace_dir) for f in tracked}
     candidates = [f for f in tracked if f not in added_upstream]
@@ -323,6 +331,15 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         metas.append(_ChangedFileMeta(filepath=f, base_commit=base))
 
     log.success(f'{len(metas)} changed, {unchanged_count} unchanged')
+
+    if allwrite:
+        # An allwrite workspace is writable by design, so the write bit is
+        # left alone on files p4 will overwrite cleanly: with noclobber it
+        # digest-compares first and these still match the have revision,
+        # and with clobber it overwrites regardless. Only the modified
+        # files, the ones noclobber would refuse on, are stripped; the
+        # post-sync merge makes them writable again.
+        _clear_write_bits([m.filepath for m in metas])
 
     # Pass 2: query Perforce for file type only on the changed subset. The
     # binary verdict must be known before staging so text content can be
@@ -641,7 +658,8 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
 
 def _sync_pass(changelist: int, label: str, depot_root: str,
                workspace_dir: str, pre_sync_head_commit: str, temp_root: str,
-               uses_crlf: bool, clobber: bool) -> WritableSyncFileSet:
+               uses_crlf: bool, clobber: bool,
+               allwrite: bool) -> WritableSyncFileSet:
     """Run one sync pass: preview, prepare writable files, and p4 sync.
 
     Returns the classified writable file set. p4 sync is skipped when the
@@ -650,7 +668,7 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
     preview = p4_sync_preview(changelist, depot_root, workspace_dir)
     prep = prepare_writable_files(preview, workspace_dir, pre_sync_head_commit,
                                   temp_root, uses_crlf=uses_crlf,
-                                  clobber=clobber)
+                                  clobber=clobber, allwrite=allwrite)
     if preview:
         p4_sync(changelist, label, depot_root, workspace_dir,
                 expected_clobber=set(prep.ignored))
@@ -814,6 +832,7 @@ def sync_command(args: argparse.Namespace) -> int:
     # (client_spec was fetched above to resolve the depot root.)
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)
+    allwrite = bool(client_spec and client_spec.allwrite)
 
     # Prompted before the preflight so declining here costs nothing: no
     # workspace queries, and no hooks fired for a sync that is abandoned.
@@ -837,7 +856,7 @@ def sync_command(args: argparse.Namespace) -> int:
         if resync_last_synced:
             _sync_pass(last_sync.changelist, LAST_SYNCED_LABEL, depot_root,
                        workspace_dir, pre_sync_head_commit, temp_root,
-                       uses_crlf, clobber)
+                       uses_crlf, clobber, allwrite)
             run_hooks('post-sync', workspace_dir, invocation_dir)
             return 0
 
@@ -852,7 +871,7 @@ def sync_command(args: argparse.Namespace) -> int:
         if last_changelist is not None:
             prep = _sync_pass(last_changelist, LAST_SYNCED_LABEL,
                               depot_root, workspace_dir, pre_sync_head_commit,
-                              temp_root, uses_crlf, clobber)
+                              temp_root, uses_crlf, clobber, allwrite)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
 
@@ -862,7 +881,7 @@ def sync_command(args: argparse.Namespace) -> int:
         for changelist, changelist_label in targets:
             prep = _sync_pass(changelist, changelist_label, depot_root,
                               workspace_dir, pre_sync_head_commit, temp_root,
-                              uses_crlf, clobber)
+                              uses_crlf, clobber, allwrite)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
 

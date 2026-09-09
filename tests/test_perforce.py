@@ -103,6 +103,20 @@ class TestP4ClientSpec(unittest.TestCase):
             line_end='local')
         self.assertTrue(spec.clobber)
 
+    def test_allwrite_enabled(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws',
+            options=['allwrite', 'noclobber', 'nocompress'], stream=None,
+            line_end='local')
+        self.assertTrue(spec.allwrite)
+
+    def test_allwrite_disabled(self):
+        spec = P4ClientSpec(
+            name='ws', root='/ws',
+            options=['noallwrite', 'noclobber', 'nocompress'], stream=None,
+            line_end='local')
+        self.assertFalse(spec.allwrite)
+
     def test_clobber_disabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',

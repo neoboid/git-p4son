@@ -78,6 +78,10 @@ class P4ClientSpec:
         return 'clobber' in self.options
 
     @property
+    def allwrite(self) -> bool:
+        return 'allwrite' in self.options
+
+    @property
     def uses_crlf(self) -> bool:
         if self.line_end == 'win':
             return True

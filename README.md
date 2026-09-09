@@ -208,6 +208,13 @@ be managed manually or via Perforce directly.
 After syncing, git-p4son prints a summary of how each writable file was handled, and instructs you to review and
 commit any files that need attention.
 
+**Workspaces with `allwrite`** - When your client spec has the `allwrite` option, every file is writable by design,
+so the read-only flag carries no information about local changes. git-p4son classifies files exactly as above (the
+verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: with
+`noclobber` Perforce compares digests before refusing to overwrite a writable file, and unchanged files pass that
+check. Only files with local changes are made read-only for the duration of the sync, since those are the ones
+Perforce would otherwise refuse to overwrite.
+
 ## Usage
 
 git-p4son provides nine commands: `init`, `sync`, `sync-split`, `new`, `update`, `review`, `list-changes`,

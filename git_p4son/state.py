@@ -23,16 +23,15 @@ def _load(workspace_dir: str) -> dict:
 
 def _save(workspace_dir: str, state: dict) -> None:
     write_toml(state_path(workspace_dir), state)
-    _ensure_gitignored(workspace_dir)
+    ensure_gitignored(workspace_dir, 'state.toml')
 
 
-def _ensure_gitignored(workspace_dir: str) -> None:
-    """Make sure state.toml is ignored via a .gitignore inside CONFIG_DIR.
+def ensure_gitignored(workspace_dir: str, entry: str) -> None:
+    """Make sure entry is ignored via a .gitignore inside CONFIG_DIR.
 
-    A self-contained ignore file keeps the local state out of version control
+    A self-contained ignore file keeps local state out of version control
     without touching the user's top-level .gitignore."""
     gitignore = os.path.join(workspace_dir, CONFIG_DIR, '.gitignore')
-    entry = 'state.toml'
     existing = []
     if os.path.exists(gitignore):
         with open(gitignore, encoding='utf-8') as f:

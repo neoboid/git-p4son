@@ -425,6 +425,42 @@ def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
     return result
 
 
+def newest_touch_is_sync(commit_range: list[str],
+                         workspace_dir: str) -> dict[str, bool]:
+    """Map each path touched in commit_range to whether the newest commit
+    touching it there is a sync commit.
+
+    One newest-first walk over the whole range with no pathspec, so the cost
+    is set by the size of the range, not by the number of paths. Only the
+    first (newest) touch of a path counts."""
+    result: dict[str, bool] = {}
+    res = run(
+        ['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
+         '--name-status', '--pretty=format:%x01%H%x01%s'] + commit_range,
+        cwd=workspace_dir, fail_on_returncode=False)
+    if res.returncode != 0:
+        return result
+
+    current_is_sync = False
+    for line in res.stdout:
+        if line.startswith('\x01'):
+            _, _, subject = line.split('\x01', 2)
+            current_is_sync = SYNC_SUBJECT_MARKER in subject
+            continue
+        status, sep, path = line.partition('\t')
+        if not sep or path in result:
+            continue
+        result[path] = current_is_sync
+    return result
+
+
+def is_ancestor(commit: str, descendant: str, workspace_dir: str) -> bool:
+    """Whether commit is an ancestor of descendant (or the same commit)."""
+    res = run(['git', 'merge-base', '--is-ancestor', commit, descendant],
+              cwd=workspace_dir, fail_on_returncode=False)
+    return res.returncode == 0
+
+
 # --- merge ---
 
 def merge_file(current_path: str, base_path: str,

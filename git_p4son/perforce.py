@@ -472,6 +472,12 @@ def is_binary_file_type(head_type: str) -> bool:
     return base_type in ('binary', 'ubinary')
 
 
+def is_always_writable_file_type(head_type: str) -> bool:
+    """Check if a Perforce headType carries the +w (always writable) modifier."""
+    _, _, modifiers = head_type.partition('+')
+    return 'w' in modifiers
+
+
 @dataclass
 class P4SyncPreviewFile:
     """A file a sync would affect, from p4 sync -n output.

@@ -726,14 +726,64 @@ class TestPrepareWritableFiles(unittest.TestCase):
             path = self._make_file(ws, 'build.log')
 
             with mock.patch('git_p4son.sync.get_tracked_files',
-                            return_value=set()):
+                            return_value=set()), \
+                    mock.patch('git_p4son.sync.p4_fstat_file_info',
+                               return_value={}):
                 result = prepare_writable_files([_upd(path)], ws, 'head123',
                                                 self.temp_root)
 
             self.assertEqual(result.changed, [])
             self.assertEqual(result.ignored, [path])
+            self.assertEqual(result.always_writable, [])
             mode = os.stat(path).st_mode
             self.assertTrue(mode & stat.S_IWUSR)
+
+    def test_always_writable_ignored_file_not_reported_as_unsynced(self):
+        """A git-ignored file whose Perforce type is +w is meant to be
+        writable; p4 overwrites it on sync, so no warning is due."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'Tool.exe')
+
+            with mock.patch('git_p4son.sync.get_tracked_files',
+                            return_value=set()), \
+                    mock.patch(
+                        'git_p4son.sync.p4_fstat_file_info',
+                        return_value={
+                            path: P4FileInfo(head_type='binary+w')}), \
+                    mock.patch('git_p4son.sync.log') as mock_log:
+                result = prepare_writable_files([_upd(path)], ws, 'head123',
+                                                self.temp_root)
+
+            self.assertEqual(result.ignored, [])
+            self.assertEqual(result.always_writable, [path])
+            warnings = ' '.join(
+                str(c.args[0]) for c in mock_log.warning.call_args_list)
+            self.assertNotIn('will not be synced', warnings)
+            mode = os.stat(path).st_mode
+            self.assertTrue(mode & stat.S_IWUSR)
+
+    def test_always_writable_files_excluded_from_expected_clobber(self):
+        """+w files must not be classified as ignored: a clobber error on
+        one is unexpected and should still surface."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            always = self._make_file(ws, 'Tool.exe')
+            ignored = self._make_file(ws, 'build.log')
+
+            with mock.patch('git_p4son.sync.get_tracked_files',
+                            return_value=set()), \
+                    mock.patch(
+                        'git_p4son.sync.p4_fstat_file_info',
+                        return_value={
+                            always: P4FileInfo(head_type='binary+w'),
+                            ignored: P4FileInfo(head_type='text')}):
+                result = prepare_writable_files(
+                    [_upd(always), _upd(ignored)], ws, 'head123',
+                    self.temp_root)
+
+            self.assertEqual(result.ignored, [ignored])
+            self.assertEqual(result.always_writable, [always])
 
     def _run_with_tracked_and_ignored(self, ws, clobber):
         """Prepare one unchanged tracked file plus one ignored file so the
@@ -743,6 +793,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
         ignored = self._make_file(ws, 'build.log')
         with mock.patch('git_p4son.sync.get_tracked_files',
                         return_value={tracked}), \
+                mock.patch('git_p4son.sync.p4_fstat_file_info',
+                           return_value={}), \
                 mock.patch('git_p4son.sync.find_base_commits',
                            return_value={'a.txt': 'head123'}), \
                 mock.patch('git_p4son.sync.get_blob_oids', return_value={}), \

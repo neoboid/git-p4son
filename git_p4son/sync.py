@@ -26,6 +26,7 @@ from .perforce import (
     get_client_spec,
     get_latest_changelist,
     get_writable_files,
+    is_always_writable_file_type,
     is_binary_file_type,
     p4_fstat_file_info,
     p4_get_opened_files,
@@ -101,6 +102,7 @@ class WritableSyncFileSet:
     """Writable files found during sync preview, classified."""
     changed: list[ChangedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
+    always_writable: list[str] = field(default_factory=list)
 
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
@@ -164,6 +166,13 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
             f'{unchanged_count} writable {label} unchanged, '
             'skipping merge')
 
+    if result.always_writable:
+        count = len(result.always_writable)
+        label = 'file is' if count == 1 else 'files are'
+        log.success(
+            f'{count} git-ignored {label} always writable (+w), '
+            'p4 syncs them normally')
+
     if result.changed:
         count = len(result.changed)
         label = 'file has' if count == 1 else 'files have'
@@ -205,7 +214,9 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     clobber reflects the workspace clobber option. git-ignored writable files
     are left writable and rely on p4 refusing to overwrite them, which only
     holds when clobber is off; with clobber on p4 overwrites them, so the
-    reported outcome differs.
+    reported outcome differs. Ignored files whose Perforce type is +w
+    (always writable) are exempt: p4 overwrites those regardless, so they
+    sync normally and are reported separately.
     """
     result = WritableSyncFileSet()
 
@@ -236,7 +247,26 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     result.ignored = [f for f in writable if f not in tracked_set]
     log.success(f'{len(tracked)} tracked, {len(result.ignored)} ignored')
 
+    if result.ignored:
+        # A file whose Perforce type carries the +w modifier is meant to be
+        # writable in the workspace. p4 overwrites it on sync without a
+        # clobber error, so it is not at risk of being skipped and must not
+        # be reported as such.
+        log.heading('Checking ignored files for the +w (always writable) type')
+        ignored_info = p4_fstat_file_info(result.ignored, workspace_dir)
+        always_writable = set()
+        for f in result.ignored:
+            info = ignored_info.get(f)
+            if info and is_always_writable_file_type(info.head_type):
+                always_writable.add(f)
+        result.always_writable = [f for f in result.ignored
+                                  if f in always_writable]
+        result.ignored = [f for f in result.ignored
+                          if f not in always_writable]
+        log.success(f'{len(result.always_writable)} always writable (+w)')
+
     if not tracked:
+        _log_prepare_summary(result, workspace_dir, clobber)
         return result
 
     # Pass 1: decide which files the user modified since their baseline by

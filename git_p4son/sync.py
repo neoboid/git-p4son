@@ -154,6 +154,39 @@ def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
                        is_binary=is_binary, added_both=meta.added_both)
 
 
+def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
+                         clobber: bool, unchanged_count: int = 0) -> None:
+    """Log what the writable-file classification found."""
+    log.heading('Prepare sync summary')
+    if unchanged_count:
+        label = 'file' if unchanged_count == 1 else 'files'
+        log.success(
+            f'{unchanged_count} writable {label} unchanged, '
+            'skipping merge')
+
+    if result.changed:
+        count = len(result.changed)
+        label = 'file has' if count == 1 else 'files have'
+        log.warning(f'{count} {label} local changes, will merge after sync')
+        for cf in result.changed:
+            log.info(os.path.relpath(cf.filepath, workspace_dir))
+
+    if result.ignored:
+        count = len(result.ignored)
+        label = 'file' if count == 1 else 'files'
+        if clobber:
+            # These files are left writable, so with clobber enabled p4
+            # overwrites them during sync rather than refusing to.
+            log.warning(
+                f'{count} git-ignored writable {label} will be overwritten '
+                'by p4 (clobber is enabled on the workspace)')
+        else:
+            log.warning(
+                f'{count} git-ignored writable {label} will not be synced')
+        for f in result.ignored:
+            log.info(os.path.relpath(f, workspace_dir))
+
+
 def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            workspace_dir: str,
                            pre_sync_head_commit: str,
@@ -283,36 +316,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                 is_binary, uses_crlf))
         log.success('')
 
-    # Log what we found
-    log.heading('Prepare sync summary')
-    if unchanged_count:
-        label = 'file' if unchanged_count == 1 else 'files'
-        log.success(
-            f'{unchanged_count} writable {label} unchanged, '
-            'skipping merge')
-
-    if result.changed:
-        count = len(result.changed)
-        label = 'file has' if count == 1 else 'files have'
-        log.warning(f'{count} {label} local changes, will merge after sync')
-        for cf in result.changed:
-            log.info(os.path.relpath(cf.filepath, workspace_dir))
-
-    if result.ignored:
-        count = len(result.ignored)
-        label = 'file' if count == 1 else 'files'
-        if clobber:
-            # These files are left writable, so with clobber enabled p4
-            # overwrites them during sync rather than refusing to.
-            log.warning(
-                f'{count} git-ignored writable {label} will be overwritten '
-                'by p4 (clobber is enabled on the workspace)')
-        else:
-            log.warning(
-                f'{count} git-ignored writable {label} will not be synced')
-        for f in result.ignored:
-            log.info(os.path.relpath(f, workspace_dir))
-
+    _log_prepare_summary(result, workspace_dir, clobber, unchanged_count)
     return result
 
 

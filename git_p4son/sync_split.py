@@ -145,7 +145,7 @@ def sync_split_command(args: argparse.Namespace) -> int:
         label = 'changelist' if len(matched) == 1 else 'changelists'
         log.success(f'{len(matched)} {label} to split out')
     else:
-        log.warning('None found, syncing to the target changelist only')
+        log.success('None found, syncing to the target changelist only')
 
     targets = build_sync_targets(changes, users, last_synced, upper)
 

@@ -208,6 +208,14 @@ be managed manually or via Perforce directly.
 After syncing, git-p4son prints a summary of how each writable file was handled, and instructs you to review and
 commit any files that need attention.
 
+**Experimental: the divergence cache** - Deciding whether a file has local changes means walking git history for each
+candidate file, which is the bulk of a sync's own runtime once the candidate list gets long (and on an `allwrite`
+workspace or in writable mode every synced file is a candidate). Setting `GIT_P4SON_DIVERGENCE_CACHE=1` turns on a cache
+in `.git-p4son/divergence.cache` that records which files are known to sit at their Perforce baseline, updated
+incrementally from the commits each sync adds. Files in it skip the walk. The cache only ever records files as
+*unchanged*, and anything it has not seen, or that any non-sync commit has touched since, stays a full candidate, so a
+stale or missing cache costs time rather than a missed merge. Delete the file to reset it.
+
 **Workspaces with `allwrite`** - When your client spec has the `allwrite` option, every file is writable by design,
 so the read-only flag carries no information about local changes. git-p4son classifies files exactly as above (the
 verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: with

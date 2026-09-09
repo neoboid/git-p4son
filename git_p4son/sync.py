@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import IO
 
 from .common import RunError, prompt_choice, run_with_output
+from .divergence import clean_paths, record_sync
 from .state import dismiss_clobber_warning, is_clobber_warning_dismissed
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
@@ -303,8 +304,19 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         # from the post-sync merge.
         _clear_write_bits(tracked)
 
-    rel_paths = {f: os.path.relpath(f, workspace_dir) for f in tracked}
-    candidates = [f for f in tracked if f not in added_upstream]
+    rel_paths = {f: os.path.relpath(f, workspace_dir).replace('\\', '/')
+                 for f in tracked}
+    # Files the divergence cache already knows are at their Perforce
+    # baseline skip the history walk below, which is what makes the walk
+    # expensive when every synced file is a candidate. An empty set (cache
+    # off, missing or stale) puts every file back through the full check.
+    known_clean = clean_paths(pre_sync_head_commit, workspace_dir)
+    skipped = {f for f in tracked
+               if f not in added_upstream and rel_paths[f] in known_clean}
+    candidates = [f for f in tracked
+                  if f not in added_upstream and f not in skipped]
+    if skipped:
+        log.success(f'{len(skipped)} known unchanged, skipping history walk')
     base_commits = find_base_commits(
         [rel_paths[f] for f in candidates], pre_sync_head_commit,
         workspace_dir)
@@ -317,9 +329,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
             oid_queries.append((base, rel_paths[f]))
     oids = get_blob_oids(oid_queries, workspace_dir)
 
-    unchanged_count = 0
+    unchanged_count = len(skipped)
     metas: list[_ChangedFileMeta] = []
     for f in tracked:
+        if f in skipped:
+            continue
         if f in added_upstream:
             # p4 will *add* this file: its have-list says the client never
             # had it, so the local content cannot have come from Perforce.
@@ -907,6 +921,12 @@ def sync_command(args: argparse.Namespace) -> int:
             commit_msg = f'git-p4son: p4 sync {depot_root}/...@{changelist}'
             commit(commit_msg, workspace_dir, allow_empty=True)
             log.success(f'Committed {len(dirty_files)} files')
+
+        # History stops changing here, so fold the sync commits into the
+        # divergence cache: every path they touched is back at its Perforce
+        # baseline and can skip classification next time.
+        record_sync(pre_sync_head_commit, get_head_commit(workspace_dir),
+                    workspace_dir)
 
         # Post-commit: merge changed files back. Dedup by filepath in case
         # the same file shows up in multiple sync passes.

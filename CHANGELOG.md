@@ -10,6 +10,9 @@
   Git-ignored files stay read-only. Turn it on with `git p4son writable enable` or when asked by `init`. With the
   mode on, `sync` makes the tracked files it synced writable again, and `git p4son writable apply` makes every
   tracked file match the current mode
+- Experimental, opt-in with `GIT_P4SON_DIVERGENCE_CACHE=1`: `sync` caches which files sit at their Perforce
+  baseline in `.git-p4son/divergence.cache` and skips the per-file history walk for them. Most useful on
+  `allwrite` workspaces and in writable mode, where every synced file would otherwise be a candidate.
 
 ## 0.3.4
 

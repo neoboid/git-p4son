@@ -275,10 +275,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     # one cat-file); with hundreds of writable files after a branch switch,
     # per-file process spawning dominated the entire sync.
     log.heading('Detecting modified tracked writable files')
-    for f in tracked:
-        # Make read-only regardless of whether changed or not
-        mode = os.stat(f).st_mode
-        os.chmod(f, mode & ~stat.S_IWUSR)
+    # Make read-only regardless of whether changed or not
+    _clear_write_bits(tracked)
 
     rel_paths = {f: os.path.relpath(f, workspace_dir) for f in tracked}
     candidates = [f for f in tracked if f not in added_upstream]
@@ -348,6 +346,14 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
     _log_prepare_summary(result, workspace_dir, clobber, unchanged_count)
     return result
+
+
+def _clear_write_bits(filepaths: list[str]) -> None:
+    """Remove user write permission from each file, making p4 willing to
+    overwrite it."""
+    for filepath in filepaths:
+        mode = os.stat(filepath).st_mode
+        os.chmod(filepath, mode & ~stat.S_IWUSR)
 
 
 def _make_writable(filepath: str) -> None:

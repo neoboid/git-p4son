@@ -1,6 +1,9 @@
 # Changelog
 
+
 ## Unreleased
+
+## 0.3.4
 
 - `sync` no longer warns that a git-ignored writable file "will not be synced" when the file's Perforce type
   carries the `+w` (always writable) modifier. Such files are meant to be writable in the workspace and p4

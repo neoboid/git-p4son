@@ -1,18 +1,23 @@
 """Tests for git_p4son.init module."""
 
 import os
+import tempfile
 import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError
+from git_p4son.config import load_config
 from git_p4son.init import (
+    _ask_writable_mode,
     _compute_cwd_depot_root,
     _configure_depot_root,
+    _configure_writable_mode,
     _setup_gitignore,
     _validate_depot_root,
     init_command,
 )
 from git_p4son.perforce import P4ClientSpec
+from git_p4son.writable import is_writable_mode, set_writable_mode
 from tests.helpers import make_run_result
 
 
@@ -157,9 +162,98 @@ _MOCK_SPEC = P4ClientSpec(
     line_end='local')
 
 
+class TestAskWritableMode(unittest.TestCase):
+    @mock.patch('builtins.input', return_value='')
+    def test_empty_answer_keeps_current_value(self, _input):
+        self.assertTrue(_ask_writable_mode(True))
+        self.assertFalse(_ask_writable_mode(False))
+
+    @mock.patch('builtins.input', side_effect=['maybe', 'Y'])
+    def test_reprompts_until_valid(self, mock_input):
+        self.assertTrue(_ask_writable_mode(False))
+        self.assertEqual(mock_input.call_count, 2)
+
+    @mock.patch('builtins.input', return_value='no')
+    def test_accepts_words(self, _input):
+        self.assertFalse(_ask_writable_mode(True))
+
+    @mock.patch('builtins.input', return_value='')
+    def test_default_is_shown_in_the_prompt(self, mock_input):
+        _ask_writable_mode(True)
+        self.assertIn('[Y/n]', mock_input.call_args.args[0])
+        _ask_writable_mode(False)
+        self.assertIn('[y/N]', mock_input.call_args.args[0])
+
+    @mock.patch('builtins.input', side_effect=EOFError)
+    def test_eof_returns_none(self, _input):
+        self.assertIsNone(_ask_writable_mode(False))
+
+
+class TestConfigureWritableMode(unittest.TestCase):
+    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    def test_saves_answer(self, _ask):
+        with tempfile.TemporaryDirectory() as ws:
+            self.assertEqual(_configure_writable_mode(ws), (True, True))
+            self.assertTrue(is_writable_mode(ws))
+
+    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    def test_unchanged_answer_is_not_a_change(self, _ask):
+        with tempfile.TemporaryDirectory() as ws:
+            set_writable_mode(ws, True)
+            self.assertEqual(_configure_writable_mode(ws), (True, False))
+
+    @mock.patch('git_p4son.init._ask_writable_mode', return_value=None)
+    def test_eof_leaves_config_untouched(self, _ask):
+        with tempfile.TemporaryDirectory() as ws:
+            self.assertEqual(_configure_writable_mode(ws), (False, False))
+            self.assertEqual(load_config(ws), {})
+
+
 class TestInitCommand(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch('git_p4son.init._configure_writable_mode',
+                             return_value=(False, False))
+        self.mock_writable = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
+
+    def _next_steps(self, has_commits):
+        with mock.patch('git_p4son.init.resolve_editor', return_value='vim'), \
+                mock.patch('git_p4son.init._setup_gitignore',
+                           return_value='created'), \
+                mock.patch('git_p4son.init._has_commits',
+                           return_value=has_commits), \
+                mock.patch('git_p4son.init.run_with_output'), \
+                mock.patch('git_p4son.init._configure_depot_root',
+                           return_value=True), \
+                mock.patch('git_p4son.init.get_client_spec',
+                           return_value=_MOCK_SPEC), \
+                mock.patch('os.path.exists', return_value=True), \
+                mock.patch('os.getcwd', return_value='/ws'), \
+                mock.patch('git_p4son.init.log') as mock_log:
+            self.assertEqual(init_command(self._make_args()), 0)
+        return [str(c.args[0]) for c in mock_log.info.call_args_list]
+
+    def test_fresh_repo_with_writable_mode_suggests_apply(self):
+        self.mock_writable.return_value = (True, True)
+        self.assertIn('* git p4son writable apply',
+                      self._next_steps(has_commits=False))
+
+    def test_fresh_repo_without_writable_mode_does_not(self):
+        steps = self._next_steps(has_commits=False)
+        self.assertFalse(any('writable' in step for step in steps))
+
+    def test_existing_repo_suggests_apply_when_mode_changes(self):
+        self.mock_writable.return_value = (False, True)
+        steps = self._next_steps(has_commits=True)
+        self.assertTrue(any('writable apply' in step for step in steps))
+
+    def test_existing_repo_unchanged_mode_suggests_nothing(self):
+        self.mock_writable.return_value = (True, False)
+        steps = self._next_steps(has_commits=True)
+        self.assertFalse(any('writable' in step for step in steps))
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')

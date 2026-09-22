@@ -4,6 +4,7 @@ import os
 import stat
 import tempfile
 import unittest
+from unittest import mock
 
 from git_p4son.config import load_config, save_config
 from git_p4son.writable import (
@@ -11,6 +12,7 @@ from git_p4son.writable import (
     make_read_only,
     make_writable,
     set_writable_mode,
+    writable_command,
 )
 
 
@@ -117,6 +119,28 @@ class TestWriteBitHelpers(unittest.TestCase):
                 self.assertFalse(_mode(target) & stat.S_IWUSR)
             finally:
                 os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+
+
+class TestWritableCommand(unittest.TestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.ws = self._tempdir.name
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def _run(self, action):
+        return writable_command(mock.Mock(workspace_dir=self.ws,
+                                          writable_action=action))
+
+    def test_show_reports_the_mode(self):
+        with mock.patch('git_p4son.writable.log') as mock_log:
+            self.assertEqual(self._run(None), 0)
+        mock_log.success.assert_called_with('off')
+        set_writable_mode(self.ws, True)
+        with mock.patch('git_p4son.writable.log') as mock_log:
+            self._run(None)
+        mock_log.success.assert_called_with('on')
 
 
 if __name__ == '__main__':

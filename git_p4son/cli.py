@@ -21,6 +21,7 @@ from .common import CommandError, RunError, branch_to_alias
 from .git import get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
 from .complete import run_complete
+from .writable import writable_command
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -46,6 +47,7 @@ Examples:
   git-p4son update --shelve     # Update changelist for current branch and re-shelve
   git-p4son update 12345        # Update changelist 12345
   git-p4son list-changes --base-branch main # List commit subjects since main branch
+  git-p4son writable            # Show whether writable mode is on
         """
     )
 
@@ -352,6 +354,15 @@ Examples:
         help='Print the generated rebase todo without executing'
     )
 
+    # Writable subcommand
+    subparsers.add_parser(
+        'writable',
+        help='Show whether writable mode is on for git-tracked files',
+        description='Writable mode keeps git-tracked files writable so they '
+        'can be edited without a manual p4 edit. Git-ignored files are left '
+        'to Perforce. Shows whether the mode is on.'
+    )
+
     # Completion subcommand (prints shell completion script path)
     completion_parser = subparsers.add_parser(
         'completion',
@@ -477,6 +488,8 @@ def run_command(args: argparse.Namespace) -> int:
         return alias_command(args)
     elif args.command == 'review':
         return review_command(args)
+    elif args.command == 'writable':
+        return writable_command(args)
     elif args.command == '_sequence-editor':
         return sequence_editor_command(args)
     else:

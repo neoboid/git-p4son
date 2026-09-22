@@ -6,10 +6,12 @@ manual p4 edit: git-p4son opens them in Perforce itself when creating or
 updating changelists. Git-ignored files are left to Perforce as usual.
 """
 
+import argparse
 import os
 import stat
 
 from .config import load_config, save_config
+from .log import log
 
 
 def is_writable_mode(workspace_dir: str) -> bool:
@@ -65,3 +67,10 @@ def make_read_only(paths: list[str]) -> int:
         os.chmod(path, mode & ~stat.S_IWUSR)
         changed += 1
     return changed
+
+
+def writable_command(args: argparse.Namespace) -> int:
+    """Execute the writable command."""
+    log.heading('Writable mode')
+    log.success('on' if is_writable_mode(args.workspace_dir) else 'off')
+    return 0

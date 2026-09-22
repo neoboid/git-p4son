@@ -8,6 +8,8 @@
 - `sync` now respects the `allwrite` workspace option: files it finds unchanged keep their write bit instead of
   being made read-only for the sync. Only files with local changes are made read-only, since those are the ones
   Perforce refuses to overwrite.
+- On `allwrite` workspaces, `sync` no longer warns that every git-ignored file in the sync "will not be synced".
+  Perforce only skips the ones modified locally, so the post-sync report lists exactly the files it skipped.
 
 ## 0.3.3
 

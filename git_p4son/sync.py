@@ -103,6 +103,10 @@ class WritableSyncFileSet:
     changed: list[ChangedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
     always_writable: list[str] = field(default_factory=list)
+    # Ignored files p4 actually refused to overwrite, known only after the
+    # sync. Without allwrite that is all of ignored; with it, only the
+    # locally modified ones.
+    not_synced: list[str] = field(default_factory=list)
 
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
@@ -157,7 +161,8 @@ def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
 
 
 def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
-                         clobber: bool, unchanged_count: int = 0) -> None:
+                         clobber: bool, unchanged_count: int = 0,
+                         allwrite: bool = False) -> None:
     """Log what the writable-file classification found."""
     log.heading('Prepare sync summary')
     if unchanged_count:
@@ -189,6 +194,15 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
             log.warning(
                 f'{count} git-ignored writable {label} will be overwritten '
                 'by p4 (clobber is enabled on the workspace)')
+        elif allwrite:
+            # With allwrite every file is writable, and p4 digest-compares
+            # before refusing to clobber one: unchanged files sync, modified
+            # ones are skipped. Which is which is only known after the sync,
+            # which reports the skipped ones, so they are not listed here.
+            log.info(
+                f'{count} git-ignored writable {label} will be synced '
+                'unless modified locally')
+            return
         else:
             log.warning(
                 f'{count} git-ignored writable {label} will not be synced')
@@ -270,7 +284,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         log.success(f'{len(result.always_writable)} always writable (+w)')
 
     if not tracked:
-        _log_prepare_summary(result, workspace_dir, clobber)
+        _log_prepare_summary(result, workspace_dir, clobber,
+                             allwrite=allwrite)
         return result
 
     # Pass 1: decide which files the user modified since their baseline by
@@ -361,7 +376,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                 is_binary, uses_crlf))
         log.success('')
 
-    _log_prepare_summary(result, workspace_dir, clobber, unchanged_count)
+    _log_prepare_summary(result, workspace_dir, clobber, unchanged_count,
+                         allwrite)
     return result
 
 
@@ -521,12 +537,12 @@ def _merge_changed_files(changed_files: list[ChangedFile],
 
 def p4_sync(changelist: int, label: str, depot_root: str,
             workspace_dir: str,
-            expected_clobber: set[str] | None = None) -> None:
+            expected_clobber: set[str] | None = None) -> list[str]:
     """Sync files from Perforce.
 
     If expected_clobber is provided, clobber errors for those files are
-    tolerated (they are git-ignored writable files). Unexpected clobber
-    errors cause a raise.
+    tolerated (they are git-ignored writable files) and the files are
+    returned. Unexpected clobber errors cause a raise.
     """
     log.heading(f'Syncing to {label} CL ({changelist})')
 
@@ -538,6 +554,7 @@ def p4_sync(changelist: int, label: str, depot_root: str,
         if result.elapsed:
             log.elapsed(result.elapsed)
         log.success(output_processor.get_summary())
+        return []
     except RunError as e:
         writable_files = get_writable_files(e.stderr)
         if not writable_files:
@@ -556,6 +573,7 @@ def p4_sync(changelist: int, label: str, depot_root: str,
         log.warning(
             f'{len(writable_files)} expected clobber errors (git-ignored files)'
         )
+        return writable_files
 
 
 def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
@@ -670,8 +688,9 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
                                   temp_root, uses_crlf=uses_crlf,
                                   clobber=clobber, allwrite=allwrite)
     if preview:
-        p4_sync(changelist, label, depot_root, workspace_dir,
-                expected_clobber=set(prep.ignored))
+        prep.not_synced = p4_sync(changelist, label, depot_root,
+                                  workspace_dir,
+                                  expected_clobber=set(prep.ignored))
     return prep
 
 
@@ -862,6 +881,7 @@ def sync_command(args: argparse.Namespace) -> int:
 
         all_changed: list[ChangedFile] = []
         all_ignored: list[str] = []
+        all_not_synced: list[str] = []
         last_changelist = last_sync.changelist if last_sync else None
 
         # Catch-up pass to the last synced changelist. This makes locally
@@ -874,6 +894,7 @@ def sync_command(args: argparse.Namespace) -> int:
                               temp_root, uses_crlf, clobber, allwrite)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
+            all_not_synced.extend(prep.not_synced)
 
         # Sync each target changelist in turn, committing pure Perforce state
         # for each. Local changes are merged back once at the very end so the
@@ -884,6 +905,7 @@ def sync_command(args: argparse.Namespace) -> int:
                               uses_crlf, clobber, allwrite)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
+            all_not_synced.extend(prep.not_synced)
 
             log.heading(f'Committing git changes for CL {changelist}')
             dirty_files = get_dirty_files(workspace_dir)
@@ -903,15 +925,21 @@ def sync_command(args: argparse.Namespace) -> int:
 
         # Report git-ignored writable files. Left writable, they are only
         # preserved because p4 refuses to clobber them; with clobber on p4
-        # overwrites them during the sync instead.
-        if all_ignored:
-            if clobber:
-                log.heading(
-                    'Git-ignored writable files overwritten by p4 '
-                    '(clobber enabled)')
-            else:
-                log.heading('Files not synced (git-ignored and writable)')
-            for f in sorted(set(all_ignored)):
+        # overwrites them during the sync instead. With allwrite p4 refuses
+        # only the locally modified ones, so report what it actually skipped.
+        if clobber:
+            reported = all_ignored
+            heading = ('Git-ignored writable files overwritten by p4 '
+                       '(clobber enabled)')
+        elif allwrite:
+            reported = all_not_synced
+            heading = 'Files not synced (git-ignored and locally modified)'
+        else:
+            reported = all_ignored
+            heading = 'Files not synced (git-ignored and writable)'
+        if reported:
+            log.heading(heading)
+            for f in sorted(set(reported)):
                 log.info(os.path.relpath(f, workspace_dir))
 
         run_hooks('post-sync', workspace_dir, invocation_dir)

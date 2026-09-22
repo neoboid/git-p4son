@@ -213,7 +213,8 @@ so the read-only flag carries no information about local changes. git-p4son clas
 verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: with
 `noclobber` Perforce compares digests before refusing to overwrite a writable file, and unchanged files pass that
 check. Only files with local changes are made read-only for the duration of the sync, since those are the ones
-Perforce would otherwise refuse to overwrite.
+Perforce would otherwise refuse to overwrite. The same digest check applies to git-ignored files: unchanged ones sync
+normally, and after the sync git-p4son lists the ones Perforce skipped because they were modified locally.
 
 ## Usage
 

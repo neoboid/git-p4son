@@ -14,6 +14,7 @@ from git_p4son.git import (
     get_file_at_commit,
     get_head_commit,
     get_tracked_files,
+    list_tracked_files,
     merge_file,
 )
 
@@ -128,6 +129,26 @@ class TestGetTrackedFiles(GitRepoTestCase):
     def test_empty_input(self):
         result = get_tracked_files([], self.tmpdir)
         self.assertEqual(result, set())
+
+
+class TestListTrackedFiles(GitRepoTestCase):
+    def test_lists_tracked_files_only(self):
+        self._write_file('src/main.py', 'code')
+        self._write_file('.gitignore', '*.log\n')
+        self._commit()
+        self._write_file('untracked.txt', '')
+        self._write_file('build.log', '')
+
+        self.assertEqual(sorted(list_tracked_files(self.tmpdir)),
+                         ['.gitignore', 'src/main.py'])
+
+    def test_non_ascii_paths_are_not_quoted(self):
+        self._write_file('src/Ärlig.py', 'code')
+        self._commit()
+        self.assertEqual(list_tracked_files(self.tmpdir), ['src/Ärlig.py'])
+
+    def test_empty_repo(self):
+        self.assertEqual(list_tracked_files(self.tmpdir), [])
 
 
 class TestGetFileAtCommit(GitRepoTestCase):

@@ -266,6 +266,15 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     return tracked
 
 
+def list_tracked_files(workspace_dir: str) -> list[str]:
+    """Return every file tracked by git, as repo-relative slash paths."""
+    # -z output is NUL-separated and verbatim, so non-ASCII paths come back
+    # as-is rather than C-quoted. run() splits its output on newlines, so
+    # they are rejoined first in case a path contains one.
+    result = run(['git', 'ls-files', '-z'], cwd=workspace_dir)
+    return [path for path in '\n'.join(result.stdout).split('\0') if path]
+
+
 # --- file retrieval ---
 
 def get_file_at_commit(filepath: str, commit: str,

@@ -140,6 +140,13 @@ def writable_command(args: argparse.Namespace) -> int:
     """Execute the writable command."""
     workspace_dir = args.workspace_dir
 
+    if args.writable_action in ('enable', 'disable'):
+        enabled = args.writable_action == 'enable'
+        log.heading('Setting writable mode')
+        set_writable_mode(workspace_dir, enabled)
+        log.success('on' if enabled else 'off')
+        return apply_writable_mode(workspace_dir)
+
     if args.writable_action == 'apply':
         return apply_writable_mode(workspace_dir)
 

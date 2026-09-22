@@ -24,9 +24,10 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(args.command, 'writable')
         self.assertIsNone(args.writable_action)
 
-    def test_writable_apply(self):
-        args = self.parser.parse_args(['writable', 'apply'])
-        self.assertEqual(args.writable_action, 'apply')
+    def test_writable_actions(self):
+        for action in ('enable', 'disable', 'apply'):
+            args = self.parser.parse_args(['writable', action])
+            self.assertEqual(args.writable_action, action)
 
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])

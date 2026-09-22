@@ -261,7 +261,8 @@ class TestComplete(unittest.TestCase):
 
     def test_writable_actions(self, _ws, _aliases):
         result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')
-        self.assertIn('apply', self._names(result))
+        self.assertEqual(sorted(self._names(result)),
+                         ['apply', 'disable', 'enable'])
 
     def test_alias_delete_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['alias', 'delete', ''],

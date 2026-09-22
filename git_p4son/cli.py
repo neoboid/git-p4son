@@ -48,6 +48,7 @@ Examples:
   git-p4son update 12345        # Update changelist 12345
   git-p4son list-changes --base-branch main # List commit subjects since main branch
   git-p4son writable            # Show whether writable mode is on
+  git-p4son writable enable     # Keep git-tracked files writable
   git-p4son writable apply      # Make tracked files match the writable mode
         """
     )
@@ -367,6 +368,18 @@ Examples:
         dest='writable_action',
         help='Available writable actions',
         metavar='ACTION'
+    )
+    writable_subparsers.add_parser(
+        'enable',
+        help='Turn writable mode on and make git-tracked files writable',
+        description='Turn writable mode on, then make every git-tracked file '
+        'writable. Sync keeps the files it syncs writable from then on.'
+    )
+    writable_subparsers.add_parser(
+        'disable',
+        help='Turn writable mode off and make git-tracked files read-only',
+        description='Turn writable mode off, then make git-tracked files '
+        'read-only, except files opened in Perforce.'
     )
     writable_subparsers.add_parser(
         'apply',

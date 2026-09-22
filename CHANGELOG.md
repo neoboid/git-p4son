@@ -6,6 +6,10 @@
 - Commands that pass many files to git, such as the tracked-file and local-change checks in `sync`, now print
   the file list as a count (`-- <2381 paths>`) instead of every path, and a list split into several batches to fit
   the command-line limit is logged as a single line (`-- <12500 paths in 71 batches>`). `-v` still prints it all
+- Add writable mode, which keeps git-tracked files writable so they can be edited without a manual `p4 edit`.
+  Git-ignored files stay read-only. Turn it on with `git p4son writable enable` or when asked by `init`. With the
+  mode on, `sync` makes the tracked files it synced writable again, and `git p4son writable apply` makes every
+  tracked file match the current mode
 
 ## 0.3.4
 

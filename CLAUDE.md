@@ -63,6 +63,9 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 **`depot.py`** owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and resolving it
 against the client spec for the commands that run Perforce queries against it (`sync`, `sync-split`).
 
+**`writable.py`** implements writable mode: reading and writing the `core.writable` setting, the `writable` command,
+and the helpers that set and clear the user write bit on git-tracked files, which `sync` also uses.
+
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
 with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
 

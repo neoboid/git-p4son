@@ -22,6 +22,7 @@ from .git import (
 from .hooks import run_hooks
 from .depot import resolve_depot_root
 from .log import log
+from .writable import is_writable_mode, make_writable
 from .perforce import (
     get_latest_changelist,
     get_writable_files,
@@ -105,6 +106,9 @@ class WritableSyncFileSet:
     # sync. Without allwrite that is all of ignored; with it, only the
     # locally modified ones.
     not_synced: list[str] = field(default_factory=list)
+    # Every file the preview said p4 would update in this pass, writable or
+    # not. Writable mode makes the tracked ones writable after the sync.
+    synced: list[str] = field(default_factory=list)
 
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
@@ -689,7 +693,23 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
         prep.not_synced = p4_sync(changelist, label, depot_root,
                                   workspace_dir,
                                   expected_clobber=set(prep.ignored))
+        prep.synced = [entry.filepath for entry in preview]
     return prep
+
+
+def _restore_writable(synced: list[str], workspace_dir: str) -> None:
+    """In writable mode, make the tracked files this sync wrote writable.
+
+    p4 writes synced files read-only. Only files git tracks are restored;
+    git-ignored ones are left to Perforce. Tracking is checked after the
+    sync commits, so a file newly added upstream counts, and a deleted one
+    is gone from both the index and the disk."""
+    if not synced or not is_writable_mode(workspace_dir):
+        return
+    log.heading('Making synced tracked files writable (writable mode)')
+    tracked = sorted(get_tracked_files(sorted(set(synced)), workspace_dir))
+    changed = make_writable(tracked)
+    log.success(f'{changed} of {len(tracked)} tracked files made writable')
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:
@@ -842,15 +862,17 @@ def sync_command(args: argparse.Namespace) -> int:
     # and the post-sync merge. Cleaned up automatically on exit.
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
         if resync_last_synced:
-            _sync_pass(last_sync.changelist, LAST_SYNCED_LABEL, depot_root,
-                       workspace_dir, pre_sync_head_commit, temp_root,
-                       uses_crlf, clobber, allwrite)
+            prep = _sync_pass(last_sync.changelist, LAST_SYNCED_LABEL,
+                              depot_root, workspace_dir, pre_sync_head_commit,
+                              temp_root, uses_crlf, clobber, allwrite)
+            _restore_writable(prep.synced, workspace_dir)
             run_hooks('post-sync', workspace_dir, invocation_dir)
             return 0
 
         all_changed: list[ChangedFile] = []
         all_ignored: list[str] = []
         all_not_synced: list[str] = []
+        all_synced: list[str] = []
         last_changelist = last_sync.changelist if last_sync else None
 
         # Catch-up pass to the last synced changelist. This makes locally
@@ -864,6 +886,7 @@ def sync_command(args: argparse.Namespace) -> int:
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             all_not_synced.extend(prep.not_synced)
+            all_synced.extend(prep.synced)
 
         # Sync each target changelist in turn, committing pure Perforce state
         # for each. Local changes are merged back once at the very end so the
@@ -875,6 +898,7 @@ def sync_command(args: argparse.Namespace) -> int:
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             all_not_synced.extend(prep.not_synced)
+            all_synced.extend(prep.synced)
 
             log.heading(f'Committing git changes for CL {changelist}')
             dirty_files = get_dirty_files(workspace_dir)
@@ -910,6 +934,8 @@ def sync_command(args: argparse.Namespace) -> int:
             log.heading(heading)
             for f in sorted(set(reported)):
                 log.info(os.path.relpath(f, workspace_dir))
+
+        _restore_writable(all_synced, workspace_dir)
 
         run_hooks('post-sync', workspace_dir, invocation_dir)
         return 0

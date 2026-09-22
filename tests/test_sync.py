@@ -27,12 +27,46 @@ from git_p4son.sync import (
     LastSync,
     WritableSyncFileSet,
     _handle_clobber_warning,
+    _restore_writable,
     git_last_sync,
     p4_sync,
     prepare_writable_files,
     sync_command,
 )
 from tests.helpers import make_run_result
+
+
+@mock.patch('git_p4son.sync.make_writable', return_value=0)
+@mock.patch('git_p4son.sync.get_tracked_files')
+class TestRestoreWritable(unittest.TestCase):
+    """Writable mode's post-sync step: tracked synced files go writable."""
+
+    @mock.patch('git_p4son.sync.is_writable_mode', return_value=False)
+    def test_does_nothing_when_mode_is_off(self, _mode, mock_tracked,
+                                           mock_make):
+        _restore_writable(['/ws/a.cpp'], '/ws')
+        mock_tracked.assert_not_called()
+        mock_make.assert_not_called()
+
+    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
+    def test_does_nothing_when_nothing_was_synced(self, _mode, mock_tracked,
+                                                  mock_make):
+        _restore_writable([], '/ws')
+        mock_tracked.assert_not_called()
+        mock_make.assert_not_called()
+
+    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
+    def test_only_tracked_files_are_made_writable(self, _mode, mock_tracked,
+                                                  mock_make):
+        """Git-ignored files (content, p4-only) are left to Perforce, and a
+        file synced by several passes is only looked up once."""
+        mock_tracked.return_value = {'/ws/a.cpp', '/ws/b.h'}
+        _restore_writable(
+            ['/ws/b.h', '/ws/a.cpp', '/ws/Content/x.uasset', '/ws/a.cpp'],
+            '/ws')
+        mock_tracked.assert_called_once_with(
+            ['/ws/Content/x.uasset', '/ws/a.cpp', '/ws/b.h'], '/ws')
+        mock_make.assert_called_once_with(['/ws/a.cpp', '/ws/b.h'])
 
 
 class TestHandleClobberWarning(unittest.TestCase):
@@ -1010,6 +1044,40 @@ class TestSyncCommand(unittest.TestCase):
         mock_resolve.assert_not_called()
         self.assertEqual(mock_preview.call_args.args[1], '//passed')
 
+    @mock.patch('git_p4son.sync._restore_writable')
+    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
+    @mock.patch('git_p4son.sync._merge_changed_files')
+    @mock.patch('git_p4son.sync.commit')
+    @mock.patch('git_p4son.sync.add_all_files')
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview')
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
+    def test_writable_mode_restores_files_from_every_pass(
+            self, _depot, _p4clean, mock_last_sync, _head, mock_preview,
+            mock_prep, _p4sync, _git_clean, _add, _commit, _merge, _mode,
+            mock_restore):
+        """The catch-up pass and each target pass all feed the restore
+        step, and writable mode leaves sync on the noallwrite path: p4 would
+        refuse every writable file there, so they must all still be made
+        read-only before the sync."""
+        mock_last_sync.return_value = self._last_sync
+        mock_preview.side_effect = [[_upd('/ws/a.cpp')],
+                                    [_upd('/ws/b.cpp')]]
+        mock_prep.side_effect = [self._empty_prep(), self._empty_prep()]
+        args = mock.Mock(changelist=['12345'], force=False,
+                         workspace_dir='/ws')
+        self.assertEqual(sync_command(args), 0)
+
+        mock_restore.assert_called_once_with(['/ws/a.cpp', '/ws/b.cpp'],
+                                             '/ws')
+        for call in mock_prep.call_args_list:
+            self.assertFalse(call.kwargs['allwrite'])
+
     @mock.patch('git_p4son.depot.get_depot_root', return_value=None)
     def test_no_depot_root_aborts(self, _depot):
         args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
@@ -1198,6 +1266,27 @@ class TestSyncCommand(unittest.TestCase):
             expected_clobber=set())
         mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
         mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
+
+    @mock.patch('git_p4son.sync._restore_writable')
+    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
+    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview',
+                return_value=[_upd('/ws/a.txt')])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
+    def test_last_synced_restores_writable_files(
+            self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
+            _preview, mock_prep, _p4sync, _hooks, mock_restore):
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        mock_prep.return_value = self._empty_prep()
+        args = mock.Mock(changelist=['last-synced'], force=False,
+                         workspace_dir='/ws', invocation_dir='/invoked')
+        self.assertEqual(sync_command(args), 0)
+        mock_restore.assert_called_once_with(['/ws/a.txt'], '/ws')
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_sync')

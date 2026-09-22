@@ -216,10 +216,13 @@ check. Only files with local changes are made read-only for the duration of the 
 Perforce would otherwise refuse to overwrite. The same digest check applies to git-ignored files: unchanged ones sync
 normally, and after the sync git-p4son lists the ones Perforce skipped because they were modified locally.
 
+**Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
+the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
+
 ## Usage
 
-git-p4son provides nine commands: `init`, `sync`, `sync-split`, `new`, `update`, `review`, `list-changes`,
-`alias`, and `completion`.
+git-p4son provides ten commands: `init`, `sync`, `sync-split`, `new`, `update`, `review`, `list-changes`,
+`alias`, `writable`, and `completion`.
 
 To see help for any command, use `-h`:
 
@@ -260,6 +263,9 @@ The `.gitignore` is set up using this priority:
 - If `.gitignore` already exists, it is left as is
 - If `.p4ignore` exists, it is copied to `.gitignore` as a starting point
 - Otherwise, an empty `.gitignore` is created
+
+`init` also asks whether to turn on [writable mode](#writable-command), defaulting to the current setting. It only
+saves the answer; run `git p4son writable apply` once your files are committed to update their permissions.
 
 ### Sync Command
 
@@ -559,6 +565,40 @@ In interactive mode, each alias is displayed in turn with a prompt:
 ```sh
 git p4son alias clean
 ```
+
+### Writable Command
+
+Writable mode keeps git-tracked files writable, so you can edit them without running `p4 edit` first. git-p4son
+opens changed files in Perforce itself when you run `new`, `update` or `review`. Git-ignored files, such as content
+and other Perforce-only files, stay read-only and are checked out through Perforce as usual.
+
+```sh
+git p4son writable            # Show whether writable mode is on
+git p4son writable enable     # Turn writable mode on, then apply it
+git p4son writable disable    # Turn writable mode off, then apply it
+git p4son writable apply      # Make git-tracked files match the current mode
+```
+
+`apply` makes every git-tracked file writable when the mode is on. When it's off, it makes them read-only, except
+files opened in Perforce in any changelist. On a workspace with the `allwrite` option, making files read-only is
+skipped, since the client spec wants every file writable. Git-ignored files are never changed.
+
+The setting is stored in `.git-p4son/config.toml`:
+
+```toml
+[core]
+writable = true
+```
+
+With the mode on, `sync` makes the files it synced writable again if git tracks them, since Perforce writes synced
+files read-only. Files made read-only outside git-p4son, for example by submitting from P4V, `p4 revert`, or "Get
+Latest" in P4V, stay read-only until a later sync touches them. Run `git p4son writable apply` to fix them right
+away.
+
+This replaces the `post-sync` hook some users run to make every tracked file writable after a sync.
+
+Turning the mode off also makes tracked files whose Perforce type carries the `+w` (always writable) modifier
+read-only. The next sync of such a file makes it writable again.
 
 ### Completion Command
 

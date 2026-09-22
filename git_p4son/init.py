@@ -15,6 +15,7 @@ from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
 from .git import resolve_editor
+from .writable import is_writable_mode, set_writable_mode
 
 
 def _validate_depot_root(depot_root: str, cwd: str) -> bool:
@@ -119,6 +120,46 @@ def _configure_depot_root(client_name: str, cwd: str,
     return True
 
 
+def _ask_writable_mode(current: bool) -> bool | None:
+    """Ask whether to keep git-tracked files writable.
+
+    An empty answer keeps the current value. Returns None on EOF."""
+    choices = '[Y/n]' if current else '[y/N]'
+    while True:
+        try:
+            answer = input(
+                f'Keep git-tracked files writable? {choices}: ').strip().lower()
+        except EOFError:
+            print()
+            return None
+        if answer == '':
+            return current
+        if answer in ('y', 'yes'):
+            return True
+        if answer in ('n', 'no'):
+            return False
+        print('Please enter y or n')
+
+
+def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
+    """Ask for the writable mode setting and save it.
+
+    Only the setting is saved: file permissions are left alone, since on a
+    fresh repo the files are not tracked yet. Returns (enabled, changed)."""
+    log.heading('Configuring writable mode')
+    current = is_writable_mode(cwd)
+    print()
+    print('Writable mode keeps git-tracked files writable, so they can be')
+    print('edited without p4 edit. Git-ignored files stay read-only.')
+    enabled = _ask_writable_mode(current)
+    if enabled is None:
+        log.success(f'{"on" if current else "off"} (unchanged)')
+        return current, False
+    set_writable_mode(cwd, enabled)
+    log.success('on' if enabled else 'off')
+    return enabled, enabled != current
+
+
 def _has_commits(cwd: str) -> bool:
     """Return whether the git repo has any commit (HEAD resolves)."""
     result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
@@ -158,6 +199,8 @@ def init_command(args: argparse.Namespace) -> int:
     if not _configure_depot_root(spec.name, cwd, spec.root):
         return 1
 
+    writable, writable_changed = _configure_writable_mode(cwd)
+
     log.heading('Checking .gitignore')
     result = _setup_gitignore(cwd)
     log.success(result)
@@ -186,6 +229,11 @@ def init_command(args: argparse.Namespace) -> int:
         log.info('* git add .')
         log.info('* git commit -m "Initial commit"')
         log.info('* git p4son sync')
+        if writable:
+            log.info('* git p4son writable apply')
+    elif writable_changed:
+        log.heading('Next steps')
+        log.info('* git p4son writable apply, to update the tracked files')
 
     # Nudge user to set an editor if none is configured
     log.heading('Validating git editor configuration')

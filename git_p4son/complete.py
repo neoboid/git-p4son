@@ -14,6 +14,8 @@ from .git import get_current_branch, get_workspace_dir
 from .log import log
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
+# Commands whose first positional is a nested action (alias list, ...).
+_COMMANDS_WITH_ACTIONS = frozenset({'alias'})
 
 
 def _get_subparsers_action(parser):
@@ -125,15 +127,16 @@ def _complete_positional(command, subcommand, positional_count,
         branch_candidates = _get_branch_candidates(prefix, workspace_dir)
         return branch_candidates + _filter(aliases, prefix)
 
-    if command == 'alias':
-        if subcommand is None and positional_count == 0:
-            nested = _get_subparsers_action(command_parser)
-            if nested and hasattr(nested, '_choices_actions'):
-                candidates = [(ca.dest, ca.help or '')
-                              for ca in nested._choices_actions]
-                return _filter(candidates, prefix)
-            return []
+    if (command in _COMMANDS_WITH_ACTIONS and subcommand is None
+            and positional_count == 0):
+        nested = _get_subparsers_action(command_parser)
+        if nested and hasattr(nested, '_choices_actions'):
+            candidates = [(ca.dest, ca.help or '')
+                          for ca in nested._choices_actions]
+            return _filter(candidates, prefix)
+        return []
 
+    if command == 'alias':
         if subcommand == 'delete' and positional_count == 0:
             branch_candidates = _get_branch_candidates(prefix, workspace_dir)
             return branch_candidates + _filter(aliases, prefix)
@@ -193,7 +196,7 @@ def _complete(parser, words, workspace_dir=None):
                 current_parser = command_parser
             continue
 
-        if command == 'alias' and subcommand is None:
+        if command in _COMMANDS_WITH_ACTIONS and subcommand is None:
             nested = _get_subparsers_action(command_parser)
             if nested and word in nested.choices:
                 subcommand = word

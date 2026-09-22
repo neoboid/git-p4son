@@ -210,6 +210,24 @@ class TestWritableCommand(unittest.TestCase):
         self.assertTrue(self._writable(self.tracked))
         mock_opened.assert_not_called()
 
+    def test_enable_turns_mode_on_and_applies(self):
+        self._set_all(stat.S_IRUSR)
+        self.assertEqual(self._run('enable'), 0)
+        self.assertTrue(is_writable_mode(self.ws))
+        self.assertTrue(self._writable(self.tracked))
+        self.assertFalse(self._writable(self.ignored))
+
+    @mock.patch('git_p4son.writable.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.writable.get_client_spec')
+    def test_disable_turns_mode_off_and_applies(self, mock_spec, _opened):
+        mock_spec.return_value = mock.Mock(allwrite=False)
+        mock_spec.return_value.name = 'ws'
+        set_writable_mode(self.ws, True)
+        self._set_all(stat.S_IRUSR | stat.S_IWUSR)
+        self.assertEqual(self._run('disable'), 0)
+        self.assertFalse(is_writable_mode(self.ws))
+        self.assertFalse(self._writable(self.tracked))
+
     @mock.patch('git_p4son.writable.get_client_spec', return_value=None)
     def test_apply_off_needs_a_perforce_workspace(self, _spec):
         self._set_all(stat.S_IRUSR | stat.S_IWUSR)

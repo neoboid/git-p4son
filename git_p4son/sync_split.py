@@ -11,9 +11,8 @@ from .perforce import (
     get_p4_user,
     get_submitted_changes,
 )
-from .sync import (
-    git_last_sync, resolve_depot_root, sync_command, sync_preflight,
-)
+from .depot import resolve_depot_root
+from .sync import git_last_sync, sync_command, sync_preflight
 
 
 def build_sync_targets(changes: list[P4Change], users: list[str],

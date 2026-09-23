@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import IO
 
 from .common import RunError, prompt_choice, run_with_output
-from .config import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .state import dismiss_clobber_warning, is_clobber_warning_dismissed
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
@@ -21,9 +20,9 @@ from .git import (
     is_file_tracked, merge_file,
 )
 from .hooks import run_hooks
+from .depot import resolve_depot_root
 from .log import log
 from .perforce import (
-    get_client_spec,
     get_latest_changelist,
     get_writable_files,
     is_always_writable_file_type,
@@ -31,7 +30,6 @@ from .perforce import (
     p4_fstat_file_info,
     p4_get_opened_files,
     p4_sync_preview,
-    P4ClientSpec,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
 )
@@ -692,38 +690,6 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
                                   workspace_dir,
                                   expected_clobber=set(prep.ignored))
     return prep
-
-
-@dataclass
-class ResolvedDepot:
-    """The configured depot root with any placeholder expanded, plus the
-    client spec it was resolved against."""
-    depot_root: str
-    client_spec: P4ClientSpec | None
-
-
-def resolve_depot_root(workspace_dir: str) -> ResolvedDepot | None:
-    """Resolve the configured depot root, or None (with an error logged).
-
-    The client spec is queried once here: its name resolves a $(workspace)
-    placeholder in the depot root, and its line-ending/clobber options feed
-    the writable-file handling in sync.
-    """
-    log.heading('Finding depot root')
-    depot_root = get_depot_root(workspace_dir)
-    if not depot_root:
-        log.error('No depot root configured. Run "git p4son init" first.')
-        return None
-
-    client_spec = get_client_spec(workspace_dir)
-    if WORKSPACE_PLACEHOLDER in depot_root and not client_spec:
-        log.error('Cannot resolve $(workspace) in depot root: not inside a '
-                  'Perforce workspace')
-        return None
-    if client_spec:
-        depot_root = expand_depot_root(depot_root, client_spec.name)
-    log.success(depot_root)
-    return ResolvedDepot(depot_root=depot_root, client_spec=client_spec)
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:

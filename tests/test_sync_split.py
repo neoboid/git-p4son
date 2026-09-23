@@ -5,7 +5,8 @@ import unittest
 from unittest import mock
 
 from git_p4son.perforce import P4Change
-from git_p4son.sync import LastSync, ResolvedDepot, sync_preflight
+from git_p4son.depot import ResolvedDepot
+from git_p4son.sync import LastSync, sync_preflight
 from git_p4son.sync_split import (
     build_sync_targets, sync_split_command,
 )

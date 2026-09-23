@@ -193,6 +193,54 @@ class TestJoinCommandLine(unittest.TestCase):
         self.assertEqual(result, ' ls')
 
 
+class TestLoggedCommandLine(unittest.TestCase):
+    """Long file lists are summarized in the printed command line; the
+    command that runs is unchanged."""
+
+    def _logged(self, command, verbose=False):
+        with mock.patch('git_p4son.common.log') as mock_log, \
+                mock.patch('subprocess.run') as mock_subprocess_run:
+            mock_log.verbose_mode = verbose
+            mock_subprocess_run.return_value = mock.Mock(
+                returncode=0, stdout='', stderr='')
+            run(command)
+        self.assertEqual(mock_subprocess_run.call_args.args[0], command)
+        return mock_log.command.call_args.args[0]
+
+    def test_long_path_list_is_counted(self):
+        paths = [f'src/file{i}.cpp' for i in range(2381)]
+        logged = self._logged(['git', 'ls-files', '-z', '--'] + paths)
+        self.assertEqual(logged, ' git ls-files -z -- <2381 paths>')
+
+    def test_short_path_list_is_shown(self):
+        logged = self._logged(['git', 'ls-files', '--', 'a.cpp', 'b.cpp'])
+        self.assertEqual(logged, ' git ls-files -- a.cpp b.cpp')
+
+    def test_arguments_before_the_separator_are_kept(self):
+        paths = [f'f{i}' for i in range(10)]
+        logged = self._logged(
+            ['git', 'log', '--name-status', 'abc123', '--'] + paths)
+        self.assertEqual(logged, ' git log --name-status abc123 -- <10 paths>')
+
+    def test_command_without_separator_is_unchanged(self):
+        logged = self._logged(['p4', 'sync', '//ws/...@123'])
+        self.assertEqual(logged, ' p4 sync //ws/...@123')
+
+    def test_verbose_mode_prints_every_path(self):
+        paths = [f'f{i}' for i in range(10)]
+        logged = self._logged(['git', 'ls-files', '--'] + paths, verbose=True)
+        self.assertEqual(logged, ' git ls-files -- ' + ' '.join(paths))
+
+    def test_run_with_output_summarizes_too(self):
+        # A real, harmless subprocess: Python ignores arguments after -c.
+        paths = [f'f{i}' for i in range(10)]
+        with mock.patch('git_p4son.common.log') as mock_log:
+            mock_log.verbose_mode = False
+            run_with_output([sys.executable, '-c', 'pass', '--'] + paths)
+        logged = mock_log.command.call_args.args[0]
+        self.assertTrue(logged.endswith(' -c pass -- <10 paths>'), logged)
+
+
 class TestIsWorkspaceDir(unittest.TestCase):
     def test_returns_true_when_git_dir_exists(self):
         with tempfile.TemporaryDirectory() as tmpdir:

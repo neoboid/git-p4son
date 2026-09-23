@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+- Commands that pass many files to git, such as the tracked-file and local-change checks in `sync`, now print
+  the file list as a count (`-- <2381 paths>`) instead of every path. `-v` still prints the full list
+
 ## 0.3.4
 
 - `sync` no longer warns that a git-ignored writable file "will not be synced" when the file's Perforce type

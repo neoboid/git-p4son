@@ -127,6 +127,12 @@ class RunResult:
         self.elapsed: timedelta | None = elapsed
 
 
+# Commands that take a list of files pass it after a `--` separator. With
+# thousands of files synced, printing every one buries the output, so a
+# longer list is logged as a count. Verbose mode still prints it in full.
+_MAX_LOGGED_PATHS = 3
+
+
 def join_command_line(command: list[str]) -> str:
     command_line = ''
     for c in command:
@@ -135,6 +141,17 @@ def join_command_line(command: list[str]) -> str:
         else:
             command_line += f' {c}'
     return command_line
+
+
+def _command_line_for_log(command: list[str]) -> str:
+    """The command line as printed, with a long path list summarized."""
+    if log.verbose_mode or '--' not in command:
+        return join_command_line(command)
+    separator = command.index('--')
+    paths = command[separator + 1:]
+    if len(paths) <= _MAX_LOGGED_PATHS:
+        return join_command_line(command)
+    return join_command_line(command[:separator + 1]) + f' <{len(paths)} paths>'
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
@@ -159,7 +176,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         RunResult object with returncode, stdout, and stderr
     """
     use_spinner = input is None and not dry_run
-    log.command(join_command_line(command),
+    log.command(_command_line_for_log(command),
                 truncate_for_spinner=use_spinner)
 
     if dry_run:
@@ -242,7 +259,8 @@ def run_with_output(command: list[str], cwd: str = '.',
     Returns:
         RunResult object with returncode, stdout, and stderr
     """
-    log.command(join_command_line(command), truncate_for_spinner=True)
+    log.command(_command_line_for_log(command),
+                truncate_for_spinner=True)
     log.start_spinner()
 
     start_timestamp = timer()

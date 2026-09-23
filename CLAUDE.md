@@ -60,6 +60,9 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 **`config.py`** manages per-repo configuration stored in `.git-p4son/config.toml`. Currently stores the depot root
 (the Perforce path to sync, e.g. `//my-workspace` or `//my-workspace/Engine/Source`).
 
+**`depot.py`** owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and resolving it
+against the client spec for the commands that run Perforce queries against it (`sync`, `sync-split`).
+
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
 with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
 

@@ -12,12 +12,6 @@ from . import CONFIG_DIR
 
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
-# Placeholder allowed in a stored depot root, substituted with the live
-# Perforce client (workspace) name each time the root is used. Storing e.g.
-# root = "//$(workspace)/Engine" keeps the config working after the workspace
-# is renamed, at the cost of one client-name lookup per command.
-WORKSPACE_PLACEHOLDER = '$(workspace)'
-
 
 def config_path(workspace_dir: str) -> str:
     """Return the path to the config file."""
@@ -94,14 +88,3 @@ def _write_table(f, name: str, table: dict) -> None:
     f.write('\n')
     for key, subtable in subtables.items():
         _write_table(f, f'{name}.{_format_key(key)}', subtable)
-
-
-def get_depot_root(workspace_dir: str) -> str | None:
-    """Get the depot root from config, or None if not configured."""
-    config = load_config(workspace_dir)
-    return config.get('depot', {}).get('root')
-
-
-def expand_depot_root(depot_root: str, workspace_name: str) -> str:
-    """Substitute the live workspace name for the $(workspace) placeholder."""
-    return depot_root.replace(WORKSPACE_PLACEHOLDER, workspace_name)

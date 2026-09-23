@@ -10,12 +10,8 @@ import os
 import shutil
 
 from .common import CommandError, run, run_with_output
-from .config import (
-    WORKSPACE_PLACEHOLDER,
-    expand_depot_root,
-    get_depot_root,
-    save_config,
-)
+from .config import save_config
+from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
 from .git import resolve_editor

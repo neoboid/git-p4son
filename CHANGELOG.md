@@ -4,7 +4,8 @@
 ## Unreleased
 
 - Commands that pass many files to git, such as the tracked-file and local-change checks in `sync`, now print
-  the file list as a count (`-- <2381 paths>`) instead of every path. `-v` still prints the full list
+  the file list as a count (`-- <2381 paths>`) instead of every path, and a list split into several batches to fit
+  the command-line limit is logged as a single line (`-- <12500 paths in 71 batches>`). `-v` still prints it all
 
 ## 0.3.4
 

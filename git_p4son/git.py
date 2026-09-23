@@ -10,6 +10,7 @@ import re
 from .common import (
     CommandError,
     RunError,
+    batched_command_log,
     normalize_workspace_path,
     run,
     run_with_output,
@@ -252,15 +253,16 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     tracked: set[str] = set()
     chunks = _chunk_paths_by_length(
         list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
-    for chunk in chunks:
-        # -z output is NUL-separated and verbatim; without it paths with
-        # non-ASCII characters are C-quoted and would never match.
-        result = run(['git', 'ls-files', '-z', '--'] + chunk,
-                     cwd=workspace_dir)
-        for line in result.stdout:
-            for git_path in line.split('\0'):
-                if git_path in by_git_path:
-                    tracked.add(by_git_path[git_path])
+    # -z output is NUL-separated and verbatim; without it paths with
+    # non-ASCII characters are C-quoted and would never match.
+    command = ['git', 'ls-files', '-z', '--']
+    with batched_command_log(command, len(by_git_path), len(chunks)):
+        for chunk in chunks:
+            result = run(command + chunk, cwd=workspace_dir)
+            for line in result.stdout:
+                for git_path in line.split('\0'):
+                    if git_path in by_git_path:
+                        tracked.add(by_git_path[git_path])
     return tracked
 
 
@@ -361,12 +363,21 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     by_git_path = {fp.replace('\\', '/'): fp for fp in filepaths}
     chunks = _chunk_paths_by_length(
         list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
-    for chunk in chunks:
-        chunk_result = _find_base_commits_chunk(
-            chunk, before_commit, workspace_dir)
-        for git_path, sha in chunk_result.items():
-            result[by_git_path[git_path]] = sha
+    with batched_command_log(_find_base_commits_command(before_commit),
+                             len(by_git_path), len(chunks)):
+        for chunk in chunks:
+            chunk_result = _find_base_commits_chunk(
+                chunk, before_commit, workspace_dir)
+            for git_path, sha in chunk_result.items():
+                result[by_git_path[git_path]] = sha
     return result
+
+
+def _find_base_commits_command(before_commit: str) -> list[str]:
+    """The history walk behind find_base_commits, up to its `--`."""
+    return ['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
+            '--name-status', '--pretty=format:%x01%H%x01%s',
+            before_commit, '--']
 
 
 def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
@@ -378,11 +389,8 @@ def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
     no sync commit ever touched. core.quotePath is disabled so non-ASCII
     paths in --name-status output match the input verbatim."""
     result: dict[str, str | None] = dict.fromkeys(git_paths)
-    res = run(
-        ['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
-         '--name-status', '--pretty=format:%x01%H%x01%s',
-         before_commit, '--'] + git_paths,
-        cwd=workspace_dir, fail_on_returncode=False)
+    res = run(_find_base_commits_command(before_commit) + git_paths,
+              cwd=workspace_dir, fail_on_returncode=False)
     if res.returncode != 0:
         return result
 

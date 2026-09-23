@@ -1,5 +1,7 @@
 """Tests for new git helper functions."""
 
+import contextlib
+import io
 import os
 import subprocess
 import tempfile
@@ -99,6 +101,29 @@ class TestGetTrackedFiles(GitRepoTestCase):
             result = get_tracked_files(
                 ['a.py', 'b.py', 'c.log'], self.tmpdir)
         self.assertEqual(result, {'a.py', 'b.py'})
+
+    def test_batches_are_logged_as_one_line(self):
+        """Thousands of synced files mean dozens of chunks; each chunk's
+        command must not get its own output line."""
+        self._write_file('a.py', 'a')
+        self._write_file('b.py', 'b')
+        self._commit()
+        buffer = io.StringIO()
+        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1), \
+                contextlib.redirect_stdout(buffer):
+            get_tracked_files(['a.py', 'b.py', 'c.log'], self.tmpdir)
+        commands = [line for line in buffer.getvalue().splitlines()
+                    if line.startswith('>')]
+        self.assertEqual(commands,
+                         ['>  git ls-files -z -- <3 paths in 3 batches>'])
+
+    def test_single_batch_logs_the_command(self):
+        self._write_file('a.py', 'a')
+        self._commit()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            get_tracked_files(['a.py'], self.tmpdir)
+        self.assertIn('>  git ls-files -z -- a.py', buffer.getvalue())
 
     def test_empty_input(self):
         result = get_tracked_files([], self.tmpdir)
@@ -356,9 +381,16 @@ class TestFindBaseCommits(GitRepoTestCase):
         self._commit('user: add b.cpp')
         s_add = self._rev_parse()
 
-        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1):
+        buffer = io.StringIO()
+        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1), \
+                contextlib.redirect_stdout(buffer):
             result = find_base_commits(
                 ['a.cpp', 'b.cpp', 'missing.cpp'], 'HEAD', self.tmpdir)
+        commands = [line for line in buffer.getvalue().splitlines()
+                    if line.startswith('>')]
+        self.assertEqual(len(commands), 1)
+        self.assertTrue(commands[0].endswith(' <3 paths in 3 batches>'),
+                        commands[0])
         self.assertEqual(result, {'a.cpp': s_sync,
                                   'b.cpp': s_add,
                                   'missing.cpp': None})

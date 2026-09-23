@@ -8,6 +8,8 @@ This centralises formatting, verbosity filtering, and future color support.
 import shutil
 import sys
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 
 # Heading prefix — single constant, easy to change later.
@@ -98,6 +100,9 @@ class Log:
         self._spinner_stop: threading.Event = threading.Event()
         self._spinner_line: str = ''
         self._spinner_final_line: str = ''
+        # Nesting depth of command_batch: while above zero, the commands run
+        # inside the batch are not echoed individually.
+        self._batch_depth: int = 0
 
     def heading(self, text: str) -> None:
         """Print a section heading."""
@@ -130,7 +135,7 @@ class Log:
 
     def command(self, cmd: str, truncate_for_spinner: bool = False) -> None:
         """Print a subprocess command line."""
-        if self.quiet_mode:
+        if self.quiet_mode or self._batch_depth:
             return
         full_line = f'> {cmd}'
         if not _is_tty(sys.stdout):
@@ -151,7 +156,7 @@ class Log:
 
     def end_command(self) -> None:
         """Finish the command line (print newline)."""
-        if self.quiet_mode:
+        if self.quiet_mode or self._batch_depth:
             return
         if self._command_line_open:
             print()
@@ -176,7 +181,7 @@ class Log:
 
     def stdin(self, text: str) -> None:
         """Print stdin input sent to a command (verbose only)."""
-        if not self.verbose_mode or self.quiet_mode:
+        if not self.verbose_mode or self.quiet_mode or self._batch_depth:
             return
         print('stdin:')
         for line in text.splitlines():
@@ -212,7 +217,7 @@ class Log:
 
     def start_spinner(self) -> None:
         """Start the spinner at the end of the current command line."""
-        if self.quiet_mode or not _is_tty(sys.stdout):
+        if self.quiet_mode or self._batch_depth or not _is_tty(sys.stdout):
             return
         self._spinner_stop.clear()
         self._spinner_thread = threading.Thread(
@@ -221,6 +226,9 @@ class Log:
 
     def stop_spinner(self) -> None:
         """Stop the spinner and reprint the clean command line."""
+        if self._batch_depth:
+            # A command inside a batch: the batch's spinner keeps running.
+            return
         if self._spinner_thread is None:
             # No spinner ran (non-TTY, quiet mode, or never started); the
             # command line, if any, may still need its newline.
@@ -236,6 +244,26 @@ class Log:
         sys.stdout.write('\n')
         sys.stdout.flush()
         self._command_line_open = False
+
+    @contextmanager
+    def command_batch(self, summary: str) -> Iterator[None]:
+        """Log the commands run inside as one summary command line.
+
+        For work split into many runs of the same command, e.g. a file list
+        chunked to fit the command-line length limit. The summary line gets
+        the spinner, and the runs inside are not echoed. Verbose mode echoes
+        every run instead."""
+        if self.verbose_mode:
+            yield
+            return
+        self.command(summary, truncate_for_spinner=True)
+        self.start_spinner()
+        self._batch_depth += 1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            self.stop_spinner()
 
     def _format_command_line(self, line: str) -> str:
         """Return a command line with a colored prompt when supported."""

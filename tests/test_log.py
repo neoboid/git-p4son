@@ -39,6 +39,66 @@ class TestNonTtyOutput(unittest.TestCase):
         self.assertEqual(buffer.getvalue(), '> p4 change -i\n')
 
 
+class TestCommandBatch(unittest.TestCase):
+    """A batch logs one summary line instead of each command inside."""
+
+    def _run_batch(self, log, inner=2):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            with log.command_batch('git ls-files -- <9 paths in 2 batches>'):
+                for i in range(inner):
+                    log.command(f'git ls-files -- f{i}',
+                                truncate_for_spinner=True)
+                    log.start_spinner()
+                    log.stop_spinner()
+        return buffer.getvalue()
+
+    def test_only_the_summary_is_printed(self):
+        output = self._run_batch(Log())
+        self.assertEqual(output, '> git ls-files -- <9 paths in 2 batches>\n')
+
+    def test_verbose_mode_prints_every_command(self):
+        log = Log()
+        log.verbose_mode = True
+        output = self._run_batch(log)
+        self.assertEqual(
+            output, '> git ls-files -- f0\n> git ls-files -- f1\n')
+
+    def test_nested_batches_print_only_the_outer_summary(self):
+        log = Log()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            with log.command_batch('outer'):
+                with log.command_batch('inner'):
+                    log.command('git status')
+        self.assertEqual(buffer.getvalue(), '> outer\n')
+
+    def test_an_error_inside_still_ends_the_batch(self):
+        log = Log()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            with self.assertRaises(RuntimeError):
+                with log.command_batch('summary'):
+                    raise RuntimeError('boom')
+            log.command('git status')
+            log.end_command()
+        self.assertEqual(buffer.getvalue(), '> summary\n> git status\n')
+
+    @mock.patch('git_p4son.log._is_tty', return_value=True)
+    def test_inner_commands_do_not_stop_the_batch_spinner(self, _tty):
+        log = Log()
+        with contextlib.redirect_stdout(io.StringIO()):
+            with log.command_batch('summary'):
+                spinner = log._spinner_thread
+                self.assertIsNotNone(spinner)
+                log.command('git status', truncate_for_spinner=True)
+                log.start_spinner()
+                log.stop_spinner()
+                self.assertIs(log._spinner_thread, spinner)
+                self.assertTrue(spinner.is_alive())
+            self.assertIsNone(log._spinner_thread)
+
+
 class TestCommandTruncation(unittest.TestCase):
     @mock.patch('git_p4son.log.shutil.get_terminal_size')
     def test_truncates_to_leave_room_for_spinner(self, mock_terminal_size):

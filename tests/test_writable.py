@@ -2,6 +2,7 @@
 
 import os
 import stat
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -122,12 +123,44 @@ class TestWriteBitHelpers(unittest.TestCase):
 
 
 class TestWritableCommand(unittest.TestCase):
+    """The writable command against a real git repo; Perforce is mocked."""
+
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
         self.ws = self._tempdir.name
+        for args in (['init'], ['config', 'user.email', 't@t.com'],
+                     ['config', 'user.name', 'T']):
+            subprocess.run(['git'] + args, cwd=self.ws, check=True,
+                           capture_output=True)
+        self.tracked = self._file('src/main.cpp')
+        self.opened = self._file('src/open.cpp')
+        self._file('.gitignore', 'Content/\n')
+        subprocess.run(['git', 'add', '-A'], cwd=self.ws, check=True,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'init'], cwd=self.ws,
+                       check=True, capture_output=True)
+        self.ignored = self._file('Content/level.umap')
 
     def tearDown(self):
+        for root, _dirs, names in os.walk(self.ws):
+            for name in names:
+                os.chmod(os.path.join(root, name),
+                         stat.S_IRUSR | stat.S_IWUSR)
         self._tempdir.cleanup()
+
+    def _file(self, rel, content='content\n'):
+        path = os.path.join(self.ws, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _set_all(self, mode):
+        for path in (self.tracked, self.opened, self.ignored):
+            os.chmod(path, mode)
+
+    def _writable(self, path):
+        return bool(os.stat(path).st_mode & stat.S_IWUSR)
 
     def _run(self, action):
         return writable_command(mock.Mock(workspace_dir=self.ws,
@@ -141,6 +174,47 @@ class TestWritableCommand(unittest.TestCase):
         with mock.patch('git_p4son.writable.log') as mock_log:
             self._run(None)
         mock_log.success.assert_called_with('on')
+
+    def test_apply_on_makes_tracked_files_writable(self):
+        set_writable_mode(self.ws, True)
+        self._set_all(stat.S_IRUSR)
+        self.assertEqual(self._run('apply'), 0)
+        self.assertTrue(self._writable(self.tracked))
+        self.assertTrue(self._writable(self.opened))
+        self.assertFalse(self._writable(self.ignored))
+
+    @mock.patch('git_p4son.writable.p4_get_opened_files')
+    @mock.patch('git_p4son.writable.get_client_spec')
+    def test_apply_off_keeps_opened_files_writable(self, mock_spec,
+                                                   mock_opened):
+        """A file opened in Perforce is being worked on, so it keeps its
+        write bit; ignored files are never touched."""
+        mock_spec.return_value = mock.Mock(allwrite=False)
+        mock_spec.return_value.name = 'ws'
+        mock_opened.return_value = [('src/open.cpp', 'modify')]
+        self._set_all(stat.S_IRUSR | stat.S_IWUSR)
+
+        self.assertEqual(self._run('apply'), 0)
+        self.assertFalse(self._writable(self.tracked))
+        self.assertTrue(self._writable(self.opened))
+        self.assertTrue(self._writable(self.ignored))
+        self.assertEqual(mock_opened.call_args.args[0], '//ws')
+
+    @mock.patch('git_p4son.writable.p4_get_opened_files')
+    @mock.patch('git_p4son.writable.get_client_spec')
+    def test_apply_off_leaves_allwrite_workspace_alone(self, mock_spec,
+                                                       mock_opened):
+        mock_spec.return_value = mock.Mock(allwrite=True)
+        self._set_all(stat.S_IRUSR | stat.S_IWUSR)
+        self.assertEqual(self._run('apply'), 0)
+        self.assertTrue(self._writable(self.tracked))
+        mock_opened.assert_not_called()
+
+    @mock.patch('git_p4son.writable.get_client_spec', return_value=None)
+    def test_apply_off_needs_a_perforce_workspace(self, _spec):
+        self._set_all(stat.S_IRUSR | stat.S_IWUSR)
+        self.assertEqual(self._run('apply'), 1)
+        self.assertTrue(self._writable(self.tracked))
 
 
 if __name__ == '__main__':

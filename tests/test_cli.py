@@ -19,9 +19,14 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(args.changelist, ['12345'])
         self.assertFalse(args.force)
 
-    def test_writable_command(self):
+    def test_writable_command_without_action(self):
         args = self.parser.parse_args(['writable'])
         self.assertEqual(args.command, 'writable')
+        self.assertIsNone(args.writable_action)
+
+    def test_writable_apply(self):
+        args = self.parser.parse_args(['writable', 'apply'])
+        self.assertEqual(args.writable_action, 'apply')
 
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
@@ -134,7 +139,7 @@ class TestRunCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.cli.writable_command', return_value=0)
     def test_dispatches_writable(self, mock_writable, _ws):
-        args = create_parser().parse_args(['writable'])
+        args = create_parser().parse_args(['writable', 'apply'])
         self.assertEqual(run_command(args), 0)
         mock_writable.assert_called_once_with(args)
 

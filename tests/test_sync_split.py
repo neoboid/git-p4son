@@ -281,6 +281,23 @@ class TestSyncSplitPreSyncHooks(unittest.TestCase):
         sync_split_command(args)
         self.assertTrue(args.preflight_done)
 
+    @mock.patch('git_p4son.sync_split.sync_command', return_value=0)
+    @mock.patch('git_p4son.sync_split.get_submitted_changes', return_value=[])
+    @mock.patch('git_p4son.sync_split.get_p4_user', return_value='me')
+    @mock.patch('git_p4son.sync_split.get_latest_changelist', return_value=103)
+    @mock.patch('git_p4son.sync_split.git_last_sync',
+                return_value=LastSync(changelist=100, commit='abc123'))
+    @mock.patch('git_p4son.sync_split.sync_preflight', return_value=True)
+    def test_sync_command_reuses_the_resolved_depot(
+            self, _hooks, _last_sync, _latest, _user, _changes, _sync):
+        """Resolving the depot root queries the client spec from the
+        server, so sync must not do it a second time."""
+        args = self._args()
+        sync_split_command(args)
+        self.assertEqual(args.resolved_depot,
+                         ResolvedDepot(depot_root='//myclient',
+                                       client_spec=None))
+
     @mock.patch('git_p4son.sync_split.get_submitted_changes')
     @mock.patch('git_p4son.sync_split.get_p4_user')
     @mock.patch('git_p4son.sync_split.sync_command')

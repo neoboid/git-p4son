@@ -158,4 +158,7 @@ def sync_split_command(args: argparse.Namespace) -> int:
 
     args.changelist = [str(cl) for cl in targets]
     args.force = False
+    # The depot root and client spec were resolved above; sync_command
+    # reuses them instead of querying the client spec a second time.
+    args.resolved_depot = resolved
     return sync_command(args)

@@ -769,7 +769,10 @@ def sync_command(args: argparse.Namespace) -> int:
     invocation_dir = vars(args).get('invocation_dir', workspace_dir)
     preflight_done = vars(args).get('preflight_done', False)
 
-    resolved = resolve_depot_root(workspace_dir)
+    # sync-split resolves the depot root before handing over, so it passes
+    # the result on rather than having the client spec queried twice.
+    resolved = (vars(args).get('resolved_depot')
+                or resolve_depot_root(workspace_dir))
     if resolved is None:
         return 1
     depot_root = resolved.depot_root

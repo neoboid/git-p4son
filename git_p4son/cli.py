@@ -48,6 +48,7 @@ Examples:
   git-p4son update 12345        # Update changelist 12345
   git-p4son list-changes --base-branch main # List commit subjects since main branch
   git-p4son writable            # Show whether writable mode is on
+  git-p4son writable apply      # Make tracked files match the writable mode
         """
     )
 
@@ -355,12 +356,25 @@ Examples:
     )
 
     # Writable subcommand
-    subparsers.add_parser(
+    writable_parser = subparsers.add_parser(
         'writable',
-        help='Show whether writable mode is on for git-tracked files',
+        help='Show or apply writable mode for git-tracked files',
         description='Writable mode keeps git-tracked files writable so they '
         'can be edited without a manual p4 edit. Git-ignored files are left '
-        'to Perforce. Shows whether the mode is on.'
+        'to Perforce. Without an action, shows whether the mode is on.'
+    )
+    writable_subparsers = writable_parser.add_subparsers(
+        dest='writable_action',
+        help='Available writable actions',
+        metavar='ACTION'
+    )
+    writable_subparsers.add_parser(
+        'apply',
+        help='Make git-tracked files match the writable mode',
+        description='With writable mode on, make every git-tracked file '
+        'writable. With it off, make them read-only, except files opened in '
+        'Perforce. Use it to fix files made read-only outside git-p4son, '
+        'for example by a submit.'
     )
 
     # Completion subcommand (prints shell completion script path)

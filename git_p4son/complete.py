@@ -15,7 +15,7 @@ from .log import log
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
 # Commands whose first positional is a nested action (alias list, ...).
-_COMMANDS_WITH_ACTIONS = frozenset({'alias'})
+_COMMANDS_WITH_ACTIONS = frozenset({'alias', 'writable'})
 
 
 def _get_subparsers_action(parser):

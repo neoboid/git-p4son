@@ -259,6 +259,10 @@ class TestComplete(unittest.TestCase):
         self.assertIn('delete', names)
         self.assertIn('clean', names)
 
+    def test_writable_actions(self, _ws, _aliases):
+        result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')
+        self.assertIn('apply', self._names(result))
+
     def test_alias_delete_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['alias', 'delete', ''],
                            workspace_dir='/ws')

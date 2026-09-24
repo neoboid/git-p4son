@@ -44,16 +44,20 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
   submitted CL numbers are meaningful. Uses threaded real-time output processing (`P4SyncOutputProcessor`) to parse p4
   sync progress.
 
-- **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, and optionally creates a Swarm
-  review (with `--review` flag) or shelves (with `--shelve` flag). Requires a clean git workspace unless `--no-edit`
-  is given. Alias defaults to the current branch name; use `--no-alias` to skip alias creation.
+- **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, reverts files that are no
+  longer part of the git change, and optionally creates a Swarm review (with `--review` flag) or shelves (with
+  `--shelve` flag). Requires a clean git workspace unless `--no-edit` is given. Alias defaults to the current branch
+  name; use `--no-alias` to skip alias creation.
 
-- **`update.py`** — Updates an existing changelist description, opens git-changed files for edit, and optionally
-  re-shelves (with `--shelve` flag). Requires a clean git workspace unless `--no-edit` is given.
+- **`update.py`** — Updates an existing changelist description, opens git-changed files for edit, reverts files that
+  are no longer part of the git change, and optionally re-shelves (with `--shelve` flag). Requires a clean git
+  workspace unless `--no-edit` is given.
 
 - **`list_changes.py`** — Lists git commit subjects since a base branch in chronological order. Used for generating changelist descriptions.
 
-**`lib.py`** contains all reusable Perforce/git library functions: changelist creation/update, file status checking, opening files for edit, shelving, and Swarm review keyword management.
+**`lib.py`** contains all reusable Perforce/git library functions: changelist creation/update, file status checking,
+opening files for edit, reverting files no longer part of the git change (`revert_stale_files`), shelving, and Swarm
+review keyword management.
 
 **`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in
 `.git-p4son/changelists/<name>`.

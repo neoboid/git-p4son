@@ -363,7 +363,8 @@ Create a new Perforce changelist and add changed files to it. Description will c
 Optionally creates a Swarm review.
 
 Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
-is skipped with `--no-edit`.
+is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
+[Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)).
 
 ```sh
 git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit] [--no-alias]
@@ -400,8 +401,10 @@ Update an existing Perforce changelist description. Commits since the base branc
 entries in the enumerated commit list (matched by subject) and new ones are appended; entries outside the
 range are kept and the list is renumbered. So `update -b main` rebuilds the whole list without duplicating
 it, while `update -b HEAD~3` only refreshes the last three entries. By default also opens changed files for
-edit. Opening files requires a clean git workspace, untracked files included; `update` refuses to run otherwise.
-The check is skipped with `--no-edit`.
+edit, and reverts files that are no longer part of the git change (see
+[Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)). Opening files requires a
+clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
+`--no-edit`.
 
 ```sh
 git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc] [--no-edit] [--shelve]
@@ -426,6 +429,27 @@ git p4son update --shelve     # update and re-shelve
 git p4son update 12345
 git p4son update myalias -b main
 ```
+
+### Keeping the changelist in step with git
+
+`new` and `update` open every file changed since the base branch in the changelist. A file can later stop being
+part of the change, for example when a later commit undoes an edit, or a file is added in one commit and deleted
+in the next. Such files would otherwise stay opened as no-ops, so after opening files both commands revert them:
+
+- Files opened for edit that are unchanged compared to the depot are reverted with `p4 revert -a`. Changed files
+  stay opened.
+- Files opened for add that are missing from disk are reverted.
+- Files opened for delete that git still has (deleted in one commit, restored in a later one) are reverted and
+  restored from git.
+
+Only files git-p4son has authority over are touched: files tracked by git, and files opened for add that are
+missing from disk. Anything else in the changelist, such as binaries that only exist in Perforce and were opened
+by hand, is left alone even when unchanged. Files opened with other actions (`move/add`, `integrate`, ...) are
+also left alone. This step is skipped with `--no-edit`.
+
+Shelving (`--shelve`, `--review`) replaces the whole shelf with the changelist's opened files using
+`p4 shelve -r -a leaveunchanged`, so the shelf never holds stale files, and unchanged files that are still opened
+are left out of it.
 
 ### Review Command
 

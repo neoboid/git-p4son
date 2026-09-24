@@ -334,6 +334,56 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                               changelist, workspace_dir, dry_run)
 
 
+def get_opened_files_in_changelist(changelist: str,
+                                   workspace_dir: str) -> list[tuple[str, str]]:
+    """Return (path, action) for files opened in a changelist.
+
+    Paths are workspace-relative slash paths; files opened outside the
+    workspace dir are left out. fstat is used rather than opened since it
+    reports local paths, though only with -Op. It exits non-zero when
+    nothing is opened, which is not an error here; anything else is
+    warned about, since the changelist would otherwise look empty."""
+    res = run(['p4', '-ztag', 'fstat', '-Ro', '-Op',
+               '-T', 'path,clientFile,action,change', '...'],
+              cwd=workspace_dir, fail_on_returncode=False)
+    errors = [line for line in res.stderr if 'not opened' not in line]
+    if res.returncode != 0 and errors:
+        log.warning('p4 fstat failed to list opened files:')
+        for line in errors:
+            log.info(f'  {line}')
+    files = []
+    for record in parse_ztag_multi_output(res.stdout):
+        if record.get('change') != changelist:
+            continue
+        client_path = record.get('path') or record.get('clientFile')
+        if not client_path:
+            continue
+        filename = normalize_workspace_path(client_path, workspace_dir)
+        if filename is not None:
+            files.append((filename, record.get('action', '')))
+    return files
+
+
+def p4_revert_unchanged(filenames: list[str], changelist: str,
+                        workspace_dir: str, dry_run: bool = False) -> list[str]:
+    """Revert the files that are unchanged, or missing and opened for add.
+
+    Uses revert -a, which leaves changed files opened, and -n on dry run
+    to preview instead. The file list is read from stdin so it does not
+    hit the command-line length limit. Returns p4's lines for the
+    reverted files."""
+    if not filenames:
+        return []
+    args = ['p4', '-x', '-', 'revert', '-a']
+    if dry_run:
+        args.append('-n')
+    args += ['-c', changelist]
+    # revert -a exits non-zero when none of the files qualify.
+    result = run(args, cwd=workspace_dir, input='\n'.join(filenames),
+                 fail_on_returncode=False)
+    return [line for line in result.stdout if 'reverted' in line]
+
+
 def _p4_action_to_change(action: str) -> str:
     """Convert a p4 action to a git-p4son change label."""
     if action in ('add', 'move/add'):

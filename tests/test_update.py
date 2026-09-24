@@ -34,10 +34,12 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
         self.assertEqual(rc, 1)
         mock_update.assert_not_called()
 
+    @mock.patch('git_p4son.update.revert_stale_files', return_value=0)
     @mock.patch('git_p4son.update.open_changes_for_edit')
     @mock.patch('git_p4son.update.update_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_clean_workspace_proceeds(self, _dirty, mock_update, mock_open):
+    def test_clean_workspace_proceeds(self, _dirty, mock_update, mock_open,
+                                      _revert):
         rc = update_command(_args())
         self.assertEqual(rc, 0)
         mock_update.assert_called_once()
@@ -50,6 +52,33 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_dirty.assert_not_called()
         mock_update.assert_called_once()
+
+
+class TestUpdateCommandRevertStep(unittest.TestCase):
+    def _run(self, **overrides):
+        order = mock.Mock()
+        with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
+                mock.patch('git_p4son.update.update_changelist'), \
+                mock.patch('git_p4son.update.open_changes_for_edit',
+                           order.open), \
+                mock.patch('git_p4son.update.revert_stale_files',
+                           order.revert), \
+                mock.patch('git_p4son.update.p4_shelve_changelist',
+                           order.shelve):
+            order.revert.return_value = 0
+            rc = update_command(_args(**overrides))
+        self.assertEqual(rc, 0)
+        return order
+
+    def test_reverts_after_opening_and_before_shelving(self):
+        order = self._run(shelve=True)
+        self.assertEqual([c[0] for c in order.mock_calls],
+                         ['open', 'revert', 'shelve'])
+        order.revert.assert_called_once_with('100', '/ws', False)
+
+    def test_no_edit_skips_revert(self):
+        order = self._run(no_edit=True, shelve=True)
+        self.assertEqual([c[0] for c in order.mock_calls], ['shelve'])
 
 
 if __name__ == '__main__':

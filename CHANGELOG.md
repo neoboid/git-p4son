@@ -1,7 +1,8 @@
 # Changelog
 
-
 ## Unreleased
+
+## 0.4.0
 
 - Commands that pass many files to git, such as the tracked-file and local-change checks in `sync`, now print
   the file list as a count (`-- <2381 paths>`) instead of every path, and a list split into several batches to fit
@@ -10,6 +11,13 @@
   Git-ignored files stay read-only. Turn it on with `git p4son writable enable` or when asked by `init`. With the
   mode on, `sync` makes the tracked files it synced writable again, and `git p4son writable apply` makes every
   tracked file match the current mode
+- `new` and `update` now revert files that are no longer part of the git change, such as an edit undone by a later
+  commit, a file added and then deleted, or a file deleted and then restored. Only files tracked by git, and files
+  opened for add that are missing from disk, are touched; p4-only files opened by hand are left alone
+- Shelving (`--shelve`, `--review`) now replaces the whole shelf in one step and leaves unchanged files out of it,
+  so no-op edits no longer show up in Swarm reviews
+- `new` and `update` now refuse to run when the git workspace has uncommitted or untracked files, like `sync`.
+  Pass `--no-edit` to skip the check
 
 ## 0.3.4
 

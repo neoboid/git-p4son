@@ -7,6 +7,6 @@ creating and updating changelists, and managing Swarm reviews.
 
 CONFIG_DIR = '.git-p4son'
 
-__version__ = "0.3.4"
+__version__ = "0.4.0"
 __author__ = "Andreas Andersson"
 __email__ = "andreas@neoboid.com"

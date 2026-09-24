@@ -957,6 +957,12 @@ class TestSyncCommand(unittest.TestCase):
                              return_value=None)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The clean-workspace check lives in lib; default to clean. The
+        # sync.get_dirty_files mocks below cover the commit step.
+        patcher = mock.patch('git_p4son.lib.get_dirty_files',
+                             return_value=[])
+        self.mock_workspace_dirty = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _empty_prep(self):
         return WritableSyncFileSet()
@@ -976,7 +982,7 @@ class TestSyncCommand(unittest.TestCase):
                               mock_git_clean, _git_add, _git_commit):
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], [('file.txt', 'modify')]]
+        mock_git_clean.return_value = [('file.txt', 'modify')]
         args = mock.Mock(changelist=['12345'],
                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
@@ -1109,7 +1115,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_spec.return_value = spec
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], [('file.txt', 'modify')]]
+        mock_git_clean.return_value = [('file.txt', 'modify')]
         args = mock.Mock(changelist=['12345'],
                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
@@ -1130,10 +1136,9 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.sync.git_last_sync', return_value=None)
-    @mock.patch('git_p4son.sync.get_dirty_files',
-                return_value=[('file.txt', 'modify')])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_dirty_git_workspace_aborts(self, _depot, _git_clean, _last_sync):
+    def test_dirty_git_workspace_aborts(self, _depot, _last_sync):
+        self.mock_workspace_dirty.return_value = [('file.txt', 'modify')]
         args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
@@ -1168,7 +1173,7 @@ class TestSyncCommand(unittest.TestCase):
             mock_git_clean, _add, _commit):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], []]
+        mock_git_clean.return_value = []
         args = mock.Mock(changelist=['200'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -1201,7 +1206,7 @@ class TestSyncCommand(unittest.TestCase):
                                           mock_git_clean, _add, _commit):
         mock_last_sync.return_value = LastSync(changelist=200, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], [('file.txt', 'modify')]]
+        mock_git_clean.return_value = [('file.txt', 'modify')]
         args = mock.Mock(changelist=['100'], force=True, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -1225,7 +1230,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_same_cl_is_noop(self, _depot, mock_git_clean, mock_p4clean,
                              mock_last_sync, _head, mock_run_hooks, mock_log):
@@ -1380,7 +1385,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], []]  # clean before and after
+        mock_git_clean.return_value = []
         args = mock.Mock(changelist=[], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -1403,7 +1408,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.side_effect = [[], []]  # clean before and after
+        mock_git_clean.return_value = []
         args = mock.Mock(changelist=['head'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)

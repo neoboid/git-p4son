@@ -6,7 +6,12 @@ import re
 from collections import Counter
 
 from .common import CommandError, run
-from .git import LocalChanges, get_commit_subjects_since, get_local_changes
+from .git import (
+    LocalChanges,
+    get_commit_subjects_since,
+    get_dirty_files,
+    get_local_changes,
+)
 from .list_changes import get_enumerated_commit_lines_since
 from .log import log
 from .perforce import (
@@ -61,6 +66,19 @@ def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], lis
             break
 
     return (lines[:start], lines[start:end], lines[end:])
+
+
+def check_git_workspace_clean(workspace_dir: str) -> bool:
+    """Report whether the git workspace has no uncommitted changes."""
+    log.heading('Checking git workspace')
+    dirty_files = get_dirty_files(workspace_dir)
+    if dirty_files:
+        for filename, change in dirty_files:
+            log.file_change(filename, change)
+        log.error('Workspace is not clean')
+        return False
+    log.success('clean')
+    return True
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str:

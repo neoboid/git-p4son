@@ -353,7 +353,7 @@ class TestSyncPreflight(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.lib.get_dirty_files')
     def test_already_done_skips_everything(
             self, mock_dirty, mock_opened, mock_run_hooks):
         self.assertTrue(sync_preflight('//ws', '/ws', '/invoked', True))
@@ -363,7 +363,7 @@ class TestSyncPreflight(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_clean_workspaces_run_the_hooks(
             self, _dirty, _opened, mock_run_hooks):
         self.assertTrue(sync_preflight('//ws', '/ws', '/invoked'))
@@ -371,7 +371,7 @@ class TestSyncPreflight(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
-    @mock.patch('git_p4son.sync.get_dirty_files',
+    @mock.patch('git_p4son.lib.get_dirty_files',
                 return_value=[('a.txt', 'modify')])
     def test_dirty_git_stops_before_p4_and_hooks(
             self, _dirty, mock_opened, mock_run_hooks):
@@ -383,7 +383,7 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
     @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('a.txt', 'modify')])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_dirty_p4_stops_before_hooks(
             self, _dirty, _opened, _tracked, mock_run_hooks):
         self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
@@ -392,7 +392,7 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_hooks',
                 return_value=[make_run_result(returncode=1)])
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
         self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
 

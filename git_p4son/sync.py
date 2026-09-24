@@ -20,6 +20,7 @@ from .git import (
     is_file_tracked, merge_file,
 )
 from .hooks import run_hooks
+from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
 from .log import log
 from .writable import is_writable_mode, make_writable
@@ -604,19 +605,6 @@ def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
     return True
 
 
-def _check_git_workspace_clean(workspace_dir: str) -> bool:
-    """Report whether the git workspace has no uncommitted changes."""
-    log.heading('Checking git workspace')
-    dirty_files = get_dirty_files(workspace_dir)
-    if dirty_files:
-        for filename, change in dirty_files:
-            log.file_change(filename, change)
-        log.error('Workspace is not clean')
-        return False
-    log.success('clean')
-    return True
-
-
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
     """Report whether the p4 workspace has no git-tracked files opened.
 
@@ -669,7 +657,7 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
     """
     if already_done:
         return True
-    if not _check_git_workspace_clean(workspace_dir):
+    if not check_git_workspace_clean(workspace_dir):
         return False
     if not _check_p4_workspace_clean(depot_root, workspace_dir):
         return False

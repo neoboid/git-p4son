@@ -10,6 +10,7 @@ from .changelist_store import load_changelist_alias
 from .lib import (
     check_git_workspace_clean,
     open_changes_for_edit,
+    revert_stale_files,
     update_changelist,
 )
 from .perforce import p4_shelve_changelist
@@ -48,6 +49,14 @@ def update_command(args: argparse.Namespace) -> int:
         open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
         log.success('Done')
+
+        # Drop files that are no longer part of the git change, e.g. an
+        # edit undone by a later commit, so the changelist and the shelf
+        # only contain real changes.
+        log.heading('Reverting unchanged files')
+        count = revert_stale_files(changelist, workspace_dir, args.dry_run)
+        log.success(f'{count} would be reverted' if args.dry_run
+                    else f'{count} reverted')
 
     # Shelve the changelist
     if args.shelve:

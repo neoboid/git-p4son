@@ -362,6 +362,9 @@ than the last synced changelist (use `git p4son sync --force` for that).
 Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits since the base branch.
 Optionally creates a Swarm review.
 
+Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
+is skipped with `--no-edit`.
+
 ```sh
 git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit] [--no-alias]
                            [--shelve] [--review]
@@ -397,7 +400,8 @@ Update an existing Perforce changelist description. Commits since the base branc
 entries in the enumerated commit list (matched by subject) and new ones are appended; entries outside the
 range are kept and the list is renumbered. So `update -b main` rebuilds the whole list without duplicating
 it, while `update -b HEAD~3` only refreshes the last three entries. By default also opens changed files for
-edit.
+edit. Opening files requires a clean git workspace, untracked files included; `update` refuses to run otherwise.
+The check is skipped with `--no-edit`.
 
 ```sh
 git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc] [--no-edit] [--shelve]

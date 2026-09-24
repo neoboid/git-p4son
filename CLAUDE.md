@@ -45,10 +45,11 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
   sync progress.
 
 - **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, and optionally creates a Swarm
-  review (with `--review` flag) or shelves (with `--shelve` flag). Alias defaults to the current branch name; use
-  `--no-alias` to skip alias creation.
+  review (with `--review` flag) or shelves (with `--shelve` flag). Requires a clean git workspace unless `--no-edit`
+  is given. Alias defaults to the current branch name; use `--no-alias` to skip alias creation.
 
-- **`update.py`** — Updates an existing changelist description, opens git-changed files for edit, and optionally re-shelves (with `--shelve` flag).
+- **`update.py`** — Updates an existing changelist description, opens git-changed files for edit, and optionally
+  re-shelves (with `--shelve` flag). Requires a clean git workspace unless `--no-edit` is given.
 
 - **`list_changes.py`** — Lists git commit subjects since a base branch in chronological order. Used for generating changelist descriptions.
 

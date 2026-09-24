@@ -7,7 +7,11 @@ and optionally re-shelves.
 
 import argparse
 from .changelist_store import load_changelist_alias
-from .lib import update_changelist, open_changes_for_edit
+from .lib import (
+    check_git_workspace_clean,
+    open_changes_for_edit,
+    update_changelist,
+)
 from .perforce import p4_shelve_changelist
 from .log import log
 
@@ -24,6 +28,12 @@ def update_command(args: argparse.Namespace) -> int:
         if changelist is None:
             return 1
         log.success(f'{args.changelist} -> CL {changelist}')
+
+    # Opening and reverting files relies on every tracked file matching
+    # HEAD, so refuse before touching the changelist. Also runs on dry
+    # run, so it reports the same problem the real run would hit.
+    if not args.no_edit and not check_git_workspace_clean(workspace_dir):
+        return 1
 
     # Update changelist description
     if not args.no_desc:

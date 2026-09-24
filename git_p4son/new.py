@@ -11,7 +11,11 @@ from .changelist_store import (
     save_changelist_alias,
     validate_alias_name,
 )
-from .lib import create_changelist, open_changes_for_edit
+from .lib import (
+    check_git_workspace_clean,
+    create_changelist,
+    open_changes_for_edit,
+)
 from .perforce import add_review_keyword_to_changelist, p4_shelve_changelist
 from .log import log
 
@@ -19,6 +23,12 @@ from .log import log
 def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
+
+    # Opening and reverting files relies on every tracked file matching
+    # HEAD, so refuse before creating anything. Also runs on dry run, so
+    # it reports the same problem the real run would hit.
+    if not args.no_edit and not check_git_workspace_clean(workspace_dir):
+        return 1
 
     # Validate alias name and availability before creating the changelist.
     # Also runs on dry run, so it reports the same alias problems the real

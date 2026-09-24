@@ -22,13 +22,14 @@ class TestNewCommandDryRun(unittest.TestCase):
     carry dry_run=True, and the placeholder changelist must survive
     command-line rendering (a None changelist used to crash there)."""
 
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.perforce.get_changelist_for_file',
                 return_value=None)
     @mock.patch('git_p4son.lib.get_local_changes')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
                 return_value=['1. Commit'])
     def test_dry_run_with_edit_review_and_shelve(self, _lines, mock_changes,
-                                                 _opened):
+                                                 _opened, _dirty):
         changes = LocalChanges()
         changes.adds = ['new.txt']
         changes.mods = ['mod.txt']
@@ -50,6 +51,40 @@ class TestNewCommandDryRun(unittest.TestCase):
     def test_dry_run_reports_existing_alias(self, _lines, _exists):
         rc = new_command(_args(alias='taken', no_edit=True))
         self.assertEqual(rc, 1)
+
+
+class TestNewCommandCleanWorkspace(unittest.TestCase):
+    @mock.patch('git_p4son.new.create_changelist')
+    @mock.patch('git_p4son.lib.get_dirty_files',
+                return_value=[('mod.txt', 'modify')])
+    def test_refuses_dirty_workspace_before_creating(self, _dirty,
+                                                     mock_create):
+        rc = new_command(_args(dry_run=False))
+        self.assertEqual(rc, 1)
+        mock_create.assert_not_called()
+
+    @mock.patch('git_p4son.new.create_changelist')
+    @mock.patch('git_p4son.lib.get_dirty_files',
+                return_value=[('stray.txt', 'untracked')])
+    def test_untracked_file_counts_as_dirty(self, _dirty, mock_create):
+        rc = new_command(_args(dry_run=False))
+        self.assertEqual(rc, 1)
+        mock_create.assert_not_called()
+
+    @mock.patch('git_p4son.new.create_changelist')
+    @mock.patch('git_p4son.lib.get_dirty_files',
+                return_value=[('mod.txt', 'modify')])
+    def test_refuses_dirty_workspace_on_dry_run(self, _dirty, mock_create):
+        rc = new_command(_args(dry_run=True))
+        self.assertEqual(rc, 1)
+        mock_create.assert_not_called()
+
+    @mock.patch('git_p4son.new.create_changelist', return_value='100')
+    @mock.patch('git_p4son.lib.get_dirty_files')
+    def test_no_edit_skips_check(self, mock_dirty, _create):
+        rc = new_command(_args(dry_run=False, no_edit=True))
+        self.assertEqual(rc, 0)
+        mock_dirty.assert_not_called()
 
 
 if __name__ == '__main__':

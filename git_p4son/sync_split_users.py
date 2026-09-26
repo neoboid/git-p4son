@@ -11,7 +11,7 @@ import argparse
 from .common import CommandError
 from .config import load_config, save_config
 from .log import log
-from .perforce import get_p4_user
+from .perforce import get_existing_p4_users, get_p4_user
 
 # Placeholder allowed in the split users list, substituted with the current
 # Perforce user each time the list is used, so the config survives a change
@@ -49,8 +49,8 @@ def _list(workspace_dir: str) -> int:
     log.heading('Split users')
     users = get_split_users(workspace_dir)
     if not users:
-        log.info('No split users configured. Add one with: '
-                 'git p4son sync-split-users add NAME')
+        log.info('No split users configured. Add yourself with: '
+                 'git p4son sync-split-users add --me')
         return 0
     # Show who $(user) stands for, but a p4 hiccup should not stop the
     # list from printing: the placeholder is shown bare instead.
@@ -64,6 +64,76 @@ def _list(workspace_dir: str) -> int:
     return 0
 
 
+def _requested(names: list[str], me: bool) -> list[str]:
+    """The names given on the command line, --me as $(user) first.
+
+    Repeated names are collapsed, keeping the order they were given in."""
+    requested: list[str] = []
+    seen: set[str] = set()
+    for name in ([USER_PLACEHOLDER] if me else []) + names:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            requested.append(name)
+    return requested
+
+
+def _canonical_names(names: list[str],
+                     workspace_dir: str) -> dict[str, str] | None:
+    """Check names against the server, mapping each to its server spelling.
+
+    Returns None (with an error logged per unknown name) if any is not a
+    Perforce user."""
+    log.heading('Checking Perforce users')
+    existing = {user.lower(): user
+                for user in get_existing_p4_users(names, workspace_dir)}
+    unknown = [name for name in names if name.lower() not in existing]
+    if unknown:
+        for name in unknown:
+            log.error(f'No such Perforce user: {name}')
+        return None
+    canonical = {name: existing[name.lower()] for name in names}
+    log.success(', '.join(canonical.values()))
+    return canonical
+
+
+def _add(workspace_dir: str, names: list[str], me: bool) -> int:
+    """Add users to the split users, all or none of them."""
+    requested = _requested(names, me)
+    if not requested:
+        log.error('Give one or more user names, or --me for yourself')
+        return 1
+
+    # A misspelled name would never match a changelist owner, so every name
+    # is checked before anything is written. $(user) is resolved each time
+    # it is used, so there is nothing to check for it here.
+    real = [name for name in requested if name != USER_PLACEHOLDER]
+    canonical: dict[str, str] = {}
+    if real:
+        checked = _canonical_names(real, workspace_dir)
+        if checked is None:
+            return 1
+        canonical = checked
+
+    log.heading('Adding split users')
+    users = get_split_users(workspace_dir)
+    present = {user.lower() for user in users}
+    added = 0
+    for name in requested:
+        name = canonical.get(name, name)
+        if name.lower() in present:
+            log.info(f'{name} is already a split user')
+            continue
+        users.append(name)
+        present.add(name.lower())
+        log.success(name)
+        added += 1
+    if added:
+        set_split_users(workspace_dir, users)
+    return 0
+
+
 def sync_split_users_command(args: argparse.Namespace) -> int:
     """Execute the sync-split-users command."""
+    if args.split_users_action == 'add':
+        return _add(args.workspace_dir, args.names, args.me)
     return _list(args.workspace_dir)

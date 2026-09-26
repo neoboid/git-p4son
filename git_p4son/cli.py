@@ -44,6 +44,7 @@ Examples:
   git-p4son sync-split 12345    # Same, but stop at changelist 12345
   git-p4son sync-split -u alice -u bob  # Split out alice's and bob's changelists
   git-p4son sync-split-users    # List the users whose changelists sync splits out
+  git-p4son sync-split-users add --me alice  # Split out your own and alice's changelists
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
   git-p4son new -m "Fix bug" --review  # Create changelist, create Swarm review
   git-p4son new -m "Fix bug" --no-alias # Create changelist without saving an alias
@@ -162,6 +163,25 @@ Examples:
         help='List the split users',
         description='List the split users. $(user) stands for the current '
         'Perforce user and is shown with the name it resolves to.'
+    )
+    split_users_add_parser = split_users_subparsers.add_parser(
+        'add',
+        help='Add split users',
+        description='Add users to the split users. Each name must be a '
+        'Perforce user; if any is not, nothing is added.'
+    )
+    split_users_add_parser.add_argument(
+        'names',
+        nargs='*',
+        metavar='NAME',
+        help='Perforce user name. A quoted "$(user)" adds the current user, '
+             'like --me'
+    )
+    split_users_add_parser.add_argument(
+        '--me',
+        action='store_true',
+        help='Add the current Perforce user, stored as $(user) so it follows '
+             'whoever is logged in'
     )
 
     # New subcommand

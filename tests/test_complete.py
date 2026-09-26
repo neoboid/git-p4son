@@ -270,10 +270,20 @@ class TestComplete(unittest.TestCase):
     def test_sync_split_users_actions(self, _ws, _aliases):
         result = _complete(self.parser, ['sync-split-users', ''],
                            workspace_dir='/ws')
-        self.assertEqual(self._names(result), ['list'])
+        self.assertEqual(sorted(self._names(result)), ['add', 'list'])
 
     def test_sync_split_users_list_takes_no_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['sync-split-users', 'list', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), [])
+
+    def test_sync_split_users_add_flags(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'add', '--'],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['--me'])
+
+    def test_sync_split_users_add_names_not_completed(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'add', ''],
                            workspace_dir='/ws')
         self.assertEqual(self._names(result), [])
 

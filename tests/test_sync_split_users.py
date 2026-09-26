@@ -104,8 +104,90 @@ class TestSyncSplitUsersList(unittest.TestCase):
         self.assertEqual(self._run('list'), 0)
         printed = self._printed()
         self.assertEqual(len(printed), 1)
-        self.assertIn('sync-split-users add', printed[0])
+        self.assertIn('sync-split-users add --me', printed[0])
         self.mock_user.assert_not_called()
+
+
+class TestSyncSplitUsersAdd(unittest.TestCase):
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+        patcher = mock.patch('git_p4son.sync_split_users.log')
+        self.mock_log = patcher.start()
+        self.addCleanup(patcher.stop)
+        # The server knows alice (spelled "Alice") and bob.
+        patcher = mock.patch(
+            'git_p4son.sync_split_users.get_existing_p4_users',
+            side_effect=lambda names, _ws: [
+                {'alice': 'Alice', 'bob': 'bob'}[n.lower()] for n in names
+                if n.lower() in ('alice', 'bob')])
+        self.mock_existing = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _run(self, *names, me=False):
+        args = mock.Mock(workspace_dir=self.ws, split_users_action='add',
+                         names=list(names), me=me)
+        return sync_split_users_command(args)
+
+    def test_adds_users_in_order(self):
+        self.assertEqual(self._run('bob', 'Alice'), 0)
+        self.assertEqual(get_split_users(self.ws), ['bob', 'Alice'])
+        self.mock_existing.assert_called_once_with(['bob', 'Alice'], self.ws)
+
+    def test_appends_to_existing_users(self):
+        set_split_users(self.ws, ['bob'])
+        self.assertEqual(self._run('Alice'), 0)
+        self.assertEqual(get_split_users(self.ws), ['bob', 'Alice'])
+
+    def test_stores_the_server_spelling(self):
+        self.assertEqual(self._run('ALICE'), 0)
+        self.assertEqual(get_split_users(self.ws), ['Alice'])
+
+    def test_already_present_is_not_an_error(self):
+        set_split_users(self.ws, ['Alice'])
+        self.assertEqual(self._run('alice', 'bob'), 0)
+        self.assertEqual(get_split_users(self.ws), ['Alice', 'bob'])
+        self.mock_log.info.assert_any_call('Alice is already a split user')
+
+    def test_repeated_names_are_added_once(self):
+        self.assertEqual(self._run('bob', 'BOB', 'bob'), 0)
+        self.assertEqual(get_split_users(self.ws), ['bob'])
+
+    def test_unknown_user_adds_nothing(self):
+        set_split_users(self.ws, ['bob'])
+        self.assertEqual(self._run('Alice', 'nobody'), 1)
+        self.assertEqual(get_split_users(self.ws), ['bob'])
+        self.mock_log.error.assert_called_once_with(
+            'No such Perforce user: nobody')
+
+    def test_me_adds_the_placeholder_without_checking(self):
+        self.assertEqual(self._run(me=True), 0)
+        self.assertEqual(get_split_users(self.ws), [USER_PLACEHOLDER])
+        self.mock_existing.assert_not_called()
+
+    def test_quoted_placeholder_is_the_same_as_me(self):
+        self.assertEqual(self._run(USER_PLACEHOLDER), 0)
+        self.assertEqual(self._run(me=True), 0)
+        self.assertEqual(get_split_users(self.ws), [USER_PLACEHOLDER])
+        self.mock_existing.assert_not_called()
+
+    def test_me_combined_with_names(self):
+        self.assertEqual(self._run('bob', me=True), 0)
+        self.assertEqual(get_split_users(self.ws), [USER_PLACEHOLDER, 'bob'])
+        self.mock_existing.assert_called_once_with(['bob'], self.ws)
+
+    def test_nothing_given_is_an_error(self):
+        self.assertEqual(self._run(), 1)
+        self.mock_log.error.assert_called_once()
+        self.assertEqual(get_split_users(self.ws), [])
+
+    def test_nothing_written_when_all_already_present(self):
+        set_split_users(self.ws, ['bob'])
+        with mock.patch(
+                'git_p4son.sync_split_users.set_split_users') as mock_set:
+            self.assertEqual(self._run('bob'), 0)
+        mock_set.assert_not_called()
 
 
 if __name__ == '__main__':

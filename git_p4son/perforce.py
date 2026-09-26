@@ -235,6 +235,22 @@ def get_p4_user(workspace_dir: str) -> str | None:
     return user or None
 
 
+def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
+    """Look up which of names are Perforce users.
+
+    Returns the ones that exist, spelled as the server spells them. p4
+    reports an unknown name as "NAME - no such user(s).", which only leaves
+    it out; any other failure raises."""
+    res = run(['p4', '-ztag', 'users', *names], cwd=workspace_dir,
+              fail_on_returncode=False)
+    errors = [line for line in res.stderr
+              if line.strip() and 'no such user' not in line]
+    if res.returncode != 0 and errors:
+        raise RunError('p4 users failed', res.returncode, errors)
+    return [record['User'] for record in parse_ztag_multi_output(res.stdout)
+            if 'User' in record]
+
+
 # --- file operations ---
 
 def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str] | None:

@@ -38,6 +38,18 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['sync-split-users', 'list'])
         self.assertEqual(args.split_users_action, 'list')
 
+    def test_sync_split_users_add(self):
+        args = self.parser.parse_args(
+            ['sync-split-users', 'add', 'alice', 'bob'])
+        self.assertEqual(args.split_users_action, 'add')
+        self.assertEqual(args.names, ['alice', 'bob'])
+        self.assertFalse(args.me)
+
+    def test_sync_split_users_add_me(self):
+        args = self.parser.parse_args(['sync-split-users', 'add', '--me'])
+        self.assertEqual(args.names, [])
+        self.assertTrue(args.me)
+
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
         self.assertEqual(args.changelist, [])

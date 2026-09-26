@@ -821,6 +821,17 @@ def sync_command(args: argparse.Namespace) -> int:
             return 0
         targets = resolved_targets
 
+    # A dry run stops once the sequence is known: it syncs nothing, so it
+    # skips the clobber prompt, the workspace checks and the hooks.
+    if vars(args).get('dry_run', False):
+        log.heading('Sync sequence')
+        if resync_last_synced:
+            log.success(f'{last_sync.changelist} ({LAST_SYNCED_LABEL})')
+        else:
+            log.success(' '.join(str(cl) for cl, _ in targets))
+        log.info('Dry run, nothing synced.')
+        return 0
+
     # Workspace line ending governs how staged git content is normalized so
     # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
     # The clobber option changes whether git-ignored writable files survive

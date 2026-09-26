@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add `sync --dry-run` (`-n`), which prints the changelists a sync would visit without syncing anything,
+  checking the workspaces, running hooks or prompting
+
 ## 0.4.0
 
 - Commands that pass many files to git, such as the tracked-file and local-change checks in `sync`, now print

@@ -272,7 +272,7 @@ saves the answer; run `git p4son writable apply` once your files are committed t
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync [changelist ...] [--force]
+git p4son sync [changelist ...] [--force] [--dry-run]
 ```
 
 **Arguments:**
@@ -283,6 +283,8 @@ git p4son sync [changelist ...] [--force]
 
 **Options:**
 - `-f, --force`: Allow syncing to changelists older than the current one.
+- `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
+  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts.
 
 **Examples:**
 ```sh
@@ -293,6 +295,7 @@ git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
 git p4son sync 123 156 head # sync 123, 156, then the latest changelist
 git p4son sync last-synced
 git p4son sync 12345 --force
+git p4son sync --dry-run    # show the changelists a sync to latest would visit
 ```
 
 #### pre-sync hook

@@ -1655,6 +1655,82 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class TestSyncDryRun(unittest.TestCase):
+    """A dry run resolves the sync sequence, prints it and stops before
+    anything that touches the workspaces or asks the user."""
+
+    def setUp(self):
+        for target, value in (
+                ('git_p4son.depot.get_client_spec', None),
+                ('git_p4son.depot.get_depot_root', '//myclient'),
+                ('git_p4son.sync.get_latest_changelist', 10500)):
+            patcher = mock.patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.sync.git_last_sync',
+                             return_value=LastSync(changelist=10000,
+                                                   commit='abc123'))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.sync.log')
+        self.mock_log = patcher.start()
+        self.addCleanup(patcher.stop)
+        # Everything past the dry-run exit: none of it may run.
+        self.untouched = {}
+        for name in ('_handle_clobber_warning', 'sync_preflight',
+                     'run_hooks', 'get_head_commit', '_sync_pass',
+                     'commit'):
+            patcher = mock.patch(f'git_p4son.sync.{name}')
+            self.untouched[name] = patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _run(self, changelist, force=False):
+        args = mock.Mock(changelist=changelist, force=force,
+                         workspace_dir='/ws', dry_run=True)
+        return sync_command(args)
+
+    def _sequence(self):
+        """The line logged under the "Sync sequence" heading."""
+        self.mock_log.heading.assert_any_call('Sync sequence')
+        return self.mock_log.success.call_args_list[-1].args[0]
+
+    def _assert_nothing_run(self):
+        for name, patched in self.untouched.items():
+            with self.subTest(name=name):
+                patched.assert_not_called()
+
+    def test_latest(self):
+        self.assertEqual(self._run([]), 0)
+        self.assertEqual(self._sequence(), '10500')
+        self._assert_nothing_run()
+
+    def test_sequence_ending_in_head(self):
+        self.assertEqual(self._run(['10100', '10200', 'head']), 0)
+        self.assertEqual(self._sequence(), '10100 10200 10500')
+        self._assert_nothing_run()
+
+    def test_last_synced(self):
+        self.assertEqual(self._run(['last-synced']), 0)
+        self.assertEqual(self._sequence(), '10000 (last synced)')
+        self._assert_nothing_run()
+
+    def test_older_changelist_with_force(self):
+        self.assertEqual(self._run(['9000'], force=True), 0)
+        self.assertEqual(self._sequence(), '9000')
+        self._assert_nothing_run()
+
+    def test_invalid_arguments_still_fail(self):
+        """A dry run validates the targets exactly as a real sync does."""
+        self.assertEqual(self._run(['9000']), 1)
+        self.mock_log.error.assert_called_once()
+        self._assert_nothing_run()
+
+    def test_already_synced(self):
+        self.assertEqual(self._run(['10000']), 0)
+        self.mock_log.info.assert_any_call('Already synced, nothing to do.')
+        self._assert_nothing_run()
+
+
 class TestMergeChangedFiles(unittest.TestCase):
     """Tests for _merge_changed_files."""
 

@@ -37,10 +37,12 @@ def set_split_users(workspace_dir: str, users: list[str]) -> None:
 
 
 def _current_user(workspace_dir: str) -> str | None:
-    """The current Perforce user, or None when p4 cannot tell."""
+    """The current Perforce user, or None when p4 cannot tell.
+
+    OSError covers p4 not being installed at all."""
     try:
         return get_p4_user(workspace_dir)
-    except CommandError:
+    except (CommandError, OSError):
         return None
 
 
@@ -132,8 +134,42 @@ def _add(workspace_dir: str, names: list[str], me: bool) -> int:
     return 0
 
 
+def _delete(workspace_dir: str, names: list[str], me: bool) -> int:
+    """Remove users from the split users, all or none of them."""
+    requested = _requested(names, me)
+    if not requested:
+        log.error('Give one or more user names, or --me for yourself')
+        return 1
+
+    users = get_split_users(workspace_dir)
+    present = {user.lower() for user in users}
+    missing = [name for name in requested if name.lower() not in present]
+    if missing:
+        # Naming yourself when the list holds $(user) is an easy slip, since
+        # list shows the placeholder next to your name.
+        current = (_current_user(workspace_dir)
+                   if USER_PLACEHOLDER in users else None)
+        for name in missing:
+            log.error(f'{name} is not a split user')
+            if current and name.lower() == current.lower():
+                log.info(f'{USER_PLACEHOLDER} stands for {current}, '
+                         'remove it with --me')
+        return 1
+
+    log.heading('Removing split users')
+    removed = {name.lower() for name in requested}
+    for user in users:
+        if user.lower() in removed:
+            log.success(user)
+    set_split_users(workspace_dir,
+                    [user for user in users if user.lower() not in removed])
+    return 0
+
+
 def sync_split_users_command(args: argparse.Namespace) -> int:
     """Execute the sync-split-users command."""
     if args.split_users_action == 'add':
         return _add(args.workspace_dir, args.names, args.me)
+    if args.split_users_action == 'delete':
+        return _delete(args.workspace_dir, args.names, args.me)
     return _list(args.workspace_dir)

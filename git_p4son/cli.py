@@ -183,6 +183,24 @@ Examples:
         help='Add the current Perforce user, stored as $(user) so it follows '
              'whoever is logged in'
     )
+    split_users_delete_parser = split_users_subparsers.add_parser(
+        'delete',
+        help='Remove split users',
+        description='Remove users from the split users. If any name is not '
+        'a split user, nothing is removed.'
+    )
+    split_users_delete_parser.add_argument(
+        'names',
+        nargs='*',
+        metavar='NAME',
+        help='Split user to remove. A quoted "$(user)" removes the current '
+             'user entry, like --me'
+    )
+    split_users_delete_parser.add_argument(
+        '--me',
+        action='store_true',
+        help='Remove the $(user) entry for the current Perforce user'
+    )
 
     # New subcommand
     new_parser = subparsers.add_parser(

@@ -50,6 +50,13 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(args.names, [])
         self.assertTrue(args.me)
 
+    def test_sync_split_users_delete(self):
+        args = self.parser.parse_args(
+            ['sync-split-users', 'delete', '--me', 'bob'])
+        self.assertEqual(args.split_users_action, 'delete')
+        self.assertEqual(args.names, ['bob'])
+        self.assertTrue(args.me)
+
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
         self.assertEqual(args.changelist, [])

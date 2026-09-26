@@ -15,6 +15,12 @@ from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
 from .git import resolve_editor
+from .sync_split_users import (
+    USER_PLACEHOLDER,
+    current_p4_user,
+    get_split_users,
+    set_split_users,
+)
 from .writable import is_writable_mode, set_writable_mode
 
 
@@ -159,6 +165,37 @@ def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
     return enabled, enabled != current
 
 
+def _configure_split_users(cwd: str) -> None:
+    """Ask whether to split out the current user's changelists and save it.
+
+    Only the $(user) entry is added or removed; other split users are left
+    alone. Nothing is written when the answer keeps the current setting."""
+    log.heading('Configuring split users')
+    user = current_p4_user(cwd)
+    if not user:
+        log.warning('Cannot determine the current Perforce user, skipping')
+        return
+    users = get_split_users(cwd)
+    current = USER_PLACEHOLDER in users
+    print()
+    print('Split users have each of their submitted changelists synced into')
+    print('its own commit, so your own submits show up in git as separate')
+    print('commits.')
+    enabled = _ask_yes_no(
+        f'Sync your own changelists ({user}) individually?', current)
+    if enabled is None or enabled == current:
+        log.success(f'{"on" if current else "off"} (unchanged)')
+    else:
+        if enabled:
+            users.append(USER_PLACEHOLDER)
+        else:
+            users.remove(USER_PLACEHOLDER)
+        set_split_users(cwd, users)
+        log.success('on' if enabled else 'off')
+    log.info('Split out other users with: '
+             'git p4son sync-split-users add NAME')
+
+
 def _has_commits(cwd: str) -> bool:
     """Return whether the git repo has any commit (HEAD resolves)."""
     result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
@@ -199,6 +236,8 @@ def init_command(args: argparse.Namespace) -> int:
         return 1
 
     writable, writable_changed = _configure_writable_mode(cwd)
+
+    _configure_split_users(cwd)
 
     log.heading('Checking .gitignore')
     result = _setup_gitignore(cwd)

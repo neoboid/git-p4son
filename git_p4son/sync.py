@@ -702,30 +702,29 @@ def _restore_writable(synced: list[str], workspace_dir: str) -> None:
 
 
 def build_sync_targets(changes: list[P4Change], users: list[str],
-                       last_synced: int, upper: int) -> list[int]:
+                       last_synced: int, required: list[int]) -> list[int]:
     """Build the sync sequence that splits out the given users' changelists.
 
     changes is every submitted changelist affecting the depot root in
-    [last_synced, upper], oldest first. Each changelist submitted by one of
-    users gets the changelist submitted just before it synced first, so that
-    submit lands in a commit containing nothing else. Changelists at or below
-    last_synced are already in git and dropped, and the sequence always ends
-    at upper.
+    [last_synced, max(required)], oldest first. Each changelist submitted by
+    one of users gets the changelist submitted just before it synced first,
+    so that submit lands in a commit containing nothing else. Changelists at
+    or below last_synced are already in git and dropped. The required
+    changelists, all newer than last_synced, are always synced and merged in
+    order with the split points.
     """
-    targets: list[int] = []
+    split: list[int] = []
     lowered = {u.lower() for u in users}
     for i, change in enumerate(changes):
         if change.change <= last_synced or change.user.lower() not in lowered:
             continue
-        last = targets[-1] if targets else last_synced
+        last = split[-1] if split else last_synced
         if i > 0 and changes[i - 1].change > last:
-            targets.append(changes[i - 1].change)
-            last = targets[-1]
+            split.append(changes[i - 1].change)
+            last = split[-1]
         if change.change > last:
-            targets.append(change.change)
-    if not targets or upper > targets[-1]:
-        targets.append(upper)
-    return targets
+            split.append(change.change)
+    return sorted(set(split).union(required))
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:

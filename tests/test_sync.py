@@ -949,19 +949,20 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
 class TestBuildSyncTargets(unittest.TestCase):
     """The sequence must isolate each of the user's own changelists in a
-    commit of its own while staying strictly increasing."""
+    commit of its own while staying strictly increasing, and visit every
+    required changelist."""
 
     def test_single_own_changelist(self):
         changes = make_changes((100, 'other'), (101, 'other'),
                                (102, 'me'), (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
+        targets = build_sync_targets(changes, ['me'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
     def test_two_own_changelists(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
                                (103, 'other'), (104, 'other'), (105, 'me'),
                                (106, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 106)
+        targets = build_sync_targets(changes, ['me'], 100, [106])
         self.assertEqual(targets, [101, 102, 104, 105, 106])
 
     def test_back_to_back_own_changelists(self):
@@ -969,42 +970,42 @@ class TestBuildSyncTargets(unittest.TestCase):
         already a target, so it must not be repeated."""
         changes = make_changes((100, 'other'), (101, 'other'),
                                (102, 'me'), (103, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
+        targets = build_sync_targets(changes, ['me'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
     def test_predecessor_is_last_synced(self):
         """The changelist before the user's own submit is already in git,
         so only the user's own submit is synced separately."""
         changes = make_changes((100, 'other'), (101, 'me'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
+        targets = build_sync_targets(changes, ['me'], 100, [102])
         self.assertEqual(targets, [101, 102])
 
     def test_own_changelist_is_the_upper_bound(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
+        targets = build_sync_targets(changes, ['me'], 100, [102])
         self.assertEqual(targets, [101, 102])
 
     def test_no_own_changelists(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
+        targets = build_sync_targets(changes, ['me'], 100, [102])
         self.assertEqual(targets, [102])
 
     def test_no_changes_at_all(self):
         """Nothing affected the depot root in the range, so the upper bound
         is still synced: it may be a changelist elsewhere in the depot."""
-        targets = build_sync_targets([], ['me'], 100, 120)
+        targets = build_sync_targets([], ['me'], 100, [120])
         self.assertEqual(targets, [120])
 
     def test_user_match_is_case_insensitive(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'Me'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
+        targets = build_sync_targets(changes, ['me'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
     def test_two_users_both_split_out(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
                                (103, 'other'), (104, 'other'), (105, 'bob'),
                                (106, 'other'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 106)
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [106])
         self.assertEqual(targets, [101, 102, 104, 105, 106])
 
     def test_adjacent_changelists_from_two_selected_users(self):
@@ -1012,21 +1013,50 @@ class TestBuildSyncTargets(unittest.TestCase):
         a target and must not be repeated."""
         changes = make_changes((100, 'other'), (101, 'other'),
                                (102, 'alice'), (103, 'bob'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 103)
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
     def test_unselected_user_is_not_split_out(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
                                (103, 'other'), (104, 'bob'))
-        targets = build_sync_targets(changes, ['alice'], 100, 104)
+        targets = build_sync_targets(changes, ['alice'], 100, [104])
         self.assertEqual(targets, [101, 102, 104])
 
     def test_targets_are_strictly_increasing(self):
         changes = make_changes((100, 'me'), (101, 'me'), (102, 'other'),
                                (103, 'me'), (104, 'me'), (105, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 105)
+        targets = build_sync_targets(changes, ['me'], 100, [105])
         self.assertEqual(targets, sorted(set(targets)))
         self.assertEqual(targets, [101, 102, 103, 104, 105])
+
+    def test_required_changelists_between_split_points(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [103, 106])
+        self.assertEqual(targets, [101, 102, 103, 104, 105, 106])
+
+    def test_required_changelists_matching_split_points(self):
+        """A required changelist that is also a split point is synced once."""
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [102, 104, 106])
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_required_changelist_outside_the_depot_root(self):
+        """A required changelist need not be in changes: it may have been
+        submitted elsewhere in the depot."""
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [110])
+        self.assertEqual(targets, [101, 102, 110])
+
+    def test_required_changelists_without_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'other'), (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [101, 103])
+        self.assertEqual(targets, [101, 103])
 
 
 class TestSyncCommand(unittest.TestCase):

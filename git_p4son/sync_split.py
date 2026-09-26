@@ -123,7 +123,7 @@ def sync_split_command(args: argparse.Namespace) -> int:
     else:
         log.success('None found, syncing to the target changelist only')
 
-    targets = build_sync_targets(changes, users, last_synced, upper)
+    targets = build_sync_targets(changes, users, last_synced, [upper])
 
     log.heading('Sync sequence')
     log.success(' '.join(str(cl) for cl in targets))

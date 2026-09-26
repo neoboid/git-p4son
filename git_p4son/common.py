@@ -256,6 +256,16 @@ def enqueue_lines(stream: IO[str], output_queue: queue.Queue[str]) -> None:
         output_queue.put(line.rstrip())
 
 
+def _terminate(process: subprocess.Popen) -> None:
+    """Terminate a subprocess, killing it if it does not exit in time."""
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log.error("Subprocess did not terminate in time. Forcing kill...")
+        process.kill()
+
+
 def run_with_output(command: list[str], cwd: str = '.',
                     on_output: Callable[..., None] | None = None,
                     env: dict[str, str] | None = None) -> RunResult:
@@ -352,13 +362,7 @@ def run_with_output(command: list[str], cwd: str = '.',
         except KeyboardInterrupt:
             log.stop_spinner()
             log.error("CTRL-C pressed, terminate subprocess")
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                log.error(
-                    "Subprocess did not terminate in time. Forcing kill...")
-                process.kill()
+            _terminate(process)
             sys.exit(1)
 
     log.stop_spinner()

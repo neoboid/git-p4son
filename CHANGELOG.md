@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add split users: Perforce users whose submitted changelists `sync` always gives a commit each, holding nothing
+  but that change. List them in `[sync] split-users` in `.git-p4son/config.toml`, where `$(user)` stands for the
+  current Perforce user. Edit the list with the new `sync-split-users` command (`list`, `add`, `delete`), or answer
+  yes when `init` asks whether to sync your own changelists individually
+- `sync -u NAME` splits out more users for one sync, and `sync --no-split` ignores the configured ones
+- `sync-split` has been folded into `sync`. It no longer syncs, and instead prints the `sync` and
+  `sync-split-users` commands that do the same
+
 ## 0.4.2
 
 - Add blocking processes: list process names under `[sync] blocking-processes` in `.git-p4son/config.toml` and

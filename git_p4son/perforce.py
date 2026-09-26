@@ -452,6 +452,16 @@ def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
     return (None, None)
 
 
+# p4 writes a synced file to a temp file and renames it into place. On
+# Windows the rename fails when another process holds the target open, e.g.
+# an editor with the asset loaded, leaving the file unsynced.
+_RENAME_FAILED_PREFIX = 'rename: failed to rename '
+
+
+class P4SyncAbortError(CommandError):
+    """Raised to stop a p4 sync that can no longer succeed."""
+
+
 class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
@@ -464,6 +474,14 @@ class P4SyncOutputProcessor:
         if re.search(r"@\d+ - file\(s\) up-to-date\.", line):
             log.info('all files up to date')
             return
+
+        if line.startswith(_RENAME_FAILED_PREFIX):
+            log.error(line)
+            raise P4SyncAbortError(
+                'Aborting sync: p4 could not replace a file, most likely '
+                'because another process has it open. The workspace is left '
+                'partially synced: close that process, then commit or '
+                'restore the synced files before syncing again.')
 
         mode, filename = parse_p4_sync_line(line)
         if not mode or not filename:

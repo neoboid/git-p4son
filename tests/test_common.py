@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -407,6 +408,24 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(len(result.stderr), 500)
         self.assertEqual(result.stderr[-1], 'err499')
         self.assertEqual(len(callback_lines), 5500)
+
+    def test_callback_exception_terminates_process(self):
+        """Raising from on_output stops the command instead of waiting."""
+        code = ('import sys, time\n'
+                'print("bad", flush=True)\n'
+                'time.sleep(60)\n')
+
+        def callback(line, stream):
+            raise CommandError(f'abort on {line}')
+
+        start = time.monotonic()
+        with mock.patch('git_p4son.common.log') as mock_log:
+            with self.assertRaises(CommandError) as ctx:
+                run_with_output([sys.executable, '-c', code],
+                                on_output=callback)
+        self.assertEqual(str(ctx.exception), 'abort on bad')
+        self.assertLess(time.monotonic() - start, 30)
+        mock_log.stop_spinner.assert_called_once()
 
 
 class TestMissingExecutable(unittest.TestCase):

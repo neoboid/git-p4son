@@ -278,6 +278,8 @@ def run_with_output(command: list[str], cwd: str = '.',
         on_output: Callback function for processing output lines
                    If set the funciton will be called with each
                    line and stream (stdout/stderr) as they are written.
+                   An exception raised from it terminates the command
+                   and propagates.
         env: Optional environment variables to add or override
 
     Returns:
@@ -364,6 +366,12 @@ def run_with_output(command: list[str], cwd: str = '.',
             log.error("CTRL-C pressed, terminate subprocess")
             _terminate(process)
             sys.exit(1)
+        except Exception:
+            # on_output raising aborts the command: stop the subprocess
+            # rather than letting it run on unobserved.
+            log.stop_spinner()
+            _terminate(process)
+            raise
 
     log.stop_spinner()
 

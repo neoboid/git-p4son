@@ -137,8 +137,9 @@ class TestComplete(unittest.TestCase):
         self.assertIn('review', names)
         self.assertIn('init', names)
         self.assertIn('sync-split', names)
+        self.assertIn('sync-split-users', names)
         self.assertIn('writable', names)
-        self.assertEqual(len(names), 9)
+        self.assertEqual(len(names), 10)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
@@ -153,7 +154,7 @@ class TestComplete(unittest.TestCase):
     def test_prefix_filters_commands(self, _ws, _aliases):
         result = _complete(self.parser, ['sy'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertEqual(names, ['sync', 'sync-split'])
+        self.assertEqual(names, ['sync', 'sync-split', 'sync-split-users'])
 
     def test_hidden_command_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, ['c'], workspace_dir='/ws')
@@ -265,6 +266,16 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')
         self.assertEqual(sorted(self._names(result)),
                          ['apply', 'disable', 'enable'])
+
+    def test_sync_split_users_actions(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['list'])
+
+    def test_sync_split_users_list_takes_no_positional(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'list', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), [])
 
     def test_alias_delete_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['alias', 'delete', ''],

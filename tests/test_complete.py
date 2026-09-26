@@ -204,6 +204,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('--force', names)
         self.assertIn('-n', names)
         self.assertIn('--dry-run', names)
+        self.assertIn('--split-user', names)
+        self.assertIn('--no-split', names)
 
     # -- new command --
 

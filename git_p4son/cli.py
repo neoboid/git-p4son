@@ -40,6 +40,8 @@ Examples:
   git-p4son sync 123 156 head   # Sync 123, 156, then the latest changelist
   git-p4son sync last-synced    # Re-sync the last synced changelist
   git-p4son sync --dry-run      # Show the changelists a sync would visit
+  git-p4son sync -u alice       # Also split alice's changelists into commits of their own
+  git-p4son sync --no-split     # Sync without splitting out the configured split users
   git-p4son sync-split          # Sync to latest, your own changelists split out
   git-p4son sync-split 12345    # Same, but stop at changelist 12345
   git-p4son sync-split -u alice -u bob  # Split out alice's and bob's changelists
@@ -111,6 +113,21 @@ Examples:
         '-n', '--dry-run',
         action='store_true',
         help='Print the resolved sync sequence without syncing'
+    )
+    sync_parser.add_argument(
+        '-u', '--split-user',
+        action='append',
+        default=None,
+        metavar='NAME',
+        help='Also split out this Perforce user\'s changelists into commits '
+             'of their own, on top of the configured split users. Repeat to '
+             'give several users'
+    )
+    sync_parser.add_argument(
+        '--no-split',
+        action='store_true',
+        help='Ignore the configured split users for this sync. Users given '
+             'with --split-user are still split out'
     )
 
     # Sync-split subcommand

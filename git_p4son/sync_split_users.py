@@ -46,6 +46,31 @@ def _current_user(workspace_dir: str) -> str | None:
         return None
 
 
+def resolve_split_users(users: list[str],
+                        workspace_dir: str) -> list[str] | None:
+    """Substitute the current Perforce user for $(user).
+
+    Repeated names are collapsed, keeping the order they were given in.
+    Returns None (with an error logged) when $(user) cannot be resolved."""
+    current = None
+    if USER_PLACEHOLDER in users:
+        current = _current_user(workspace_dir)
+        if not current:
+            log.error(f'Cannot determine the current Perforce user for '
+                      f'{USER_PLACEHOLDER} in the split users. Check the p4 '
+                      'connection, or pass --no-split to sync without '
+                      'the configured split users.')
+            return None
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for user in users:
+        name = current if user == USER_PLACEHOLDER else user
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            resolved.append(name)
+    return resolved
+
+
 def _list(workspace_dir: str) -> int:
     """Print the configured split users, one per line."""
     log.heading('Split users')
@@ -79,8 +104,8 @@ def _requested(names: list[str], me: bool) -> list[str]:
     return requested
 
 
-def _canonical_names(names: list[str],
-                     workspace_dir: str) -> dict[str, str] | None:
+def check_p4_users(names: list[str],
+                   workspace_dir: str) -> dict[str, str] | None:
     """Check names against the server, mapping each to its server spelling.
 
     Returns None (with an error logged per unknown name) if any is not a
@@ -111,7 +136,7 @@ def _add(workspace_dir: str, names: list[str], me: bool) -> int:
     real = [name for name in requested if name != USER_PLACEHOLDER]
     canonical: dict[str, str] = {}
     if real:
-        checked = _canonical_names(real, workspace_dir)
+        checked = check_p4_users(real, workspace_dir)
         if checked is None:
             return 1
         canonical = checked

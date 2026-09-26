@@ -48,6 +48,9 @@ class TestSyncSplitCommand(unittest.TestCase):
         mock_sync.assert_called_once_with(args)
         self.assertEqual(args.changelist, ['101', '102', '104', '105', '106'])
         self.assertFalse(args.force)
+        # The sequence already splits out the given users, so sync must not
+        # split out the configured ones on top of it.
+        self.assertTrue(args.no_split)
 
     @mock.patch('git_p4son.sync_split.sync_command', return_value=0)
     @mock.patch('git_p4son.sync_split.get_submitted_changes')

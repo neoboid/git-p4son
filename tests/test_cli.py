@@ -75,6 +75,15 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['sync', '100', '-f'])
         self.assertTrue(args.force)
 
+    def test_sync_command_split_options(self):
+        args = self.parser.parse_args(['sync'])
+        self.assertIsNone(args.split_user)
+        self.assertFalse(args.no_split)
+        args = self.parser.parse_args(
+            ['sync', '-u', 'alice', '--split-user', 'bob', '--no-split'])
+        self.assertEqual(args.split_user, ['alice', 'bob'])
+        self.assertTrue(args.no_split)
+
     def test_sync_command_dry_run(self):
         self.assertFalse(self.parser.parse_args(['sync']).dry_run)
         for flag in ('--dry-run', '-n'):

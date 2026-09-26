@@ -135,6 +135,9 @@ def sync_split_command(args: argparse.Namespace) -> int:
 
     args.changelist = [str(cl) for cl in targets]
     args.force = False
+    # The sequence above already splits out the given users; sync must not
+    # add the configured split users on top of it.
+    args.no_split = True
     # The depot root and client spec were resolved above; sync_command
     # reuses them instead of querying the client spec a second time.
     args.resolved_depot = resolved

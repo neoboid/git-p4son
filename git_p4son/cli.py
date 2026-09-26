@@ -414,10 +414,11 @@ Examples:
         help='Print the directory instead of the full file path'
     )
 
-    # Hidden _sequence-editor subcommand (used internally by review)
+    # Hidden _sequence-editor subcommand (used internally by review). It is
+    # given no help: argparse lists a subcommand with help=SUPPRESS anyway,
+    # as "==SUPPRESS==", but leaves one without help out of the list.
     seq_editor_parser = subparsers.add_parser(
         '_sequence-editor',
-        help=argparse.SUPPRESS,
     )
     seq_editor_parser.add_argument(
         'filename',

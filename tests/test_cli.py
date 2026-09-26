@@ -128,6 +128,11 @@ class TestCreateParser(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.parser.parse_args(['update', '100', '-s', 'abc'])
 
+    def test_sequence_editor_hidden_from_help(self):
+        help_text = self.parser.format_help()
+        self.assertNotIn('_sequence-editor', help_text)
+        self.assertNotIn('SUPPRESS', help_text)
+
     def test_version_flag(self):
         with self.assertRaises(SystemExit) as ctx:
             self.parser.parse_args(['--version'])

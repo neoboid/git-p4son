@@ -201,6 +201,8 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertIn('-f', names)
         self.assertIn('--force', names)
+        self.assertIn('-n', names)
+        self.assertIn('--dry-run', names)
 
     # -- new command --
 

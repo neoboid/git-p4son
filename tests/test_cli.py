@@ -47,6 +47,12 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['sync', '100', '-f'])
         self.assertTrue(args.force)
 
+    def test_sync_command_dry_run(self):
+        self.assertFalse(self.parser.parse_args(['sync']).dry_run)
+        for flag in ('--dry-run', '-n'):
+            args = self.parser.parse_args(['sync', flag])
+            self.assertTrue(args.dry_run)
+
     def test_new_command_no_message(self):
         args = self.parser.parse_args(['new'])
         self.assertEqual(args.command, 'new')

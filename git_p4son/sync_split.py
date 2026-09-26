@@ -6,40 +6,17 @@ import argparse
 
 from .log import log
 from .perforce import (
-    P4Change,
     get_latest_changelist,
     get_p4_user,
     get_submitted_changes,
 )
 from .depot import resolve_depot_root
-from .sync import git_last_sync, sync_command, sync_preflight
-
-
-def build_sync_targets(changes: list[P4Change], users: list[str],
-                       last_synced: int, upper: int) -> list[int]:
-    """Build the sync sequence that splits out the given users' changelists.
-
-    changes is every submitted changelist affecting the depot root in
-    [last_synced, upper], oldest first. Each changelist submitted by one of
-    users gets the changelist submitted just before it synced first, so that
-    submit lands in a commit containing nothing else. Changelists at or below
-    last_synced are already in git and dropped, and the sequence always ends
-    at upper.
-    """
-    targets: list[int] = []
-    lowered = {u.lower() for u in users}
-    for i, change in enumerate(changes):
-        if change.change <= last_synced or change.user.lower() not in lowered:
-            continue
-        last = targets[-1] if targets else last_synced
-        if i > 0 and changes[i - 1].change > last:
-            targets.append(changes[i - 1].change)
-            last = targets[-1]
-        if change.change > last:
-            targets.append(change.change)
-    if not targets or upper > targets[-1]:
-        targets.append(upper)
-    return targets
+from .sync import (
+    build_sync_targets,
+    git_last_sync,
+    sync_command,
+    sync_preflight,
+)
 
 
 def _resolve_users(args: argparse.Namespace, workspace_dir: str) -> list[str]:

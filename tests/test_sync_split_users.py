@@ -100,6 +100,12 @@ class TestSyncSplitUsersList(unittest.TestCase):
         self.assertEqual(self._run('list'), 0)
         self.assertEqual(self._printed(), ['$(user)', 'bob'])
 
+    def test_placeholder_shown_bare_without_p4_installed(self):
+        self.mock_user.side_effect = FileNotFoundError('p4')
+        set_split_users(self.ws, [USER_PLACEHOLDER])
+        self.assertEqual(self._run('list'), 0)
+        self.assertEqual(self._printed(), ['$(user)'])
+
     def test_empty_list_prints_a_hint(self):
         self.assertEqual(self._run('list'), 0)
         printed = self._printed()
@@ -188,6 +194,79 @@ class TestSyncSplitUsersAdd(unittest.TestCase):
                 'git_p4son.sync_split_users.set_split_users') as mock_set:
             self.assertEqual(self._run('bob'), 0)
         mock_set.assert_not_called()
+
+
+class TestSyncSplitUsersDelete(unittest.TestCase):
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+        patcher = mock.patch('git_p4son.sync_split_users.log')
+        self.mock_log = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
+                             return_value='Carol')
+        self.mock_user = patcher.start()
+        self.addCleanup(patcher.stop)
+        set_split_users(self.ws, [USER_PLACEHOLDER, 'Alice', 'bob'])
+
+    def _run(self, *names, me=False):
+        args = mock.Mock(workspace_dir=self.ws, split_users_action='delete',
+                         names=list(names), me=me)
+        return sync_split_users_command(args)
+
+    def test_removes_users_keeping_the_rest_in_order(self):
+        self.assertEqual(self._run('Alice'), 0)
+        self.assertEqual(get_split_users(self.ws), [USER_PLACEHOLDER, 'bob'])
+
+    def test_match_is_case_insensitive(self):
+        self.assertEqual(self._run('ALICE', 'Bob'), 0)
+        self.assertEqual(get_split_users(self.ws), [USER_PLACEHOLDER])
+        self.mock_log.success.assert_any_call('Alice')
+
+    def test_me_removes_the_placeholder(self):
+        self.assertEqual(self._run(me=True), 0)
+        self.assertEqual(get_split_users(self.ws), ['Alice', 'bob'])
+        self.mock_user.assert_not_called()
+
+    def test_quoted_placeholder_is_the_same_as_me(self):
+        self.assertEqual(self._run(USER_PLACEHOLDER), 0)
+        self.assertEqual(get_split_users(self.ws), ['Alice', 'bob'])
+
+    def test_removing_the_last_user_leaves_an_empty_list(self):
+        self.assertEqual(self._run('Alice', 'bob', me=True), 0)
+        self.assertEqual(get_split_users(self.ws), [])
+
+    def test_unknown_name_removes_nothing(self):
+        self.assertEqual(self._run('bob', 'dave'), 1)
+        self.assertEqual(get_split_users(self.ws),
+                         [USER_PLACEHOLDER, 'Alice', 'bob'])
+        self.mock_log.error.assert_called_once_with('dave is not a split user')
+
+    def test_hints_at_me_when_naming_yourself(self):
+        """The list holds $(user), not the name it resolves to."""
+        self.assertEqual(self._run('carol'), 1)
+        self.mock_log.error.assert_called_once_with(
+            'carol is not a split user')
+        self.mock_log.info.assert_called_once_with(
+            '$(user) stands for Carol, remove it with --me')
+
+    def test_no_hint_without_the_placeholder(self):
+        set_split_users(self.ws, ['Alice'])
+        self.assertEqual(self._run('carol'), 1)
+        self.mock_log.info.assert_not_called()
+        self.mock_user.assert_not_called()
+
+    def test_no_hint_when_p4_fails(self):
+        self.mock_user.side_effect = RunError('p4 info failed')
+        self.assertEqual(self._run('carol'), 1)
+        self.mock_log.info.assert_not_called()
+
+    def test_nothing_given_is_an_error(self):
+        self.assertEqual(self._run(), 1)
+        self.mock_log.error.assert_called_once()
+        self.assertEqual(get_split_users(self.ws),
+                         [USER_PLACEHOLDER, 'Alice', 'bob'])
 
 
 if __name__ == '__main__':

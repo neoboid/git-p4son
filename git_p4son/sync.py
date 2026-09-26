@@ -654,19 +654,14 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
     return True
 
 
-def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   already_done: bool = False) -> bool:
+def sync_preflight(depot_root: str, workspace_dir: str,
+                   invocation_dir: str) -> bool:
     """Gate a sync: both workspaces clean, then the pre-sync hooks.
 
     Returns False when the sync must not go ahead. Callers run this once they
     know a sync will actually be attempted, so that a run with nothing to sync
-    neither checks the workspaces nor fires the hooks. already_done covers a
-    caller that ran it before delegating here: sync-split runs it up front,
-    ahead of the p4 queries that resolve its changelist sequence, so neither
-    the checks nor the hooks happen twice.
+    neither checks the workspaces nor fires the hooks.
     """
-    if already_done:
-        return True
     if not check_git_workspace_clean(workspace_dir):
         return False
     if not _check_p4_workspace_clean(depot_root, workspace_dir):
@@ -860,12 +855,8 @@ def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
     invocation_dir = vars(args).get('invocation_dir', workspace_dir)
-    preflight_done = vars(args).get('preflight_done', False)
 
-    # sync-split resolves the depot root before handing over, so it passes
-    # the result on rather than having the client spec queried twice.
-    resolved = (vars(args).get('resolved_depot')
-                or resolve_depot_root(workspace_dir))
+    resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
         return 1
     depot_root = resolved.depot_root
@@ -952,12 +943,10 @@ def sync_command(args: argparse.Namespace) -> int:
             return 1
 
         # The single gate: both workspaces clean, then the pre-sync hooks.
-        # Runs once for the whole sync, covering the catch-up pass as well,
-        # and is skipped outright when the caller (sync-split) already ran
-        # it. It runs before splitting, whose queries are the costly part,
-        # so a dirty workspace or a vetoing hook gets to say so first.
-        if not sync_preflight(depot_root, workspace_dir, invocation_dir,
-                              preflight_done):
+        # Runs once for the whole sync, covering the catch-up pass as well.
+        # It runs before splitting, whose queries are the costly part, so a
+        # dirty workspace or a vetoing hook gets to say so first.
+        if not sync_preflight(depot_root, workspace_dir, invocation_dir):
             return 1
 
     if split:

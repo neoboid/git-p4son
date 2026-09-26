@@ -21,7 +21,6 @@ from git_p4son.git import (
     commit,
     get_dirty_files,
 )
-from git_p4son.depot import ResolvedDepot
 from git_p4son.sync import (
     ChangedFile,
     LastSync,
@@ -33,6 +32,7 @@ from git_p4son.sync import (
     p4_sync,
     prepare_writable_files,
     sync_command,
+    sync_preflight,
 )
 from tests.helpers import make_changes, make_run_result
 
@@ -1138,31 +1138,6 @@ class TestSyncCommand(unittest.TestCase):
         self.assertIn('edited.log', infos)
         self.assertNotIn('pristine.log', infos)
 
-    @mock.patch('git_p4son.sync.resolve_depot_root')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_sync')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    def test_reuses_a_depot_resolved_by_the_caller(
-            self, _p4clean, mock_last_sync, _head, mock_preview, mock_prep,
-            _p4sync, _git_clean, _add, _commit, mock_resolve):
-        """sync-split resolves the depot root first and passes it on, so
-        the client spec isn't queried from the server a second time."""
-        mock_last_sync.return_value = self._last_sync
-        mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['12345'], force=False,
-                         workspace_dir='/ws',
-                         resolved_depot=ResolvedDepot(
-                             depot_root='//passed', client_spec=None))
-        self.assertEqual(sync_command(args), 0)
-        mock_resolve.assert_not_called()
-        self.assertEqual(mock_preview.call_args.args[1], '//passed')
-
     @mock.patch('git_p4son.sync._restore_writable')
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
     @mock.patch('git_p4son.sync._merge_changed_files')
@@ -2023,6 +1998,46 @@ class TestSyncSplitting(unittest.TestCase):
         self.patches['sync_preflight'].assert_not_called()
         self.patches['_handle_clobber_warning'].assert_not_called()
         self.patches['_sync_pass'].assert_not_called()
+
+
+class TestSyncPreflight(unittest.TestCase):
+    """The gate before a sync: workspace checks then hooks, in that
+    order."""
+
+    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_clean_workspaces_run_the_hooks(
+            self, _dirty, _opened, mock_run_hooks):
+        self.assertTrue(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.p4_get_opened_files')
+    @mock.patch('git_p4son.lib.get_dirty_files',
+                return_value=[('a.txt', 'modify')])
+    def test_dirty_git_stops_before_p4_and_hooks(
+            self, _dirty, mock_opened, mock_run_hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_opened.assert_not_called()
+        mock_run_hooks.assert_not_called()
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
+    @mock.patch('git_p4son.sync.p4_get_opened_files',
+                return_value=[('a.txt', 'modify')])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_dirty_p4_stops_before_hooks(
+            self, _dirty, _opened, _tracked, mock_run_hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_run_hooks.assert_not_called()
+
+    @mock.patch('git_p4son.sync.run_hooks',
+                return_value=[make_run_result(returncode=1)])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
 
 
 class TestMergeChangedFiles(unittest.TestCase):

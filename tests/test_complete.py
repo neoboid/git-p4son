@@ -136,15 +136,18 @@ class TestComplete(unittest.TestCase):
         self.assertIn('alias', names)
         self.assertIn('review', names)
         self.assertIn('init', names)
-        self.assertIn('sync-split', names)
         self.assertIn('sync-split-users', names)
         self.assertIn('writable', names)
-        self.assertEqual(len(names), 10)
+        self.assertEqual(len(names), 9)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
         names = self._names(result)
         self.assertNotIn('complete', names)
+
+    def test_folded_sync_split_not_completed(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-'], workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['sync-split-users'])
 
     def test_hidden_sequence_editor_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
@@ -154,7 +157,7 @@ class TestComplete(unittest.TestCase):
     def test_prefix_filters_commands(self, _ws, _aliases):
         result = _complete(self.parser, ['sy'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertEqual(names, ['sync', 'sync-split', 'sync-split-users'])
+        self.assertEqual(names, ['sync', 'sync-split-users'])
 
     def test_hidden_command_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, ['c'], workspace_dir='/ws')

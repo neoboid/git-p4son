@@ -42,9 +42,6 @@ Examples:
   git-p4son sync --dry-run      # Show the changelists a sync would visit
   git-p4son sync -u alice       # Also split alice's changelists into commits of their own
   git-p4son sync --no-split     # Sync without splitting out the configured split users
-  git-p4son sync-split          # Sync to latest, your own changelists split out
-  git-p4son sync-split 12345    # Same, but stop at changelist 12345
-  git-p4son sync-split -u alice -u bob  # Split out alice's and bob's changelists
   git-p4son sync-split-users    # List the users whose changelists sync splits out
   git-p4son sync-split-users add --me alice  # Split out your own and alice's changelists
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
@@ -130,14 +127,12 @@ Examples:
              'with --split-user are still split out'
     )
 
-    # Sync-split subcommand
+    # Sync-split subcommand, folded into sync. Kept to tell anyone still
+    # running it what to run instead. Given no help, so it is not listed.
     sync_split_parser = subparsers.add_parser(
         'sync-split',
-        help='Sync forward, splitting a user\'s changelists into own commits',
-        description='Sync from the last synced changelist up to a target '
-        'changelist (the latest by default), syncing the changelist submitted '
-        'just before each of the selected users\' submits first so that every '
-        'changelist they submitted lands in a git commit of its own.'
+        description='Folded into sync: prints the sync and sync-split-users '
+        'commands that do the same, without syncing.'
     )
     sync_split_parser.add_argument(
         'changelist',

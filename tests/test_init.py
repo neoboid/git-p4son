@@ -8,7 +8,7 @@ from unittest import mock
 from git_p4son.common import CommandError
 from git_p4son.config import load_config
 from git_p4son.init import (
-    _ask_writable_mode,
+    _ask_yes_no,
     _compute_cwd_depot_root,
     _configure_depot_root,
     _configure_writable_mode,
@@ -162,47 +162,47 @@ _MOCK_SPEC = P4ClientSpec(
     line_end='local')
 
 
-class TestAskWritableMode(unittest.TestCase):
+class TestAskYesNo(unittest.TestCase):
     @mock.patch('builtins.input', return_value='')
     def test_empty_answer_keeps_current_value(self, _input):
-        self.assertTrue(_ask_writable_mode(True))
-        self.assertFalse(_ask_writable_mode(False))
+        self.assertTrue(_ask_yes_no('Q?', True))
+        self.assertFalse(_ask_yes_no('Q?', False))
 
     @mock.patch('builtins.input', side_effect=['maybe', 'Y'])
     def test_reprompts_until_valid(self, mock_input):
-        self.assertTrue(_ask_writable_mode(False))
+        self.assertTrue(_ask_yes_no('Q?', False))
         self.assertEqual(mock_input.call_count, 2)
 
     @mock.patch('builtins.input', return_value='no')
     def test_accepts_words(self, _input):
-        self.assertFalse(_ask_writable_mode(True))
+        self.assertFalse(_ask_yes_no('Q?', True))
 
     @mock.patch('builtins.input', return_value='')
-    def test_default_is_shown_in_the_prompt(self, mock_input):
-        _ask_writable_mode(True)
-        self.assertIn('[Y/n]', mock_input.call_args.args[0])
-        _ask_writable_mode(False)
-        self.assertIn('[y/N]', mock_input.call_args.args[0])
+    def test_question_and_default_are_shown_in_the_prompt(self, mock_input):
+        _ask_yes_no('Keep it?', True)
+        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [Y/n]: ')
+        _ask_yes_no('Keep it?', False)
+        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [y/N]: ')
 
     @mock.patch('builtins.input', side_effect=EOFError)
     def test_eof_returns_none(self, _input):
-        self.assertIsNone(_ask_writable_mode(False))
+        self.assertIsNone(_ask_yes_no('Q?', False))
 
 
 class TestConfigureWritableMode(unittest.TestCase):
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=True)
     def test_saves_answer(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             self.assertEqual(_configure_writable_mode(ws), (True, True))
             self.assertTrue(is_writable_mode(ws))
 
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=True)
     def test_unchanged_answer_is_not_a_change(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             set_writable_mode(ws, True)
             self.assertEqual(_configure_writable_mode(ws), (True, False))
 
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=None)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=None)
     def test_eof_leaves_config_untouched(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             self.assertEqual(_configure_writable_mode(ws), (False, False))

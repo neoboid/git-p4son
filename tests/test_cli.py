@@ -29,6 +29,34 @@ class TestCreateParser(unittest.TestCase):
             args = self.parser.parse_args(['writable', action])
             self.assertEqual(args.writable_action, action)
 
+    def test_sync_split_users_command_without_action(self):
+        args = self.parser.parse_args(['sync-split-users'])
+        self.assertEqual(args.command, 'sync-split-users')
+        self.assertIsNone(args.split_users_action)
+
+    def test_sync_split_users_list(self):
+        args = self.parser.parse_args(['sync-split-users', 'list'])
+        self.assertEqual(args.split_users_action, 'list')
+
+    def test_sync_split_users_add(self):
+        args = self.parser.parse_args(
+            ['sync-split-users', 'add', 'alice', 'bob'])
+        self.assertEqual(args.split_users_action, 'add')
+        self.assertEqual(args.names, ['alice', 'bob'])
+        self.assertFalse(args.me)
+
+    def test_sync_split_users_add_me(self):
+        args = self.parser.parse_args(['sync-split-users', 'add', '--me'])
+        self.assertEqual(args.names, [])
+        self.assertTrue(args.me)
+
+    def test_sync_split_users_delete(self):
+        args = self.parser.parse_args(
+            ['sync-split-users', 'delete', '--me', 'bob'])
+        self.assertEqual(args.split_users_action, 'delete')
+        self.assertEqual(args.names, ['bob'])
+        self.assertTrue(args.me)
+
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
         self.assertEqual(args.changelist, [])
@@ -46,6 +74,15 @@ class TestCreateParser(unittest.TestCase):
     def test_sync_command_short_force(self):
         args = self.parser.parse_args(['sync', '100', '-f'])
         self.assertTrue(args.force)
+
+    def test_sync_command_split_options(self):
+        args = self.parser.parse_args(['sync'])
+        self.assertIsNone(args.split_user)
+        self.assertFalse(args.no_split)
+        args = self.parser.parse_args(
+            ['sync', '-u', 'alice', '--split-user', 'bob', '--no-split'])
+        self.assertEqual(args.split_user, ['alice', 'bob'])
+        self.assertTrue(args.no_split)
 
     def test_sync_command_dry_run(self):
         self.assertFalse(self.parser.parse_args(['sync']).dry_run)
@@ -154,6 +191,12 @@ class TestRunCommand(unittest.TestCase):
         args = create_parser().parse_args(['writable', 'apply'])
         self.assertEqual(run_command(args), 0)
         mock_writable.assert_called_once_with(args)
+
+    @mock.patch('git_p4son.cli.sync_split_users_command', return_value=0)
+    def test_dispatches_sync_split_users(self, mock_split_users, _ws):
+        args = create_parser().parse_args(['sync-split-users', 'list'])
+        self.assertEqual(run_command(args), 0)
+        mock_split_users.assert_called_once_with(args)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)

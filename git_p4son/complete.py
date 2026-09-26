@@ -12,10 +12,13 @@ from .changelist_store import list_changelist_aliases
 from .common import branch_to_alias
 from .git import get_current_branch, get_workspace_dir
 from .log import log
+from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
-_HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
+_HIDDEN_COMMANDS = frozenset(
+    {'complete', 'completion', '_sequence-editor', 'sync-split'})
 # Commands whose first positional is a nested action (alias list, ...).
-_COMMANDS_WITH_ACTIONS = frozenset({'alias', 'writable'})
+_COMMANDS_WITH_ACTIONS = frozenset(
+    {'alias', 'sync-split-users', 'writable'})
 
 
 def _get_subparsers_action(parser):
@@ -73,6 +76,21 @@ def _get_alias_names(workspace_dir):
         return []
 
 
+def _get_split_user_names(workspace_dir):
+    """Get configured split users for completion.
+
+    $(user) is left out: inserted unquoted, the shell would run it as a
+    command substitution. --me covers it instead."""
+    if not workspace_dir:
+        return []
+    try:
+        return [(name, 'Split user')
+                for name in get_split_users(workspace_dir)
+                if name != USER_PLACEHOLDER]
+    except Exception:
+        return []
+
+
 def _filter(candidates, prefix):
     """Filter candidates by prefix and return matches."""
     return [(name, description) for name, description in candidates
@@ -119,10 +137,6 @@ def _complete_positional(command, subcommand, positional_count,
         return _filter(
             [('head', 'Sync to the latest changelist')], prefix)
 
-    if command == 'sync-split' and positional_count == 0:
-        return _filter(
-            [('head', 'Sync to the latest changelist')], prefix)
-
     if command == 'update' and positional_count == 0:
         branch_candidates = _get_branch_candidates(prefix, workspace_dir)
         return branch_candidates + _filter(aliases, prefix)
@@ -135,6 +149,9 @@ def _complete_positional(command, subcommand, positional_count,
                           for ca in nested._choices_actions]
             return _filter(candidates, prefix)
         return []
+
+    if command == 'sync-split-users' and subcommand == 'delete':
+        return _filter(_get_split_user_names(workspace_dir), prefix)
 
     if command == 'alias':
         if subcommand == 'delete' and positional_count == 0:

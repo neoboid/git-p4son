@@ -3,9 +3,11 @@
 import unittest
 from unittest import mock
 
+from git_p4son.common import RunError
 from git_p4son.perforce import (
     P4ClientSpec, P4FileInfo, P4SyncPreviewFile, get_client_spec,
-    get_p4_user, get_submitted_changes, is_always_writable_file_type,
+    get_existing_p4_users, get_p4_user, get_submitted_changes,
+    is_always_writable_file_type,
     is_binary_file_type,
     p4_fstat_file_info, p4_sync_preview, parse_ztag_multi_output,
     parse_ztag_output,
@@ -328,3 +330,34 @@ class TestGetP4User(unittest.TestCase):
     def test_missing_user_name(self, mock_run):
         mock_run.return_value = make_run_result(stdout=['... clientName x'])
         self.assertIsNone(get_p4_user('/ws'))
+
+
+class TestGetExistingP4Users(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_returns_existing_users_as_spelled_by_the_server(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... User Alice', '... FullName Alice A', '',
+            '... User bob', '... FullName Bob B',
+        ])
+        self.assertEqual(get_existing_p4_users(['alice', 'bob'], '/ws'),
+                         ['Alice', 'bob'])
+        mock_run.assert_called_once_with(
+            ['p4', '-ztag', 'users', 'alice', 'bob'], cwd='/ws',
+            fail_on_returncode=False)
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_unknown_users_are_left_out(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stdout=['... User bob'],
+            stderr=['nobody - no such user(s).'])
+        self.assertEqual(get_existing_p4_users(['nobody', 'bob'], '/ws'),
+                         ['bob'])
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_other_failures_raise(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['Perforce client error:',
+                                  'Connect to server failed'])
+        with self.assertRaises(RunError) as ctx:
+            get_existing_p4_users(['bob'], '/ws')
+        self.assertIn('Connect to server failed', ctx.exception.stderr)

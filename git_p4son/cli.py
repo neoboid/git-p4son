@@ -10,6 +10,7 @@ from importlib.resources import files
 from . import __version__
 from .sync import sync_command
 from .sync_split import sync_split_command
+from .sync_split_users import sync_split_users_command
 from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
@@ -39,9 +40,10 @@ Examples:
   git-p4son sync 123 156 head   # Sync 123, 156, then the latest changelist
   git-p4son sync last-synced    # Re-sync the last synced changelist
   git-p4son sync --dry-run      # Show the changelists a sync would visit
-  git-p4son sync-split          # Sync to latest, your own changelists split out
-  git-p4son sync-split 12345    # Same, but stop at changelist 12345
-  git-p4son sync-split -u alice -u bob  # Split out alice's and bob's changelists
+  git-p4son sync -u alice       # Also split alice's changelists into commits of their own
+  git-p4son sync --no-split     # Sync without splitting out the configured split users
+  git-p4son sync-split-users    # List the users whose changelists sync splits out
+  git-p4son sync-split-users add --me alice  # Split out your own and alice's changelists
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
   git-p4son new -m "Fix bug" --review  # Create changelist, create Swarm review
   git-p4son new -m "Fix bug" --no-alias # Create changelist without saving an alias
@@ -109,15 +111,28 @@ Examples:
         action='store_true',
         help='Print the resolved sync sequence without syncing'
     )
+    sync_parser.add_argument(
+        '-u', '--split-user',
+        action='append',
+        default=None,
+        metavar='NAME',
+        help='Also split out this Perforce user\'s changelists into commits '
+             'of their own, on top of the configured split users. Repeat to '
+             'give several users'
+    )
+    sync_parser.add_argument(
+        '--no-split',
+        action='store_true',
+        help='Ignore the configured split users for this sync. Users given '
+             'with --split-user are still split out'
+    )
 
-    # Sync-split subcommand
+    # Sync-split subcommand, folded into sync. Kept to tell anyone still
+    # running it what to run instead. Given no help, so it is not listed.
     sync_split_parser = subparsers.add_parser(
         'sync-split',
-        help='Sync forward, splitting a user\'s changelists into own commits',
-        description='Sync from the last synced changelist up to a target '
-        'changelist (the latest by default), syncing the changelist submitted '
-        'just before each of the selected users\' submits first so that every '
-        'changelist they submitted lands in a git commit of its own.'
+        description='Folded into sync: prints the sync and sync-split-users '
+        'commands that do the same, without syncing.'
     )
     sync_split_parser.add_argument(
         'changelist',
@@ -140,6 +155,63 @@ Examples:
         '-n', '--dry-run',
         action='store_true',
         help='Print the resolved sync sequence without syncing'
+    )
+
+    # Sync-split-users subcommand
+    split_users_parser = subparsers.add_parser(
+        'sync-split-users',
+        help='Show or edit the users whose changelists sync splits out',
+        description='Split users are the Perforce users whose submitted '
+        'changelists sync gives a git commit each, holding nothing but that '
+        'change. Without an action, lists them.'
+    )
+    split_users_subparsers = split_users_parser.add_subparsers(
+        dest='split_users_action',
+        help='Available split user actions',
+        metavar='ACTION'
+    )
+    split_users_subparsers.add_parser(
+        'list',
+        help='List the split users',
+        description='List the split users. $(user) stands for the current '
+        'Perforce user and is shown with the name it resolves to.'
+    )
+    split_users_add_parser = split_users_subparsers.add_parser(
+        'add',
+        help='Add split users',
+        description='Add users to the split users. Each name must be a '
+        'Perforce user; if any is not, nothing is added.'
+    )
+    split_users_add_parser.add_argument(
+        'names',
+        nargs='*',
+        metavar='NAME',
+        help='Perforce user name. A quoted "$(user)" adds the current user, '
+             'like --me'
+    )
+    split_users_add_parser.add_argument(
+        '--me',
+        action='store_true',
+        help='Add the current Perforce user, stored as $(user) so it follows '
+             'whoever is logged in'
+    )
+    split_users_delete_parser = split_users_subparsers.add_parser(
+        'delete',
+        help='Remove split users',
+        description='Remove users from the split users. If any name is not '
+        'a split user, nothing is removed.'
+    )
+    split_users_delete_parser.add_argument(
+        'names',
+        nargs='*',
+        metavar='NAME',
+        help='Split user to remove. A quoted "$(user)" removes the current '
+             'user entry, like --me'
+    )
+    split_users_delete_parser.add_argument(
+        '--me',
+        action='store_true',
+        help='Remove the $(user) entry for the current Perforce user'
     )
 
     # New subcommand
@@ -512,6 +584,8 @@ def run_command(args: argparse.Namespace) -> int:
         return sync_command(args)
     elif args.command == 'sync-split':
         return sync_split_command(args)
+    elif args.command == 'sync-split-users':
+        return sync_split_users_command(args)
     elif args.command == 'new':
         return new_command(args)
     elif args.command == 'update':

@@ -8,15 +8,17 @@ from unittest import mock
 from git_p4son.common import CommandError
 from git_p4son.config import load_config
 from git_p4son.init import (
-    _ask_writable_mode,
+    _ask_yes_no,
     _compute_cwd_depot_root,
     _configure_depot_root,
+    _configure_split_users,
     _configure_writable_mode,
     _setup_gitignore,
     _validate_depot_root,
     init_command,
 )
 from git_p4son.perforce import P4ClientSpec
+from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
 from tests.helpers import make_run_result
 
@@ -162,51 +164,108 @@ _MOCK_SPEC = P4ClientSpec(
     line_end='local')
 
 
-class TestAskWritableMode(unittest.TestCase):
+class TestAskYesNo(unittest.TestCase):
     @mock.patch('builtins.input', return_value='')
     def test_empty_answer_keeps_current_value(self, _input):
-        self.assertTrue(_ask_writable_mode(True))
-        self.assertFalse(_ask_writable_mode(False))
+        self.assertTrue(_ask_yes_no('Q?', True))
+        self.assertFalse(_ask_yes_no('Q?', False))
 
     @mock.patch('builtins.input', side_effect=['maybe', 'Y'])
     def test_reprompts_until_valid(self, mock_input):
-        self.assertTrue(_ask_writable_mode(False))
+        self.assertTrue(_ask_yes_no('Q?', False))
         self.assertEqual(mock_input.call_count, 2)
 
     @mock.patch('builtins.input', return_value='no')
     def test_accepts_words(self, _input):
-        self.assertFalse(_ask_writable_mode(True))
+        self.assertFalse(_ask_yes_no('Q?', True))
 
     @mock.patch('builtins.input', return_value='')
-    def test_default_is_shown_in_the_prompt(self, mock_input):
-        _ask_writable_mode(True)
-        self.assertIn('[Y/n]', mock_input.call_args.args[0])
-        _ask_writable_mode(False)
-        self.assertIn('[y/N]', mock_input.call_args.args[0])
+    def test_question_and_default_are_shown_in_the_prompt(self, mock_input):
+        _ask_yes_no('Keep it?', True)
+        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [Y/n]: ')
+        _ask_yes_no('Keep it?', False)
+        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [y/N]: ')
 
     @mock.patch('builtins.input', side_effect=EOFError)
     def test_eof_returns_none(self, _input):
-        self.assertIsNone(_ask_writable_mode(False))
+        self.assertIsNone(_ask_yes_no('Q?', False))
 
 
 class TestConfigureWritableMode(unittest.TestCase):
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=True)
     def test_saves_answer(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             self.assertEqual(_configure_writable_mode(ws), (True, True))
             self.assertTrue(is_writable_mode(ws))
 
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=True)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=True)
     def test_unchanged_answer_is_not_a_change(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             set_writable_mode(ws, True)
             self.assertEqual(_configure_writable_mode(ws), (True, False))
 
-    @mock.patch('git_p4son.init._ask_writable_mode', return_value=None)
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=None)
     def test_eof_leaves_config_untouched(self, _ask):
         with tempfile.TemporaryDirectory() as ws:
             self.assertEqual(_configure_writable_mode(ws), (False, False))
             self.assertEqual(load_config(ws), {})
+
+
+class TestConfigureSplitUsers(unittest.TestCase):
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+        patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
+                             return_value='alice')
+        self.mock_user = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.init.log')
+        self.mock_log = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _answer(self, answer):
+        with mock.patch('git_p4son.init._ask_yes_no',
+                        return_value=answer) as mock_ask, \
+                mock.patch('builtins.print'):
+            _configure_split_users(self.ws)
+        return mock_ask
+
+    def test_question_names_the_user_and_defaults_to_off(self):
+        mock_ask = self._answer(None)
+        mock_ask.assert_called_once_with(
+            'Sync your own changelists (alice) individually?', False)
+
+    def test_default_is_on_when_already_configured(self):
+        set_split_users(self.ws, ['$(user)'])
+        mock_ask = self._answer(None)
+        self.assertTrue(mock_ask.call_args.args[1])
+
+    def test_yes_adds_the_placeholder_after_other_users(self):
+        set_split_users(self.ws, ['bob'])
+        self._answer(True)
+        self.assertEqual(get_split_users(self.ws), ['bob', '$(user)'])
+
+    def test_no_removes_only_the_placeholder(self):
+        set_split_users(self.ws, ['bob', '$(user)', 'carol'])
+        self._answer(False)
+        self.assertEqual(get_split_users(self.ws), ['bob', 'carol'])
+
+    def test_unchanged_answer_writes_nothing(self):
+        self._answer(False)
+        self.assertEqual(load_config(self.ws), {})
+        self.mock_log.success.assert_called_once_with('off (unchanged)')
+
+    def test_eof_writes_nothing(self):
+        self._answer(None)
+        self.assertEqual(load_config(self.ws), {})
+
+    def test_skipped_without_a_current_user(self):
+        self.mock_user.return_value = None
+        mock_ask = self._answer(True)
+        mock_ask.assert_not_called()
+        self.mock_log.warning.assert_called_once()
+        self.assertEqual(load_config(self.ws), {})
 
 
 class TestInitCommand(unittest.TestCase):
@@ -214,6 +273,9 @@ class TestInitCommand(unittest.TestCase):
         patcher = mock.patch('git_p4son.init._configure_writable_mode',
                              return_value=(False, False))
         self.mock_writable = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.init._configure_split_users')
+        self.mock_split_users = patcher.start()
         self.addCleanup(patcher.stop)
 
     def _make_args(self):
@@ -235,6 +297,10 @@ class TestInitCommand(unittest.TestCase):
                 mock.patch('git_p4son.init.log') as mock_log:
             self.assertEqual(init_command(self._make_args()), 0)
         return [str(c.args[0]) for c in mock_log.info.call_args_list]
+
+    def test_configures_split_users(self):
+        self._next_steps(has_commits=False)
+        self.mock_split_users.assert_called_once_with('/ws')
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

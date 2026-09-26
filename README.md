@@ -221,8 +221,8 @@ the sync if git tracks them. The sync itself works as described above, since the
 
 ## Usage
 
-git-p4son provides ten commands: `init`, `sync`, `sync-split`, `new`, `update`, `review`, `list-changes`,
-`alias`, `writable`, and `completion`.
+git-p4son provides ten commands: `init`, `sync`, `sync-split-users`, `new`, `update`, `review`,
+`list-changes`, `alias`, `writable`, and `completion`.
 
 To see help for any command, use `-h`:
 
@@ -267,12 +267,16 @@ The `.gitignore` is set up using this priority:
 `init` also asks whether to turn on [writable mode](#writable-command), defaulting to the current setting. It only
 saves the answer; run `git p4son writable apply` once your files are committed to update their permissions.
 
+Finally, `init` asks whether to sync your own changelists individually, making you a [split user](#split-users).
+The default is the current setting. Yes adds a `$(user)` entry to the split users and no removes it; other split
+users are left alone.
+
 ### Sync Command
 
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync [changelist ...] [--force] [--dry-run]
+git p4son sync [changelist ...] [--force] [--dry-run] [--split-user NAME ...] [--no-split]
 ```
 
 **Arguments:**
@@ -285,6 +289,10 @@ git p4son sync [changelist ...] [--force] [--dry-run]
 - `-f, --force`: Allow syncing to changelists older than the current one.
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
   real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts.
+- `-u, --split-user NAME`: Also split out this user's changelists, on top of the configured
+  [split users](#split-users). Repeat to give several users. Each name is checked against the Perforce server.
+- `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
+  out, so `--no-split -u alice` splits out only alice's changelists.
 
 **Examples:**
 ```sh
@@ -296,7 +304,42 @@ git p4son sync 123 156 head # sync 123, 156, then the latest changelist
 git p4son sync last-synced
 git p4son sync 12345 --force
 git p4son sync --dry-run    # show the changelists a sync to latest would visit
+git p4son sync -u alice     # also split out alice's changelists
+git p4son sync --no-split   # sync without splitting out the configured split users
 ```
+
+#### Split users
+
+Syncing straight to the latest changelist lumps your own submitted changelists together with everyone else's in a
+single commit. Split users fix that: for each changelist a split user submitted since the last sync, `sync` first
+syncs the changelist submitted immediately before it, so every changelist they submitted becomes a commit containing
+nothing but their own change.
+
+The split users are stored in `.git-p4son/config.toml`, and edited with the
+[`sync-split-users` command](#sync-split-users-command) or by answering yes in `init`:
+
+```toml
+[sync]
+split-users = ["$(user)", "alice"]
+```
+
+`$(user)` stands for the current Perforce user (from `p4 info`), resolved each time `sync` runs, so the config
+survives a change of user, the same way `$(workspace)` works in the depot root.
+
+For example, with the last sync at CL 100, your own changelists at 102 and 105, and the latest changelist at 106,
+`sync` visits `101 102 104 105 106`, producing five commits where CL 102 and CL 105 each hold only your change.
+Changelists given on the command line are all still visited, with the split points merged in: `sync 103 head`
+visits `101 102 103 104 105 106`.
+
+Splitting only moves forward from a previous sync. The first sync, `last-synced`, and syncing to an older changelist
+with `--force` are never split. Without any split users, `sync` makes no extra Perforce queries.
+
+Finding the split users' changelists costs one extra Perforce query over the range being synced. It runs after the
+clean-workspace checks and the pre-sync hooks, so a dirty workspace or a hook that aborts the sync says so before
+that work. `--dry-run` skips the checks and hooks but still shows the resulting sequence.
+
+`sync-split`, which split out users' changelists for a single run, has been folded into `sync`. It now only prints
+the `sync` and `sync-split-users` commands that do the same.
 
 #### pre-sync hook
 
@@ -309,56 +352,27 @@ changelists is given, the pre-sync hooks run once, before the first sync.
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs [hooks](#hooks)
 from `.git-p4son/hooks/post-sync/`.
 
-### Sync-Split Command
+### Sync-Split-Users Command
 
-Sync forward from the last synced changelist, splitting selected users' changelists into their own commits:
+Show or edit the [split users](#split-users), the Perforce users whose changelists `sync` gives a commit each:
 
 ```sh
-git p4son sync-split [changelist] [--user NAME ...] [--dry-run]
+git p4son sync-split-users                 # list the split users (same as list)
+git p4son sync-split-users list
+git p4son sync-split-users add --me        # add yourself, stored as $(user)
+git p4son sync-split-users add alice bob
+git p4son sync-split-users delete alice
+git p4son sync-split-users delete --me
 ```
 
-Syncing straight to the latest changelist lumps your own submitted changelists together with everyone
-else's in a single commit. `sync-split` resolves the sequence for you: it looks up the last synced
-changelist in the git log, asks Perforce which changelists the selected users submitted since then, and
-syncs the changelist submitted immediately before each of those first. The result is a git history where
-every changelist those users submitted is a commit containing nothing but their own change.
+- `list` prints one user per line. `$(user)` is shown with the name it stands for, e.g. `$(user) (alice)`.
+- `add` checks every name against the Perforce server first, since a misspelled name would never match a
+  changelist. If any name is not a Perforce user, nothing is added. Names are stored as the server spells them,
+  and a name that is already a split user is skipped.
+- `delete` removes names regardless of case. If any name is not a split user, nothing is removed.
 
-By default the selected user is you (the current p4 user), which covers the common case of reviewing your
-own submits one at a time. Repeat `--user` to split out several people's changelists in the same run.
-
-It is equivalent to working out the numbers by hand and running
-`git p4son sync <before-theirs> <theirs> ... head`, and it delegates to `sync` once the sequence is
-resolved, so [pre-sync and post-sync hooks](#hooks), writable-file merging, and the clean-workspace checks
-all behave exactly as they do for `sync`. The clean-workspace checks and the pre-sync hooks are the one
-thing that runs earlier: resolving the sequence costs several Perforce queries, so they go first, and a
-dirty workspace or a hook that aborts the sync says so before that work. They run once for the whole sync,
-and not at all for a `--dry-run` or when there is nothing to sync.
-
-**Arguments:**
-- `changelist` (optional): Changelist number to sync up to, or `head` for the latest. Omit to sync to the
-  latest changelist affecting the workspace.
-
-**Options:**
-- `-u, --user NAME`: Perforce user whose changelists to split into their own commits. Repeat the flag to
-  select several users. Defaults to the current p4 user (from `p4 info`).
-- `-n, --dry-run`: Print the resolved sync sequence without syncing.
-
-**Examples:**
-```sh
-git p4son sync-split                  # sync to latest, your own changelists split out
-git p4son sync-split head             # same, explicit
-git p4son sync-split 12345            # stop at changelist 12345
-git p4son sync-split --dry-run        # show the sequence that would be synced
-git p4son sync-split -u alice         # split out alice's changelists instead of yours
-git p4son sync-split -u alice -u bob  # split out both alice's and bob's changelists
-```
-
-For example, with the last sync at CL 100 and your own changelists at 102 and 105, `sync-split` resolves
-to `git p4son sync 101 102 104 105 106`, producing five commits where CL 102 and CL 105 each hold only
-your change.
-
-`sync-split` only moves forward: it requires a previous sync to start from, and refuses a target older
-than the last synced changelist (use `git p4son sync --force` for that).
+`--me` adds or removes the `$(user)` entry. A quoted `'$(user)'` does the same, but the quotes matter: unquoted,
+bash, zsh and PowerShell run `$(user)` as a command substitution.
 
 ### New Command
 

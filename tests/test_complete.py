@@ -136,7 +136,7 @@ class TestComplete(unittest.TestCase):
         self.assertIn('alias', names)
         self.assertIn('review', names)
         self.assertIn('init', names)
-        self.assertIn('sync-split', names)
+        self.assertIn('sync-split-users', names)
         self.assertIn('writable', names)
         self.assertEqual(len(names), 9)
 
@@ -144,6 +144,10 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, [''], workspace_dir='/ws')
         names = self._names(result)
         self.assertNotIn('complete', names)
+
+    def test_folded_sync_split_not_completed(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-'], workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['sync-split-users'])
 
     def test_hidden_sequence_editor_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
@@ -153,7 +157,7 @@ class TestComplete(unittest.TestCase):
     def test_prefix_filters_commands(self, _ws, _aliases):
         result = _complete(self.parser, ['sy'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertEqual(names, ['sync', 'sync-split'])
+        self.assertEqual(names, ['sync', 'sync-split-users'])
 
     def test_hidden_command_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, ['c'], workspace_dir='/ws')
@@ -203,6 +207,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('--force', names)
         self.assertIn('-n', names)
         self.assertIn('--dry-run', names)
+        self.assertIn('--split-user', names)
+        self.assertIn('--no-split', names)
 
     # -- new command --
 
@@ -265,6 +271,51 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')
         self.assertEqual(sorted(self._names(result)),
                          ['apply', 'disable', 'enable'])
+
+    def test_sync_split_users_actions(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(sorted(self._names(result)),
+                         ['add', 'delete', 'list'])
+
+    def test_sync_split_users_list_takes_no_positional(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'list', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), [])
+
+    def test_sync_split_users_add_flags(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'add', '--'],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['--me'])
+
+    def test_sync_split_users_add_names_not_completed(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'add', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), [])
+
+    @mock.patch('git_p4son.complete.get_split_users',
+                return_value=['$(user)', 'alice', 'albert', 'bob'])
+    def test_sync_split_users_delete_completes_configured_names(
+            self, _users, _ws, _aliases):
+        """$(user) is left out: the shell would run it unquoted."""
+        result = _complete(self.parser, ['sync-split-users', 'delete', ''],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['alice', 'albert', 'bob'])
+        result = _complete(self.parser,
+                           ['sync-split-users', 'delete', 'bob', 'al'],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['alice', 'albert'])
+
+    def test_sync_split_users_delete_flags(self, _ws, _aliases):
+        result = _complete(self.parser,
+                           ['sync-split-users', 'delete', '--'],
+                           workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['--me'])
+
+    def test_sync_split_users_delete_outside_a_workspace(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync-split-users', 'delete', ''],
+                           workspace_dir=None)
+        self.assertEqual(self._names(result), [])
 
     def test_alias_delete_positional(self, _ws, _aliases):
         result = _complete(self.parser, ['alias', 'delete', ''],

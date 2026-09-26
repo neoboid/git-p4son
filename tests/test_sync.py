@@ -21,19 +21,20 @@ from git_p4son.git import (
     commit,
     get_dirty_files,
 )
-from git_p4son.depot import ResolvedDepot
 from git_p4son.sync import (
     ChangedFile,
     LastSync,
     WritableSyncFileSet,
     _handle_clobber_warning,
     _restore_writable,
+    build_sync_targets,
     git_last_sync,
     p4_sync,
     prepare_writable_files,
     sync_command,
+    sync_preflight,
 )
-from tests.helpers import make_run_result
+from tests.helpers import make_changes, make_run_result
 
 
 @mock.patch('git_p4son.sync.make_writable', return_value=0)
@@ -946,6 +947,118 @@ class TestPrepareWritableFiles(unittest.TestCase):
         self.assertEqual(result.ignored, [])
 
 
+class TestBuildSyncTargets(unittest.TestCase):
+    """The sequence must isolate each of the user's own changelists in a
+    commit of its own while staying strictly increasing, and visit every
+    required changelist."""
+
+    def test_single_own_changelist(self):
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'me'), (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [103])
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_two_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [106])
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_back_to_back_own_changelists(self):
+        """A predecessor that is itself one of the user's changelists is
+        already a target, so it must not be repeated."""
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'me'), (103, 'me'))
+        targets = build_sync_targets(changes, ['me'], 100, [103])
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_predecessor_is_last_synced(self):
+        """The changelist before the user's own submit is already in git,
+        so only the user's own submit is synced separately."""
+        changes = make_changes((100, 'other'), (101, 'me'), (102, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [102])
+        self.assertEqual(targets, [101, 102])
+
+    def test_own_changelist_is_the_upper_bound(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'))
+        targets = build_sync_targets(changes, ['me'], 100, [102])
+        self.assertEqual(targets, [101, 102])
+
+    def test_no_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [102])
+        self.assertEqual(targets, [102])
+
+    def test_no_changes_at_all(self):
+        """Nothing affected the depot root in the range, so the upper bound
+        is still synced: it may be a changelist elsewhere in the depot."""
+        targets = build_sync_targets([], ['me'], 100, [120])
+        self.assertEqual(targets, [120])
+
+    def test_user_match_is_case_insensitive(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'Me'))
+        targets = build_sync_targets(changes, ['me'], 100, [103])
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_two_users_both_split_out(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
+                               (103, 'other'), (104, 'other'), (105, 'bob'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [106])
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_adjacent_changelists_from_two_selected_users(self):
+        """alice's changelist is the predecessor of bob's, so it is already
+        a target and must not be repeated."""
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'alice'), (103, 'bob'))
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [103])
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_unselected_user_is_not_split_out(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
+                               (103, 'other'), (104, 'bob'))
+        targets = build_sync_targets(changes, ['alice'], 100, [104])
+        self.assertEqual(targets, [101, 102, 104])
+
+    def test_targets_are_strictly_increasing(self):
+        changes = make_changes((100, 'me'), (101, 'me'), (102, 'other'),
+                               (103, 'me'), (104, 'me'), (105, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [105])
+        self.assertEqual(targets, sorted(set(targets)))
+        self.assertEqual(targets, [101, 102, 103, 104, 105])
+
+    def test_required_changelists_between_split_points(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [103, 106])
+        self.assertEqual(targets, [101, 102, 103, 104, 105, 106])
+
+    def test_required_changelists_matching_split_points(self):
+        """A required changelist that is also a split point is synced once."""
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [102, 104, 106])
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_required_changelist_outside_the_depot_root(self):
+        """A required changelist need not be in changes: it may have been
+        submitted elsewhere in the depot."""
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [110])
+        self.assertEqual(targets, [101, 102, 110])
+
+    def test_required_changelists_without_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'other'), (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [101, 103])
+        self.assertEqual(targets, [101, 103])
+
+
 class TestSyncCommand(unittest.TestCase):
 
     _last_sync = LastSync(changelist=10000, commit='abc123')
@@ -1024,31 +1137,6 @@ class TestSyncCommand(unittest.TestCase):
         infos = [str(c.args[0]) for c in mock_log.info.call_args_list]
         self.assertIn('edited.log', infos)
         self.assertNotIn('pristine.log', infos)
-
-    @mock.patch('git_p4son.sync.resolve_depot_root')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_sync')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    def test_reuses_a_depot_resolved_by_the_caller(
-            self, _p4clean, mock_last_sync, _head, mock_preview, mock_prep,
-            _p4sync, _git_clean, _add, _commit, mock_resolve):
-        """sync-split resolves the depot root first and passes it on, so
-        the client spec isn't queried from the server a second time."""
-        mock_last_sync.return_value = self._last_sync
-        mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['12345'], force=False,
-                         workspace_dir='/ws',
-                         resolved_depot=ResolvedDepot(
-                             depot_root='//passed', client_spec=None))
-        self.assertEqual(sync_command(args), 0)
-        mock_resolve.assert_not_called()
-        self.assertEqual(mock_preview.call_args.args[1], '//passed')
 
     @mock.patch('git_p4son.sync._restore_writable')
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
@@ -1729,6 +1817,227 @@ class TestSyncDryRun(unittest.TestCase):
         self.assertEqual(self._run(['10000']), 0)
         self.mock_log.info.assert_any_call('Already synced, nothing to do.')
         self._assert_nothing_run()
+
+
+class TestSyncSplitting(unittest.TestCase):
+    """sync splits out the split users' changelists: configured ones unless
+    --no-split, plus any given with -u."""
+
+    # Last synced at 100, latest 106; "me" submitted 102 and 105.
+    _changes = make_changes(
+        (100, 'other'), (101, 'other'), (102, 'me'), (103, 'other'),
+        (104, 'other'), (105, 'me'), (106, 'other'))
+
+    def setUp(self):
+        self.patches = {}
+        for target, value in (
+                ('git_p4son.depot.get_client_spec', None),
+                ('git_p4son.depot.get_depot_root', '//myclient'),
+                ('git_p4son.sync.git_last_sync',
+                 LastSync(changelist=100, commit='abc123')),
+                ('git_p4son.sync.get_latest_changelist', 106),
+                ('git_p4son.sync.get_split_users', []),
+                ('git_p4son.sync.get_submitted_changes', self._changes),
+                ('git_p4son.sync_split_users.get_p4_user', 'me'),
+                ('git_p4son.sync_split_users.get_existing_p4_users', []),
+                ('git_p4son.sync._handle_clobber_warning', True),
+                ('git_p4son.sync.sync_preflight', True),
+                ('git_p4son.sync.get_head_commit', 'def456'),
+                ('git_p4son.sync._sync_pass', WritableSyncFileSet()),
+                ('git_p4son.sync.get_dirty_files', []),
+                ('git_p4son.sync.commit', None),
+                ('git_p4son.sync._merge_changed_files', None),
+                ('git_p4son.sync._restore_writable', None),
+                ('git_p4son.sync.run_hooks', [])):
+            patcher = mock.patch(target, return_value=value)
+            self.patches[target.rsplit('.', 1)[1]] = patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.sync.log')
+        self.mock_log = patcher.start()
+        self.addCleanup(patcher.stop)
+        # User checks and resolution log from their own module.
+        patcher = mock.patch('git_p4son.sync_split_users.log')
+        self.mock_users_log = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _run(self, *changelist, configured=(), split_user=None,
+             no_split=False, force=False, dry_run=False):
+        self.patches['get_split_users'].return_value = list(configured)
+        args = mock.Mock(changelist=list(changelist), force=force,
+                         workspace_dir='/ws', dry_run=dry_run,
+                         split_user=split_user, no_split=no_split)
+        return sync_command(args)
+
+    def _synced(self):
+        """The (changelist, label) of each target pass, catch-up excluded."""
+        calls = self.patches['_sync_pass'].call_args_list
+        return [(c.args[0], c.args[1]) for c in calls
+                if c.args[1] != 'last synced']
+
+    def _assert_not_split(self):
+        self.patches['get_submitted_changes'].assert_not_called()
+
+    def test_configured_user_changelists_get_their_own_commits(self):
+        self.assertEqual(self._run(configured=['me']), 0)
+        self.assertEqual(self._synced(), [
+            (101, 'split'), (102, 'split'), (104, 'split'), (105, 'split'),
+            (106, 'latest')])
+        self.patches['get_submitted_changes'].assert_called_once_with(
+            '//myclient', 100, 106, '/ws')
+
+    def test_no_split_users_makes_no_extra_queries(self):
+        self.assertEqual(self._run(), 0)
+        self.assertEqual(self._synced(), [(106, 'latest')])
+        self._assert_not_split()
+        self.patches['get_p4_user'].assert_not_called()
+        self.patches['get_existing_p4_users'].assert_not_called()
+
+    def test_placeholder_resolves_to_the_current_user(self):
+        self.assertEqual(self._run(configured=['$(user)']), 0)
+        self.assertEqual([cl for cl, _ in self._synced()],
+                         [101, 102, 104, 105, 106])
+
+    def test_unresolvable_placeholder_fails_without_syncing(self):
+        self.patches['get_p4_user'].return_value = None
+        self.assertEqual(self._run(configured=['$(user)']), 1)
+        self.assertIn('--no-split',
+                      self.mock_users_log.error.call_args.args[0])
+        self.patches['_sync_pass'].assert_not_called()
+
+    def test_explicit_sequence_is_merged_with_split_points(self):
+        self.assertEqual(self._run('101', '103', 'head', configured=['me']),
+                         0)
+        self.assertEqual(self._synced(), [
+            (101, 'specified'), (102, 'split'), (103, 'specified'),
+            (104, 'split'), (105, 'split'), (106, 'latest')])
+
+    def test_explicit_target_bounds_the_range(self):
+        self.patches['get_submitted_changes'].return_value = (
+            self._changes[:5])
+        self.assertEqual(self._run('104', configured=['me']), 0)
+        self.assertEqual(self._synced(), [
+            (101, 'split'), (102, 'split'), (104, 'specified')])
+        self.patches['get_submitted_changes'].assert_called_once_with(
+            '//myclient', 100, 104, '/ws')
+        self.patches['get_latest_changelist'].assert_not_called()
+
+    def test_split_user_adds_to_the_configured_users(self):
+        self.patches['get_existing_p4_users'].return_value = ['Other']
+        self.assertEqual(self._run(configured=['me'], split_user=['other']),
+                         0)
+        # Everyone's changelists are split out, so every one is a target.
+        self.assertEqual([cl for cl, _ in self._synced()],
+                         [101, 102, 103, 104, 105, 106])
+        self.patches['get_existing_p4_users'].assert_called_once_with(
+            ['other'], '/ws')
+
+    def test_unknown_split_user_fails_before_any_work(self):
+        self.assertEqual(self._run(split_user=['nobody']), 1)
+        self.mock_users_log.error.assert_called_once_with(
+            'No such Perforce user: nobody')
+        self.patches['get_latest_changelist'].assert_not_called()
+        self.patches['sync_preflight'].assert_not_called()
+        self.patches['_sync_pass'].assert_not_called()
+
+    def test_quoted_placeholder_split_user_is_not_checked(self):
+        self.assertEqual(self._run(split_user=['$(user)']), 0)
+        self.patches['get_existing_p4_users'].assert_not_called()
+        self.assertEqual([cl for cl, _ in self._synced()],
+                         [101, 102, 104, 105, 106])
+
+    def test_no_split_ignores_the_configured_users(self):
+        self.assertEqual(self._run(configured=['me'], no_split=True), 0)
+        self.assertEqual(self._synced(), [(106, 'latest')])
+        self._assert_not_split()
+
+    def test_no_split_with_split_user_splits_only_that_user(self):
+        self.patches['get_existing_p4_users'].return_value = ['me']
+        self.patches['get_submitted_changes'].return_value = make_changes(
+            (100, 'other'), (101, 'other'), (102, 'me'), (103, 'bob'),
+            (104, 'other'))
+        self.patches['get_latest_changelist'].return_value = 104
+        self.assertEqual(self._run(configured=['bob'], split_user=['me'],
+                                   no_split=True), 0)
+        self.assertEqual([cl for cl, _ in self._synced()], [101, 102, 104])
+
+    def test_last_synced_is_not_split(self):
+        self.assertEqual(self._run('last-synced', configured=['me']), 0)
+        self._assert_not_split()
+
+    def test_first_sync_is_not_split(self):
+        self.patches['git_last_sync'].return_value = None
+        self.assertEqual(self._run(configured=['me']), 0)
+        self.assertEqual(self._synced(), [(106, 'latest')])
+        self._assert_not_split()
+        self.mock_log.info.assert_any_call(
+            'Not splitting out changelists: no previous sync to start from')
+
+    def test_syncing_backwards_is_not_split(self):
+        self.assertEqual(self._run('90', configured=['me'], force=True), 0)
+        self.assertEqual(self._synced(), [(90, 'specified')])
+        self._assert_not_split()
+        self.mock_log.info.assert_any_call(
+            'Not splitting out changelists: syncing to an older changelist')
+
+    def test_already_synced_makes_no_split_queries(self):
+        self.patches['get_latest_changelist'].return_value = 100
+        self.assertEqual(self._run(configured=['me']), 0)
+        self._assert_not_split()
+        self.patches['sync_preflight'].assert_not_called()
+
+    def test_preflight_runs_before_the_split_queries(self):
+        self.patches['sync_preflight'].return_value = False
+        self.assertEqual(self._run(configured=['me']), 1)
+        self._assert_not_split()
+        self.patches['get_p4_user'].assert_not_called()
+
+    def test_dry_run_prints_the_split_sequence(self):
+        self.assertEqual(self._run(configured=['me'], dry_run=True), 0)
+        self.mock_log.success.assert_any_call('101 102 104 105 106')
+        self.mock_log.info.assert_any_call('Dry run, nothing synced.')
+        self.patches['sync_preflight'].assert_not_called()
+        self.patches['_handle_clobber_warning'].assert_not_called()
+        self.patches['_sync_pass'].assert_not_called()
+
+
+class TestSyncPreflight(unittest.TestCase):
+    """The gate before a sync: workspace checks then hooks, in that
+    order."""
+
+    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_clean_workspaces_run_the_hooks(
+            self, _dirty, _opened, mock_run_hooks):
+        self.assertTrue(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.p4_get_opened_files')
+    @mock.patch('git_p4son.lib.get_dirty_files',
+                return_value=[('a.txt', 'modify')])
+    def test_dirty_git_stops_before_p4_and_hooks(
+            self, _dirty, mock_opened, mock_run_hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_opened.assert_not_called()
+        mock_run_hooks.assert_not_called()
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
+    @mock.patch('git_p4son.sync.p4_get_opened_files',
+                return_value=[('a.txt', 'modify')])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_dirty_p4_stops_before_hooks(
+            self, _dirty, _opened, _tracked, mock_run_hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_run_hooks.assert_not_called()
+
+    @mock.patch('git_p4son.sync.run_hooks',
+                return_value=[make_run_result(returncode=1)])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
 
 
 class TestMergeChangedFiles(unittest.TestCase):

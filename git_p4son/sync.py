@@ -24,20 +24,30 @@ from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
 from .log import log
 from .writable import is_writable_mode, make_writable
+from .sync_split_users import (
+    USER_PLACEHOLDER,
+    check_p4_users,
+    get_split_users,
+    resolve_split_users,
+)
 from .perforce import (
     get_latest_changelist,
+    get_submitted_changes,
     get_writable_files,
     is_always_writable_file_type,
     is_binary_file_type,
     p4_fstat_file_info,
     p4_get_opened_files,
     p4_sync_preview,
+    P4Change,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
 )
 
 
 LAST_SYNCED_LABEL = 'last synced'
+# Label for the targets added to split out the split users' changelists.
+SPLIT_LABEL = 'split'
 
 
 @dataclass
@@ -644,19 +654,14 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
     return True
 
 
-def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   already_done: bool = False) -> bool:
+def sync_preflight(depot_root: str, workspace_dir: str,
+                   invocation_dir: str) -> bool:
     """Gate a sync: both workspaces clean, then the pre-sync hooks.
 
     Returns False when the sync must not go ahead. Callers run this once they
     know a sync will actually be attempted, so that a run with nothing to sync
-    neither checks the workspaces nor fires the hooks. already_done covers a
-    caller that ran it before delegating here: sync-split runs it up front,
-    ahead of the p4 queries that resolve its changelist sequence, so neither
-    the checks nor the hooks happen twice.
+    neither checks the workspaces nor fires the hooks.
     """
-    if already_done:
-        return True
     if not check_git_workspace_clean(workspace_dir):
         return False
     if not _check_p4_workspace_clean(depot_root, workspace_dir):
@@ -698,6 +703,81 @@ def _restore_writable(synced: list[str], workspace_dir: str) -> None:
     tracked = sorted(get_tracked_files(sorted(set(synced)), workspace_dir))
     changed = make_writable(tracked)
     log.success(f'{changed} of {len(tracked)} tracked files made writable')
+
+
+def build_sync_targets(changes: list[P4Change], users: list[str],
+                       last_synced: int, required: list[int]) -> list[int]:
+    """Build the sync sequence that splits out the given users' changelists.
+
+    changes is every submitted changelist affecting the depot root in
+    [last_synced, max(required)], oldest first. Each changelist submitted by
+    one of users gets the changelist submitted just before it synced first,
+    so that submit lands in a commit containing nothing else. Changelists at
+    or below last_synced are already in git and dropped. The required
+    changelists, all newer than last_synced, are always synced and merged in
+    order with the split points.
+    """
+    split: list[int] = []
+    lowered = {u.lower() for u in users}
+    for i, change in enumerate(changes):
+        if change.change <= last_synced or change.user.lower() not in lowered:
+            continue
+        last = split[-1] if split else last_synced
+        if i > 0 and changes[i - 1].change > last:
+            split.append(changes[i - 1].change)
+            last = split[-1]
+        if change.change > last:
+            split.append(change.change)
+    return sorted(set(split).union(required))
+
+
+def _check_split_user_args(names: list[str],
+                           workspace_dir: str) -> list[str] | None:
+    """Check the users given with -u, spelled as the server spells them.
+
+    Returns None (with an error logged) if any is not a Perforce user.
+    $(user) is resolved when the users are, so it is not checked here."""
+    real = [name for name in names if name != USER_PLACEHOLDER]
+    if not real:
+        return list(names)
+    checked = check_p4_users(real, workspace_dir)
+    if checked is None:
+        return None
+    return [checked.get(name, name) for name in names]
+
+
+def _split_targets(targets: list[tuple[int, str]], users: list[str],
+                   last_synced: int, depot_root: str,
+                   workspace_dir: str) -> list[tuple[int, str]]:
+    """Add the targets that give each of users' changelists its own commit.
+
+    The targets are strictly increasing and all newer than last_synced. One
+    query covers both jobs: which changelists in the range belong to the
+    users, and which changelist was submitted immediately before each of
+    them (its predecessor in this same list)."""
+    upper = targets[-1][0]
+    log.heading(f'Finding changelists submitted to {depot_root} '
+                f'in CL {last_synced}..{upper}')
+    changes = get_submitted_changes(depot_root, last_synced, upper,
+                                    workspace_dir)
+    log.success(f'{len(changes)} changelists')
+
+    lowered = {u.lower() for u in users}
+    matched = [c for c in changes
+               if c.change > last_synced and c.user.lower() in lowered]
+    log.heading('Finding changelists to split into their own commits')
+    if matched:
+        for change in matched:
+            log.info(f'CL {change.change} ({change.user})')
+        label = 'changelist' if len(matched) == 1 else 'changelists'
+        log.success(f'{len(matched)} {label} to split out')
+    else:
+        log.success('None found')
+
+    labels = dict(targets)
+    return [(cl, labels.get(cl, SPLIT_LABEL))
+            for cl in build_sync_targets(changes, users, last_synced,
+                                         list(labels))]
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:
@@ -775,12 +855,8 @@ def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
     invocation_dir = vars(args).get('invocation_dir', workspace_dir)
-    preflight_done = vars(args).get('preflight_done', False)
 
-    # sync-split resolves the depot root before handing over, so it passes
-    # the result on rather than having the client spec queried twice.
-    resolved = (vars(args).get('resolved_depot')
-                or resolve_depot_root(workspace_dir))
+    resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
         return 1
     depot_root = resolved.depot_root
@@ -792,6 +868,18 @@ def sync_command(args: argparse.Namespace) -> int:
         log.success(f'CL {last_sync.changelist}')
     else:
         log.warning('No previous sync found')
+
+    # Users given with -u are checked up front with the other arguments, so
+    # a misspelled name fails before any work is done.
+    extra_split_users = vars(args).get('split_user') or []
+    if extra_split_users:
+        extra_split_users = _check_split_user_args(extra_split_users,
+                                                   workspace_dir)
+        if extra_split_users is None:
+            return 1
+    configured_split_users = ([] if vars(args).get('no_split', False)
+                              else get_split_users(workspace_dir))
+    split_users = configured_split_users + extra_split_users
 
     # Work out what the sync will do before touching either workspace, so a
     # run with nothing to sync gets through without checks or hooks.
@@ -821,16 +909,21 @@ def sync_command(args: argparse.Namespace) -> int:
             return 0
         targets = resolved_targets
 
-    # A dry run stops once the sequence is known: it syncs nothing, so it
-    # skips the clobber prompt, the workspace checks and the hooks.
-    if vars(args).get('dry_run', False):
-        log.heading('Sync sequence')
-        if resync_last_synced:
-            log.success(f'{last_sync.changelist} ({LAST_SYNCED_LABEL})')
+    # Splitting only moves forward from a known starting point: it syncs
+    # the changelist before each of the split users' submits, which needs
+    # a range to look for them in.
+    split = False
+    if split_users and not resync_last_synced:
+        if not last_sync:
+            log.info('Not splitting out changelists: '
+                     'no previous sync to start from')
+        elif targets[0][0] < last_sync.changelist:
+            log.info('Not splitting out changelists: '
+                     'syncing to an older changelist')
         else:
-            log.success(' '.join(str(cl) for cl, _ in targets))
-        log.info('Dry run, nothing synced.')
-        return 0
+            split = True
+
+    dry_run = vars(args).get('dry_run', False)
 
     # Workspace line ending governs how staged git content is normalized so
     # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
@@ -841,17 +934,39 @@ def sync_command(args: argparse.Namespace) -> int:
     clobber = bool(client_spec and client_spec.clobber)
     allwrite = bool(client_spec and client_spec.allwrite)
 
-    # Prompted before the preflight so declining here costs nothing: no
-    # workspace queries, and no hooks fired for a sync that is abandoned.
-    if not _handle_clobber_warning(clobber, workspace_dir):
-        return 1
+    # A dry run syncs nothing, so it skips the clobber prompt, the
+    # workspace checks and the hooks.
+    if not dry_run:
+        # Prompted before the preflight so declining here costs nothing: no
+        # workspace queries, and no hooks fired for a sync that is abandoned.
+        if not _handle_clobber_warning(clobber, workspace_dir):
+            return 1
 
-    # The single gate: both workspaces clean, then the pre-sync hooks. Runs
-    # once for the whole sync, covering the catch-up pass as well, and is
-    # skipped outright when the caller (sync-split) already ran it.
-    if not sync_preflight(depot_root, workspace_dir, invocation_dir,
-                          preflight_done):
-        return 1
+        # The single gate: both workspaces clean, then the pre-sync hooks.
+        # Runs once for the whole sync, covering the catch-up pass as well.
+        # It runs before splitting, whose queries are the costly part, so a
+        # dirty workspace or a vetoing hook gets to say so first.
+        if not sync_preflight(depot_root, workspace_dir, invocation_dir):
+            return 1
+
+    if split:
+        log.heading('Finding split users')
+        users = resolve_split_users(split_users, workspace_dir)
+        if users is None:
+            return 1
+        log.success(', '.join(users))
+        targets = _split_targets(targets, users, last_sync.changelist,
+                                 depot_root, workspace_dir)
+
+    if split or dry_run:
+        log.heading('Sync sequence')
+        if resync_last_synced:
+            log.success(f'{last_sync.changelist} ({LAST_SYNCED_LABEL})')
+        else:
+            log.success(' '.join(str(cl) for cl, _ in targets))
+    if dry_run:
+        log.info('Dry run, nothing synced.')
+        return 0
 
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)

@@ -36,7 +36,7 @@ def set_split_users(workspace_dir: str, users: list[str]) -> None:
     save_config(workspace_dir, {'sync': {'split-users': users}})
 
 
-def _current_user(workspace_dir: str) -> str | None:
+def current_p4_user(workspace_dir: str) -> str | None:
     """The current Perforce user, or None when p4 cannot tell.
 
     OSError covers p4 not being installed at all."""
@@ -54,7 +54,7 @@ def resolve_split_users(users: list[str],
     Returns None (with an error logged) when $(user) cannot be resolved."""
     current = None
     if USER_PLACEHOLDER in users:
-        current = _current_user(workspace_dir)
+        current = current_p4_user(workspace_dir)
         if not current:
             log.error(f'Cannot determine the current Perforce user for '
                       f'{USER_PLACEHOLDER} in the split users. Check the p4 '
@@ -81,7 +81,7 @@ def _list(workspace_dir: str) -> int:
         return 0
     # Show who $(user) stands for, but a p4 hiccup should not stop the
     # list from printing: the placeholder is shown bare instead.
-    current = (_current_user(workspace_dir)
+    current = (current_p4_user(workspace_dir)
                if USER_PLACEHOLDER in users else None)
     for user in users:
         if user == USER_PLACEHOLDER and current:
@@ -172,7 +172,7 @@ def _delete(workspace_dir: str, names: list[str], me: bool) -> int:
     if missing:
         # Naming yourself when the list holds $(user) is an easy slip, since
         # list shows the placeholder next to your name.
-        current = (_current_user(workspace_dir)
+        current = (current_p4_user(workspace_dir)
                    if USER_PLACEHOLDER in users else None)
         for name in missing:
             log.error(f'{name} is not a split user')

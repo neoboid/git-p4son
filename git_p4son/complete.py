@@ -14,7 +14,8 @@ from .git import get_current_branch, get_workspace_dir
 from .log import log
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
-_HIDDEN_COMMANDS = frozenset({'complete', 'completion', '_sequence-editor'})
+_HIDDEN_COMMANDS = frozenset(
+    {'complete', 'completion', '_sequence-editor', 'sync-split'})
 # Commands whose first positional is a nested action (alias list, ...).
 _COMMANDS_WITH_ACTIONS = frozenset(
     {'alias', 'sync-split-users', 'writable'})
@@ -133,10 +134,6 @@ def _complete_positional(command, subcommand, positional_count,
             ]
             return _filter(candidates, prefix)
         # "head" may also close out a sequence of changelist numbers.
-        return _filter(
-            [('head', 'Sync to the latest changelist')], prefix)
-
-    if command == 'sync-split' and positional_count == 0:
         return _filter(
             [('head', 'Sync to the latest changelist')], prefix)
 

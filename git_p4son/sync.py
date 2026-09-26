@@ -656,20 +656,14 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   already_done: bool = False,
                    ignore_blocking_processes: bool = False) -> bool:
     """Gate a sync: no blocking processes, both workspaces clean, then the
     pre-sync hooks.
 
     Returns False when the sync must not go ahead. Callers run this once they
     know a sync will actually be attempted, so that a run with nothing to sync
-    neither checks the workspaces nor fires the hooks. already_done covers a
-    caller that ran it before delegating here: sync-split runs it up front,
-    ahead of the p4 queries that resolve its changelist sequence, so neither
-    the checks nor the hooks happen twice.
+    neither checks the workspaces nor fires the hooks.
     """
-    if already_done:
-        return True
     # First: it is the cheapest check, and an editor left open is the most
     # common reason not to sync.
     if not check_no_blocking_processes(workspace_dir,
@@ -868,14 +862,10 @@ def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
     invocation_dir = vars(args).get('invocation_dir', workspace_dir)
-    preflight_done = vars(args).get('preflight_done', False)
     ignore_blocking_processes = vars(args).get('ignore_blocking_processes',
                                                False)
 
-    # sync-split resolves the depot root before handing over, so it passes
-    # the result on rather than having the client spec queried twice.
-    resolved = (vars(args).get('resolved_depot')
-                or resolve_depot_root(workspace_dir))
+    resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
         return 1
     depot_root = resolved.depot_root
@@ -963,12 +953,11 @@ def sync_command(args: argparse.Namespace) -> int:
 
         # The single gate: no blocking processes, both workspaces clean,
         # then the pre-sync hooks. Runs once for the whole sync, covering the
-        # catch-up pass as well, and is skipped outright when the caller
-        # (sync-split) already ran it. It runs before splitting, whose
-        # queries are the costly part, so a blocking process, a dirty
-        # workspace or a vetoing hook gets to say so first.
+        # catch-up pass as well. It runs before splitting, whose queries are
+        # the costly part, so a blocking process, a dirty workspace or a
+        # vetoing hook gets to say so first.
         if not sync_preflight(depot_root, workspace_dir, invocation_dir,
-                              preflight_done, ignore_blocking_processes):
+                              ignore_blocking_processes):
             return 1
 
     if split:

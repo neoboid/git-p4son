@@ -9,6 +9,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
+    P4SyncAbortError,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
     get_latest_changelist,
@@ -454,6 +455,13 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
         processor = P4SyncOutputProcessor()
         processor('//...@12345 - file(s) up-to-date.', sys.stdout)
         self.assertEqual(processor.synced_file_count, 0)
+
+    def test_failed_rename_aborts(self):
+        processor = P4SyncOutputProcessor()
+        with self.assertRaises(P4SyncAbortError):
+            processor('rename: failed to rename D:\\ws\\a.uasset after 10 '
+                      'attempts: Cannot create a file when that file '
+                      'already exists.', sys.stderr)
 
 
 class TestP4Sync(unittest.TestCase):

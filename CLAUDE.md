@@ -42,7 +42,15 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
   commit each (a trailing `head` may close out the sequence). Changelist arguments are numeric-only: `sync` does not
   resolve changelist aliases (those name pending CLs from `new`/`review`, which Perforce renumbers on submit), only
   submitted CL numbers are meaningful. Uses threaded real-time output processing (`P4SyncOutputProcessor`) to parse p4
-  sync progress.
+  sync progress. When moving forward from a previous sync, also syncs the changelist before each of the split users'
+  submits (`build_sync_targets`), so each of their changelists gets a commit of its own; `-u` adds users for one run
+  and `--no-split` ignores the configured ones.
+
+- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
+  `$(user)` placeholder to the current Perforce user, and the `sync-split-users` command (`list`, `add`, `delete`).
+
+- **`sync_split.py`** - The `sync-split` command, folded into `sync`. Hidden from help; only prints the equivalent
+  `sync` and `sync-split-users` commands.
 
 - **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, reverts files that are no
   longer part of the git change, and optionally creates a Swarm review (with `--review` flag) or shelves (with
@@ -62,11 +70,11 @@ review keyword management.
 **`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in
 `.git-p4son/changelists/<name>`.
 
-**`config.py`** manages per-repo configuration stored in `.git-p4son/config.toml`. Currently stores the depot root
-(the Perforce path to sync, e.g. `//my-workspace` or `//my-workspace/Engine/Source`).
+**`config.py`** manages per-repo configuration stored in `.git-p4son/config.toml`, such as the depot root (the
+Perforce path to sync, e.g. `//my-workspace` or `//my-workspace/Engine/Source`) and the split users.
 
 **`depot.py`** owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and resolving it
-against the client spec for the commands that run Perforce queries against it (`sync`, `sync-split`).
+against the client spec for the commands that run Perforce queries against it (`sync`).
 
 **`writable.py`** implements writable mode: reading and writing the `core.writable` setting, the `writable` command,
 and the helpers that set and clear the user write bit on git-tracked files, which `sync` also uses.

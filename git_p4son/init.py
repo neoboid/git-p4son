@@ -120,15 +120,14 @@ def _configure_depot_root(client_name: str, cwd: str,
     return True
 
 
-def _ask_writable_mode(current: bool) -> bool | None:
-    """Ask whether to keep git-tracked files writable.
+def _ask_yes_no(question: str, current: bool) -> bool | None:
+    """Ask a yes/no question, defaulting to the current value.
 
     An empty answer keeps the current value. Returns None on EOF."""
     choices = '[Y/n]' if current else '[y/N]'
     while True:
         try:
-            answer = input(
-                f'Keep git-tracked files writable? {choices}: ').strip().lower()
+            answer = input(f'{question} {choices}: ').strip().lower()
         except EOFError:
             print()
             return None
@@ -151,7 +150,7 @@ def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
     print()
     print('Writable mode keeps git-tracked files writable, so they can be')
     print('edited without p4 edit. Git-ignored files stay read-only.')
-    enabled = _ask_writable_mode(current)
+    enabled = _ask_yes_no('Keep git-tracked files writable?', current)
     if enabled is None:
         log.success(f'{"on" if current else "off"} (unchanged)')
         return current, False

@@ -4,100 +4,10 @@ import argparse
 import unittest
 from unittest import mock
 
-from git_p4son.perforce import P4Change
 from git_p4son.depot import ResolvedDepot
 from git_p4son.sync import LastSync, sync_preflight
-from git_p4son.sync_split import (
-    build_sync_targets, sync_split_command,
-)
-from tests.helpers import make_run_result
-
-
-def _changes(*pairs):
-    """Build a change list from (changelist, user) pairs."""
-    return [P4Change(change=cl, user=user) for cl, user in pairs]
-
-
-class TestBuildSyncTargets(unittest.TestCase):
-    """The sequence must isolate each of the user's own changelists in a
-    commit of its own while staying strictly increasing."""
-
-    def test_single_own_changelist(self):
-        changes = _changes((100, 'other'), (101, 'other'),
-                           (102, 'me'), (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_two_own_changelists(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'me'),
-                           (103, 'other'), (104, 'other'), (105, 'me'),
-                           (106, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 106)
-        self.assertEqual(targets, [101, 102, 104, 105, 106])
-
-    def test_back_to_back_own_changelists(self):
-        """A predecessor that is itself one of the user's changelists is
-        already a target, so it must not be repeated."""
-        changes = _changes((100, 'other'), (101, 'other'),
-                           (102, 'me'), (103, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_predecessor_is_last_synced(self):
-        """The changelist before the user's own submit is already in git,
-        so only the user's own submit is synced separately."""
-        changes = _changes((100, 'other'), (101, 'me'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
-        self.assertEqual(targets, [101, 102])
-
-    def test_own_changelist_is_the_upper_bound(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
-        self.assertEqual(targets, [101, 102])
-
-    def test_no_own_changelists(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 102)
-        self.assertEqual(targets, [102])
-
-    def test_no_changes_at_all(self):
-        """Nothing affected the depot root in the range, so the upper bound
-        is still synced: it may be a changelist elsewhere in the depot."""
-        targets = build_sync_targets([], ['me'], 100, 120)
-        self.assertEqual(targets, [120])
-
-    def test_user_match_is_case_insensitive(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'Me'))
-        targets = build_sync_targets(changes, ['me'], 100, 103)
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_two_users_both_split_out(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'alice'),
-                           (103, 'other'), (104, 'other'), (105, 'bob'),
-                           (106, 'other'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 106)
-        self.assertEqual(targets, [101, 102, 104, 105, 106])
-
-    def test_adjacent_changelists_from_two_selected_users(self):
-        """alice's changelist is the predecessor of bob's, so it is already
-        a target and must not be repeated."""
-        changes = _changes((100, 'other'), (101, 'other'),
-                           (102, 'alice'), (103, 'bob'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 103)
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_unselected_user_is_not_split_out(self):
-        changes = _changes((100, 'other'), (101, 'other'), (102, 'alice'),
-                           (103, 'other'), (104, 'bob'))
-        targets = build_sync_targets(changes, ['alice'], 100, 104)
-        self.assertEqual(targets, [101, 102, 104])
-
-    def test_targets_are_strictly_increasing(self):
-        changes = _changes((100, 'me'), (101, 'me'), (102, 'other'),
-                           (103, 'me'), (104, 'me'), (105, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, 105)
-        self.assertEqual(targets, sorted(set(targets)))
-        self.assertEqual(targets, [101, 102, 103, 104, 105])
+from git_p4son.sync_split import sync_split_command
+from tests.helpers import make_changes, make_run_result
 
 
 class TestSyncSplitCommand(unittest.TestCase):
@@ -129,7 +39,7 @@ class TestSyncSplitCommand(unittest.TestCase):
                 return_value=LastSync(changelist=100, commit='abc123'))
     def test_delegates_resolved_sequence_to_sync(
             self, _last_sync, _latest, _user, mock_changes, mock_sync):
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'me'),
             (103, 'other'), (104, 'other'), (105, 'me'), (106, 'other'))
         args = self._args()
@@ -147,7 +57,7 @@ class TestSyncSplitCommand(unittest.TestCase):
                 return_value=LastSync(changelist=100, commit='abc123'))
     def test_explicit_upper_bound_skips_head_lookup(
             self, _last_sync, mock_latest, _user, mock_changes, mock_sync):
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'me'))
         args = self._args(changelist='103')
         rc = sync_split_command(args)
@@ -164,7 +74,7 @@ class TestSyncSplitCommand(unittest.TestCase):
                 return_value=LastSync(changelist=100, commit='abc123'))
     def test_user_option_overrides_p4_user(
             self, _last_sync, _latest, mock_p4_user, mock_changes, _sync):
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'colleague'))
         args = self._args(user=['colleague'])
         rc = sync_split_command(args)
@@ -180,7 +90,7 @@ class TestSyncSplitCommand(unittest.TestCase):
                 return_value=LastSync(changelist=100, commit='abc123'))
     def test_dry_run_does_not_sync(
             self, _last_sync, _latest, _user, mock_changes, mock_sync):
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'me'))
         rc = sync_split_command(self._args(dry_run=True))
         self.assertEqual(rc, 0)
@@ -426,7 +336,7 @@ class TestSyncSplitCommandMultiUser(unittest.TestCase):
                 return_value=LastSync(changelist=100, commit='abc123'))
     def test_multiple_users_are_all_split_out(
             self, _last_sync, _latest, mock_p4_user, mock_changes, _sync):
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'alice'),
             (103, 'other'), (104, 'other'), (105, 'bob'), (106, 'other'))
         args = self._args(user=['alice', 'bob'])
@@ -445,7 +355,7 @@ class TestSyncSplitCommandMultiUser(unittest.TestCase):
             self, _last_sync, _latest, _p4_user, mock_changes, _sync):
         """Naming the same user twice (in any casing) must not change the
         resolved sequence."""
-        mock_changes.return_value = _changes(
+        mock_changes.return_value = make_changes(
             (100, 'other'), (101, 'other'), (102, 'alice'))
         args = self._args(user=['alice', 'Alice'])
         rc = sync_split_command(args)

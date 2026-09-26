@@ -32,6 +32,7 @@ from .perforce import (
     p4_fstat_file_info,
     p4_get_opened_files,
     p4_sync_preview,
+    P4Change,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
 )
@@ -698,6 +699,33 @@ def _restore_writable(synced: list[str], workspace_dir: str) -> None:
     tracked = sorted(get_tracked_files(sorted(set(synced)), workspace_dir))
     changed = make_writable(tracked)
     log.success(f'{changed} of {len(tracked)} tracked files made writable')
+
+
+def build_sync_targets(changes: list[P4Change], users: list[str],
+                       last_synced: int, upper: int) -> list[int]:
+    """Build the sync sequence that splits out the given users' changelists.
+
+    changes is every submitted changelist affecting the depot root in
+    [last_synced, upper], oldest first. Each changelist submitted by one of
+    users gets the changelist submitted just before it synced first, so that
+    submit lands in a commit containing nothing else. Changelists at or below
+    last_synced are already in git and dropped, and the sequence always ends
+    at upper.
+    """
+    targets: list[int] = []
+    lowered = {u.lower() for u in users}
+    for i, change in enumerate(changes):
+        if change.change <= last_synced or change.user.lower() not in lowered:
+            continue
+        last = targets[-1] if targets else last_synced
+        if i > 0 and changes[i - 1].change > last:
+            targets.append(changes[i - 1].change)
+            last = targets[-1]
+        if change.change > last:
+            targets.append(change.change)
+    if not targets or upper > targets[-1]:
+        targets.append(upper)
+    return targets
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:

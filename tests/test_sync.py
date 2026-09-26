@@ -28,12 +28,13 @@ from git_p4son.sync import (
     WritableSyncFileSet,
     _handle_clobber_warning,
     _restore_writable,
+    build_sync_targets,
     git_last_sync,
     p4_sync,
     prepare_writable_files,
     sync_command,
 )
-from tests.helpers import make_run_result
+from tests.helpers import make_changes, make_run_result
 
 
 @mock.patch('git_p4son.sync.make_writable', return_value=0)
@@ -944,6 +945,88 @@ class TestPrepareWritableFiles(unittest.TestCase):
         result = prepare_writable_files([], '/ws', 'head123', self.temp_root)
         self.assertEqual(result.changed, [])
         self.assertEqual(result.ignored, [])
+
+
+class TestBuildSyncTargets(unittest.TestCase):
+    """The sequence must isolate each of the user's own changelists in a
+    commit of its own while staying strictly increasing."""
+
+    def test_single_own_changelist(self):
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'me'), (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, 103)
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_two_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
+                               (103, 'other'), (104, 'other'), (105, 'me'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, 106)
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_back_to_back_own_changelists(self):
+        """A predecessor that is itself one of the user's changelists is
+        already a target, so it must not be repeated."""
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'me'), (103, 'me'))
+        targets = build_sync_targets(changes, ['me'], 100, 103)
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_predecessor_is_last_synced(self):
+        """The changelist before the user's own submit is already in git,
+        so only the user's own submit is synced separately."""
+        changes = make_changes((100, 'other'), (101, 'me'), (102, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, 102)
+        self.assertEqual(targets, [101, 102])
+
+    def test_own_changelist_is_the_upper_bound(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'))
+        targets = build_sync_targets(changes, ['me'], 100, 102)
+        self.assertEqual(targets, [101, 102])
+
+    def test_no_own_changelists(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, 102)
+        self.assertEqual(targets, [102])
+
+    def test_no_changes_at_all(self):
+        """Nothing affected the depot root in the range, so the upper bound
+        is still synced: it may be a changelist elsewhere in the depot."""
+        targets = build_sync_targets([], ['me'], 100, 120)
+        self.assertEqual(targets, [120])
+
+    def test_user_match_is_case_insensitive(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'Me'))
+        targets = build_sync_targets(changes, ['me'], 100, 103)
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_two_users_both_split_out(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
+                               (103, 'other'), (104, 'other'), (105, 'bob'),
+                               (106, 'other'))
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 106)
+        self.assertEqual(targets, [101, 102, 104, 105, 106])
+
+    def test_adjacent_changelists_from_two_selected_users(self):
+        """alice's changelist is the predecessor of bob's, so it is already
+        a target and must not be repeated."""
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'alice'), (103, 'bob'))
+        targets = build_sync_targets(changes, ['alice', 'bob'], 100, 103)
+        self.assertEqual(targets, [101, 102, 103])
+
+    def test_unselected_user_is_not_split_out(self):
+        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
+                               (103, 'other'), (104, 'bob'))
+        targets = build_sync_targets(changes, ['alice'], 100, 104)
+        self.assertEqual(targets, [101, 102, 104])
+
+    def test_targets_are_strictly_increasing(self):
+        changes = make_changes((100, 'me'), (101, 'me'), (102, 'other'),
+                               (103, 'me'), (104, 'me'), (105, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, 105)
+        self.assertEqual(targets, sorted(set(targets)))
+        self.assertEqual(targets, [101, 102, 103, 104, 105])
 
 
 class TestSyncCommand(unittest.TestCase):

@@ -117,7 +117,9 @@ def sync_split_command(args: argparse.Namespace) -> int:
     # sync_command is told it is done so none of it happens twice, and a dry
     # run syncs nothing, so it skips the gate entirely.
     if not args.dry_run:
-        if not sync_preflight(depot_root, workspace_dir, invocation_dir):
+        if not sync_preflight(
+                depot_root, workspace_dir, invocation_dir,
+                ignore_blocking_processes=args.ignore_blocking_processes):
             return 1
         args.preflight_done = True
 

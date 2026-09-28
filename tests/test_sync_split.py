@@ -117,7 +117,7 @@ class TestSyncSplitCommand(unittest.TestCase):
 
     def _args(self, **overrides):
         values = dict(changelist=None, user=None, dry_run=False,
-                      workspace_dir='/ws')
+                      ignore_blocking_processes=False, workspace_dir='/ws')
         values.update(overrides)
         return mock.Mock(**values)
 
@@ -244,7 +244,7 @@ class TestSyncSplitPreSyncHooks(unittest.TestCase):
 
     def _args(self, **overrides):
         values = dict(changelist=None, user=None, dry_run=False,
-                      workspace_dir='/ws', invocation_dir='/invoked')
+                      ignore_blocking_processes=False, workspace_dir='/ws', invocation_dir='/invoked')
         values.update(overrides)
         return argparse.Namespace(**values)
 
@@ -280,6 +280,19 @@ class TestSyncSplitPreSyncHooks(unittest.TestCase):
         args = self._args()
         sync_split_command(args)
         self.assertTrue(args.preflight_done)
+
+    @mock.patch('git_p4son.sync_split.sync_command', return_value=0)
+    @mock.patch('git_p4son.sync_split.get_submitted_changes', return_value=[])
+    @mock.patch('git_p4son.sync_split.get_p4_user', return_value='me')
+    @mock.patch('git_p4son.sync_split.get_latest_changelist', return_value=103)
+    @mock.patch('git_p4son.sync_split.git_last_sync',
+                return_value=LastSync(changelist=100, commit='abc123'))
+    @mock.patch('git_p4son.sync_split.sync_preflight', return_value=True)
+    def test_ignore_blocking_processes_reaches_the_gate(
+            self, mock_gate, _last_sync, _latest, _user, _changes, _sync):
+        sync_split_command(self._args(ignore_blocking_processes=True))
+        self.assertTrue(
+            mock_gate.call_args.kwargs['ignore_blocking_processes'])
 
     @mock.patch('git_p4son.sync_split.sync_command', return_value=0)
     @mock.patch('git_p4son.sync_split.get_submitted_changes', return_value=[])
@@ -348,15 +361,42 @@ class TestSyncSplitPreSyncHooks(unittest.TestCase):
 
 
 class TestSyncPreflight(unittest.TestCase):
-    """The one gate both commands share: workspace checks then hooks, in
-    that order, and skipped wholesale when a caller already ran it."""
+    """The one gate both commands share: blocking processes, workspace
+    checks then hooks, in that order, and skipped wholesale when a caller
+    already ran it."""
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
     @mock.patch('git_p4son.lib.get_dirty_files')
+    @mock.patch('git_p4son.sync.check_no_blocking_processes',
+                return_value=False)
+    def test_blocking_process_stops_before_everything_else(
+            self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
+        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        mock_blocking.assert_called_once_with('/ws', False)
+        mock_dirty.assert_not_called()
+        mock_opened.assert_not_called()
+        mock_run_hooks.assert_not_called()
+
+    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.check_no_blocking_processes',
+                return_value=True)
+    def test_ignore_blocking_processes_is_passed_on(
+            self, mock_blocking, _dirty, _opened, _hooks):
+        self.assertTrue(sync_preflight('//ws', '/ws', '/invoked',
+                                       ignore_blocking_processes=True))
+        mock_blocking.assert_called_once_with('/ws', True)
+
+    @mock.patch('git_p4son.sync.run_hooks')
+    @mock.patch('git_p4son.sync.p4_get_opened_files')
+    @mock.patch('git_p4son.lib.get_dirty_files')
+    @mock.patch('git_p4son.sync.check_no_blocking_processes')
     def test_already_done_skips_everything(
-            self, mock_dirty, mock_opened, mock_run_hooks):
+            self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
         self.assertTrue(sync_preflight('//ws', '/ws', '/invoked', True))
+        mock_blocking.assert_not_called()
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
         mock_run_hooks.assert_not_called()
@@ -414,7 +454,7 @@ class TestSyncSplitCommandMultiUser(unittest.TestCase):
 
     def _args(self, **overrides):
         values = dict(changelist=None, user=None, dry_run=False,
-                      workspace_dir='/ws')
+                      ignore_blocking_processes=False, workspace_dir='/ws')
         values.update(overrides)
         return mock.Mock(**values)
 

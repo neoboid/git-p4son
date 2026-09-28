@@ -109,6 +109,11 @@ Examples:
         action='store_true',
         help='Print the resolved sync sequence without syncing'
     )
+    sync_parser.add_argument(
+        '--ignore-blocking-processes',
+        action='store_true',
+        help='Sync even while a configured blocking process is running'
+    )
 
     # Sync-split subcommand
     sync_split_parser = subparsers.add_parser(
@@ -140,6 +145,11 @@ Examples:
         '-n', '--dry-run',
         action='store_true',
         help='Print the resolved sync sequence without syncing'
+    )
+    sync_split_parser.add_argument(
+        '--ignore-blocking-processes',
+        action='store_true',
+        help='Sync even while a configured blocking process is running'
     )
 
     # New subcommand

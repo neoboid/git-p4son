@@ -275,7 +275,7 @@ saves the answer; run `git p4son writable apply` once your files are committed t
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync [changelist ...] [--force] [--dry-run]
+git p4son sync [changelist ...] [--force] [--dry-run] [--ignore-blocking-processes]
 ```
 
 **Arguments:**
@@ -288,6 +288,7 @@ git p4son sync [changelist ...] [--force] [--dry-run]
 - `-f, --force`: Allow syncing to changelists older than the current one.
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
   real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts.
+- `--ignore-blocking-processes`: Sync even while a [blocking process](#blocking-processes) is running.
 
 **Examples:**
 ```sh
@@ -300,6 +301,24 @@ git p4son sync last-synced
 git p4son sync 12345 --force
 git p4son sync --dry-run    # show the changelists a sync to latest would visit
 ```
+
+#### Blocking processes
+
+Syncing while e.g. the Unreal editor is open lets p4 replace assets the editor still has loaded, so the editor
+keeps working against files that no longer match what is on disk. List such processes in `.git-p4son/config.toml`
+and `sync` refuses to start while any of them is running:
+
+```toml
+[sync]
+blocking-processes = ["UnrealEditor", "UnrealLightmass"]
+```
+
+Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers `UnrealEditor.exe` on
+Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace checks and the pre-sync hooks. A
+setting that is present but malformed, or a process list that cannot be read, aborts the sync rather than silently
+skipping the check.
+
+Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.
 
 #### pre-sync hook
 
@@ -317,7 +336,7 @@ from `.git-p4son/hooks/post-sync/`.
 Sync forward from the last synced changelist, splitting selected users' changelists into their own commits:
 
 ```sh
-git p4son sync-split [changelist] [--user NAME ...] [--dry-run]
+git p4son sync-split [changelist] [--user NAME ...] [--dry-run] [--ignore-blocking-processes]
 ```
 
 Syncing straight to the latest changelist lumps your own submitted changelists together with everyone
@@ -331,11 +350,12 @@ own submits one at a time. Repeat `--user` to split out several people's changel
 
 It is equivalent to working out the numbers by hand and running
 `git p4son sync <before-theirs> <theirs> ... head`, and it delegates to `sync` once the sequence is
-resolved, so [pre-sync and post-sync hooks](#hooks), writable-file merging, and the clean-workspace checks
-all behave exactly as they do for `sync`. The clean-workspace checks and the pre-sync hooks are the one
-thing that runs earlier: resolving the sequence costs several Perforce queries, so they go first, and a
-dirty workspace or a hook that aborts the sync says so before that work. They run once for the whole sync,
-and not at all for a `--dry-run` or when there is nothing to sync.
+resolved, so [pre-sync and post-sync hooks](#hooks), [blocking processes](#blocking-processes), writable-file
+merging, and the clean-workspace checks all behave exactly as they do for `sync`. The blocking processes check,
+the clean-workspace checks and the pre-sync hooks are the one thing that runs earlier: resolving the sequence
+costs several Perforce queries, so they go first, and a running blocking process, a dirty workspace or a hook
+that aborts the sync says so before that work. They run once for the whole sync, and not at all for a
+`--dry-run` or when there is nothing to sync.
 
 **Arguments:**
 - `changelist` (optional): Changelist number to sync up to, or `head` for the latest. Omit to sync to the
@@ -345,6 +365,7 @@ and not at all for a `--dry-run` or when there is nothing to sync.
 - `-u, --user NAME`: Perforce user whose changelists to split into their own commits. Repeat the flag to
   select several users. Defaults to the current p4 user (from `p4 info`).
 - `-n, --dry-run`: Print the resolved sync sequence without syncing.
+- `--ignore-blocking-processes`: Sync even while a [blocking process](#blocking-processes) is running.
 
 **Examples:**
 ```sh
@@ -690,49 +711,6 @@ before the first sync.
 
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
 `.git-p4son/hooks/post-sync/`.
-
-### Example hooks
-
-The [`examples/hooks/`](examples/hooks/) directory holds ready-made hooks. Nothing installs them for you:
-symlink or copy the one you want into the matching hook directory in your workspace. Symlinking keeps the hook
-up to date with the clone it points at, and on macOS and Linux the executable bit comes from the file in the
-clone, so no `chmod` is needed.
-
-#### block-while-running (pre-sync)
-
-Aborts the sync while a named process is running, so a sync cannot swap out assets that a running editor still
-has loaded. Link it into your workspace's `pre-sync` hook directory - on macOS and Linux:
-
-```sh
-ln -s /path/to/git-p4son/examples/hooks/pre-sync/block-while-running.py .git-p4son/hooks/pre-sync/
-```
-
-On Windows, from PowerShell. Note that `-Path` is the link to create and `-Target` the existing file, the
-reverse of the `ln -s` argument order, and that `-Target` should be absolute: a relative path is resolved
-against the current directory and quietly produces a broken link.
-
-```powershell
-New-Item -ItemType SymbolicLink `
-  -Path   "C:\p4\my-workspace\.git-p4son\hooks\pre-sync\block-while-running.py" `
-  -Target "C:\src\git-p4son\examples\hooks\pre-sync\block-while-running.py"
-```
-
-Creating a symlink on Windows needs either an elevated shell or Developer Mode enabled (Settings > System >
-For developers). Without one of those, copy the file instead and re-copy it whenever the clone updates.
-
-Which processes block a sync is read from your workspace's own `.git-p4son/config.toml`, so a symlinked hook
-stays per-project:
-
-```toml
-[hooks.block-while-running]
-processes = ["UnrealEditor", "UnrealLightmass"]
-```
-
-Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers
-`UnrealEditor.exe` on Windows and `UnrealEditor` on macOS. Without that table the hook checks nothing and the
-sync proceeds; a table that is present but malformed aborts the sync rather than silently skipping the check.
-
-Set `GIT_P4SON_SKIP_PROCESS_CHECK=1` to run one sync without the check.
 
 ## Shell Completions
 

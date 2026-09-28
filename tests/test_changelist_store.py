@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 
+from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
     delete_changelist_alias,
     load_changelist_alias,
@@ -28,6 +29,12 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
         self.assertEqual(load_changelist_alias('feature', self.ws), '123')
         self.assertTrue(delete_changelist_alias('feature', self.ws))
         self.assertIsNone(load_changelist_alias('feature', self.ws))
+
+    def test_save_ensures_config_gitignore(self):
+        save_changelist_alias('feature', '123', self.ws)
+        gitignore = os.path.join(self.ws, CONFIG_DIR, '.gitignore')
+        with open(gitignore, encoding='utf-8') as f:
+            self.assertEqual(f.read(), '*\n')
 
     def test_load_rejects_path_traversal(self):
         # The store directory must exist for the relative path to resolve.

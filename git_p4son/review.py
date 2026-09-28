@@ -10,6 +10,7 @@ import os
 import shlex
 import subprocess
 from . import CONFIG_DIR
+from .config import ensure_config_dir
 from .changelist_store import alias_exists, validate_alias_name
 from .git import get_commit_lines_since, resolve_editor
 from .log import log
@@ -112,6 +113,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     # Write todo to .git-p4son/reviews/todo
     reviews_dir = _reviews_dir(workspace_dir)
+    ensure_config_dir(workspace_dir)
     os.makedirs(reviews_dir, exist_ok=True)
     todo_file = _todo_path(workspace_dir)
     with open(todo_file, 'w') as f:

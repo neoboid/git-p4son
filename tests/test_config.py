@@ -1,15 +1,57 @@
 """Tests for git_p4son.config module."""
 
 import os
+import subprocess
 import tempfile
 import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.config import (
     config_path,
+    ensure_config_dir,
     load_config,
     save_config,
 )
+
+
+def _read_config_gitignore(workspace_dir):
+    with open(os.path.join(workspace_dir, CONFIG_DIR, '.gitignore'),
+              encoding='utf-8') as f:
+        return f.read()
+
+
+class TestEnsureConfigDir(unittest.TestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.ws = self._tempdir.name
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def test_creates_dir_ignoring_everything(self):
+        ensure_config_dir(self.ws)
+        self.assertEqual(_read_config_gitignore(self.ws), '*\n')
+
+    def test_replaces_state_only_gitignore(self):
+        """Earlier versions ignored only state.toml."""
+        os.makedirs(os.path.join(self.ws, CONFIG_DIR))
+        with open(os.path.join(self.ws, CONFIG_DIR, '.gitignore'), 'w',
+                  encoding='utf-8') as f:
+            f.write('state.toml\n')
+        ensure_config_dir(self.ws)
+        self.assertEqual(_read_config_gitignore(self.ws), '*\n')
+
+    def test_save_config_ensures_gitignore(self):
+        save_config(self.ws, {'depot': {'root': '//ws/...'}})
+        self.assertEqual(_read_config_gitignore(self.ws), '*\n')
+
+    def test_git_ignores_config_dir(self):
+        subprocess.run(['git', 'init', '-q', self.ws], check=True)
+        save_config(self.ws, {'depot': {'root': '//ws/...'}})
+        status = subprocess.run(
+            ['git', 'status', '--porcelain', '--untracked-files=all'],
+            cwd=self.ws, check=True, capture_output=True, text=True)
+        self.assertEqual(status.stdout, '')
 
 
 class TestConfigPath(unittest.TestCase):

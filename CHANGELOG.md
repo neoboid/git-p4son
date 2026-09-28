@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1
+
 - `sync` aborts as soon as p4 fails to replace a synced file, which happens on Windows when another process has it
   open. Previously the failure was logged as an unparsable line and the sync carried on. The workspace is left
   partially synced

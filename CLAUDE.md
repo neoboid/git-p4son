@@ -39,10 +39,11 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 - **`sync.py`** — Syncs git repo with a Perforce changelist. Validates both git and p4 workspaces are clean, performs
   `p4 sync`, then creates a git commit. Accepts one or more explicit CL numbers, `last-synced`, or `head`; omitting the
   argument syncs to the latest changelist. Multiple strictly increasing CL numbers are synced in sequence with one
-  commit each (a trailing `head` may close out the sequence). Changelist arguments are numeric-only: `sync` does not
-  resolve changelist aliases (those name pending CLs from `new`/`review`, which Perforce renumbers on submit), only
-  submitted CL numbers are meaningful. Uses threaded real-time output processing (`P4SyncOutputProcessor`) to parse p4
-  sync progress.
+  commit each (a trailing `head` may close out the sequence). Refuses to start while a configured blocking process
+  (see `processes.py`) is running, unless `--ignore-blocking-processes` is given. Changelist arguments are
+  numeric-only: `sync` does not resolve changelist aliases (those name pending CLs from `new`/`review`, which Perforce
+  renumbers on submit), only submitted CL numbers are meaningful. Uses threaded real-time output processing
+  (`P4SyncOutputProcessor`) to parse p4 sync progress.
 
 - **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, reverts files that are no
   longer part of the git change, and optionally creates a Swarm review (with `--review` flag) or shelves (with
@@ -70,6 +71,9 @@ against the client spec for the commands that run Perforce queries against it (`
 
 **`writable.py`** implements writable mode: reading and writing the `core.writable` setting, the `writable` command,
 and the helpers that set and clear the user write bit on git-tracked files, which `sync` also uses.
+
+**`processes.py`** implements blocking processes: reading the `[sync] blocking-processes` setting, listing running
+processes (`ps` or `tasklist`), and the check `sync_preflight` runs first to refuse a sync while one of them runs.
 
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
 with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).

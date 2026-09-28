@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add blocking processes: list process names under `[sync] blocking-processes` in `.git-p4son/config.toml` and
+  `sync` (and `sync-split`) refuses to start while any of them is running. `--ignore-blocking-processes` skips the
+  check for one sync
+- Remove the `block-while-running` example hook, which blocking processes replaces. To migrate, move the names from
+  `[hooks.block-while-running] processes` to `[sync] blocking-processes`, delete the hook from
+  `.git-p4son/hooks/pre-sync/`, and use `--ignore-blocking-processes` instead of `GIT_P4SON_SKIP_PROCESS_CHECK=1`
+
 ## 0.4.1
 
 - `sync` aborts as soon as p4 fails to replace a synced file, which happens on Windows when another process has it

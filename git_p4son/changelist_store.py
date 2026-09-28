@@ -8,6 +8,7 @@ import os
 import re
 
 from . import CONFIG_DIR
+from .config import ensure_config_dir
 from .log import log
 
 
@@ -85,6 +86,7 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
         return False
 
+    ensure_config_dir(workspace_dir)
     if not os.path.isdir(changelists_dir):
         log.info(f'Creating {changelists_dir}')
         os.makedirs(changelists_dir, exist_ok=True)

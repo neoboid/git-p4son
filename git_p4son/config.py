@@ -13,6 +13,27 @@ from . import CONFIG_DIR
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
+def ensure_config_dir(workspace_dir: str) -> None:
+    """Create the config dir with a .gitignore that ignores everything in it.
+
+    Nothing in the config dir belongs in git. A .gitignore of its own keeps
+    it out without touching the workspace .gitignore, which may be checked
+    into Perforce. The file is rewritten when its content differs, which
+    also replaces the state.toml-only ignore file of earlier versions."""
+    config_dir = os.path.join(workspace_dir, CONFIG_DIR)
+    os.makedirs(config_dir, exist_ok=True)
+    gitignore = os.path.join(config_dir, '.gitignore')
+    content = '*\n'
+    try:
+        with open(gitignore, encoding='utf-8') as f:
+            if f.read() == content:
+                return
+    except FileNotFoundError:
+        pass
+    with open(gitignore, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+
 def config_path(workspace_dir: str) -> str:
     """Return the path to the config file."""
     return os.path.join(workspace_dir, CONFIG_DIR, 'config.toml')
@@ -49,6 +70,7 @@ def save_config(workspace_dir: str, config: dict) -> None:
     merged = load_config(workspace_dir)
     for section, values in config.items():
         merged.setdefault(section, {}).update(values)
+    ensure_config_dir(workspace_dir)
     write_toml(config_path(workspace_dir), merged)
 
 

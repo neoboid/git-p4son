@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `.git-p4son/` now ignores everything in it through its own `.gitignore`, created whenever git-p4son writes to the
+  folder. Previously only `state.toml` was ignored, so aliases, review files and `config.toml` showed up in git
+  unless the workspace `.gitignore` listed the folder
 - Add `sync --dry-run` (`-n`), which prints the changelists a sync would visit without syncing anything,
   checking the workspaces, running hooks or prompting
 

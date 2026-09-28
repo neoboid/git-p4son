@@ -23,6 +23,7 @@ from .hooks import run_hooks
 from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
 from .log import log
+from .processes import check_no_blocking_processes
 from .writable import is_writable_mode, make_writable
 from .perforce import (
     get_latest_changelist,
@@ -645,8 +646,10 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   already_done: bool = False) -> bool:
-    """Gate a sync: both workspaces clean, then the pre-sync hooks.
+                   already_done: bool = False,
+                   ignore_blocking_processes: bool = False) -> bool:
+    """Gate a sync: no blocking processes, both workspaces clean, then the
+    pre-sync hooks.
 
     Returns False when the sync must not go ahead. Callers run this once they
     know a sync will actually be attempted, so that a run with nothing to sync
@@ -657,6 +660,11 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
     """
     if already_done:
         return True
+    # First: it is the cheapest check, and an editor left open is the most
+    # common reason not to sync.
+    if not check_no_blocking_processes(workspace_dir,
+                                       ignore_blocking_processes):
+        return False
     if not check_git_workspace_clean(workspace_dir):
         return False
     if not _check_p4_workspace_clean(depot_root, workspace_dir):
@@ -776,6 +784,8 @@ def sync_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
     invocation_dir = vars(args).get('invocation_dir', workspace_dir)
     preflight_done = vars(args).get('preflight_done', False)
+    ignore_blocking_processes = vars(args).get('ignore_blocking_processes',
+                                               False)
 
     # sync-split resolves the depot root before handing over, so it passes
     # the result on rather than having the client spec queried twice.
@@ -846,11 +856,12 @@ def sync_command(args: argparse.Namespace) -> int:
     if not _handle_clobber_warning(clobber, workspace_dir):
         return 1
 
-    # The single gate: both workspaces clean, then the pre-sync hooks. Runs
-    # once for the whole sync, covering the catch-up pass as well, and is
-    # skipped outright when the caller (sync-split) already ran it.
+    # The single gate: no blocking processes, both workspaces clean, then
+    # the pre-sync hooks. Runs once for the whole sync, covering the
+    # catch-up pass as well, and is skipped outright when the caller
+    # (sync-split) already ran it.
     if not sync_preflight(depot_root, workspace_dir, invocation_dir,
-                          preflight_done):
+                          preflight_done, ignore_blocking_processes):
         return 1
 
     log.heading('Finding HEAD commit')

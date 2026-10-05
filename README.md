@@ -508,7 +508,7 @@ pick ghi9012 Third commit
 exec git p4son update my-feature --shelve
 ```
 
-You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file — just like a
+You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file - just like a
 normal `git rebase -i`. Each `exec` line automatically sleeps after shelving to give Perforce/Swarm time to process.
 
 If the rebase fails mid-way, you can fix the issue and run `git rebase --continue` as usual.
@@ -678,7 +678,7 @@ See [Shell Completions](#shell-completions) below for installation instructions.
 ### The `branch` keyword
 
 Most commands that accept an alias or changelist argument default to the current branch name. You can also pass the
-`branch` keyword explicitly — it resolves to an alias name derived from the current git branch.
+`branch` keyword explicitly - it resolves to an alias name derived from the current git branch.
 
 The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new` and `review`) or supply an
 explicit alias name instead.

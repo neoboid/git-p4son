@@ -386,8 +386,8 @@ than the last synced changelist (use `git p4son sync --force` for that).
 
 ### New Command
 
-Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits since the base branch.
-Optionally creates a Swarm review.
+Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits
+since the base branch. Optionally creates a Swarm review.
 
 Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
 is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
@@ -480,7 +480,9 @@ are left out of it.
 
 ### Review Command
 
-Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec` lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit, then opens it in your editor for review before executing.
+Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec`
+lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit,
+then opens it in your editor for review before executing.
 
 ```sh
 git p4son review [alias] -m <message> [--base-branch BASE_BRANCH] [--force] [--dry-run]
@@ -506,7 +508,8 @@ pick ghi9012 Third commit
 exec git p4son update my-feature --shelve
 ```
 
-You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file — just like a normal `git rebase -i`. Each `exec` line automatically sleeps after shelving to give Perforce/Swarm time to process.
+You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file — just like a
+normal `git rebase -i`. Each `exec` line automatically sleeps after shelving to give Perforce/Swarm time to process.
 
 If the rebase fails mid-way, you can fix the issue and run `git rebase --continue` as usual.
 
@@ -539,7 +542,8 @@ git p4son list-changes
 git p4son list-changes --base-branch main
 ```
 
-This command is useful for generating changelist descriptions by listing all commit messages since the base branch, numbered sequentially.
+This command is useful for generating changelist descriptions by listing all commit messages since the base branch,
+numbered sequentially.
 
 ### Alias Command
 

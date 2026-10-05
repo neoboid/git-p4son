@@ -175,8 +175,8 @@ workflow.
 ### How sync handles writable files
 
 When you switch branches with `git checkout`, git removes the read-only flag on every file it writes. This means
-that when you switch back to `main` for a sync, Perforce may report "Can't clobber writable file" errors. git-p4son
-handles these automatically by classifying each writable file:
+that when you switch back to `main` for a sync, Perforce may refuse to overwrite those files because they are
+writable. git-p4son handles these automatically by classifying each writable file:
 
 **writable-unchanged** - The file on disk is identical to the last sync (only the read-only flag was removed
 by git). This is the common case after switching branches. git-p4son detects this by comparing git blob IDs against
@@ -210,11 +210,11 @@ commit any files that need attention.
 
 **Workspaces with `allwrite`** - When your client spec has the `allwrite` option, every file is writable by design,
 so the read-only flag carries no information about local changes. git-p4son classifies files exactly as above (the
-verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: with
-`noclobber` Perforce compares digests before refusing to overwrite a writable file, and unchanged files pass that
-check. Only files with local changes are made read-only for the duration of the sync, since those are the ones
-Perforce would otherwise refuse to overwrite. The same digest check applies to git-ignored files: unchanged ones sync
-normally, and after the sync git-p4son lists the ones Perforce skipped because they were modified locally.
+verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: Perforce
+compares digests before refusing to overwrite a writable file, and unchanged files pass that check. Only files with
+local changes are made read-only for the duration of the sync, since those are the ones Perforce would otherwise
+refuse to overwrite. The same digest check applies to git-ignored files: unchanged ones sync normally, and after the
+sync git-p4son lists the ones Perforce skipped because they were modified locally.
 
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.

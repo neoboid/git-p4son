@@ -21,6 +21,10 @@ def update_command(args: argparse.Namespace) -> int:
     """Execute the update command."""
     workspace_dir = args.workspace_dir
 
+    if args.no_desc:
+        log.warning('--no-desc is deprecated, use --no-commit-list instead')
+        args.no_commit_list = True
+
     if args.changelist.isdigit():
         changelist = args.changelist
     else:
@@ -37,7 +41,7 @@ def update_command(args: argparse.Namespace) -> int:
         return 1
 
     # Update changelist description
-    if not args.no_desc:
+    if not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')
         update_changelist(
             changelist, args.base_branch, workspace_dir, dry_run=args.dry_run,

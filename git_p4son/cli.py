@@ -332,9 +332,15 @@ Examples:
         help='Pretend and print what would be done, but do not execute'
     )
     update_parser.add_argument(
+        '--no-commit-list',
+        action='store_true',
+        help='Leave the enumerated commit list in the changelist description as it is'
+    )
+    # Deprecated in favour of --no-commit-list
+    update_parser.add_argument(
         '--no-desc',
         action='store_true',
-        help='Skip updating the changelist description'
+        help=argparse.SUPPRESS
     )
     update_parser.add_argument(
         '--no-edit',

@@ -9,7 +9,7 @@ from git_p4son.update import update_command
 def _args(**overrides):
     defaults = dict(workspace_dir='/ws', changelist='100', dry_run=False,
                     base_branch='HEAD~1', no_desc=False, no_edit=False,
-                    shelve=False, message=None)
+                    shelve=False, message=None, no_commit_list=False)
     defaults.update(overrides)
     return mock.Mock(**defaults)
 
@@ -64,6 +64,21 @@ class TestUpdateCommandMessage(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_update.assert_called_once_with(
             '100', 'HEAD~1', '/ws', dry_run=False, message='New title')
+
+    @mock.patch('git_p4son.update.update_changelist')
+    def test_no_commit_list_leaves_description_alone(self, mock_update):
+        rc = update_command(_args(no_edit=True, no_commit_list=True))
+        self.assertEqual(rc, 0)
+        mock_update.assert_not_called()
+
+    @mock.patch('git_p4son.update.update_changelist')
+    def test_deprecated_no_desc_maps_to_no_commit_list(self, mock_update):
+        with mock.patch('git_p4son.update.log') as mock_log:
+            rc = update_command(_args(no_edit=True, no_desc=True))
+        self.assertEqual(rc, 0)
+        mock_update.assert_not_called()
+        mock_log.warning.assert_called_once_with(
+            '--no-desc is deprecated, use --no-commit-list instead')
 
 
 class TestUpdateCommandRevertStep(unittest.TestCase):

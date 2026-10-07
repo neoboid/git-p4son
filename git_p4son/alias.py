@@ -48,6 +48,14 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     """Execute the 'alias delete' command."""
     workspace_dir = args.workspace_dir
 
+    if args.all:
+        aliases = list_changelist_aliases(workspace_dir)
+        if not aliases:
+            log.success('No changelist aliases to delete')
+            return 0
+        _clean_all(aliases, workspace_dir)
+        return 0
+
     if not delete_changelist_alias(args.alias, workspace_dir):
         return 1
 

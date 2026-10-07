@@ -424,11 +424,17 @@ Examples:
         help='Delete a changelist alias',
         description='Delete a changelist alias from .git-p4son/changelists/'
     )
-    alias_delete_parser.add_argument(
+    alias_delete_target = alias_delete_parser.add_mutually_exclusive_group()
+    alias_delete_target.add_argument(
         'alias',
         nargs='?',
         default='branch',
         help='Alias name to delete. Defaults to the current branch name'
+    )
+    alias_delete_target.add_argument(
+        '--all',
+        action='store_true',
+        help='Delete all aliases without prompting'
     )
 
     # alias clean
@@ -623,7 +629,8 @@ def run_command(args: argparse.Namespace) -> int:
         branch_attr = 'changelist'
     elif (args.command == 'alias'
           and args.alias_action in ('new', 'delete')
-          and args.alias == 'branch'):
+          and args.alias == 'branch'
+          and not getattr(args, 'all', False)):
         branch_attr = 'alias'
 
     if branch_attr:

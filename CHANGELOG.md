@@ -20,6 +20,7 @@
   Combined with `-m` or `-F` it replaces only the message. `--no-desc` still works for now, with a warning
 - `new --no-commit-list` leaves the enumerated commit list out of the changelist description, so it holds only the
   message. `review --no-commit-list` passes it on to `new` and each `update` in its rebase todo
+- `alias delete --all` deletes all aliases without prompting
 
 ## 0.4.2
 

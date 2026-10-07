@@ -18,7 +18,7 @@ _HIDDEN_COMMANDS = frozenset(
     {'complete', 'completion', '_sequence-editor', 'sync-split'})
 # Commands whose first positional is a nested action (alias list, ...).
 _COMMANDS_WITH_ACTIONS = frozenset(
-    {'alias', 'sync-split-users', 'writable'})
+    {'alias', 'skill', 'sync-split-users', 'writable'})
 
 
 def _get_subparsers_action(parser):

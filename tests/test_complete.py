@@ -138,7 +138,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('init', names)
         self.assertIn('sync-split-users', names)
         self.assertIn('writable', names)
-        self.assertEqual(len(names), 9)
+        self.assertIn('skill', names)
+        self.assertEqual(len(names), 10)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')

@@ -22,6 +22,7 @@ from .common import CommandError, RunError, branch_to_alias
 from .git import get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
 from .complete import run_complete
+from .skill import skill_command
 from .writable import writable_command
 
 
@@ -53,6 +54,7 @@ Examples:
   git-p4son writable            # Show whether writable mode is on
   git-p4son writable enable     # Keep git-tracked files writable
   git-p4son writable apply      # Make tracked files match the writable mode
+  git-p4son skill install       # Install the Claude Code skill for git-p4son
         """
     )
 
@@ -563,6 +565,33 @@ Examples:
         help='Print the directory instead of the full file path'
     )
 
+    # Skill subcommand (no workspace needed)
+    skill_parser = subparsers.add_parser(
+        'skill',
+        help='Install or show the Claude Code skill for git-p4son',
+        description='Manage the Claude Code skill that teaches AI agents how '
+        'to use git-p4son. The installed skill only tells the agent to run '
+        '"git p4son skill show", so it stays current when git-p4son is '
+        'upgraded.'
+    )
+    skill_subparsers = skill_parser.add_subparsers(
+        dest='skill_action',
+        help='Available skill actions',
+        metavar='ACTION'
+    )
+    skill_subparsers.add_parser(
+        'install',
+        help='Install the skill for Claude Code',
+        description='Write the skill to ~/.claude/skills/git-p4son/SKILL.md '
+        '(or under $CLAUDE_CONFIG_DIR), replacing any existing one'
+    )
+    skill_subparsers.add_parser(
+        'show',
+        help='Print the instructions the skill gives to AI agents',
+        description='Print the instructions for AI agents that ship with '
+        'this version of git-p4son'
+    )
+
     # Hidden _sequence-editor subcommand (used internally by review). It is
     # given no help: argparse lists a subcommand with help=SUPPRESS anyway,
     # as "==SUPPRESS==", but leaves one without help out of the list.
@@ -727,6 +756,9 @@ def main() -> int:
 
     if args.command == 'completion':
         return completion_command(args)
+
+    if args.command == 'skill':
+        return skill_command(args)
 
     try:
         log.verbose_mode = args.verbose

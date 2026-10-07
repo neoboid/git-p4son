@@ -232,10 +232,16 @@ Examples:
         'enumerated git commits since the base branch. By default also opens '
         'changed files for edit in the changelist.'
     )
-    new_parser.add_argument(
+    new_parser_message = new_parser.add_mutually_exclusive_group()
+    new_parser_message.add_argument(
         '-m', '--message',
         default=None,
         help='Changelist description message (defaults to HEAD commit subject)'
+    )
+    new_parser_message.add_argument(
+        '-F', '--file',
+        default=None,
+        help='Read the changelist description message from the given file'
     )
     new_parser.add_argument(
         '-b', '--base-branch',
@@ -581,6 +587,20 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
+
+    if args.command == 'new' and args.file is not None:
+        args.file = os.path.join(args.invocation_dir, args.file)
+        log.heading('Reading message from file')
+        try:
+            with open(args.file, encoding='utf-8') as f:
+                args.message = f.read().strip()
+        except OSError as e:
+            log.error(f'Failed to read message file: {e}')
+            return 1
+        if not args.message:
+            log.error(f'Message file {args.file} is empty')
+            return 1
+        log.success(args.file)
 
     if args.command in ('new', 'review') and args.message is None:
         log.heading('Resolving message from HEAD commit')

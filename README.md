@@ -407,8 +407,8 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 [Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)).
 
 ```sh
-git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit] [--no-alias]
-                           [--shelve] [--review]
+git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
+              [--no-alias] [--shelve] [--review]
 ```
 
 **Arguments:**
@@ -416,6 +416,8 @@ git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-
 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
+- `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
+  multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file

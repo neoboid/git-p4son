@@ -2,6 +2,8 @@
 
 import contextlib
 import io
+import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -112,6 +114,19 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.no_edit)
         self.assertFalse(args.shelve)
         self.assertFalse(args.review)
+
+    def test_message_file(self):
+        for command in ('new',):
+            args = self.parser.parse_args([command, '-F', 'msg.txt'])
+            self.assertEqual(args.file, 'msg.txt')
+            self.assertIsNone(args.message)
+
+    def test_message_and_file_are_exclusive(self):
+        for command in ('new',):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    self.parser.parse_args(
+                        [command, '-m', 'msg', '-F', 'msg.txt'])
 
     def test_new_command_with_options(self):
         args = self.parser.parse_args(
@@ -255,6 +270,43 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(args.message, 'Review change')
         mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_message_read_from_file(self, mock_new, _branch, _head, _ws):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, 'msg.txt'), 'w') as f:
+                f.write('Title\n\nBody line\n\n')
+            args = create_parser().parse_args(['new', '-F', 'msg.txt'])
+            with mock.patch('os.getcwd', return_value=tmp):
+                result = run_command(args)
+        self.assertEqual(result, 0)
+        self.assertEqual(args.message, 'Title\n\nBody line')
+        self.assertEqual(args.file, os.path.join(tmp, 'msg.txt'))
+        _head.assert_not_called()
+
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_missing_message_file_returns_error(self, mock_new, _branch, _ws):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = create_parser().parse_args(['new', '-F', 'missing.txt'])
+            with mock.patch('os.getcwd', return_value=tmp):
+                result = run_command(args)
+        self.assertEqual(result, 1)
+        mock_new.assert_not_called()
+
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_empty_message_file_returns_error(self, mock_new, _branch, _ws):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, 'msg.txt'), 'w') as f:
+                f.write('\n  \n')
+            args = create_parser().parse_args(['new', '-F', 'msg.txt'])
+            with mock.patch('os.getcwd', return_value=tmp):
+                result = run_command(args)
+        self.assertEqual(result, 1)
+        mock_new.assert_not_called()
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
     def test_dispatches_update(self, mock_update, _ws):

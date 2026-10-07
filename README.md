@@ -415,7 +415,7 @@ git p4son new -m <message> [alias] [--base-branch BASE_BRANCH] [--force] [--dry-
 - `alias` (optional): Alias name to save the new changelist number under. Defaults to the current branch name.
 
 **Options:**
-- `-m, --message MESSAGE`: Changelist description message (required)
+- `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
@@ -505,7 +505,7 @@ git p4son review [alias] -m <message> [--base-branch BASE_BRANCH] [--force] [--d
 - `alias` (optional): Alias name for the new changelist. Defaults to the current branch name.
 
 **Options:**
-- `-m, --message MESSAGE`: Changelist description message (required)
+- `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the generated rebase todo without executing

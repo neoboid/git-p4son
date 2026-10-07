@@ -474,7 +474,7 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 
 **Options:**
 - `-m, --message MESSAGE`: Replace the changelist description message above the commit list. The commit list is
-  kept and updated as usual
+  kept and updated as usual, and so is a Swarm `#review` keyword on a line of its own at the end of the description
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`

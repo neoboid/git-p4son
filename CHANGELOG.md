@@ -12,6 +12,8 @@
 - `new -F FILE` and `review -F FILE` read the changelist description from a file instead of `-m`, so it can span
   multiple lines. `review` passes the file on to `new` in its rebase todo, so keep the file in place until the rebase
   has finished
+- `review --no-edit-todo` accepts the generated rebase todo without opening an editor, so scripts and AI agents
+  can run a review without one configured
 
 ## 0.4.2
 

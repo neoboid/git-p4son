@@ -117,6 +117,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
 
@@ -135,6 +136,38 @@ class TestReviewCommand(unittest.TestCase):
             'git-p4son _sequence-editor',
         )
 
+    @mock.patch('git_p4son.review.subprocess.run')
+    @mock.patch('git_p4son.review.resolve_editor', return_value=None)
+    @mock.patch('git_p4son.review.get_commit_lines_since')
+    def test_no_edit_todo(self, mock_run, mock_resolve_editor,
+                          mock_subprocess_run):
+        """Accepts the todo without an editor, so none needs configuring."""
+        mock_run.return_value = ['abc1234 First commit']
+        mock_subprocess_run.return_value = mock.Mock(returncode=0)
+
+        args = mock.Mock(
+            alias='my-feature',
+            message='My feature',
+            file=None,
+            base_branch='main',
+            force=False,
+            dry_run=False,
+            no_edit_todo=True,
+            workspace_dir='/workspace',
+        )
+
+        with mock.patch('os.path.exists', return_value=False):
+            with mock.patch('os.makedirs'):
+                with mock.patch('builtins.open', mock.mock_open()):
+                    rc = review_command(args)
+
+        self.assertEqual(rc, 0)
+        mock_resolve_editor.assert_not_called()
+        self.assertEqual(
+            mock_subprocess_run.call_args[1]['env']['GIT_SEQUENCE_EDITOR'],
+            'git-p4son _sequence-editor --no-edit',
+        )
+
     def test_multiline_message_rejected(self):
         """The rebase todo is line-based; an embedded newline in the
         message would split the exec line."""
@@ -145,6 +178,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         rc = review_command(args)
@@ -161,6 +195,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=True,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         with mock.patch('git_p4son.review.alias_exists', return_value=False):
@@ -178,6 +213,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
@@ -193,6 +229,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
@@ -208,6 +245,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=True):
@@ -228,6 +266,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=True,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
         rc = review_command(args)
@@ -250,6 +289,7 @@ class TestReviewCommand(unittest.TestCase):
             base_branch='main',
             force=False,
             dry_run=False,
+            no_edit_todo=False,
             workspace_dir='/workspace',
         )
 
@@ -275,7 +315,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
         ]
 
         args = mock.Mock(filename='/tmp/git-rebase-todo',
-                         workspace_dir='/workspace')
+                         workspace_dir='/workspace', no_edit=False)
         todo_file = os.path.join('/workspace', CONFIG_DIR, 'reviews', 'todo')
 
         with mock.patch('os.path.exists', return_value=True):
@@ -290,9 +330,26 @@ class TestSequenceEditorCommand(unittest.TestCase):
         second_call = mock_subprocess_run.call_args_list[1]
         self.assertEqual(second_call[0][0], ['vim', '/tmp/git-rebase-todo'])
 
+    @mock.patch('git_p4son.review.subprocess.run')
+    def test_no_edit(self, mock_subprocess_run):
+        """Writes our todo over git's without opening an editor."""
+        todo_content = "pick abc First\nexec git p4son new feat --review -m 'msg'\n"
+        args = mock.Mock(filename='/tmp/git-rebase-todo',
+                         workspace_dir='/workspace', no_edit=True)
+
+        opener = mock.mock_open(read_data=todo_content)
+        with mock.patch('os.path.exists', return_value=True):
+            with mock.patch('builtins.open', opener):
+                rc = sequence_editor_command(args)
+
+        self.assertEqual(rc, 0)
+        mock_subprocess_run.assert_not_called()
+        opener.assert_any_call('/tmp/git-rebase-todo', 'w')
+        opener().write.assert_any_call(todo_content)
+
     def test_missing_todo_file(self):
         args = mock.Mock(filename='/tmp/git-rebase-todo',
-                         workspace_dir='/workspace')
+                         workspace_dir='/workspace', no_edit=False)
         with mock.patch('os.path.exists', return_value=False):
             rc = sequence_editor_command(args)
         self.assertEqual(rc, 1)
@@ -316,7 +373,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
         ]
 
         args = mock.Mock(filename='/tmp/git-rebase-todo',
-                         workspace_dir='/workspace')
+                         workspace_dir='/workspace', no_edit=False)
         todo_file = os.path.join('/workspace', CONFIG_DIR, 'reviews', 'todo')
 
         written = []
@@ -360,7 +417,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
         ]
 
         args = mock.Mock(filename='/tmp/git-rebase-todo',
-                         workspace_dir='/workspace')
+                         workspace_dir='/workspace', no_edit=False)
         with mock.patch('os.path.exists', return_value=True):
             with mock.patch('builtins.open', mock.mock_open(read_data=todo_content)):
                 rc = sequence_editor_command(args)

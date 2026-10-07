@@ -263,9 +263,15 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['alias', ''], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('list', names)
+        self.assertIn('show', names)
         self.assertIn('new', names)
         self.assertIn('delete', names)
         self.assertIn('clean', names)
+
+    def test_alias_show_completes_aliases(self, _ws, _aliases):
+        result = _complete(self.parser, ['alias', 'show', ''],
+                           workspace_dir='/ws')
+        self.assertIn('myalias', self._names(result))
 
     def test_writable_actions(self, _ws, _aliases):
         result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')

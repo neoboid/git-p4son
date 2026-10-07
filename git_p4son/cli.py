@@ -394,6 +394,20 @@ Examples:
         description='List all changelist aliases stored in .git-p4son/changelists/'
     )
 
+    # alias show
+    alias_show_parser = alias_subparsers.add_parser(
+        'show',
+        help='Print the changelist number of an alias',
+        description='Print only the changelist number saved under an alias, '
+        'for use in scripts'
+    )
+    alias_show_parser.add_argument(
+        'alias',
+        nargs='?',
+        default='branch',
+        help='Alias name to show. Defaults to the current branch name'
+    )
+
     # alias new
     alias_new_parser = alias_subparsers.add_parser(
         'new',
@@ -610,6 +624,11 @@ def completion_command(args: argparse.Namespace) -> int:
 def run_command(args: argparse.Namespace) -> int:
     args.invocation_dir = os.getcwd()
 
+    # alias show prints nothing but the changelist number on stdout, so
+    # scripts can capture it. Errors still go to stderr.
+    if args.command == 'alias' and args.alias_action == 'show':
+        log.quiet_mode = True
+
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
     if not args.workspace_dir:
@@ -628,7 +647,7 @@ def run_command(args: argparse.Namespace) -> int:
     elif args.command == 'update' and args.changelist == 'branch':
         branch_attr = 'changelist'
     elif (args.command == 'alias'
-          and args.alias_action in ('new', 'delete')
+          and args.alias_action in ('show', 'new', 'delete')
           and args.alias == 'branch'
           and not getattr(args, 'all', False)):
         branch_attr = 'alias'

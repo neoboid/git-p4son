@@ -4,6 +4,7 @@ Alias command implementation for git-p4son.
 
 import argparse
 from .changelist_store import (
+    load_changelist_alias,
     save_changelist_alias,
     list_changelist_aliases,
     delete_changelist_alias,
@@ -25,6 +26,15 @@ def alias_list_command(args: argparse.Namespace) -> int:
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
 
+    return 0
+
+
+def alias_show_command(args: argparse.Namespace) -> int:
+    """Execute the 'alias show' command."""
+    changelist = load_changelist_alias(args.alias, args.workspace_dir)
+    if changelist is None:
+        return 1
+    print(changelist)
     return 0
 
 
@@ -126,6 +136,8 @@ def alias_command(args: argparse.Namespace) -> int:
     """Dispatch alias subcommands."""
     if args.alias_action == 'list':
         return alias_list_command(args)
+    elif args.alias_action == 'show':
+        return alias_show_command(args)
     elif args.alias_action == 'new':
         return alias_new_command(args)
     elif args.alias_action == 'delete':

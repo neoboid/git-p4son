@@ -600,6 +600,27 @@ git p4son alias list
 git p4son alias list
 ```
 
+#### alias show
+
+Print the changelist number saved under an alias:
+
+```sh
+git p4son alias show [alias]
+```
+
+Only the number is printed to stdout, so scripts and AI agents can capture it, e.g. to find the changelist that
+`new` or `review` created. Exits with an error if the alias does not exist.
+
+**Arguments:**
+- `alias` (optional): Alias name to show. Defaults to the current branch name.
+
+**Examples:**
+```sh
+git p4son alias show              # changelist for current branch
+git p4son alias show myfeature
+p4 describe -s $(git p4son alias show)
+```
+
 #### alias new
 
 Save a changelist number under a named alias:

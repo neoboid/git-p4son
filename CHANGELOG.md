@@ -21,6 +21,8 @@
 - `new --no-commit-list` leaves the enumerated commit list out of the changelist description, so it holds only the
   message. `review --no-commit-list` passes it on to `new` and each `update` in its rebase todo
 - `alias delete --all` deletes all aliases without prompting
+- Add `alias show`, which prints only the changelist number saved under an alias (the current branch's by default),
+  for use in scripts
 
 ## 0.4.2
 

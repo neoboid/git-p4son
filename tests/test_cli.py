@@ -9,6 +9,7 @@ from unittest import mock
 
 from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
 from git_p4son.git import get_head_subject
+from git_p4son.log import log
 
 
 class TestCreateParser(unittest.TestCase):
@@ -373,6 +374,20 @@ class TestResolveBranchKeyword(unittest.TestCase):
         self.assertEqual(args.alias, 'feat-bar')
         mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
+    @mock.patch('git_p4son.alias.load_changelist_alias', return_value='100')
+    def test_alias_show_prints_only_the_changelist(
+            self, mock_load, _ws, _branch):
+        """Resolves the branch and keeps all logging off stdout."""
+        args = self.parser.parse_args(['alias', 'show'])
+        with mock.patch.object(log, 'quiet_mode', False):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                result = run_command(args)
+        self.assertEqual(result, 0)
+        self.assertEqual(out.getvalue(), '100\n')
+        mock_load.assert_called_once_with('feat-bar', '/ws')
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')

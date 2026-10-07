@@ -500,7 +500,7 @@ lines that run `git p4son new --review` on the first commit and `git p4son updat
 then opens it in your editor for review before executing.
 
 ```sh
-git p4son review [alias] -m <message> [--base-branch BASE_BRANCH] [--force] [--dry-run]
+git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
 ```
 
 **Arguments:**
@@ -508,6 +508,9 @@ git p4son review [alias] -m <message> [--base-branch BASE_BRANCH] [--force] [--d
 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
+- `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
+  multiple lines. The generated `exec` line passes the file on to `git p4son new -F`, so keep it in place until the
+  rebase has finished
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the generated rebase todo without executing
@@ -538,6 +541,9 @@ git p4son review -m "Fix bug"
 
 # Preview the generated todo without executing
 git p4son review -m "Add my feature" -b main --dry-run
+
+# Take a multi-line description from a file
+git p4son review -F description.txt -b main
 ```
 
 ### List-Changes Command

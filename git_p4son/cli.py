@@ -429,10 +429,16 @@ Examples:
         default='branch',
         help='Alias name for the new changelist. Defaults to the current branch name'
     )
-    review_parser.add_argument(
+    review_parser_message = review_parser.add_mutually_exclusive_group()
+    review_parser_message.add_argument(
         '-m', '--message',
         default=None,
         help='Changelist description message (defaults to HEAD commit subject)'
+    )
+    review_parser_message.add_argument(
+        '-F', '--file',
+        default=None,
+        help='Read the changelist description message from the given file'
     )
     review_parser.add_argument(
         '-b', '--base-branch',
@@ -588,7 +594,8 @@ def run_command(args: argparse.Namespace) -> int:
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
-    if args.command == 'new' and args.file is not None:
+    if args.command in ('new', 'review') and args.file is not None:
+        # Absolute, so review's exec lines find it from the workspace root
         args.file = os.path.join(args.invocation_dir, args.file)
         log.heading('Reading message from file')
         try:

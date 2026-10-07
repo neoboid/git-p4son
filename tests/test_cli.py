@@ -116,13 +116,13 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.review)
 
     def test_message_file(self):
-        for command in ('new',):
+        for command in ('new', 'review'):
             args = self.parser.parse_args([command, '-F', 'msg.txt'])
             self.assertEqual(args.file, 'msg.txt')
             self.assertIsNone(args.message)
 
     def test_message_and_file_are_exclusive(self):
-        for command in ('new',):
+        for command in ('new', 'review'):
             with contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     self.parser.parse_args(

@@ -86,14 +86,18 @@ def check_git_workspace_clean(workspace_dir: str) -> bool:
     return True
 
 
-def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> str:
-    """Create a new Perforce changelist with the given message and enumerated git commits.
+def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
+                      commit_list: bool = True) -> str:
+    """Create a new Perforce changelist with the given message and, unless
+    commit_list is False, enumerated git commits.
 
     On dry run, returns the placeholder '<changelist>' so downstream
     commands can be rendered without a real changelist number."""
     # Build description: user message + enumerated commits
-    commit_lines = get_enumerated_commit_lines_since(
-        base_branch, workspace_dir)
+    commit_lines = []
+    if commit_list:
+        commit_lines = get_enumerated_commit_lines_since(
+            base_branch, workspace_dir)
 
     description_lines = message.splitlines()
     if commit_lines:

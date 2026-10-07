@@ -244,6 +244,11 @@ Examples:
         help='Read the changelist description message from the given file'
     )
     new_parser.add_argument(
+        '--no-commit-list',
+        action='store_true',
+        help='Leave the enumerated commit list out of the changelist description'
+    )
+    new_parser.add_argument(
         '-b', '--base-branch',
         default='HEAD~1',
         help='Base branch for enumerating commits and finding changed files. Default is HEAD~1'
@@ -473,6 +478,12 @@ Examples:
         '-n', '--dry-run',
         action='store_true',
         help='Print the generated rebase todo without executing'
+    )
+    review_parser.add_argument(
+        '--no-commit-list',
+        action='store_true',
+        help='Leave the enumerated commit list out of the changelist description. '
+             'Passed on to new and each update in the rebase todo'
     )
     review_parser.add_argument(
         '--no-edit-todo',

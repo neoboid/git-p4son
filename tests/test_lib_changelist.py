@@ -172,6 +172,22 @@ class TestCreateChangelist(unittest.TestCase):
             create_changelist('Msg', 'HEAD~1', '/ws')
 
 
+class TestCreateChangelistWithoutCommitList(unittest.TestCase):
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    def test_leaves_out_commit_list(self, mock_get_lines, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 created.'])
+        cl_num = create_changelist('Title\n\nBody', 'HEAD~1', '/ws',
+                                   commit_list=False)
+
+        self.assertEqual(cl_num, '12345')
+        mock_get_lines.assert_not_called()
+        self.assertEqual(
+            mock_run.call_args.kwargs['input'],
+            'Change: new\n\nDescription:\n\tTitle\n\t\n\tBody\n')
+
+
 class TestGetChangelistSpec(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_success(self, mock_run):

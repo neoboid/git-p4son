@@ -48,7 +48,8 @@ def new_command(args: argparse.Namespace) -> int:
     # Create new changelist
     log.heading('Creating changelist')
     changelist = create_changelist(
-        args.message, args.base_branch, workspace_dir, dry_run=args.dry_run)
+        args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
+        commit_list=not args.no_commit_list)
 
     if not args.dry_run:
         if args.alias:

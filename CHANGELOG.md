@@ -18,6 +18,8 @@
   which is kept and updated as usual
 - `update --no-desc` is renamed to `update --no-commit-list`, which leaves the enumerated commit list as it is.
   Combined with `-m` or `-F` it replaces only the message. `--no-desc` still works for now, with a warning
+- `new --no-commit-list` leaves the enumerated commit list out of the changelist description, so it holds only the
+  message. `review --no-commit-list` passes it on to `new` and each `update` in its rebase todo
 
 ## 0.4.2
 

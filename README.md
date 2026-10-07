@@ -408,7 +408,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 
 ```sh
 git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
-              [--no-alias] [--shelve] [--review]
+              [--no-alias] [--no-commit-list] [--shelve] [--review]
 ```
 
 **Arguments:**
@@ -418,6 +418,8 @@ git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
   multiple lines
+- `--no-commit-list`: Leave the enumerated commit list out of the changelist description, so it holds only the
+  message
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
@@ -508,7 +510,7 @@ then opens it in your editor for review before executing.
 
 ```sh
 git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
-                 [--no-edit-todo]
+                 [--no-commit-list] [--no-edit-todo]
 ```
 
 **Arguments:**
@@ -522,6 +524,8 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the generated rebase todo without executing
+- `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
+  each `update` in the rebase todo
 - `--no-edit-todo`: Accept the generated rebase todo as is and start the rebase without opening an editor. No
   editor needs to be configured. Useful for scripts and AI agents, which can check the todo with `--dry-run` first
 

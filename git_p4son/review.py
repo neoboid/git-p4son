@@ -27,7 +27,8 @@ def _todo_path(workspace_dir: str) -> str:
 
 
 def _generate_todo(commit_lines: list[str], alias: str, message: str,
-                   force: bool, message_file: str | None = None) -> str:
+                   force: bool, message_file: str | None = None,
+                   no_commit_list: bool = False) -> str:
     """Generate the rebase todo content with exec lines."""
     lines = []
     last_index = len(commit_lines) - 1
@@ -50,6 +51,9 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
         else:
             # Subsequent commits: update and shelve
             cmd = f'update {shlex.quote(alias)} --shelve'
+
+        if no_commit_list:
+            cmd += ' --no-commit-list'
 
         # Sleep after all exec lines except the last
         if i < last_index:
@@ -111,7 +115,8 @@ def review_command(args: argparse.Namespace) -> int:
     # Generate the rebase todo
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(
-        commit_lines, args.alias, args.message, args.force, args.file)
+        commit_lines, args.alias, args.message, args.force, args.file,
+        args.no_commit_list)
 
     if args.dry_run:
         log.info('Generated rebase todo:')

@@ -361,6 +361,13 @@ Examples:
         help='Re-shelve the changelist after updating'
     )
     update_parser.add_argument(
+        '--per-commit',
+        action='store_true',
+        help='Update the changelist once per commit since the base branch, '
+             'oldest first, through an interactive rebase. With --shelve each '
+             'commit gets a shelf of its own'
+    )
+    update_parser.add_argument(
         '-s', '--sleep',
         type=int,
         help='Sleep for the specified number of seconds after the command is done'

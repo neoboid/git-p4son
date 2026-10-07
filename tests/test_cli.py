@@ -146,6 +146,11 @@ class TestCreateParser(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(['alias', 'delete', 'x', '--all'])
 
+    def test_update_per_commit(self):
+        self.assertFalse(self.parser.parse_args(['update']).per_commit)
+        self.assertTrue(self.parser.parse_args(
+            ['update', '--per-commit']).per_commit)
+
     def test_review_no_edit_todo(self):
         self.assertFalse(self.parser.parse_args(['review']).no_edit_todo)
         self.assertTrue(self.parser.parse_args(

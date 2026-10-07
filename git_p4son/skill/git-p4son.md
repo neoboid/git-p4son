@@ -104,15 +104,18 @@ git p4son update --shelve
 `update` opens the changed files in the CL, reverts files that are no longer part of the change, and adds the commit
 to the commit list. `--shelve` replaces the shelf, which adds a new patch to the Swarm review.
 
-With several new commits since the last update, run `update` once per commit so each one becomes its own patch, as
-`review` does. A rebase with `--exec` does that without an editor; replace 2 with the number of new commits:
+With several new commits since the last update, update once per commit so each one becomes its own patch, as
+`review` does. `--per-commit` does that through a rebase, without an editor; replace 2 with the number of new
+commits:
 
 ```sh
-git rebase HEAD~2 --exec "git p4son update --shelve --sleep 5"
+git p4son update -b HEAD~2 --per-commit --shelve --dry-run   # check the steps
+git p4son update -b HEAD~2 --per-commit --shelve
 ```
 
 To find the number, compare the commit list in `p4 describe -s $(git p4son alias show)` with
-`git log --oneline main..`. The sleep gives Swarm time to process each shelf before the next one.
+`git log --oneline main..`. If a step fails, the rebase stops: tell the user what failed; after fixing it,
+`git rebase --continue` carries on.
 
 To reword the description, `-F FILE` or `-m MESSAGE` replaces everything above the commit list. Add `--no-edit` to
 change only the description and leave the files alone. `--no-commit-list` leaves the commit list as it is.

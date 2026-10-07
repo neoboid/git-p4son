@@ -16,7 +16,8 @@
   can run a review without one configured
 - `update -m MESSAGE` and `update -F FILE` replace the changelist description message above the commit list,
   which is kept and updated as usual
-- `update --no-desc` is renamed to `update --no-commit-list`. `--no-desc` still works for now, with a warning
+- `update --no-desc` is renamed to `update --no-commit-list`, which leaves the enumerated commit list as it is.
+  Combined with `-m` or `-F` it replaces only the message. `--no-desc` still works for now, with a warning
 
 ## 0.4.2
 

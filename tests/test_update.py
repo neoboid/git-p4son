@@ -63,13 +63,23 @@ class TestUpdateCommandMessage(unittest.TestCase):
         rc = update_command(_args(message='New title'))
         self.assertEqual(rc, 0)
         mock_update.assert_called_once_with(
-            '100', 'HEAD~1', '/ws', dry_run=False, message='New title')
+            '100', 'HEAD~1', '/ws', dry_run=False, message='New title',
+            commit_list=True)
 
     @mock.patch('git_p4son.update.update_changelist')
     def test_no_commit_list_leaves_description_alone(self, mock_update):
         rc = update_command(_args(no_edit=True, no_commit_list=True))
         self.assertEqual(rc, 0)
         mock_update.assert_not_called()
+
+    @mock.patch('git_p4son.update.update_changelist')
+    def test_message_with_no_commit_list_keeps_list(self, mock_update):
+        rc = update_command(_args(no_edit=True, no_commit_list=True,
+                                  message='New title'))
+        self.assertEqual(rc, 0)
+        mock_update.assert_called_once_with(
+            '100', 'HEAD~1', '/ws', dry_run=False, message='New title',
+            commit_list=False)
 
     @mock.patch('git_p4son.update.update_changelist')
     def test_deprecated_no_desc_maps_to_no_commit_list(self, mock_update):

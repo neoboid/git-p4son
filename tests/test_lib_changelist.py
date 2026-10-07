@@ -306,6 +306,23 @@ class TestUpdateChangelist(unittest.TestCase):
         self.assertNotIn('Just a message', spec_input)
         self.assertNotIn('Changes included:', spec_input)
 
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_message_without_updating_commit_list(self, mock_get_spec,
+                                                  mock_subjects, mock_run):
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws', message='New title',
+                          commit_list=False)
+
+        mock_subjects.assert_not_called()
+        self.assertIn(
+            '\tNew title\n\t\n\tChanges included:\n'
+            '\t1. Add validation\n\t2. Fix redirect\n',
+            self._spec_input(mock_run))
+
 
 if __name__ == '__main__':
     unittest.main()

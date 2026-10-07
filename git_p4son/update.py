@@ -40,12 +40,12 @@ def update_command(args: argparse.Namespace) -> int:
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
-    # Update changelist description
-    if not args.no_commit_list:
+    # Update changelist description, unless there is nothing to change
+    if args.message is not None or not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')
         update_changelist(
             changelist, args.base_branch, workspace_dir, dry_run=args.dry_run,
-            message=args.message)
+            message=args.message, commit_list=not args.no_commit_list)
         log.success('Done')
 
     # Open changed files for edit

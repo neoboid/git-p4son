@@ -124,27 +124,9 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     )
 
 
-def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
-                      message: str | None = None) -> None:
-    """Update the enumerated commit list in a changelist description.
-
-    Commits in base_branch..HEAD replace their existing entries in the
-    list (matched by subject) and new ones are appended; entries outside
-    the range are kept. The whole list is renumbered. So `-b main`
-    rebuilds the full list without duplicating it, while the review
-    rebase flow (`-b HEAD~1` per picked commit) keeps appending.
-
-    A message replaces everything above the commit list."""
-    # Fetch existing spec
-    spec_text = get_changelist_spec(changelist_nr, workspace_dir)
-
-    # Extract and split description into lines
-    description_lines = extract_description_lines(spec_text)
-    message_lines, old_commit_lines, trailing_lines = split_description_lines(
-        description_lines)
-    if message is not None:
-        message_lines = message.splitlines()
-
+def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,
+                        workspace_dir: str) -> list[str]:
+    """Merge the commits since base_branch into an enumerated commit list."""
     old_subjects = [re.sub(r'^\d+\. ', '', line)
                     for line in old_commit_lines]
     new_subjects = get_commit_subjects_since(base_branch, workspace_dir)
@@ -159,8 +141,37 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
         else:
             kept_subjects.append(subject)
 
-    commit_lines = [f'{number}. {subject}' for number, subject
-                    in enumerate(kept_subjects + new_subjects, 1)]
+    return [f'{number}. {subject}' for number, subject
+            in enumerate(kept_subjects + new_subjects, 1)]
+
+
+def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
+                      message: str | None = None, commit_list: bool = True) -> None:
+    """Update the enumerated commit list in a changelist description.
+
+    Commits in base_branch..HEAD replace their existing entries in the
+    list (matched by subject) and new ones are appended; entries outside
+    the range are kept. The whole list is renumbered. So `-b main`
+    rebuilds the full list without duplicating it, while the review
+    rebase flow (`-b HEAD~1` per picked commit) keeps appending.
+
+    A message replaces everything above the commit list. With commit_list
+    False the list is left as it is."""
+    # Fetch existing spec
+    spec_text = get_changelist_spec(changelist_nr, workspace_dir)
+
+    # Extract and split description into lines
+    description_lines = extract_description_lines(spec_text)
+    message_lines, old_commit_lines, trailing_lines = split_description_lines(
+        description_lines)
+    if message is not None:
+        message_lines = message.splitlines()
+
+    if commit_list:
+        commit_lines = _merge_commit_lines(
+            old_commit_lines, base_branch, workspace_dir)
+    else:
+        commit_lines = old_commit_lines
 
     # Add the marker for descriptions that did not have it yet (e.g.
     # created with no commits), so later splits anchor on it.

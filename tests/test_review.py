@@ -61,6 +61,15 @@ class TestGenerateTodo(unittest.TestCase):
         self.assertIn("It", result)
         self.assertIn("a feature", result)
 
+    def test_message_file(self):
+        commit_lines = ['abc1234 First commit']
+        result = _generate_todo(commit_lines, 'feat', 'Title\n\nBody',
+                                force=False, message_file='/tmp/my msg.txt')
+        self.assertEqual(result, (
+            "pick abc1234 First commit\n"
+            "exec git p4son new feat --review -F '/tmp/my msg.txt'\n"
+        ))
+
     def test_alias_with_special_chars(self):
         commit_lines = ['abc1234 First commit']
         result = _generate_todo(commit_lines, 'my feature', 'msg', force=False)
@@ -104,6 +113,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,
@@ -131,6 +141,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='Line one\nLine two',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,
@@ -141,11 +152,29 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.review.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.get_commit_lines_since')
+    def test_multiline_message_from_file_accepted(self, mock_run, _editor):
+        mock_run.return_value = ['abc1234 First commit']
+        args = mock.Mock(
+            alias='my-feature',
+            message='Line one\nLine two',
+            file='/workspace/msg.txt',
+            base_branch='main',
+            force=False,
+            dry_run=True,
+            workspace_dir='/workspace',
+        )
+        with mock.patch('git_p4son.review.alias_exists', return_value=False):
+            rc = review_command(args)
+        self.assertEqual(rc, 0)
+
+    @mock.patch('git_p4son.review.resolve_editor', return_value='vim')
+    @mock.patch('git_p4son.review.get_commit_lines_since')
     def test_no_commits(self, mock_run, mock_resolve_editor):
         mock_run.return_value = []
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,
@@ -160,6 +189,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,
@@ -174,6 +204,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,
@@ -193,6 +224,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=True,
@@ -214,6 +246,7 @@ class TestReviewCommand(unittest.TestCase):
         args = mock.Mock(
             alias='my-feature',
             message='My feature',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=False,

@@ -9,7 +9,9 @@
 - `sync -u NAME` splits out more users for one sync, and `sync --no-split` ignores the configured ones
 - `sync-split` has been folded into `sync`. It no longer syncs, and instead prints the `sync` and
   `sync-split-users` commands that do the same
-- `new -F FILE` reads the changelist description from a file instead of `-m`, so it can span multiple lines
+- `new -F FILE` and `review -F FILE` read the changelist description from a file instead of `-m`, so it can span
+  multiple lines. `review` passes the file on to `new` in its rebase todo, so keep the file in place until the rebase
+  has finished
 
 ## 0.4.2
 

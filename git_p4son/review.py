@@ -27,7 +27,7 @@ def _todo_path(workspace_dir: str) -> str:
 
 
 def _generate_todo(commit_lines: list[str], alias: str, message: str,
-                   force: bool) -> str:
+                   force: bool, message_file: str | None = None) -> str:
     """Generate the rebase todo content with exec lines."""
     lines = []
     last_index = len(commit_lines) - 1
@@ -40,7 +40,11 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
 
         if i == 0:
             # First commit: create new changelist with review
-            cmd = f'new {shlex.quote(alias)} --review -m {shlex.quote(message)}'
+            if message_file:
+                message_arg = f'-F {shlex.quote(message_file)}'
+            else:
+                message_arg = f'-m {shlex.quote(message)}'
+            cmd = f'new {shlex.quote(alias)} --review {message_arg}'
             if force:
                 cmd += ' --force'
         else:
@@ -60,9 +64,11 @@ def review_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     # The generated rebase todo is line-based, so an embedded newline in
-    # the message would split the exec line and break the rebase.
-    if args.message and '\n' in args.message:
-        log.error('Review message must be a single line')
+    # the message would split the exec line and break the rebase. A message
+    # read from a file is passed on by file name instead.
+    if not args.file and args.message and '\n' in args.message:
+        log.error(
+            'Review message must be a single line (use -F for a multi-line message)')
         return 1
 
     # Validate alias name before starting
@@ -104,7 +110,7 @@ def review_command(args: argparse.Namespace) -> int:
     # Generate the rebase todo
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(
-        commit_lines, args.alias, args.message, args.force)
+        commit_lines, args.alias, args.message, args.force, args.file)
 
     if args.dry_run:
         log.info('Generated rebase todo:')

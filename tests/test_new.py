@@ -10,7 +10,8 @@ from git_p4son.new import new_command
 def _args(**overrides):
     defaults = dict(workspace_dir='/ws', alias=None, force=False,
                     dry_run=True, message='Msg', base_branch='main',
-                    no_edit=False, review=False, shelve=False)
+                    no_edit=False, review=False, shelve=False,
+                    no_commit_list=False)
     defaults.update(overrides)
     return mock.Mock(**defaults)
 

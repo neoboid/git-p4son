@@ -122,9 +122,11 @@ class TestCreateParser(unittest.TestCase):
             self.assertIsNone(args.message)
 
     def test_no_commit_list(self):
-        self.assertFalse(self.parser.parse_args(['update']).no_commit_list)
-        self.assertTrue(self.parser.parse_args(
-            ['update', '--no-commit-list']).no_commit_list)
+        for command in ('new', 'update', 'review'):
+            self.assertFalse(
+                self.parser.parse_args([command]).no_commit_list)
+            self.assertTrue(self.parser.parse_args(
+                [command, '--no-commit-list']).no_commit_list)
 
     def test_update_no_desc_hidden_from_help(self):
         self.assertTrue(self.parser.parse_args(

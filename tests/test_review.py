@@ -70,6 +70,17 @@ class TestGenerateTodo(unittest.TestCase):
             "exec git p4son new feat --review -F '/tmp/my msg.txt'\n"
         ))
 
+    def test_no_commit_list(self):
+        commit_lines = ['abc1234 First commit', 'def5678 Second commit']
+        result = _generate_todo(commit_lines, 'feat', 'msg', force=False,
+                                no_commit_list=True)
+        self.assertEqual(result, (
+            "pick abc1234 First commit\n"
+            "exec git p4son new feat --review -m msg --no-commit-list --sleep 5\n"
+            "pick def5678 Second commit\n"
+            "exec git p4son update feat --shelve --no-commit-list\n"
+        ))
+
     def test_alias_with_special_chars(self):
         commit_lines = ['abc1234 First commit']
         result = _generate_todo(commit_lines, 'my feature', 'msg', force=False)
@@ -118,6 +129,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
 
@@ -153,6 +165,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=True,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
 
@@ -179,6 +192,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         rc = review_command(args)
@@ -196,6 +210,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=True,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         with mock.patch('git_p4son.review.alias_exists', return_value=False):
@@ -214,6 +229,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
@@ -230,6 +246,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
@@ -246,6 +263,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=True):
@@ -267,6 +285,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=True,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
         rc = review_command(args)
@@ -290,6 +309,7 @@ class TestReviewCommand(unittest.TestCase):
             force=False,
             dry_run=False,
             no_edit_todo=False,
+            no_commit_list=False,
             workspace_dir='/workspace',
         )
 

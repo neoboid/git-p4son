@@ -95,7 +95,8 @@ Requires Python 3.11 or later.
 pip install --upgrade git-p4son
 ```
 
-For tab completion (zsh and PowerShell), see [Shell Completions](#shell-completions).
+For tab completion (zsh and PowerShell), see [Shell Completions](#shell-completions). To let Claude Code drive
+git-p4son, see [Claude Code Skill](#claude-code-skill).
 
 ## Development
 
@@ -221,8 +222,8 @@ the sync if git tracks them. The sync itself works as described above, since the
 
 ## Usage
 
-git-p4son provides ten commands: `init`, `sync`, `sync-split-users`, `new`, `update`, `review`,
-`list-changes`, `alias`, `writable`, and `completion`.
+git-p4son provides eleven commands: `init`, `sync`, `sync-split-users`, `new`, `update`, `review`,
+`list-changes`, `alias`, `writable`, `completion`, and `skill`.
 
 To see help for any command, use `-h`:
 
@@ -739,6 +740,15 @@ git-p4son completion <shell> [--dirname]
 
 See [Shell Completions](#shell-completions) below for installation instructions.
 
+### Skill Command
+
+Install or show the [Claude Code skill](#claude-code-skill):
+
+```sh
+git p4son skill install    # install the skill for your user
+git p4son skill show       # print the instructions the skill gives to AI agents
+```
+
 ### The `branch` keyword
 
 Most commands that accept an alias or changelist argument default to the current branch name. You can also pass the
@@ -779,6 +789,30 @@ before the first sync.
 
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
 `.git-p4son/hooks/post-sync/`.
+
+## Claude Code Skill
+
+git-p4son ships a skill for Claude Code that teaches it how git-p4son is meant to be used: keeping `main` in step
+with Perforce, never submitting on your behalf, creating reviews with full control of the changelist description,
+updating them after feedback, and cleaning up after a submit. With it installed, you can
+ask Claude to sync, put a branch up for review or address review feedback, and it will use git-p4son to do it.
+
+Install it once for your user:
+
+```sh
+git p4son skill install
+```
+
+This writes `~/.claude/skills/git-p4son/SKILL.md` (under `$CLAUDE_CONFIG_DIR` if set).
+The skill is installed for your user rather than in the workspace, where it would show up as an untracked file and
+block `sync`, `new` and `update`.
+
+The installed file is only a short stub: it tells Claude when the skill applies and to run `git p4son skill show`,
+which prints the full instructions from the installed git-p4son. So the instructions always match your version of
+git-p4son, and upgrading with pip needs no reinstall. Run `git p4son skill show` yourself to read what Claude is told.
+
+Claude picks the skill up on its own when you work in a git-p4son workspace. You can also invoke it directly with
+`/git-p4son`.
 
 ## Shell Completions
 

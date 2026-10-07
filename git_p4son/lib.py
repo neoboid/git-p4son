@@ -124,14 +124,17 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     )
 
 
-def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
+def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
+                      message: str | None = None) -> None:
     """Update the enumerated commit list in a changelist description.
 
     Commits in base_branch..HEAD replace their existing entries in the
     list (matched by subject) and new ones are appended; entries outside
     the range are kept. The whole list is renumbered. So `-b main`
     rebuilds the full list without duplicating it, while the review
-    rebase flow (`-b HEAD~1` per picked commit) keeps appending."""
+    rebase flow (`-b HEAD~1` per picked commit) keeps appending.
+
+    A message replaces everything above the commit list."""
     # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
@@ -139,6 +142,8 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     description_lines = extract_description_lines(spec_text)
     message_lines, old_commit_lines, trailing_lines = split_description_lines(
         description_lines)
+    if message is not None:
+        message_lines = message.splitlines()
 
     old_subjects = [re.sub(r'^\d+\. ', '', line)
                     for line in old_commit_lines]

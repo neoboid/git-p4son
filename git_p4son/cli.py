@@ -298,7 +298,8 @@ Examples:
         description='Update an existing Perforce changelist description: '
         'commits since the base branch replace their existing entries in '
         'the enumerated commit list and new ones are appended; entries '
-        'outside the range are kept. By default also opens changed files '
+        'outside the range are kept. The message above the list is kept '
+        'unless -m or -F replaces it. By default also opens changed files '
         'for edit.'
     )
     update_parser.add_argument(
@@ -307,6 +308,18 @@ Examples:
         default='branch',
         help='Changelist number or named alias to update. '
              'Defaults to the current branch name'
+    )
+    update_parser_message = update_parser.add_mutually_exclusive_group()
+    update_parser_message.add_argument(
+        '-m', '--message',
+        default=None,
+        help='Replace the changelist description message above the commit list'
+    )
+    update_parser_message.add_argument(
+        '-F', '--file',
+        default=None,
+        help='Replace the changelist description message above the commit list '
+             'with the contents of the given file'
     )
     update_parser.add_argument(
         '-b', '--base-branch',
@@ -604,7 +617,7 @@ def run_command(args: argparse.Namespace) -> int:
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
-    if args.command in ('new', 'review') and args.file is not None:
+    if args.command in ('new', 'update', 'review') and args.file is not None:
         # Absolute, so review's exec lines find it from the workspace root
         args.file = os.path.join(args.invocation_dir, args.file)
         log.heading('Reading message from file')

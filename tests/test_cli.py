@@ -116,7 +116,7 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.review)
 
     def test_message_file(self):
-        for command in ('new', 'review'):
+        for command in ('new', 'update', 'review'):
             args = self.parser.parse_args([command, '-F', 'msg.txt'])
             self.assertEqual(args.file, 'msg.txt')
             self.assertIsNone(args.message)
@@ -127,7 +127,7 @@ class TestCreateParser(unittest.TestCase):
             ['review', '--no-edit-todo']).no_edit_todo)
 
     def test_message_and_file_are_exclusive(self):
-        for command in ('new', 'review'):
+        for command in ('new', 'update', 'review'):
             with contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     self.parser.parse_args(

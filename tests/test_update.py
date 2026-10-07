@@ -9,7 +9,7 @@ from git_p4son.update import update_command
 def _args(**overrides):
     defaults = dict(workspace_dir='/ws', changelist='100', dry_run=False,
                     base_branch='HEAD~1', no_desc=False, no_edit=False,
-                    shelve=False)
+                    shelve=False, message=None)
     defaults.update(overrides)
     return mock.Mock(**defaults)
 
@@ -52,6 +52,18 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_dirty.assert_not_called()
         mock_update.assert_called_once()
+
+
+class TestUpdateCommandMessage(unittest.TestCase):
+    @mock.patch('git_p4son.update.revert_stale_files', return_value=0)
+    @mock.patch('git_p4son.update.open_changes_for_edit')
+    @mock.patch('git_p4son.update.update_changelist')
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_passes_message_on(self, _dirty, mock_update, _open, _revert):
+        rc = update_command(_args(message='New title'))
+        self.assertEqual(rc, 0)
+        mock_update.assert_called_once_with(
+            '100', 'HEAD~1', '/ws', dry_run=False, message='New title')
 
 
 class TestUpdateCommandRevertStep(unittest.TestCase):

@@ -154,7 +154,7 @@ def _complete_positional(command, subcommand, positional_count,
         return _filter(_get_split_user_names(workspace_dir), prefix)
 
     if command == 'alias':
-        if subcommand == 'delete' and positional_count == 0:
+        if subcommand in ('show', 'delete') and positional_count == 0:
             branch_candidates = _get_branch_candidates(prefix, workspace_dir)
             return branch_candidates + _filter(aliases, prefix)
 

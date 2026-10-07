@@ -1,9 +1,15 @@
 """Tests for git_p4son.alias module."""
 
+import contextlib
+import io
 import unittest
 from unittest import mock
 
-from git_p4son.alias import alias_clean_command, alias_delete_command
+from git_p4son.alias import (
+    alias_clean_command,
+    alias_delete_command,
+    alias_show_command,
+)
 from git_p4son.common import prompt_choice
 
 
@@ -25,6 +31,25 @@ def _args(workspace_dir='/ws'):
 
 
 ALIASES = [('feature-a', '100'), ('feature-b', '200'), ('feature-c', '300')]
+
+
+class TestAliasShowCommand(unittest.TestCase):
+    @mock.patch('git_p4son.alias.load_changelist_alias', return_value='100')
+    def test_prints_only_the_changelist(self, mock_load):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = alias_show_command(
+                mock.Mock(workspace_dir='/ws', alias='feature-a'))
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue(), '100\n')
+        mock_load.assert_called_once_with('feature-a', '/ws')
+
+    @mock.patch('git_p4son.alias.load_changelist_alias', return_value=None)
+    def test_missing_alias_fails(self, _load):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = alias_show_command(
+                mock.Mock(workspace_dir='/ws', alias='nope'))
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.getvalue(), '')
 
 
 @mock.patch('git_p4son.alias.delete_changelist_alias', return_value=True)

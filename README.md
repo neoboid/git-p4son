@@ -450,8 +450,8 @@ clean git workspace, untracked files included; `update` refuses to run otherwise
 `--no-edit`.
 
 ```sh
-git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc]
-                 [--no-edit] [--shelve]
+git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
+                 [--no-commit-list] [--no-edit] [--shelve]
 ```
 
 **Arguments:**
@@ -464,7 +464,8 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
-- `--no-desc`: Skip updating the changelist description
+- `--no-commit-list`: Skip updating the changelist description. Replaces `--no-desc`, which still works but is
+  deprecated
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done

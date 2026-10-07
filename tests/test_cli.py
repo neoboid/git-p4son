@@ -121,6 +121,19 @@ class TestCreateParser(unittest.TestCase):
             self.assertEqual(args.file, 'msg.txt')
             self.assertIsNone(args.message)
 
+    def test_no_commit_list(self):
+        self.assertFalse(self.parser.parse_args(['update']).no_commit_list)
+        self.assertTrue(self.parser.parse_args(
+            ['update', '--no-commit-list']).no_commit_list)
+
+    def test_update_no_desc_hidden_from_help(self):
+        self.assertTrue(self.parser.parse_args(
+            ['update', '--no-desc']).no_desc)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(['update', '--help'])
+        self.assertNotIn('--no-desc', out.getvalue())
+
     def test_review_no_edit_todo(self):
         self.assertFalse(self.parser.parse_args(['review']).no_edit_todo)
         self.assertTrue(self.parser.parse_args(

@@ -270,6 +270,42 @@ class TestUpdateChangelist(unittest.TestCase):
         update_changelist('12345', 'HEAD~1', '/ws')
         self.assertIn('1. First commit', self._spec_input(mock_run))
 
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_message_replaces_text_above_commit_list(self, mock_get_spec,
+                                                     mock_subjects, mock_run):
+        mock_get_spec.return_value = SAMPLE_SPEC
+        mock_subjects.return_value = ['New commit']
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          message='New title\n\nNew body')
+
+        spec_input = self._spec_input(mock_run)
+        self.assertNotIn('Fix the login bug', spec_input)
+        self.assertIn(
+            '\tNew title\n\t\n\tNew body\n\t\n\tChanges included:\n'
+            '\t1. Add validation\n\t2. Fix redirect\n\t3. New commit\n',
+            spec_input)
+
+    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
+    @mock.patch('git_p4son.lib.get_changelist_spec')
+    def test_message_without_commit_list(self, mock_get_spec,
+                                         mock_subjects, mock_run):
+        """Without a list, the message replaces the whole description."""
+        mock_get_spec.return_value = SAMPLE_SPEC_NO_COMMITS
+        mock_subjects.return_value = []
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 updated.'])
+        update_changelist('12345', 'HEAD~1', '/ws', message='New title')
+
+        spec_input = self._spec_input(mock_run)
+        self.assertIn('\tNew title\n', spec_input)
+        self.assertNotIn('Just a message', spec_input)
+        self.assertNotIn('Changes included:', spec_input)
+
 
 if __name__ == '__main__':
     unittest.main()

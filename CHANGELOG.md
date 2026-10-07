@@ -14,6 +14,8 @@
   has finished
 - `review --no-edit-todo` accepts the generated rebase todo without opening an editor, so scripts and AI agents
   can run a review without one configured
+- `update -m MESSAGE` and `update -F FILE` replace the changelist description message above the commit list,
+  which is kept and updated as usual
 
 ## 0.4.2
 

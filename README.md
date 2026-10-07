@@ -442,20 +442,25 @@ git p4son new -m "New feature" --review -b main
 Update an existing Perforce changelist description. Commits since the base branch replace their existing
 entries in the enumerated commit list (matched by subject) and new ones are appended; entries outside the
 range are kept and the list is renumbered. So `update -b main` rebuilds the whole list without duplicating
-it, while `update -b HEAD~3` only refreshes the last three entries. By default also opens changed files for
+it, while `update -b HEAD~3` only refreshes the last three entries. The message above the list is kept unless `-m`
+or `-F` replaces it. By default also opens changed files for
 edit, and reverts files that are no longer part of the git change (see
 [Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)). Opening files requires a
 clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
 `--no-edit`.
 
 ```sh
-git p4son update [changelist] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc] [--no-edit] [--shelve]
+git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run] [--no-desc]
+                 [--no-edit] [--shelve]
 ```
 
 **Arguments:**
 - `changelist` (optional): Changelist number or named alias to update. Defaults to the current branch name.
 
 **Options:**
+- `-m, --message MESSAGE`: Replace the changelist description message above the commit list. The commit list is
+  kept and updated as usual
+- `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
@@ -470,6 +475,7 @@ git p4son update              # update changelist for current branch
 git p4son update --shelve     # update and re-shelve
 git p4son update 12345
 git p4son update myalias -b main
+git p4son update -F description.txt   # replace the message, e.g. after review feedback
 ```
 
 ### Keeping the changelist in step with git

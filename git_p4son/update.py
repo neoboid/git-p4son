@@ -40,7 +40,8 @@ def update_command(args: argparse.Namespace) -> int:
     if not args.no_desc:
         log.heading(f'Updating description for CL {changelist}')
         update_changelist(
-            changelist, args.base_branch, workspace_dir, dry_run=args.dry_run)
+            changelist, args.base_branch, workspace_dir, dry_run=args.dry_run,
+            message=args.message)
         log.success('Done')
 
     # Open changed files for edit

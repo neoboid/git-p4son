@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from git_p4son.alias import alias_clean_command
+from git_p4son.alias import alias_clean_command, alias_delete_command
 from git_p4son.common import prompt_choice
 
 
@@ -25,6 +25,35 @@ def _args(workspace_dir='/ws'):
 
 
 ALIASES = [('feature-a', '100'), ('feature-b', '200'), ('feature-c', '300')]
+
+
+@mock.patch('git_p4son.alias.delete_changelist_alias', return_value=True)
+@mock.patch('git_p4son.alias.list_changelist_aliases', return_value=ALIASES)
+class TestAliasDeleteCommand(unittest.TestCase):
+    def test_deletes_named_alias(self, mock_list, mock_delete):
+        rc = alias_delete_command(
+            mock.Mock(workspace_dir='/ws', alias='feature-b', all=False))
+        self.assertEqual(rc, 0)
+        mock_delete.assert_called_once_with('feature-b', '/ws')
+        mock_list.assert_not_called()
+
+    def test_all_deletes_everything_without_prompting(
+            self, _list, mock_delete):
+        with mock.patch('builtins.input') as mock_input:
+            rc = alias_delete_command(
+                mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+        self.assertEqual(rc, 0)
+        mock_input.assert_not_called()
+        self.assertEqual(
+            [c.args[0] for c in mock_delete.call_args_list],
+            ['feature-a', 'feature-b', 'feature-c'])
+
+    def test_all_without_aliases(self, mock_list, mock_delete):
+        mock_list.return_value = []
+        rc = alias_delete_command(
+            mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+        self.assertEqual(rc, 0)
+        mock_delete.assert_not_called()
 
 
 @mock.patch('git_p4son.alias.delete_changelist_alias', return_value=True)

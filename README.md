@@ -624,19 +624,24 @@ git p4son alias new 67890 myfeature -f
 
 #### alias delete
 
-Delete a changelist alias:
+Delete a changelist alias, or all of them:
 
 ```sh
-git p4son alias delete [alias]
+git p4son alias delete [alias | --all]
 ```
 
 **Arguments:**
 - `alias` (optional): Alias name to delete. Defaults to the current branch name.
 
+**Options:**
+- `--all`: Delete all aliases without prompting. Unlike `alias clean`, it does not ask first, which suits scripts
+  and AI agents
+
 **Examples:**
 ```sh
 git p4son alias delete              # delete alias for current branch
 git p4son alias delete myfeature
+git p4son alias delete --all
 ```
 
 #### alias clean

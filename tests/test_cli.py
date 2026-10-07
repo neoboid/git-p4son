@@ -136,6 +136,15 @@ class TestCreateParser(unittest.TestCase):
                 self.parser.parse_args(['update', '--help'])
         self.assertNotIn('--no-desc', out.getvalue())
 
+    def test_alias_delete_all(self):
+        args = self.parser.parse_args(['alias', 'delete', '--all'])
+        self.assertTrue(args.all)
+        self.assertFalse(
+            self.parser.parse_args(['alias', 'delete', 'x']).all)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(['alias', 'delete', 'x', '--all'])
+
     def test_review_no_edit_todo(self):
         self.assertFalse(self.parser.parse_args(['review']).no_edit_todo)
         self.assertTrue(self.parser.parse_args(
@@ -364,6 +373,17 @@ class TestResolveBranchKeyword(unittest.TestCase):
         self.assertEqual(args.alias, 'feat-bar')
         mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
+    @mock.patch('git_p4son.cli.alias_command', return_value=0)
+    def test_alias_delete_all_skips_resolution(
+            self, mock_alias, _ws, mock_branch):
+        """--all names no alias, so it works on a detached HEAD."""
+        args = self.parser.parse_args(['alias', 'delete', '--all'])
+        self.assertEqual(run_command(args), 0)
+        mock_branch.assert_not_called()
+        mock_alias.assert_called_once_with(args)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
     def test_detached_head_returns_none(self, _branch):

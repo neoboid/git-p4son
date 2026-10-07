@@ -10,6 +10,7 @@ from git_p4son.config import load_config
 from git_p4son.init import (
     _ask_yes_no,
     _compute_cwd_depot_root,
+    _configure_claude_skill,
     _configure_depot_root,
     _configure_split_users,
     _configure_writable_mode,
@@ -268,6 +269,47 @@ class TestConfigureSplitUsers(unittest.TestCase):
         self.assertEqual(load_config(self.ws), {})
 
 
+class TestConfigureClaudeSkill(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.config_dir = os.path.join(tmp.name, '.claude')
+        patcher = mock.patch.dict(
+            os.environ, {'CLAUDE_CONFIG_DIR': self.config_dir})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.stub = os.path.join(
+            self.config_dir, 'skills', 'git-p4son', 'SKILL.md')
+
+    @mock.patch('builtins.input')
+    def test_skipped_without_claude_code(self, mock_input):
+        _configure_claude_skill()
+        mock_input.assert_not_called()
+        self.assertFalse(os.path.exists(self.config_dir))
+
+    @mock.patch('builtins.input', return_value='y')
+    def test_installs_when_accepted(self, _input):
+        os.makedirs(self.config_dir)
+        _configure_claude_skill()
+        self.assertTrue(os.path.exists(self.stub))
+
+    @mock.patch('builtins.input', return_value='')
+    def test_defaults_to_not_installing(self, _input):
+        os.makedirs(self.config_dir)
+        _configure_claude_skill()
+        self.assertFalse(os.path.exists(self.stub))
+
+    @mock.patch('builtins.input')
+    def test_refreshes_installed_skill_without_asking(self, mock_input):
+        os.makedirs(os.path.dirname(self.stub))
+        with open(self.stub, 'w') as f:
+            f.write('old')
+        _configure_claude_skill()
+        mock_input.assert_not_called()
+        with open(self.stub) as f:
+            self.assertNotEqual(f.read(), 'old')
+
+
 class TestInitCommand(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch('git_p4son.init._configure_writable_mode',
@@ -276,6 +318,9 @@ class TestInitCommand(unittest.TestCase):
         self.addCleanup(patcher.stop)
         patcher = mock.patch('git_p4son.init._configure_split_users')
         self.mock_split_users = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('git_p4son.init._configure_claude_skill')
+        self.mock_claude_skill = patcher.start()
         self.addCleanup(patcher.stop)
 
     def _make_args(self):
@@ -301,6 +346,10 @@ class TestInitCommand(unittest.TestCase):
     def test_configures_split_users(self):
         self._next_steps(has_commits=False)
         self.mock_split_users.assert_called_once_with('/ws')
+
+    def test_configures_claude_skill(self):
+        self._next_steps(has_commits=False)
+        self.mock_claude_skill.assert_called_once_with()
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

@@ -271,9 +271,12 @@ The `.gitignore` is set up using this priority:
 `init` also asks whether to turn on [writable mode](#writable-command), defaulting to the current setting. It only
 saves the answer; run `git p4son writable apply` once your files are committed to update their permissions.
 
-Finally, `init` asks whether to sync your own changelists individually, making you a [split user](#split-users).
+`init` then asks whether to sync your own changelists individually, making you a [split user](#split-users).
 The default is the current setting. Yes adds a `$(user)` entry to the split users and no removes it; other split
 users are left alone.
+
+Finally, if Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
+already installed skill is refreshed without asking.
 
 ### Sync Command
 
@@ -803,7 +806,7 @@ Install it once for your user:
 git p4son skill install
 ```
 
-This writes `~/.claude/skills/git-p4son/SKILL.md` (under `$CLAUDE_CONFIG_DIR` if set).
+This writes `~/.claude/skills/git-p4son/SKILL.md` (under `$CLAUDE_CONFIG_DIR` if set). `init` offers to do the same.
 The skill is installed for your user rather than in the workspace, where it would show up as an untracked file and
 block `sync`, `new` and `update`.
 

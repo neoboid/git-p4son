@@ -464,8 +464,8 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
-- `--no-commit-list`: Skip updating the changelist description. Replaces `--no-desc`, which still works but is
-  deprecated
+- `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
+  touched at all. Replaces `--no-desc`, which still works but is deprecated
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done

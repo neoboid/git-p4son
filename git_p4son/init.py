@@ -14,6 +14,7 @@ from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
+from .skill import claude_config_dir, install_skill, is_skill_installed
 from .git import resolve_editor
 from .sync_split_users import (
     USER_PLACEHOLDER,
@@ -196,6 +197,27 @@ def _configure_split_users(cwd: str) -> None:
              'git p4son sync-split-users add NAME')
 
 
+def _configure_claude_skill() -> None:
+    """Offer to install the Claude Code skill, or refresh an installed one.
+
+    Skipped when Claude Code's config directory does not exist."""
+    log.heading('Configuring Claude Code skill')
+    if not os.path.isdir(claude_config_dir()):
+        log.success('Claude Code not found, skipping')
+        return
+    if is_skill_installed():
+        install_skill()
+        log.success('installed (refreshed)')
+        return
+    print()
+    print('The Claude Code skill teaches AI agents how to use git-p4son.')
+    print('It is installed for your user, not in the workspace.')
+    if _ask_yes_no('Install the Claude Code skill?', False):
+        log.success(f'installed to {install_skill()}')
+    else:
+        log.success('not installed')
+
+
 def _has_commits(cwd: str) -> bool:
     """Return whether the git repo has any commit (HEAD resolves)."""
     result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
@@ -238,6 +260,8 @@ def init_command(args: argparse.Namespace) -> int:
     writable, writable_changed = _configure_writable_mode(cwd)
 
     _configure_split_users(cwd)
+
+    _configure_claude_skill()
 
     log.heading('Checking .gitignore')
     result = _setup_gitignore(cwd)

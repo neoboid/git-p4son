@@ -23,9 +23,9 @@
 - `alias delete --all` deletes all aliases without prompting
 - Add `alias show`, which prints only the changelist number saved under an alias (the current branch's by default),
   for use in scripts
-- Add a Claude Code skill that teaches AI agents how to use git-p4son. Install it with `git p4son skill install`.
-  The installed skill only tells Claude to run `git p4son skill show`, which prints the instructions from the
-  installed git-p4son, so it stays current across upgrades
+- Add a Claude Code skill that teaches AI agents how to use git-p4son. Install it with `git p4son skill install`, or
+  let `init` offer it. The installed skill only tells Claude to run `git p4son skill show`, which prints the
+  instructions from the installed git-p4son, so it stays current across upgrades
 
 ## 0.4.2
 

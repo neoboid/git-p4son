@@ -85,7 +85,7 @@ processes (`ps` or `tasklist`), and the check `sync_preflight` runs first to ref
 
 **`skill.py`** implements the `skill` command: `install` writes a stub `SKILL.md` to the user's Claude Code skills
 directory, and `show` prints the full agent instructions shipped in `skill/git-p4son.md`. The stub only tells the agent
-to run `skill show`, so the instructions follow the installed version.
+to run `skill show`, so the instructions follow the installed version. `init` offers the install.
 
 **`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
 with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).

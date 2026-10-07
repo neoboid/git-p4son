@@ -455,6 +455,11 @@ Examples:
         action='store_true',
         help='Print the generated rebase todo without executing'
     )
+    review_parser.add_argument(
+        '--no-edit-todo',
+        action='store_true',
+        help='Accept the generated rebase todo as is, without opening an editor'
+    )
 
     # Writable subcommand
     writable_parser = subparsers.add_parser(
@@ -517,6 +522,11 @@ Examples:
     seq_editor_parser.add_argument(
         'filename',
         help='The rebase todo file to edit'
+    )
+    seq_editor_parser.add_argument(
+        '--no-edit',
+        action='store_true',
+        help='Write the todo without opening an editor'
     )
 
     return parser

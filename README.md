@@ -501,6 +501,7 @@ then opens it in your editor for review before executing.
 
 ```sh
 git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
+                 [--no-edit-todo]
 ```
 
 **Arguments:**
@@ -514,6 +515,8 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the generated rebase todo without executing
+- `--no-edit-todo`: Accept the generated rebase todo as is and start the rebase without opening an editor. No
+  editor needs to be configured. Useful for scripts and AI agents, which can check the todo with `--dry-run` first
 
 When run, the command generates a todo like this and opens it in your editor:
 
@@ -544,6 +547,9 @@ git p4son review -m "Add my feature" -b main --dry-run
 
 # Take a multi-line description from a file
 git p4son review -F description.txt -b main
+
+# Run the rebase without reviewing the todo in an editor
+git p4son review -m "Add my feature" -b main --no-edit-todo
 ```
 
 ### List-Changes Command

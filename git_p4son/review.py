@@ -90,13 +90,14 @@ def review_command(args: argparse.Namespace) -> int:
         log.success('Done')
 
     # Validate editor is available before starting
-    log.heading('Checking editor')
-    editor = resolve_editor(workspace_dir)
-    if not editor:
-        log.error(
-            'No git editor configured. Set one with: git config core.editor <editor>')
-        return 1
-    log.success(editor)
+    if not args.no_edit_todo:
+        log.heading('Checking editor')
+        editor = resolve_editor(workspace_dir)
+        if not editor:
+            log.error(
+                'No git editor configured. Set one with: git config core.editor <editor>')
+            return 1
+        log.success(editor)
 
     # Get commits since base branch
     log.heading('Finding commits')
@@ -132,6 +133,8 @@ def review_command(args: argparse.Namespace) -> int:
         log.heading('Running interactive rebase')
         env = os.environ.copy()
         env['GIT_SEQUENCE_EDITOR'] = 'git-p4son _sequence-editor'
+        if args.no_edit_todo:
+            env['GIT_SEQUENCE_EDITOR'] += ' --no-edit'
         result = subprocess.run(
             ['git', 'rebase', '-i', args.base_branch],
             cwd=workspace_dir,
@@ -152,7 +155,8 @@ def review_command(args: argparse.Namespace) -> int:
 
 
 def sequence_editor_command(args: argparse.Namespace) -> int:
-    """Replace git's rebase todo with ours, then open the user's editor."""
+    """Replace git's rebase todo with ours, then open the user's editor
+    unless --no-edit is given."""
     workspace_dir = args.workspace_dir
     todo_file = _todo_path(workspace_dir)
 
@@ -175,6 +179,9 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
         if comment_lines:
             f.write('\n')
             f.writelines(comment_lines)
+
+    if args.no_edit:
+        return 0
 
     editor = resolve_editor(workspace_dir)
     if not editor:

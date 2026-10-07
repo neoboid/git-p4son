@@ -121,6 +121,11 @@ class TestCreateParser(unittest.TestCase):
             self.assertEqual(args.file, 'msg.txt')
             self.assertIsNone(args.message)
 
+    def test_review_no_edit_todo(self):
+        self.assertFalse(self.parser.parse_args(['review']).no_edit_todo)
+        self.assertTrue(self.parser.parse_args(
+            ['review', '--no-edit-todo']).no_edit_todo)
+
     def test_message_and_file_are_exclusive(self):
         for command in ('new', 'review'):
             with contextlib.redirect_stderr(io.StringIO()):

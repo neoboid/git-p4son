@@ -15,7 +15,7 @@
 - `review --no-edit-todo` accepts the generated rebase todo without opening an editor, so scripts and AI agents
   can run a review without one configured
 - `update -m MESSAGE` and `update -F FILE` replace the changelist description message above the commit list,
-  which is kept and updated as usual
+  which is kept and updated as usual. The Swarm `#review` keyword is kept too, also when there is no commit list
 - `update --no-desc` is renamed to `update --no-commit-list`, which leaves the enumerated commit list as it is.
   Combined with `-m` or `-F` it replaces only the message. `--no-desc` still works for now, with a warning
 - `new --no-commit-list` leaves the enumerated commit list out of the changelist description, so it holds only the

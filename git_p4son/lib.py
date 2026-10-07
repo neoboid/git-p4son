@@ -30,6 +30,26 @@ from .writable import is_writable_mode, make_writable
 # Heading written above the enumerated commit list in descriptions.
 COMMIT_LIST_MARKER = 'Changes included:'
 
+# A Swarm review keyword on a line of its own: #review, which Swarm turns
+# into #review-<id> once the review exists.
+_REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
+
+
+def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
+    """Split standalone review keyword lines out of description lines.
+
+    Returns (other_lines, keyword_lines). Blank lines left at the end of
+    other_lines by the removal are dropped."""
+    keywords = [line for line in lines
+                if _REVIEW_KEYWORD_RE.match(line.strip())]
+    if not keywords:
+        return lines, []
+    others = [line for line in lines
+              if not _REVIEW_KEYWORD_RE.match(line.strip())]
+    while others and not others[-1].strip():
+        others.pop()
+    return others, keywords
+
 
 def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
     """Split description into (message_lines, commit_lines, trailing_lines).
@@ -160,7 +180,9 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     rebase flow (`-b HEAD~1` per picked commit) keeps appending.
 
     A message replaces everything above the commit list. With commit_list
-    False the list is left as it is."""
+    False the list is left as it is. Swarm review keyword lines found above
+    the list are moved to the end of the description, where `new --review`
+    puts them, so a message never replaces them."""
     # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
@@ -168,8 +190,16 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     description_lines = extract_description_lines(spec_text)
     message_lines, old_commit_lines, trailing_lines = split_description_lines(
         description_lines)
+
+    # Without a commit list the keyword #review appends is part of the
+    # message lines. Move it to the end so it survives a new message.
+    message_lines, keywords = _split_review_keywords(message_lines)
     if message is not None:
         message_lines = message.splitlines()
+    present = {line.strip() for line in message_lines + trailing_lines}
+    keywords = [line for line in keywords if line.strip() not in present]
+    if keywords:
+        trailing_lines = trailing_lines + [''] + keywords
 
     if commit_list:
         commit_lines = _merge_commit_lines(

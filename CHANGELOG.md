@@ -26,6 +26,9 @@
 - Add a Claude Code skill that teaches AI agents how to use git-p4son. Install it with `git p4son skill install`, or
   let `init` offer it. The installed skill only tells Claude to run `git p4son skill show`, which prints the
   instructions from the installed git-p4son, so it stays current across upgrades
+- `update --per-commit` updates the changelist once per commit since the base branch, through an interactive rebase
+  without an editor, so `update -b HEAD~2 --per-commit --shelve` gives each of the last two commits its own shelf
+  and Swarm patch
 
 ## 0.4.2
 

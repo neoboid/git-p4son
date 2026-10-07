@@ -455,9 +455,18 @@ edit, and reverts files that are no longer part of the git change (see
 clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
 `--no-edit`.
 
+With `--per-commit`, `update` runs once per commit since the base branch instead of once for the whole range, the
+way `review` does after creating the changelist. It replays the commits with an interactive rebase, without opening
+an editor, and runs `git p4son update` after each one. With `--shelve`, every commit gets a shelf of its own and so
+shows up as its own patch in the Swarm review. Use it after making several commits since the last update:
+`update -b HEAD~2 --per-commit --shelve` updates the changelist with the last two commits, one at a time. The
+changelist is resolved before the rebase starts, and `-m`/`-F` is applied on the first step only. The rebase needs a
+clean git workspace, also with `--no-edit`. If a step fails, the rebase stops; fix the problem and run
+`git rebase --continue`.
+
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
-                 [--no-commit-list] [--no-edit] [--shelve]
+                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit]
 ```
 
 **Arguments:**
@@ -474,6 +483,9 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   touched at all. Replaces `--no-desc`, which still works but is deprecated
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
+- `--per-commit`: Update the changelist once per commit since the base branch, oldest first, through an
+  interactive rebase. Steps sleep 5 seconds between them to give Perforce/Swarm time to process each shelf.
+  `--dry-run` prints the generated rebase todo
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
@@ -483,6 +495,7 @@ git p4son update --shelve     # update and re-shelve
 git p4son update 12345
 git p4son update myalias -b main
 git p4son update -F description.txt   # replace the message, e.g. after review feedback
+git p4son update -b HEAD~2 --per-commit --shelve   # one shelf for each of the last two commits
 ```
 
 ### Keeping the changelist in step with git

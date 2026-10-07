@@ -16,7 +16,8 @@ from .update import update_command
 from .list_changes import list_changes_command
 from .alias import alias_command
 from .init import init_command
-from .review import review_command, sequence_editor_command
+from .rebase_todo import sequence_editor_command
+from .review import review_command
 from .changelist_store import RESERVED_KEYWORDS
 from .common import CommandError, RunError, branch_to_alias
 from .git import get_current_branch, get_head_subject, get_workspace_dir

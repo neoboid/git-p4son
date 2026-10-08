@@ -94,12 +94,11 @@ class TestCreateParser(unittest.TestCase):
             self.assertTrue(args.dry_run)
 
     def test_ignore_blocking_processes(self):
-        for command in ('sync', 'sync-split'):
-            self.assertFalse(self.parser.parse_args(
-                [command]).ignore_blocking_processes)
-            self.assertTrue(self.parser.parse_args(
-                [command, '--ignore-blocking-processes'])
-                .ignore_blocking_processes)
+        self.assertFalse(self.parser.parse_args(
+            ['sync']).ignore_blocking_processes)
+        self.assertTrue(self.parser.parse_args(
+            ['sync', '--ignore-blocking-processes'])
+            .ignore_blocking_processes)
 
     def test_new_command_no_message(self):
         args = self.parser.parse_args(['new'])

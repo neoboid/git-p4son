@@ -365,9 +365,6 @@ blocking processes check, the clean-workspace checks and the pre-sync hooks, so 
 workspace or a hook that aborts the sync says so before that work. `--dry-run` skips the checks and hooks but still
 shows the resulting sequence.
 
-`sync-split`, which split out users' changelists for a single run, has been folded into `sync`. It now only prints
-the `sync` and `sync-split-users` commands that do the same.
-
 #### pre-sync hook
 
 Before `git-p4son sync` syncs any changelist, git-p4son runs [hooks](#hooks) from

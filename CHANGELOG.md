@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove `sync-split`, deprecated in 0.5.0. `sync` splits out the configured split users; see `sync-split-users`
+
 ## 0.5.0
 
 - Add split users: Perforce users whose submitted changelists `sync` always gives a commit each, holding nothing

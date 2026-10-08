@@ -2,8 +2,8 @@
 """Bump the version of git-p4son.
 
 Two-step workflow:
-  1. bump-version.py [patch|minor|major]: bump the version files and generate
-     the changelog
+  1. bump-version.py [patch|minor|major]: bump the version files and move the
+     entries under "## Unreleased" in CHANGELOG.md under the new version
   2. (edit CHANGELOG.md if desired)
   3. bump-version.py --finalize: commit, tag, push and create the GitHub
      release
@@ -75,41 +75,24 @@ def run(cmd, input=None):
     return result
 
 
-def get_previous_tag():
-    """Return the most recent version tag, or None if no tags exist."""
-    result = subprocess.run(
-        ['git', 'describe', '--tags', '--abbrev=0'],
-        capture_output=True, text=True)
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
+UNRELEASED_RE = re.compile(r'^## Unreleased\n(.*?)(?=^## |\Z)',
+                           re.MULTILINE | re.DOTALL)
 
 
-def get_release_notes(previous_tag):
-    """Get commit subjects since previous_tag, excluding release commits."""
-    if previous_tag:
-        cmd = ['git', 'log', f'{previous_tag}..HEAD', '--format=%s']
-    else:
-        cmd = ['git', 'log', '--format=%s']
-    result = run(cmd)
-    subjects = result.stdout.strip().splitlines()
-    return [s for s in subjects if not s.startswith('Release git-p4son v')]
+def unreleased_entries():
+    """Return the entries under "## Unreleased" in CHANGELOG.md."""
+    m = UNRELEASED_RE.search(CHANGELOG.read_text())
+    if not m or not m.group(1).strip():
+        print(f'Error: no entries under "## Unreleased" in {CHANGELOG}. '
+              'Describe the changes there first.', file=sys.stderr)
+        sys.exit(1)
+    return m.group(1).strip().splitlines()
 
 
-def update_changelog(version, notes):
-    """Prepend a new version section to CHANGELOG.md."""
-    section = f'\n## {version}\n\n'
-    for note in notes:
-        section += f'- {note}\n'
-
-    if CHANGELOG.exists():
-        text = CHANGELOG.read_text()
-        # Insert after the "# Changelog" header line
-        header_end = text.index('\n') + 1
-        text = text[:header_end] + section + text[header_end:]
-    else:
-        text = '# Changelog\n' + section
-
+def update_changelog(version):
+    """Move the Unreleased entries in CHANGELOG.md under a new heading."""
+    text = re.sub(r'^## Unreleased\n+', f'## Unreleased\n\n## {version}\n\n',
+                  CHANGELOG.read_text(), count=1, flags=re.MULTILINE)
     CHANGELOG.write_text(text)
 
 
@@ -157,6 +140,9 @@ def prepare(args):
         print(f'Error: tag {tag} already exists.', file=sys.stderr)
         sys.exit(1)
 
+    # Safety: the release must be described in CHANGELOG.md
+    notes = unreleased_entries()
+
     # Safety: all tests must pass
     print('Running tests...')
     result = subprocess.run(
@@ -167,24 +153,19 @@ def prepare(args):
               file=sys.stderr)
         sys.exit(1)
 
-    # Generate release notes
-    previous_tag = get_previous_tag()
-    notes = get_release_notes(previous_tag)
-
     # Update files
     replace_in_file(
         PYPROJECT, f'version = "{old_str}"', f'version = "{new_str}"')
     replace_in_file(
         INIT_PY, f'__version__ = "{old_str}"', f'__version__ = "{new_str}"')
-    update_changelog(new_str, notes)
+    update_changelog(new_str)
 
     print(f'{old_str} -> {new_str}')
     print()
-    if notes:
-        print('Release notes:')
-        for note in notes:
-            print(f'  - {note}')
-        print()
+    print('Release notes:')
+    for line in notes:
+        print(f'  {line}')
+    print()
     print('Review CHANGELOG.md, then run:')
     print('  python scripts/bump-version.py --finalize')
 

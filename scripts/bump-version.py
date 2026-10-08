@@ -5,11 +5,14 @@ Two-step workflow:
   1. bump-version.py [patch|minor|major]: bump the version files and generate
      the changelog
   2. (edit CHANGELOG.md if desired)
-  3. bump-version.py --finalize: commit and tag
+  3. bump-version.py --finalize: commit, tag, push and create the GitHub
+     release
 """
 
 import argparse
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -61,9 +64,9 @@ def replace_in_file(path, old, new):
     path.write_text(text.replace(old, new, 1))
 
 
-def run(cmd):
+def run(cmd, input=None):
     """Run a command and exit on failure."""
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, input=input)
     if result.returncode != 0:
         print(f'Error running: {" ".join(cmd)}', file=sys.stderr)
         if result.stderr:
@@ -108,6 +111,18 @@ def update_changelog(version, notes):
         text = '# Changelog\n' + section
 
     CHANGELOG.write_text(text)
+
+
+def changelog_section(version):
+    """Return the CHANGELOG.md section for a version, without its heading."""
+    text = CHANGELOG.read_text()
+    m = re.search(rf'^## {re.escape(version)}\n(.*?)(?=^## |\Z)', text,
+                  re.MULTILINE | re.DOTALL)
+    if not m or not m.group(1).strip():
+        print(f'Error: no entries for {version} in {CHANGELOG}',
+              file=sys.stderr)
+        sys.exit(1)
+    return m.group(1).strip() + '\n'
 
 
 def prepare(args):
@@ -175,7 +190,7 @@ def prepare(args):
 
 
 def finalize(args):
-    """Commit and tag the prepared release."""
+    """Commit, tag, push and create the GitHub release."""
     version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
     tag = f'v{version}'
 
@@ -185,17 +200,52 @@ def finalize(args):
         print(f'Error: tag {tag} already exists.', file=sys.stderr)
         sys.exit(1)
 
+    # Check everything the release needs before committing, so a failure
+    # cannot leave a half-done release behind
+    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).stdout.strip()
+    if branch == 'HEAD':
+        print('Error: detached HEAD. Check out the branch to release from.',
+              file=sys.stderr)
+        sys.exit(1)
+    if not shutil.which('gh'):
+        print('Error: the GitHub CLI (gh) is needed to create the release.',
+              file=sys.stderr)
+        sys.exit(1)
+    run(['gh', 'auth', 'status'])
+    notes = changelog_section(version)
+
     # Commit and tag
     commit_msg = f'Release git-p4son v{version}'
     run(['git', 'add', str(PYPROJECT), str(INIT_PY), str(CHANGELOG)])
     run(['git', 'commit', '-m', commit_msg])
     run(['git', 'tag', tag])
-
     print(f'Committed: {commit_msg}')
     print(f'Tagged: {tag}')
-    print()
-    print('To publish, push the commit and tag:')
-    print(f'  git push && git push origin {tag}')
+
+    # Push and release. Pushing the tag starts the PyPI publish workflow.
+    # Each step is (message when done, command, stdin, command to show if it
+    # has to be run by hand).
+    release_cmd = ['gh', 'release', 'create', tag, '--verify-tag', '--latest',
+                   '--title', f'git-p4son {tag}', '--notes-file']
+    steps = [
+        (f'Pushed {branch}', ['git', 'push', 'origin', branch], None, None),
+        (f'Pushed {tag}', ['git', 'push', 'origin', tag], None, None),
+        (f'Created GitHub release {tag}', release_cmd + ['-'], notes,
+         f'{shlex.join(release_cmd)} <the {version} section of '
+         'CHANGELOG.md>'),
+    ]
+    for i, (done, cmd, stdin, _) in enumerate(steps):
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                input=stdin)
+        if result.returncode != 0:
+            print(f'Error running: {shlex.join(cmd)}', file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+            print('Finish the release by hand:', file=sys.stderr)
+            for _, remaining, _, shown in steps[i:]:
+                print(f'  {shown or shlex.join(remaining)}', file=sys.stderr)
+            sys.exit(1)
+        print(done)
 
 
 def main():

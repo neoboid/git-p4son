@@ -128,14 +128,6 @@ class TestCreateParser(unittest.TestCase):
             self.assertTrue(self.parser.parse_args(
                 [command, '--no-commit-list']).no_commit_list)
 
-    def test_update_no_desc_hidden_from_help(self):
-        self.assertTrue(self.parser.parse_args(
-            ['update', '--no-desc']).no_desc)
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(['update', '--help'])
-        self.assertNotIn('--no-desc', out.getvalue())
-
     def test_alias_delete_all(self):
         args = self.parser.parse_args(['alias', 'delete', '--all'])
         self.assertTrue(args.all)

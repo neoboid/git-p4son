@@ -477,7 +477,7 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
-  touched at all. Replaces `--no-desc`, which still works but is deprecated
+  touched at all
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
 - `--per-commit`: Update the changelist once per commit since the base branch, oldest first, through an

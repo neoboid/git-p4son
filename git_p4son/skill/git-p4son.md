@@ -19,8 +19,8 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm. Read-only commands are always fine:
   `alias list`, `alias show`, `list-changes`, and any command with `--dry-run`.
 - **Let git-p4son talk to Perforce.** Don't run `p4 sync`, `p4 edit`, `p4 add`, `p4 delete`, `p4 revert`, `p4 shelve`
-  or `p4 change` on files git-p4son manages. Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes`
-  are fine.
+  or `p4 change` on files git-p4son manages, except to recover as described under "When something refuses".
+  Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes` are fine.
 - **Writable mode.** When it is on (`git p4son writable` shows it), git-tracked files stay writable, so you edit and
   commit them without `p4 edit`. git-p4son opens the changed files in the CL when it creates or updates one.
 - **Git-ignored files belong to Perforce.** Files ignored by git, typically binary assets, never end up in a
@@ -194,6 +194,12 @@ Ask before deleting a branch or alias if you are not sure the CL was submitted.
 
 - **The workspace is not clean.** Commit or stash first; untracked files count. Park something unrelated, like a
   scratch file, with `git stash push -u -- <path>`, and restore it with `git stash pop` once git-p4son is done.
+- **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git"). Files that git
+  tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for
+  example checked out but never edited, revert just those with `p4 revert -a <files>`: `-a` only reverts files
+  whose content is unchanged, so edited files stay opened for the user to deal with. Ask the user first. Files in a
+  CL made by `new` or `review` are opened too, and usually unchanged while `main` is checked out; reverting them
+  keeps the shelf and the Swarm review, and the next `update` opens them again.
 - **The alias already exists.** An earlier attempt saved it. `-f` overwrites it, or `git p4son alias delete` removes
   it; ask the user first if the old CL may still be in use.
 - **A tracked file turned read-only**, for example after a manual `p4 revert`. With writable mode on,

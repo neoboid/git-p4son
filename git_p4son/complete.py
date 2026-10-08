@@ -15,7 +15,7 @@ from .log import log
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset(
-    {'complete', 'completion', '_sequence-editor', 'sync-split'})
+    {'complete', 'completion', '_sequence-editor'})
 # Commands whose first positional is a nested action (alias list, ...).
 _COMMANDS_WITH_ACTIONS = frozenset(
     {'alias', 'skill', 'sync-split-users', 'writable'})

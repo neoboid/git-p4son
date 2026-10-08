@@ -146,10 +146,6 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertNotIn('complete', names)
 
-    def test_folded_sync_split_not_completed(self, _ws, _aliases):
-        result = _complete(self.parser, ['sync-'], workspace_dir='/ws')
-        self.assertEqual(self._names(result), ['sync-split-users'])
-
     def test_hidden_sequence_editor_not_completed(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
         names = self._names(result)

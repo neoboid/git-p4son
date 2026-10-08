@@ -9,7 +9,6 @@ import time
 from importlib.resources import files
 from . import __version__
 from .sync import sync_command
-from .sync_split import sync_split_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
 from .update import update_command
@@ -133,41 +132,6 @@ Examples:
         action='store_true',
         help='Ignore the configured split users for this sync. Users given '
              'with --split-user are still split out'
-    )
-
-    # Sync-split subcommand, folded into sync. Kept to tell anyone still
-    # running it what to run instead. Given no help, so it is not listed.
-    sync_split_parser = subparsers.add_parser(
-        'sync-split',
-        description='Folded into sync: prints the sync and sync-split-users '
-        'commands that do the same, without syncing.'
-    )
-    sync_split_parser.add_argument(
-        'changelist',
-        nargs='?',
-        default=None,
-        metavar='CHANGELIST',
-        help='Changelist number to sync up to, or "head" for the latest. '
-             'Omit to sync to the latest changelist affecting the workspace'
-    )
-    sync_split_parser.add_argument(
-        '-u', '--user',
-        action='append',
-        default=None,
-        metavar='NAME',
-        help='Perforce user whose changelists to split into their own '
-             'commits. Repeat to select several users. '
-             'Defaults to the current p4 user'
-    )
-    sync_split_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Print the resolved sync sequence without syncing'
-    )
-    sync_split_parser.add_argument(
-        '--ignore-blocking-processes',
-        action='store_true',
-        help='Sync even while a configured blocking process is running'
     )
 
     # Sync-split-users subcommand
@@ -722,8 +686,6 @@ def run_command(args: argparse.Namespace) -> int:
 
     if args.command == 'sync':
         return sync_command(args)
-    elif args.command == 'sync-split':
-        return sync_split_command(args)
     elif args.command == 'sync-split-users':
         return sync_split_users_command(args)
     elif args.command == 'new':

@@ -50,9 +50,6 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
   `$(user)` placeholder to the current Perforce user, and the `sync-split-users` command (`list`, `add`, `delete`).
 
-- **`sync_split.py`** - The `sync-split` command, folded into `sync`. Hidden from help; only prints the equivalent
-  `sync` and `sync-split-users` commands.
-
 - **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, reverts files that are no
   longer part of the git change, and optionally creates a Swarm review (with `--review` flag) or shelves (with
   `--shelve` flag). Requires a clean git workspace unless `--no-edit` is given. Alias defaults to the current branch

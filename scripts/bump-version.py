@@ -2,9 +2,10 @@
 """Bump the version of git-p4son.
 
 Two-step workflow:
-  1. bump-version.py [patch|minor|major]  — bump version files, generate changelog
+  1. bump-version.py [patch|minor|major]: bump the version files and generate
+     the changelog
   2. (edit CHANGELOG.md if desired)
-  3. bump-version.py --finalize            — commit and tag
+  3. bump-version.py --finalize: commit and tag
 """
 
 import argparse
@@ -117,8 +118,8 @@ def prepare(args):
 
     if pyproject_version != init_version:
         print(
-            f'Error: version mismatch — pyproject.toml has {pyproject_version}, '
-            f'__init__.py has {init_version}',
+            f'Error: version mismatch, pyproject.toml has '
+            f'{pyproject_version} and __init__.py has {init_version}',
             file=sys.stderr)
         sys.exit(1)
 
@@ -131,8 +132,8 @@ def prepare(args):
     # Safety: working tree must be clean
     status = run(['git', 'status', '--porcelain'])
     if status.stdout.strip():
-        print('Error: working tree is not clean. Commit or stash changes first.',
-              file=sys.stderr)
+        print('Error: working tree is not clean. Commit or stash changes '
+              'first.', file=sys.stderr)
         sys.exit(1)
 
     # Safety: tag must not exist

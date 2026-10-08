@@ -177,6 +177,29 @@ To find the number, compare the commit list in `p4 describe -s $(git p4son alias
 To reword the description, `-F FILE` or `-m MESSAGE` replaces everything above the commit list. Add `--no-edit` to
 change only the description and leave the files alone. `--no-commit-list` leaves the commit list as it is.
 
+## Binary assets in a review
+
+Git-ignored files never travel with a commit, but the user can open them in the CL by hand, for example a string
+table that goes with a code change. Two things decide which patch they land in:
+
+- **A placeholder commit gives the asset its own entry.** An empty commit whose subject describes the asset change,
+  `git commit --allow-empty -m "Add the Other string to the quests string table"`, puts a line in the commit list.
+  `review` and `update --per-commit` handle it like any other commit. Its step adds no patch until the asset is in
+  the CL: shelving files that have not changed is a no-op in Swarm.
+- **Every shelve takes everything open in the CL.** git-p4son replays git-tracked files commit by commit, but an
+  asset already open in the CL goes up with the first shelve of a run, whichever commit it belongs to.
+
+So keep the asset out of the review CL while the commits before it are shelved, for example in the default
+changelist. Put the placeholder commit last, run `review` or `update --per-commit --shelve` as usual, then move the
+asset into the CL and shelve once more. The asset then arrives as its own patch, right after the code:
+
+```sh
+p4 reopen -c $(git p4son alias show) <asset>
+git p4son update --shelve
+```
+
+Moving the asset is a P4V step for the user if they prefer; it is not a file git-p4son manages.
+
 ## After the CL is submitted
 
 Once the user says the CL is submitted:

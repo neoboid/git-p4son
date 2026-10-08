@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0
+
 - Add split users: Perforce users whose submitted changelists `sync` always gives a commit each, holding nothing
   but that change. List them in `[sync] split-users` in `.git-p4son/config.toml`, where `$(user)` stands for the
   current Perforce user. Edit the list with the new `sync-split-users` command (`list`, `add`, `delete`), or answer

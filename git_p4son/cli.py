@@ -308,12 +308,6 @@ Examples:
         action='store_true',
         help='Leave the enumerated commit list in the changelist description as it is'
     )
-    # Deprecated in favour of --no-commit-list
-    update_parser.add_argument(
-        '--no-desc',
-        action='store_true',
-        help=argparse.SUPPRESS
-    )
     update_parser.add_argument(
         '--no-edit',
         action='store_true',

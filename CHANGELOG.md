@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Remove `sync-split`, deprecated in 0.5.0. `sync` splits out the configured split users; see `sync-split-users`
+- Remove `update --no-desc`, deprecated in 0.5.0. Use `update --no-commit-list` instead
 
 ## 0.5.0
 

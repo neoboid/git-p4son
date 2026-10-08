@@ -23,8 +23,9 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes` are fine.
 - **Writable mode.** When it is on (`git p4son writable` shows it), git-tracked files stay writable, so you edit and
   commit them without `p4 edit`. git-p4son opens the changed files in the CL when it creates or updates one.
-- **Git-ignored files belong to Perforce.** Files ignored by git, typically binary assets, never end up in a
-  git-p4son CL. The user checks them out, locks and submits them in P4V as usual.
+- **Git-ignored files belong to Perforce.** Files ignored by git, typically binary assets, are never opened in a CL
+  by git-p4son. The user checks them out, locks and submits them in P4V as usual, and opens them in a review CL by
+  hand when needed (see "Binary assets in a review").
 - **Never submit.** git-p4son has no submit command on purpose: submitting is left to the user, usually in P4V.
 - **Keep the workspace clean.** `sync`, `new` and `update` refuse to run with uncommitted changes, untracked files
   included. Commit or stash first, and keep scratch files, like a description file, outside the workspace.

@@ -108,8 +108,7 @@ def run_hooks(hook_name: str, workspace_dir: str,
             log.warning(f'Skipping non-executable hook: {display_path}')
             continue
 
-        # One failing hook must not prevent the remaining hooks from
-        # running; hooks are independent of each other.
+        # Hooks are independent, so one failing does not stop the rest.
         result = run(command, cwd=cwd, env=env, fail_on_returncode=False)
         _print_output(result)
         if result.returncode != 0:

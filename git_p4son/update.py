@@ -37,8 +37,7 @@ def _generate_todo(commit_lines: list[str], changelist: str,
         if args.shelve:
             cmd += ' --shelve'
 
-        # Sleep after all exec lines except the last, so Swarm can process
-        # each shelf before the next
+        # Give Swarm time to process each shelf before the next
         if i < last_index:
             cmd += ' --sleep 5'
         lines.append(f'exec git p4son {cmd}')
@@ -50,9 +49,7 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     """Update the changelist once per commit since the base branch."""
     workspace_dir = args.workspace_dir
 
-    # The generated rebase todo is line-based, so an embedded newline in
-    # the message would split the exec line and break the rebase. A message
-    # read from a file is passed on by file name instead.
+    # The rebase todo is line-based, so a multi-line message must come from a file.
     if not args.file and args.message and '\n' in args.message:
         log.error('Message must be a single line with --per-commit '
                   '(use -F for a multi-line message)')
@@ -69,8 +66,7 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
         return 1
     log.success(f'{len(commit_lines)} commits since {args.base_branch}')
 
-    # Each step names the changelist by number: HEAD is detached during the
-    # rebase, so the current branch alias cannot be resolved there.
+    # Steps name the changelist by number: HEAD is detached during the rebase.
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(commit_lines, changelist, args)
 
@@ -99,9 +95,7 @@ def update_command(args: argparse.Namespace) -> int:
     if args.per_commit:
         return _update_per_commit(changelist, args)
 
-    # Opening and reverting files relies on every tracked file matching
-    # HEAD, so refuse before touching the changelist. Also runs on dry
-    # run, so it reports the same problem the real run would hit.
+    # Opening and reverting files relies on every tracked file matching HEAD.
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
@@ -113,22 +107,17 @@ def update_command(args: argparse.Namespace) -> int:
             message=args.message, commit_list=not args.no_commit_list)
         log.success('Done')
 
-    # Open changed files for edit
     if not args.no_edit:
         log.heading('Opening files for edit')
         open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
         log.success('Done')
 
-        # Drop files that are no longer part of the git change, e.g. an
-        # edit undone by a later commit, so the changelist and the shelf
-        # only contain real changes.
         log.heading('Reverting unchanged files')
         count = revert_stale_files(changelist, workspace_dir, args.dry_run)
         log.success(f'{count} would be reverted' if args.dry_run
                     else f'{count} reverted')
 
-    # Shelve the changelist
     if args.shelve:
         log.heading('Shelving')
         p4_shelve_changelist(

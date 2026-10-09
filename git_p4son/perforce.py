@@ -153,12 +153,10 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
                                      dry_run: bool = False) -> None:
     """Add the #review keyword to a changelist description."""
     if dry_run:
-        # Checked first: a dry run must not query the server, and the
-        # changelist may be a placeholder from a dry-run create.
+        # A dry run must not query the server; the changelist may be a placeholder.
         log.info(f"Would add #review keyword to changelist {changelist}")
         return
 
-    # Get current changelist description
     res = run(['p4', 'change', '-o', changelist], cwd=workspace_dir)
 
     lines = res.stdout
@@ -168,12 +166,10 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
 
     desc_end = find_end_of_indented_section(lines, desc_start + 1)
 
-    # Check if #review is already in the description
     if any('#review' in line for line in lines[desc_start:desc_end]):
         log.info(f'Changelist {changelist} already has #review keyword')
         return
 
-    # Insert #review at the end of the description, preceded by a blank line
     lines[desc_end:desc_end] = ['\t', '\t#review']
 
     run(['p4', 'change', '-i'], cwd=workspace_dir,
@@ -267,12 +263,8 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
 
     current_cl, current_action = result
     if current_action != p4_action:
-        # Action mismatch - revert first, then reopen with correct action.
-        # p4 revert overwrites the file on disk with the depot version,
-        # so we need git restore afterwards to get the git content back.
-
-        # add -> edit: the file is new to the depot, so it must stay as add.
-        # This happens when a file is added in one commit and modified in the next.
+        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
+        # add -> edit: new to the depot, so it stays an add.
         if current_action == 'add' and p4_action == 'edit':
             if current_cl != changelist:
                 run(['p4', 'reopen', '-c', changelist, filename],
@@ -280,7 +272,7 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
             return
 
         run(['p4', 'revert', filename], cwd=workspace_dir, dry_run=dry_run)
-        # For add -> delete: the file never existed in the depot, so just revert.
+        # add -> delete: never in the depot, so just revert.
         if current_action == 'add' and p4_action == 'delete':
             return
         _open_in_changelist(filename, p4_action, changelist,
@@ -416,9 +408,7 @@ def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
     return (None, None)
 
 
-# p4 writes a synced file to a temp file and renames it into place. On
-# Windows the rename fails when another process holds the target open, e.g.
-# an editor with the asset loaded, leaving the file unsynced.
+# On Windows p4's rename into place fails while another process holds the file open.
 _RENAME_FAILED_PREFIX = 'rename: failed to rename '
 
 

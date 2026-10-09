@@ -252,9 +252,7 @@ def init_command(args: argparse.Namespace) -> int:
         run_with_output(['git', 'init'], cwd=cwd)
         log.success('created new git repository')
 
-    # An existing repo without commits also needs the initial commit: a
-    # previous init may have failed at the commit step (e.g. user.email
-    # not configured), and sync cannot work on an unborn HEAD.
+    # Also covers a repo left without commits by an init that failed to commit.
     if not _has_commits(cwd):
         log.heading('Creating initial commit')
         run_with_output(['git', 'add', '.gitignore'], cwd=cwd)
@@ -273,7 +271,6 @@ def init_command(args: argparse.Namespace) -> int:
         log.heading('Next steps')
         log.info('* git p4son writable apply, to update the tracked files')
 
-    # Nudge user to set an editor if none is configured
     log.heading('Validating git editor configuration')
     editor = resolve_editor(cwd)
     if editor:

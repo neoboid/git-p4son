@@ -10,14 +10,10 @@ from .log import log
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
 
-# Allowed characters: ASCII letters, digits, hyphen, underscore, dot.
-# Must not start or end with a dot, so "." and ".." are rejected and the
-# filename does not collide with hidden files or platform-specific quirks
-# (Windows disallows trailing dots).
+# ASCII letters, digits, hyphen, underscore and dot, not starting or ending with a dot.
 _ALIAS_NAME_RE = re.compile(r'^[A-Za-z0-9_-]([A-Za-z0-9._-]*[A-Za-z0-9_-])?$')
 
-# Windows device names; opening such a path hits the device namespace
-# instead of creating a file, on any drive and regardless of extension.
+# Windows device names: opening one hits the device instead of creating a file.
 _WINDOWS_RESERVED_NAMES = frozenset(
     {'con', 'prn', 'aux', 'nul'}
     | {f'com{i}' for i in range(1, 10)}
@@ -35,8 +31,7 @@ def validate_alias_name(name: str) -> str | None:
             f'Invalid alias name "{name}": must contain only letters, digits, '
             'hyphens, underscores, and dots, and must not start or end with a dot')
     if name.isdigit():
-        # Digit strings are always interpreted as changelist numbers, so
-        # such an alias could be created but never referenced.
+        # Digit strings are taken as changelist numbers, so such an alias could never be used.
         return (
             f'Invalid alias name "{name}": an all-digit name would be '
             'indistinguishable from a changelist number')

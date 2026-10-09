@@ -34,14 +34,12 @@ def normalize_process_name(name: str) -> str:
 def get_running_processes() -> set[str]:
     """Return the normalized names of all currently running processes."""
     if os.name == 'nt':
-        # /NH drops the header row. CSV output keeps an image name that
-        # contains spaces or commas inside one quoted field.
+        # /NH: no header row. CSV quotes names containing spaces or commas.
         result = run(['tasklist', '/NH', '/FO', 'CSV'])
         lines = [line for line in result.stdout if line.strip()]
         return {normalize_process_name(row[0])
                 for row in csv.reader(lines) if row}
-    # -ww stops ps truncating output to the terminal width, which would
-    # otherwise cut long process names short.
+    # -ww: don't truncate long process names to the terminal width.
     result = run(['ps', '-A', '-ww', '-o', 'comm='])
     return {normalize_process_name(line)
             for line in result.stdout if line.strip()}

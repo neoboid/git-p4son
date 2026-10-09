@@ -45,15 +45,12 @@ def review_command(args: argparse.Namespace) -> int:
     """Execute the review command."""
     workspace_dir = args.workspace_dir
 
-    # The generated rebase todo is line-based, so an embedded newline in
-    # the message would split the exec line and break the rebase. A message
-    # read from a file is passed on by file name instead.
+    # The rebase todo is line-based, so a multi-line message must come from a file.
     if not args.file and args.message and '\n' in args.message:
         log.error(
             'Review message must be a single line (use -F for a multi-line message)')
         return 1
 
-    # Validate alias name before starting
     log.heading(f'Validating alias "{args.alias}"')
     error = validate_alias_name(args.alias)
     if error:
@@ -61,7 +58,6 @@ def review_command(args: argparse.Namespace) -> int:
         return 1
     log.success('Done')
 
-    # Check alias availability before starting
     if not args.force:
         log.heading(f'Checking alias "{args.alias}" is available')
         if alias_exists(args.alias, workspace_dir):
@@ -71,7 +67,6 @@ def review_command(args: argparse.Namespace) -> int:
             return 1
         log.success('Done')
 
-    # Validate editor is available before starting
     if not args.no_edit_todo:
         log.heading('Checking editor')
         editor = resolve_editor(workspace_dir)
@@ -81,7 +76,6 @@ def review_command(args: argparse.Namespace) -> int:
             return 1
         log.success(editor)
 
-    # Get commits since base branch
     log.heading('Finding commits')
     commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)
 
@@ -90,7 +84,6 @@ def review_command(args: argparse.Namespace) -> int:
         return 1
     log.success(f'{len(commit_lines)} commits since {args.base_branch}')
 
-    # Generate the rebase todo
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(
         commit_lines, args.alias, args.message, args.force, args.file,

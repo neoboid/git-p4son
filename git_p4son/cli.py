@@ -75,7 +75,6 @@ Examples:
         metavar='COMMAND'
     )
 
-    # Init subcommand
     subparsers.add_parser(
         'init',
         help='Initialize a git repository inside a Perforce workspace',
@@ -84,7 +83,6 @@ Examples:
         'sets up .gitignore, and creates an initial commit.'
     )
 
-    # Sync subcommand
     sync_parser = subparsers.add_parser(
         'sync',
         help='Sync local git repository with a Perforce workspace',
@@ -132,7 +130,6 @@ Examples:
              'with --split-user are still split out'
     )
 
-    # Sync-split-users subcommand
     split_users_parser = subparsers.add_parser(
         'sync-split-users',
         help='Show or edit the users whose changelists sync splits out',
@@ -189,7 +186,6 @@ Examples:
         help='Remove the $(user) entry for the current Perforce user'
     )
 
-    # New subcommand
     new_parser = subparsers.add_parser(
         'new',
         help='Create a new changelist, open files for edit, and optionally create a Swarm review',
@@ -261,7 +257,6 @@ Examples:
         help='Sleep for the specified number of seconds after the command is done'
     )
 
-    # Update subcommand
     update_parser = subparsers.add_parser(
         'update',
         help='Update an existing changelist description and open files for edit',
@@ -329,7 +324,6 @@ Examples:
         help='Sleep for the specified number of seconds after the command is done'
     )
 
-    # List-changes subcommand
     list_changes_parser = subparsers.add_parser(
         'list-changes',
         help='List commit subjects since base branch',
@@ -341,7 +335,6 @@ Examples:
         help='Base branch to compare against. Default is HEAD~1'
     )
 
-    # Alias subcommand
     alias_parser = subparsers.add_parser(
         'alias',
         help='Manage changelist aliases',
@@ -353,14 +346,12 @@ Examples:
         metavar='ACTION'
     )
 
-    # alias list
     alias_subparsers.add_parser(
         'list',
         help='List all aliases and their changelist numbers',
         description='List all changelist aliases stored in .git-p4son/changelists/'
     )
 
-    # alias show
     alias_show_parser = alias_subparsers.add_parser(
         'show',
         help='Print the changelist number of an alias',
@@ -374,7 +365,6 @@ Examples:
         help='Alias name to show. Defaults to the current branch name'
     )
 
-    # alias new
     alias_new_parser = alias_subparsers.add_parser(
         'new',
         help='Save a changelist number under a named alias',
@@ -398,7 +388,6 @@ Examples:
         help='Overwrite an existing alias file'
     )
 
-    # alias delete
     alias_delete_parser = alias_subparsers.add_parser(
         'delete',
         help='Delete a changelist alias',
@@ -417,7 +406,6 @@ Examples:
         help='Delete all aliases without prompting'
     )
 
-    # alias clean
     alias_subparsers.add_parser(
         'clean',
         help='Clean up changelist aliases',
@@ -425,7 +413,6 @@ Examples:
         'or review each one interactively with yes/no/all/quit prompts'
     )
 
-    # Review subcommand
     review_parser = subparsers.add_parser(
         'review',
         help='Create a Swarm review via automated interactive rebase',
@@ -477,7 +464,6 @@ Examples:
         help='Accept the generated rebase todo as is, without opening an editor'
     )
 
-    # Writable subcommand
     writable_parser = subparsers.add_parser(
         'writable',
         help='Show or apply writable mode for git-tracked files',
@@ -511,7 +497,6 @@ Examples:
         'for example by a submit.'
     )
 
-    # Completion subcommand (prints shell completion script path)
     completion_parser = subparsers.add_parser(
         'completion',
         help='Print path to a shell completion script',
@@ -529,7 +514,6 @@ Examples:
         help='Print the directory instead of the full file path'
     )
 
-    # Skill subcommand (no workspace needed)
     skill_parser = subparsers.add_parser(
         'skill',
         help='Install or show the Claude Code skill for git-p4son',
@@ -556,9 +540,7 @@ Examples:
         'this version of git-p4son'
     )
 
-    # Hidden _sequence-editor subcommand (used internally by review). It is
-    # given no help: argparse lists a subcommand with help=SUPPRESS anyway,
-    # as "==SUPPRESS==", but leaves one without help out of the list.
+    # Hidden, used by review. No help, since argparse lists help=SUPPRESS as "==SUPPRESS==".
     seq_editor_parser = subparsers.add_parser(
         '_sequence-editor',
     )
@@ -613,8 +595,7 @@ def completion_command(args: argparse.Namespace) -> int:
 def run_command(args: argparse.Namespace) -> int:
     args.invocation_dir = os.getcwd()
 
-    # alias show prints nothing but the changelist number on stdout, so
-    # scripts can capture it. Errors still go to stderr.
+    # alias show prints only the changelist number on stdout, so scripts can capture it.
     if args.command == 'alias' and args.alias_action == 'show':
         log.quiet_mode = True
 
@@ -625,11 +606,9 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
     log.success(args.workspace_dir)
 
-    # Handle --no-alias for new/review
     if args.command in ('new', 'review') and getattr(args, 'no_alias', False):
         args.alias = None
 
-    # Determine which attribute may need branch resolution
     branch_attr = None
     if args.command in ('new', 'review') and getattr(args, 'alias', None) == 'branch':
         branch_attr = 'alias'
@@ -700,7 +679,6 @@ def main() -> int:
     # Handle 'complete' before argparse to avoid flag/word conflicts
     if len(sys.argv) >= 2 and sys.argv[1] == 'complete':
         words = sys.argv[2:]
-        # Strip leading '--' separator if present
         if words and words[0] == '--':
             words = words[1:]
         return run_complete(words)
@@ -721,7 +699,7 @@ def main() -> int:
     try:
         log.verbose_mode = args.verbose
 
-        # Run init before run_command (as no workspace needed)
+        # init runs without a workspace
         if args.command == 'init':
             return init_command(args)
 

@@ -211,11 +211,9 @@ def _complete(parser, words, workspace_dir=None):
 
         positional_count += 1
 
-    # Completing a flag's value
     if expecting_flag_value:
         return _complete_flag_value(expecting_flag_name, prefix)
 
-    # Completing the command name
     if command is None:
         if prefix.startswith('-'):
             return _filter(_get_flags(parser), prefix)
@@ -226,11 +224,9 @@ def _complete(parser, words, workspace_dir=None):
                     candidates.append((ca.dest, ca.help or ''))
             return _filter(candidates, prefix)
 
-    # Completing a flag for the current command
     if prefix.startswith('-'):
         return _filter(_get_flags(current_parser), prefix)
 
-    # Completing a positional argument
     return _complete_positional(command, subcommand, positional_count,
                                 prefix, workspace_dir, command_parser)
 
@@ -238,9 +234,7 @@ def _complete(parser, words, workspace_dir=None):
 def run_complete(words):
     """Execute the complete command with the given word list."""
     from .cli import create_parser
-    # stdout is reserved for completion candidates: any status line or
-    # command echo from helpers (e.g. get_current_branch running git)
-    # would be offered to the user as a candidate by the shell.
+    # stdout is reserved for completion candidates, so silence all logging.
     log.quiet_mode = True
     parser = create_parser()
     workspace_dir = get_workspace_dir()

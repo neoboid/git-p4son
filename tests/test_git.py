@@ -351,14 +351,6 @@ class TestFindBaseCommits(GitRepoTestCase):
         result = find_base_commits(['a.cpp'], s0, self.tmpdir)
         self.assertEqual(result, {'a.cpp': s0})
 
-    def test_matches_pergit_subjects(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('pergit: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
-        self.assertEqual(result, {'a.cpp': s0})
-
     def test_backslash_paths_keyed_by_input(self):
         self._write_file('src/engine/test.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')

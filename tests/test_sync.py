@@ -354,14 +354,6 @@ class TestGitLastSync(unittest.TestCase):
         self.assertEqual(result.commit, self.HASH)
 
     @mock.patch('git_p4son.sync.run_with_output')
-    def test_extracts_changelist_pergit(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            f'{self.HASH} pergit: p4 sync //...@12345'
-        ])
-        result = git_last_sync('/ws')
-        self.assertEqual(result.changelist, 12345)
-
-    @mock.patch('git_p4son.sync.run_with_output')
     def test_extracts_changelist_git_p4son(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             f'{self.HASH} git-p4son: p4 sync //...@12345'
@@ -372,7 +364,7 @@ class TestGitLastSync(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_with_output')
     def test_extracts_changelist_fail(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            f'{self.HASH} pergot: p4 sync //...@12345'
+            f'{self.HASH} other: p4 sync //...@12345'
         ])
         result = git_last_sync('/ws')
         self.assertIsNone(result)

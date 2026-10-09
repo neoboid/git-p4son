@@ -1,9 +1,4 @@
-"""
-Init command implementation for git-p4son.
-
-Sets up a new git repository inside a Perforce workspace with an initial
-commit containing .gitignore.
-"""
+"""Init command: sets up a git repository inside a Perforce workspace."""
 
 import argparse
 import os
@@ -36,12 +31,7 @@ def _validate_depot_root(depot_root: str, cwd: str) -> bool:
 
 
 def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
-    """Compute the depot root template for cwd relative to workspace root.
-
-    Uses the $(workspace) placeholder in place of the client name so the stored
-    root survives a workspace rename. Returns None if cwd is the workspace root
-    (identical to the entire workspace).
-    """
+    """Compute the $(workspace)-based depot root for cwd, or None if cwd is the workspace root."""
     rel = os.path.relpath(cwd, p4_workspace_root)
     if rel == '.':
         return None
@@ -51,11 +41,7 @@ def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
 
 def _select_depot_root(client_name: str, cwd: str,
                        p4_workspace_root: str) -> str | None:
-    """Interactive prompt for depot root selection.
-
-    Returns a depot root template (with the $(workspace) placeholder) to store,
-    or None to abort. Menu entries and validation use the resolved path.
-    """
+    """Interactively select a depot root template to store, or None to abort."""
     entire_root = f'//{WORKSPACE_PLACEHOLDER}'
     cwd_root = _compute_cwd_depot_root(cwd, p4_workspace_root)
 
@@ -128,9 +114,7 @@ def _configure_depot_root(client_name: str, cwd: str,
 
 
 def _ask_yes_no(question: str, current: bool) -> bool | None:
-    """Ask a yes/no question, defaulting to the current value.
-
-    An empty answer keeps the current value. Returns None on EOF."""
+    """Ask a yes/no question, where an empty answer keeps current; None on EOF."""
     choices = '[Y/n]' if current else '[y/N]'
     while True:
         try:
@@ -148,10 +132,7 @@ def _ask_yes_no(question: str, current: bool) -> bool | None:
 
 
 def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
-    """Ask for the writable mode setting and save it.
-
-    Only the setting is saved: file permissions are left alone, since on a
-    fresh repo the files are not tracked yet. Returns (enabled, changed)."""
+    """Ask for the writable mode setting and save it; returns (enabled, changed)."""
     log.heading('Configuring writable mode')
     current = is_writable_mode(cwd)
     print()
@@ -167,10 +148,7 @@ def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
 
 
 def _configure_split_users(cwd: str) -> None:
-    """Ask whether to split out the current user's changelists and save it.
-
-    Only the $(user) entry is added or removed; other split users are left
-    alone. Nothing is written when the answer keeps the current setting."""
+    """Ask whether to split out the current user's changelists and save it."""
     log.heading('Configuring split users')
     user = current_p4_user(cwd)
     if not user:
@@ -198,9 +176,7 @@ def _configure_split_users(cwd: str) -> None:
 
 
 def _configure_claude_skill() -> None:
-    """Offer to install the Claude Code skill, or refresh an installed one.
-
-    Skipped when Claude Code's config directory does not exist."""
+    """Offer to install or refresh the Claude Code skill, if Claude Code is present."""
     log.heading('Configuring Claude Code skill')
     if not os.path.isdir(claude_config_dir()):
         log.success('Claude Code not found, skipping')

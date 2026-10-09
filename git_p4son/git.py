@@ -1,7 +1,4 @@
-"""Git abstraction layer.
-
-All functions that interact directly with the git CLI live here.
-"""
+"""Git abstraction layer: all direct git CLI calls live here."""
 
 import os
 import os.path
@@ -20,10 +17,7 @@ from .common import (
 # --- workspace ---
 
 def is_workspace_dir(directory: str) -> bool:
-    """Check if a directory is a git workspace.
-
-    .git is a directory in a regular repo, but a file pointing at the real
-    git dir in linked worktrees and submodules."""
+    """Check if a directory is a git workspace (.git may be a dir or, in worktrees, a file)."""
     return os.path.exists(os.path.join(directory, '.git'))
 
 
@@ -43,11 +37,7 @@ def get_workspace_dir() -> str | None:
 # --- branch ---
 
 def get_current_branch(workspace_dir: str) -> str | None:
-    """Return the current git branch name, or None on error/detached HEAD.
-
-    When in detached HEAD during an interactive rebase, returns the
-    original branch name from git's rebase state.
-    """
+    """Return the current branch name (the original one during a rebase), or None on detached HEAD."""
     try:
         result = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
                      cwd=workspace_dir)
@@ -206,11 +196,7 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 # --- log ---
 
 def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get git log --oneline lines for commits since base branch.
-
-    Merge commits are skipped: as rebase todo picks they fail the rebase
-    ("is a merge but no -m option was given"), and the merged branch's own
-    commits are already in the range."""
+    """Get git log --oneline lines for non-merge commits since base branch."""
     # Explicit format instead of --oneline: a user's log.decorate=short
     # config would otherwise prepend "(HEAD -> branch)" decorations to
     # every subject in pick lines and changelist descriptions.
@@ -238,11 +224,7 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
 # --- tracking ---
 
 def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
-    """Return the subset of filepaths that are tracked by git, batched.
-
-    Tracking status decides whether a file is git's to manage: a tracked
-    file matching a .gitignore pattern (common when .gitignore was copied
-    from .p4ignore) is still tracked. Returned paths are the input paths."""
+    """Return the subset of filepaths that are tracked by git, batched."""
     if not filepaths:
         return set()
     by_git_path: dict[str, str] = {}
@@ -291,12 +273,7 @@ def get_file_at_commit(filepath: str, commit: str,
 
 def get_blob_oids(items: list[tuple[str, str]],
                   workspace_dir: str) -> dict[tuple[str, str], str | None]:
-    """Blob OIDs for (commit, filepath) pairs, resolved in one git call.
-
-    Returns a mapping of (commit, filepath) to OID, or None when the file
-    doesn't exist at that commit. Equal OIDs mean byte-identical content
-    (git content-addresses blobs), so this answers "did the content change?"
-    without transferring the blobs."""
+    """Map (commit, filepath) pairs to blob OIDs, or None where the file doesn't exist at that commit."""
     if not items:
         return {}
     queries = []
@@ -354,17 +331,7 @@ def _chunk_paths_by_length(paths: list[str], budget: int) -> list[list[str]]:
 
 def find_base_commits(filepaths: list[str], before_commit: str,
                       workspace_dir: str) -> dict[str, str | None]:
-    """Baseline commit for each repo-relative path, batched.
-
-    The baseline is the most recent sync commit reachable from before_commit
-    (inclusive) that touched the file, falling back to the most recent commit
-    that added it when no sync commit ever touched it (e.g. files brought in
-    via an initial bulk import committed with a non-sync subject; if the file
-    was deleted and re-added, the most recent add starts the current
-    lineage), or None when neither exists.
-
-    All paths are resolved in a single history walk per pathspec chunk
-    instead of one git log per file."""
+    """Map each path to its most recent sync commit before before_commit, else its latest add, else None."""
     result: dict[str, str | None] = {}
     if not filepaths:
         return result
@@ -391,12 +358,7 @@ def _find_base_commits_command(before_commit: str) -> list[str]:
 
 def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
                              workspace_dir: str) -> dict[str, str | None]:
-    """One newest-first history walk resolving baselines for git_paths.
-
-    The first sync commit seen touching a path is its baseline (the most
-    recent one). The first add seen is remembered as the fallback for paths
-    no sync commit ever touched. core.quotePath is disabled so non-ASCII
-    paths in --name-status output match the input verbatim."""
+    """Resolve baselines for git_paths in one newest-first history walk."""
     result: dict[str, str | None] = dict.fromkeys(git_paths)
     res = run(_find_base_commits_command(before_commit) + git_paths,
               cwd=workspace_dir, fail_on_returncode=False)
@@ -429,11 +391,7 @@ def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
 
 def merge_file(current_path: str, base_path: str,
                other_path: str) -> tuple[bool, bytes]:
-    """Three-way merge using git merge-file.
-
-    All three inputs are file paths read by git directly. Returns
-    (clean, merged_content) where clean is True if no conflicts.
-    """
+    """Three-way merge of file paths using git merge-file; returns (clean, merged_content)."""
     result = run(
         ['git', 'merge-file', '-p',
          '--marker-size=7',

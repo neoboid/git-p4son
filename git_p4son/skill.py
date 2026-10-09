@@ -1,11 +1,4 @@
-"""
-Skill command implementation for git-p4son.
-
-Installs a Claude Code skill that teaches AI agents how to use git-p4son. The
-installed SKILL.md is only a stub telling the agent to run `git p4son skill
-show`, which prints the full instructions from the installed package, so the
-skill stays current across git-p4son upgrades without being reinstalled.
-"""
+"""Skill command: installs a Claude Code skill stub and shows the full instructions."""
 
 import argparse
 import os

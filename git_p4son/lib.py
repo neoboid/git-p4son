@@ -1,6 +1,4 @@
-"""
-Bridge functions that combine git and Perforce operations.
-"""
+"""Bridge functions that combine git and Perforce operations."""
 
 import os
 import re
@@ -36,10 +34,7 @@ _REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
 
 
 def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
-    """Split standalone review keyword lines out of description lines.
-
-    Returns (other_lines, keyword_lines). Blank lines left at the end of
-    other_lines by the removal are dropped."""
+    """Split standalone review keyword lines out; returns (other_lines, keyword_lines)."""
     keywords = [line for line in lines
                 if _REVIEW_KEYWORD_RE.match(line.strip())]
     if not keywords:
@@ -52,12 +47,7 @@ def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
 
 
 def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """Split description into (message_lines, commit_lines, trailing_lines).
-
-    The commit list is located via the COMMIT_LIST_MARKER heading written
-    above it, so a numbered list inside the user's own message is not
-    mistaken for it. Descriptions without the marker fall back to the
-    first '1. ' line."""
+    """Split description into (message_lines, commit_lines, trailing_lines)."""
     start = None
     for i, line in enumerate(lines):
         if line.strip() != COMMIT_LIST_MARKER:
@@ -108,11 +98,9 @@ def check_git_workspace_clean(workspace_dir: str) -> bool:
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
                       commit_list: bool = True) -> str:
-    """Create a new Perforce changelist with the given message and, unless
-    commit_list is False, enumerated git commits.
+    """Create a changelist from message and, unless commit_list is False, the git commits.
 
-    On dry run, returns the placeholder '<changelist>' so downstream
-    commands can be rendered without a real changelist number."""
+    On dry run, returns the placeholder '<changelist>'."""
     # Build description: user message + enumerated commits
     commit_lines = []
     if commit_list:
@@ -171,18 +159,7 @@ def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,
 
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
                       message: str | None = None, commit_list: bool = True) -> None:
-    """Update the enumerated commit list in a changelist description.
-
-    Commits in base_branch..HEAD replace their existing entries in the
-    list (matched by subject) and new ones are appended; entries outside
-    the range are kept. The whole list is renumbered. So `-b main`
-    rebuilds the full list without duplicating it, while the review
-    rebase flow (`-b HEAD~1` per picked commit) keeps appending.
-
-    A message replaces everything above the commit list. With commit_list
-    False the list is left as it is. Swarm review keyword lines found above
-    the list are moved to the end of the description, where `new --review`
-    puts them, so a message never replaces them."""
+    """Update a changelist description, merging commits since base_branch into its commit list."""
     # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
@@ -236,12 +213,7 @@ def revert_stale_files(changelist: str, workspace_dir: str,
                        dry_run: bool = False) -> int:
     """Revert files in a changelist that are no longer part of the git change.
 
-    Only files git-p4son has authority over are considered: files tracked
-    by git, whose content git holds, and files opened for add that are
-    missing from disk, where there is nothing to lose. Other files, like
-    p4-only binaries opened by hand, are left alone even when unchanged.
-    Requires a clean git workspace, so tracked files on disk match HEAD.
-    Returns the number of files reverted (or that would be on dry run)."""
+    Requires a clean git workspace. Returns the number of files reverted."""
     if dry_run and not changelist.isdigit():
         # Placeholder from a dry-run new: there is no changelist to query.
         log.info(f'Would revert unchanged files in changelist {changelist}')

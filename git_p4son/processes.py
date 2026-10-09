@@ -1,11 +1,4 @@
-"""
-Blocking processes for git-p4son.
-
-A sync is refused while any of the configured blocking processes is running.
-Syncing while e.g. the Unreal editor is open lets p4 replace assets the editor
-still has loaded, so the editor keeps working against files that no longer
-match what is on disk.
-"""
+"""Blocking processes: a sync is refused while one of them is running."""
 
 import csv
 import os
@@ -31,11 +24,7 @@ def get_blocking_processes(workspace_dir: str) -> list[str]:
 
 
 def normalize_process_name(name: str) -> str:
-    """Reduce a process name to a form comparable across platforms.
-
-    Any directory and .exe suffix are dropped and case is ignored, so
-    "UnrealEditor" matches "UnrealEditor.exe" on Windows and a full path in
-    ps output."""
+    """Reduce a process name to a case-insensitive basename without .exe."""
     name = os.path.basename(name.strip())
     if name.lower().endswith('.exe'):
         name = name[:-len('.exe')]
@@ -59,12 +48,7 @@ def get_running_processes() -> set[str]:
 
 
 def check_no_blocking_processes(workspace_dir: str, ignore: bool) -> bool:
-    """Report whether the sync may go ahead as far as running processes go.
-
-    Nothing configured means nothing to check, so no process listing is
-    made. A malformed config or a process list that cannot be read fails
-    the check: going ahead would silently drop the protection. ignore skips
-    all of it, config included."""
+    """Report whether the sync may go ahead; unreadable config or process list fails the check."""
     if ignore:
         log.heading('Checking for blocking processes')
         log.warning(f'Skipped ({IGNORE_FLAG})')

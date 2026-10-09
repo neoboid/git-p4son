@@ -1,10 +1,4 @@
-"""
-Rebase todo support for git-p4son.
-
-Runs an interactive rebase with a generated todo, whose exec lines run
-git p4son after each picked commit. The hidden _sequence-editor command puts
-the generated todo in place of git's own.
-"""
+"""Runs an interactive rebase with a generated todo that runs git p4son after each pick."""
 
 import argparse
 import os
@@ -35,10 +29,7 @@ def pick_line(commit_line: str) -> str:
 
 def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
                     edit_todo: bool) -> int:
-    """Rebase onto base_branch with the generated todo.
-
-    With edit_todo the todo is opened in the git editor before the rebase
-    runs, as with a normal git rebase -i."""
+    """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo."""
     reviews_dir = _reviews_dir(workspace_dir)
     ensure_config_dir(workspace_dir)
     os.makedirs(reviews_dir, exist_ok=True)
@@ -75,8 +66,7 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 
 
 def sequence_editor_command(args: argparse.Namespace) -> int:
-    """Replace git's rebase todo with ours, then open the user's editor
-    unless --no-edit is given."""
+    """Replace git's rebase todo with ours, then open the user's editor unless --no-edit."""
     workspace_dir = args.workspace_dir
     todo_file = _todo_path(workspace_dir)
 

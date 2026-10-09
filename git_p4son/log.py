@@ -1,9 +1,4 @@
-"""
-Structured output module for git-p4son.
-
-All user-facing output goes through the module-level `log` singleton.
-This centralises formatting, verbosity filtering, and future color support.
-"""
+"""Structured output: all user-facing output goes through the `log` singleton."""
 
 import shutil
 import sys
@@ -59,8 +54,7 @@ def _color(text: str, color: str, stream) -> str:
 
 
 def _color_status(status: str, color: str, stream) -> str:
-    """Format and wrap status in ANSI color codes
-       if the stream supports color."""
+    """Format status, colored if the stream supports color."""
     colored_status = _color(status, color, stream)
     return f'[{colored_status}]'
 
@@ -194,10 +188,7 @@ class Log:
         print(f'elapsed: {duration}')
 
     def file_change(self, filename: str, change: str) -> None:
-        """Print a file change line with colored prefix.
-
-        change is one of 'add', 'delete', 'modify', 'untracked'.
-        """
+        """Print a file change line ('add', 'delete', 'modify', 'untracked') with colored prefix."""
         if self.quiet_mode:
             return
         prefixes = {
@@ -247,12 +238,7 @@ class Log:
 
     @contextmanager
     def command_batch(self, summary: str) -> Iterator[None]:
-        """Log the commands run inside as one summary command line.
-
-        For work split into many runs of the same command, e.g. a file list
-        chunked to fit the command-line length limit. The summary line gets
-        the spinner, and the runs inside are not echoed. Verbose mode echoes
-        every run instead."""
+        """Log the commands run inside as one summary command line (every run in verbose mode)."""
         if self.verbose_mode:
             yield
             return

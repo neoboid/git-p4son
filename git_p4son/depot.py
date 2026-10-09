@@ -1,10 +1,4 @@
-"""
-Depot root resolution for git-p4son.
-
-The depot root is the Perforce path git-p4son syncs, stored in
-.git-p4son/config.toml. This module reads it, expands the $(workspace)
-placeholder, and resolves it into the path Perforce commands run against.
-"""
+"""Depot root resolution: reading it from config and expanding $(workspace)."""
 
 from dataclasses import dataclass
 
@@ -32,19 +26,13 @@ def expand_depot_root(depot_root: str, workspace_name: str) -> str:
 
 @dataclass
 class ResolvedDepot:
-    """The configured depot root with any placeholder expanded, plus the
-    client spec it was resolved against."""
+    """The configured depot root with any placeholder expanded, plus its client spec."""
     depot_root: str
     client_spec: P4ClientSpec | None
 
 
 def resolve_depot_root(workspace_dir: str) -> ResolvedDepot | None:
-    """Resolve the configured depot root, or None (with an error logged).
-
-    The client spec is queried once here: its name resolves a $(workspace)
-    placeholder in the depot root, and its line-ending/clobber options feed
-    the writable-file handling in sync.
-    """
+    """Resolve the configured depot root, or None (with an error logged)."""
     log.heading('Finding depot root')
     depot_root = get_depot_root(workspace_dir)
     if not depot_root:

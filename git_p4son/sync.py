@@ -1,6 +1,4 @@
-"""
-Sync command implementation for git-p4son.
-"""
+"""Sync command implementation for git-p4son."""
 
 import argparse
 import os
@@ -84,10 +82,7 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
 
 @dataclass
 class ChangedFile:
-    """A writable file flagged for post-sync merge. HEAD and baseline content
-    captured during classification is staged to disk under a per-sync temp
-    root so it doesn't have to be held in memory through to the merge step.
-    A None path means git had no version of the file at that commit."""
+    """A writable file to merge after sync; a None staged path means git had no version."""
     filepath: str
     base_commit: str | None
     ours_path: str | None
@@ -98,11 +93,7 @@ class ChangedFile:
 
 @dataclass
 class _ChangedFileMeta:
-    """A file the user modified since its baseline, identified by blob OID
-    comparison without reading content. Staged to disk only after the binary
-    verdict is known. added_both marks an add/add: p4 is adding a file at a
-    path that already has locally committed content, so there is no common
-    baseline and the merge runs against an empty base."""
+    """A file modified since its baseline; added_both means p4 adds it over local content."""
     filepath: str
     base_commit: str | None
     added_both: bool = False
@@ -125,8 +116,7 @@ class WritableSyncFileSet:
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
                         content: bytes) -> str:
-    """Write content to a file under temp_root mirroring rel_path with the
-    given suffix appended. Returns the full path."""
+    """Write content to temp_root/rel_path + suffix and return that path."""
     rel_norm = rel_path.replace('\\', '/')
     temp_path = os.path.join(temp_root, rel_norm + suffix)
     os.makedirs(os.path.dirname(temp_path), exist_ok=True)
@@ -136,21 +126,14 @@ def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
 
 
 def _to_crlf(content: bytes) -> bytes:
-    """Convert content to CRLF line endings. Normalizes to LF first so blobs
-    that already contain CRLF (or mixed endings) don't get doubled \\r."""
+    """Convert content to CRLF line endings without doubling existing \\r."""
     return content.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
 
 
 def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
                         workspace_dir: str, temp_root: str,
                         is_binary: bool, uses_crlf: bool) -> ChangedFile:
-    """Read HEAD and baseline content for a changed file and stage it.
-
-    Text content is converted to the workspace line ending before the single
-    write: git blobs are LF, but a Perforce workspace with LineEnd win/local
-    writes files to disk as CRLF, and without matching endings the post-sync
-    merge sees every line as changed and conflicts the whole file. Binary
-    files are staged verbatim; their ours blob is restored byte-for-byte."""
+    """Stage HEAD and baseline content of a changed file, text in the workspace line ending."""
     rel_path = os.path.relpath(meta.filepath, workspace_dir)
     ours = get_file_at_commit(
         rel_path, pre_sync_head_commit, workspace_dir)
@@ -231,25 +214,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            uses_crlf: bool = False,
                            clobber: bool = False,
                            allwrite: bool = False) -> WritableSyncFileSet:
-    """Check which preview files are writable on disk and prepare them for sync.
-
-    For tracked writable files, queries Perforce for the file type (binary
-    detection) and uses git to decide whether the user has modified the file
-    since the last sync that touched it. Files that haven't been modified
-    are just made read-only. Modified files are made read-only and added
-    to the changed list for post-sync merging. Files p4 will add over local
-    content (add/add) are always queued for merge against an empty base.
-
-    clobber reflects the workspace clobber option. git-ignored writable files
-    are left writable and rely on p4 refusing to overwrite them, which only
-    holds when clobber is off; with clobber on p4 overwrites them, so the
-    reported outcome differs. Ignored files whose Perforce type is +w
-    (always writable) are exempt: p4 overwrites those regardless, so they
-    sync normally and are reported separately.
-
-    allwrite reflects the workspace allwrite option, which narrows how many
-    files have their write bit stripped (see _clear_write_bits).
-    """
+    """Classify the preview's writable files and stage the modified ones for post-sync merge."""
     result = WritableSyncFileSet()
 
     log.heading('Detecting writable files')
@@ -396,8 +361,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
 
 def _clear_write_bits(filepaths: list[str]) -> None:
-    """Remove user write permission from each file, making p4 willing to
-    overwrite it."""
+    """Remove user write permission so p4 is willing to overwrite the files."""
     for filepath in filepaths:
         mode = os.stat(filepath).st_mode
         os.chmod(filepath, mode & ~stat.S_IWUSR)
@@ -413,11 +377,7 @@ def _make_writable(filepath: str) -> None:
 def _merge_changed_files(changed_files: list[ChangedFile],
                          workspace_dir: str,
                          temp_root: str) -> None:
-    """Merge local changes back into the workspace after syncing.
-
-    Each ChangedFile points at temp files staged during classification, so
-    the merge step does no extra git queries and only reads file content
-    when copying or comparing."""
+    """Merge local changes back into the workspace after syncing."""
     if not changed_files:
         return
 
@@ -552,11 +512,9 @@ def _merge_changed_files(changed_files: list[ChangedFile],
 def p4_sync(changelist: int, label: str, depot_root: str,
             workspace_dir: str,
             expected_clobber: set[str] | None = None) -> list[str]:
-    """Sync files from Perforce.
+    """Sync files from Perforce, returning the expected_clobber files p4 refused.
 
-    If expected_clobber is provided, clobber errors for those files are
-    tolerated (they are git-ignored writable files) and the files are
-    returned. Unexpected clobber errors cause a raise.
+    Any other clobber error raises.
     """
     log.heading(f'Syncing to {label} CL ({changelist})')
 
@@ -591,12 +549,7 @@ def p4_sync(changelist: int, label: str, depot_root: str,
 
 
 def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
-    """Warn interactively that clobber is no longer needed.
-
-    Returns True to continue the sync, False to abort. Skipped silently when
-    clobber is off, when the user permanently dismissed the warning, or when
-    stdin is not a terminal (automation must never block on a prompt).
-    """
+    """Warn that clobber is no longer needed; return False if the user aborts."""
     if not clobber or is_clobber_warning_dismissed(workspace_dir):
         return True
     if not sys.stdin.isatty():
@@ -617,11 +570,7 @@ def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
 
 
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
-    """Report whether the p4 workspace has no git-tracked files opened.
-
-    Files opened in Perforce that git does not track cannot collide with the
-    commit a sync makes, so they only warrant a warning.
-    """
+    """Report whether the p4 workspace has no git-tracked files opened."""
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
     tracked_opened_files = [
@@ -643,11 +592,7 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
 
 
 def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
-    """Run pre-sync hooks; return False when any hook fails, aborting the sync.
-
-    All hooks run (they are independent), then the sync is aborted if any
-    returned a non-zero code.
-    """
+    """Run all pre-sync hooks; return False if any of them failed."""
     results = run_hooks('pre-sync', workspace_dir, invocation_dir)
     if any(result.returncode != 0 for result in results):
         log.error('Aborting sync because a pre-sync hook failed')
@@ -657,13 +602,7 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
                    ignore_blocking_processes: bool = False) -> bool:
-    """Gate a sync: no blocking processes, both workspaces clean, then the
-    pre-sync hooks.
-
-    Returns False when the sync must not go ahead. Callers run this once they
-    know a sync will actually be attempted, so that a run with nothing to sync
-    neither checks the workspaces nor fires the hooks.
-    """
+    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks."""
     # First: it is the cheapest check, and an editor left open is the most
     # common reason not to sync.
     if not check_no_blocking_processes(workspace_dir,
@@ -680,11 +619,7 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
                workspace_dir: str, pre_sync_head_commit: str, temp_root: str,
                uses_crlf: bool, clobber: bool,
                allwrite: bool) -> WritableSyncFileSet:
-    """Run one sync pass: preview, prepare writable files, and p4 sync.
-
-    Returns the classified writable file set. p4 sync is skipped when the
-    preview is empty (nothing to sync).
-    """
+    """Run one sync pass: preview, prepare writable files, and p4 sync."""
     preview = p4_sync_preview(changelist, depot_root, workspace_dir)
     prep = prepare_writable_files(preview, workspace_dir, pre_sync_head_commit,
                                   temp_root, uses_crlf=uses_crlf,
@@ -698,12 +633,7 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
 
 
 def _restore_writable(synced: list[str], workspace_dir: str) -> None:
-    """In writable mode, make the tracked files this sync wrote writable.
-
-    p4 writes synced files read-only. Only files git tracks are restored;
-    git-ignored ones are left to Perforce. Tracking is checked after the
-    sync commits, so a file newly added upstream counts, and a deleted one
-    is gone from both the index and the disk."""
+    """In writable mode, make the git-tracked files this sync wrote writable."""
     if not synced or not is_writable_mode(workspace_dir):
         return
     log.heading('Making synced tracked files writable (writable mode)')
@@ -716,13 +646,8 @@ def build_sync_targets(changes: list[P4Change], users: list[str],
                        last_synced: int, required: list[int]) -> list[int]:
     """Build the sync sequence that splits out the given users' changelists.
 
-    changes is every submitted changelist affecting the depot root in
-    [last_synced, max(required)], oldest first. Each changelist submitted by
-    one of users gets the changelist submitted just before it synced first,
-    so that submit lands in a commit containing nothing else. Changelists at
-    or below last_synced are already in git and dropped. The required
-    changelists, all newer than last_synced, are always synced and merged in
-    order with the split points.
+    Each of their changelists is preceded by the one submitted just before it,
+    so it lands in a commit of its own. changes is oldest first.
     """
     split: list[int] = []
     lowered = {u.lower() for u in users}
@@ -740,10 +665,7 @@ def build_sync_targets(changes: list[P4Change], users: list[str],
 
 def _check_split_user_args(names: list[str],
                            workspace_dir: str) -> list[str] | None:
-    """Check the users given with -u, spelled as the server spells them.
-
-    Returns None (with an error logged) if any is not a Perforce user.
-    $(user) is resolved when the users are, so it is not checked here."""
+    """Return the -u users as the server spells them, or None if any is unknown."""
     real = [name for name in names if name != USER_PLACEHOLDER]
     if not real:
         return list(names)
@@ -756,12 +678,7 @@ def _check_split_user_args(names: list[str],
 def _split_targets(targets: list[tuple[int, str]], users: list[str],
                    last_synced: int, depot_root: str,
                    workspace_dir: str) -> list[tuple[int, str]]:
-    """Add the targets that give each of users' changelists its own commit.
-
-    The targets are strictly increasing and all newer than last_synced. One
-    query covers both jobs: which changelists in the range belong to the
-    users, and which changelist was submitted immediately before each of
-    them (its predecessor in this same list)."""
+    """Add the targets that give each of users' changelists its own commit."""
     upper = targets[-1][0]
     log.heading(f'Finding changelists submitted to {depot_root} '
                 f'in CL {last_synced}..{upper}')
@@ -800,8 +717,7 @@ def _resolve_sync_targets(
         workspace_dir: str, force: bool) -> list[tuple[int, str]] | None:
     """Resolve the ordered (changelist, label) targets a sync will visit.
 
-    Returns None when the arguments are invalid, and an empty list when the
-    workspace already sits at the only changelist asked for.
+    Returns None for invalid arguments, and [] when already at the only target.
     """
     lowered = [c.lower() for c in raw]
 

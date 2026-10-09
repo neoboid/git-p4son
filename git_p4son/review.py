@@ -1,9 +1,4 @@
-"""
-Review command implementation for git-p4son.
-
-Automates the interactive rebase workflow by generating a rebase todo file
-with exec lines that run git p4son new/update for each commit.
-"""
+"""Review command: creates or updates a changelist per commit through an interactive rebase."""
 
 import argparse
 import shlex

@@ -1,10 +1,4 @@
-"""
-Shell completion for git-p4son.
-
-Provides completion candidates by introspecting the argparse parser.
-Output format: one candidate per line, with optional tab-separated description.
-Special directives (e.g. __branch__) tell the shell wrapper to use native completion.
-"""
+"""Shell completion for git-p4son, introspecting the argparse parser."""
 
 import argparse
 
@@ -77,10 +71,7 @@ def _get_alias_names(workspace_dir):
 
 
 def _get_split_user_names(workspace_dir):
-    """Get configured split users for completion.
-
-    $(user) is left out: inserted unquoted, the shell would run it as a
-    command substitution. --me covers it instead."""
+    """Get configured split users for completion, leaving out $(user) (the shell would run it)."""
     if not workspace_dir:
         return []
     try:
@@ -170,10 +161,7 @@ def _complete_positional(command, subcommand, positional_count,
 
 
 def _complete(parser, words, workspace_dir=None):
-    """Generate completion candidates for the given words.
-
-    Returns a list of (name, description) tuples.
-    """
+    """Return (name, description) completion candidates for the given words."""
     if not words:
         words = ['']
 

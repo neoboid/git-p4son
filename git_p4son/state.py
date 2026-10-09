@@ -1,9 +1,4 @@
-"""
-Local, per-user state for git-p4son.
-
-Stored in .git-p4son/state.toml. State here reflects a single user's workspace
-and preferences, e.g. dismissed warnings.
-"""
+"""Local, per-user state stored in .git-p4son/state.toml."""
 
 import os
 

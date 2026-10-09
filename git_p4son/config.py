@@ -1,8 +1,4 @@
-"""
-Configuration management for git-p4son.
-
-Reads and writes per-repo config stored in .git-p4son/config.toml.
-"""
+"""Per-repo configuration stored in .git-p4son/config.toml."""
 
 import os
 import re
@@ -14,12 +10,7 @@ _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
 def ensure_config_dir(workspace_dir: str) -> None:
-    """Create the config dir with a .gitignore that ignores everything in it.
-
-    Nothing in the config dir belongs in git. A .gitignore of its own keeps
-    it out without touching the workspace .gitignore, which may be checked
-    into Perforce. The file is rewritten when its content differs, which
-    also replaces the state.toml-only ignore file of earlier versions."""
+    """Create the config dir with a .gitignore that ignores everything in it."""
     config_dir = os.path.join(workspace_dir, CONFIG_DIR)
     os.makedirs(config_dir, exist_ok=True)
     gitignore = os.path.join(config_dir, '.gitignore')
@@ -62,11 +53,7 @@ def load_config(workspace_dir: str) -> dict:
 
 
 def save_config(workspace_dir: str, config: dict) -> None:
-    """Merge config into the config file, section by section.
-
-    Sections not named in config are preserved (e.g. a configured [hooks]
-    section survives re-running init); keys within a named section are
-    updated rather than replacing the section wholesale."""
+    """Merge config into the config file, preserving sections and keys not named in config."""
     merged = load_config(workspace_dir)
     for section, values in config.items():
         merged.setdefault(section, {}).update(values)

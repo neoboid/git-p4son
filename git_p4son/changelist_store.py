@@ -1,8 +1,4 @@
-"""
-Changelist alias utilities for git-p4son.
-
-Stores named aliases for changelist numbers in .git-p4son/changelists/<name>.
-"""
+"""Changelist aliases, stored in .git-p4son/changelists/<name>."""
 
 import os
 import re
@@ -56,10 +52,7 @@ def _changelists_dir(workspace_dir: str) -> str:
 
 
 def _alias_path(name: str, workspace_dir: str) -> str | None:
-    """Validate name and return its store path, or None if invalid.
-
-    Validating on every lookup, not just on save, keeps raw user input
-    (e.g. "../../somefile") from escaping the store directory."""
+    """Validate name and return its store path, or None if invalid (e.g. one escaping the store)."""
     error = validate_alias_name(name)
     if error:
         log.error(error)

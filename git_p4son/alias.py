@@ -1,6 +1,4 @@
-"""
-Alias command implementation for git-p4son.
-"""
+"""Alias command implementation for git-p4son."""
 
 import argparse
 from .changelist_store import (
@@ -82,11 +80,7 @@ def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
 
 def _clean_interactive(aliases: list[tuple[str, str]],
                        workspace_dir: str) -> None:
-    """Review each alias in turn with yes/no/all/quit prompts.
-
-    The all option lets the user keep the first aliases and sweep the rest:
-    answer no until the last one worth keeping, then a deletes the
-    remainder without further prompts."""
+    """Review each alias in turn with yes/no/all/quit prompts."""
     response = None
     for name, changelist in aliases:
         log.heading(f'{name} -> CL {changelist}')

@@ -45,7 +45,6 @@ from .perforce import (
 
 
 LAST_SYNCED_LABEL = 'last synced'
-# Label for the targets added to split out the split users' changelists.
 SPLIT_LABEL = 'split'
 
 
@@ -105,12 +104,9 @@ class WritableSyncFileSet:
     changed: list[ChangedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
     always_writable: list[str] = field(default_factory=list)
-    # Ignored files p4 actually refused to overwrite, known only after the
-    # sync. Without allwrite that is all of ignored; with it, only the
-    # locally modified ones.
+    # Ignored files p4 refused to overwrite, known only after the sync.
     not_synced: list[str] = field(default_factory=list)
-    # Every file the preview said p4 would update in this pass, writable or
-    # not. Writable mode makes the tracked ones writable after the sync.
+    # Every file the preview said p4 would update, writable or not.
     synced: list[str] = field(default_factory=list)
 
 
@@ -186,16 +182,11 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
         count = len(result.ignored)
         label = 'file' if count == 1 else 'files'
         if clobber:
-            # These files are left writable, so with clobber enabled p4
-            # overwrites them during sync rather than refusing to.
             log.warning(
                 f'{count} git-ignored writable {label} will be overwritten '
                 'by p4 (clobber is enabled on the workspace)')
         elif allwrite:
-            # With allwrite every file is writable, and p4 digest-compares
-            # before refusing to clobber one: unchanged files sync, modified
-            # ones are skipped. Which is which is only known after the sync,
-            # which reports the skipped ones, so they are not listed here.
+            # The skipped ones are only known after the sync, which lists them.
             log.info(
                 f'{count} git-ignored writable {label} will be synced '
                 'unless modified locally')
@@ -235,20 +226,13 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         return result
 
     log.heading('Splitting writable files into tracked and ignored')
-    # Tracking status is the discriminator, not ignore patterns: a tracked
-    # file matching a .gitignore pattern (common when .gitignore was copied
-    # from .p4ignore at init) must still sync, and an untracked writable
-    # file is necessarily git-ignored since sync requires a clean workspace.
+    # Split on tracking, not ignore patterns: a tracked file matching .gitignore must still sync.
     tracked_set = get_tracked_files(writable, workspace_dir)
     tracked = [f for f in writable if f in tracked_set]
     result.ignored = [f for f in writable if f not in tracked_set]
     log.success(f'{len(tracked)} tracked, {len(result.ignored)} ignored')
 
     if result.ignored:
-        # A file whose Perforce type carries the +w modifier is meant to be
-        # writable in the workspace. p4 overwrites it on sync without a
-        # clobber error, so it is not at risk of being skipped and must not
-        # be reported as such.
         log.heading('Checking ignored files for the +w (always writable) type')
         ignored_info = p4_fstat_file_info(result.ignored, workspace_dir)
         always_writable = set()
@@ -267,17 +251,10 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                              allwrite=allwrite)
         return result
 
-    # Pass 1: decide which files the user modified since their baseline by
-    # comparing git blob OIDs, transferring no content. Baselines and OIDs
-    # for all files are resolved in batched git calls (one history walk plus
-    # one cat-file); with hundreds of writable files after a branch switch,
-    # per-file process spawning dominated the entire sync.
+    # Pass 1: find modified files by comparing blob OIDs, in batched git calls.
     log.heading('Detecting modified tracked writable files')
     if not allwrite:
-        # Without allwrite, noclobber makes p4 refuse to overwrite any
-        # writable file, so every tracked file goes read-only whether it
-        # changed or not. The modified ones get their local content back
-        # from the post-sync merge.
+        # noclobber refuses any writable file; the merge restores the modified ones.
         _clear_write_bits(tracked)
 
     rel_paths = {f: os.path.relpath(f, workspace_dir) for f in tracked}
@@ -298,19 +275,12 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     metas: list[_ChangedFileMeta] = []
     for f in tracked:
         if f in added_upstream:
-            # p4 will *add* this file: its have-list says the client never
-            # had it, so the local content cannot have come from Perforce.
-            # The git baseline (the file's own introducing commit) says
-            # nothing about p4 state here, so skip the blob comparison and
-            # always merge, against an empty base.
+            # p4 adds a file the client never had: always merge, against an empty base.
             metas.append(_ChangedFileMeta(
                 filepath=f, base_commit=None, added_both=True))
             continue
 
-        # Since sync_command verifies the workspace is clean, "HEAD content"
-        # also means "on-disk content". HEAD as the baseline, or a HEAD blob
-        # identical to the baseline blob, means the user has not modified
-        # the file since the baseline; no merge needed.
+        # The workspace is clean, so HEAD content is the on-disk content.
         rel = rel_paths[f]
         base = base_commits.get(rel)
         if base == pre_sync_head_commit:
@@ -327,19 +297,10 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     log.success(f'{len(metas)} changed, {unchanged_count} unchanged')
 
     if allwrite:
-        # An allwrite workspace is writable by design, so the write bit is
-        # left alone on files p4 will overwrite cleanly: with noclobber it
-        # digest-compares first and these still match the have revision,
-        # and with clobber it overwrites regardless. Only the modified
-        # files, the ones noclobber would refuse on, are stripped; the
-        # post-sync merge makes them writable again.
+        # p4 overwrites unmodified files cleanly; only strip the ones it would refuse.
         _clear_write_bits([m.filepath for m in metas])
 
-    # Pass 2: query Perforce for file type only on the changed subset. The
-    # binary verdict must be known before staging so text content can be
-    # written once in the workspace line ending (its only authoritative
-    # source is p4's headType, and the merge step restores binary ours blobs
-    # byte-for-byte). Pass 3: read content once, convert, stage.
+    # Pass 2: file types of the changed files. Pass 3: stage their content.
     if metas:
         log.heading('Finding file types (text/binary)')
         file_info = p4_fstat_file_info(
@@ -398,14 +359,9 @@ def _merge_changed_files(changed_files: list[ChangedFile],
         rel_path = os.path.relpath(filepath, workspace_dir)
         log.info(f'{rel_path}: base = {cf.base_commit or "(none)"}')
 
-        # Get the Perforce version (on disk after sync)
         theirs_exists = os.path.exists(filepath)
 
-        # Handle add/delete asymmetry. If the file is gone upstream there is
-        # nothing to merge against; let the delete stand. The local version
-        # (if any) remains recoverable from git history. Any ChangedFile
-        # whose ours_path is set is by construction one we couldn't prove
-        # unchanged against the baseline, so we always flag it.
+        # Deleted upstream: let the delete stand, local edits stay in git history.
         if not theirs_exists:
             if cf.ours_path is not None:
                 deleted_upstream_with_local_changes.append(filepath)
@@ -416,18 +372,12 @@ def _merge_changed_files(changed_files: list[ChangedFile],
             deleted_local_added_upstream.append(filepath)
             continue
 
-        # Check if binary using Perforce file type
         if cf.is_binary:
-            # Binary file - restore user's version
             _make_writable(filepath)
             shutil.copyfile(cf.ours_path, filepath)
             binary_file_list.append(filepath)
             continue
 
-        # Three-way merge using git merge-file directly on the staged paths.
-        # Staged ours/base already carry the workspace line ending (handled in
-        # prepare_writable_files), so no conversion is needed here.
-        # When no baseline commit exists, fall back to a shared empty file.
         base_path = cf.base_path
         if base_path is None:
             if empty_base_path is None:
@@ -447,7 +397,6 @@ def _merge_changed_files(changed_files: list[ChangedFile],
         else:
             merged_conflicts.append(filepath)
 
-    # Report results
     if merged_clean:
         count = len(merged_clean)
         label = 'file' if count == 1 else 'files'
@@ -532,7 +481,6 @@ def p4_sync(changelist: int, label: str, depot_root: str,
         if not writable_files:
             raise
 
-        # Check if all clobber errors are expected
         expected = expected_clobber or set()
         unexpected = [f for f in writable_files if f not in expected]
         if unexpected:
@@ -603,8 +551,6 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
                    ignore_blocking_processes: bool = False) -> bool:
     """Gate a sync on blocking processes, clean workspaces and pre-sync hooks."""
-    # First: it is the cheapest check, and an editor left open is the most
-    # common reason not to sync.
     if not check_no_blocking_processes(workspace_dir,
                                        ignore_blocking_processes):
         return False
@@ -721,8 +667,6 @@ def _resolve_sync_targets(
     """
     lowered = [c.lower() for c in raw]
 
-    # "head" resolves to the latest changelist, the largest in an increasing
-    # sequence, so it may only appear as the final target.
     if 'head' in lowered and lowered.index('head') != len(lowered) - 1:
         log.error('The "head" keyword must come last')
         return None
@@ -741,8 +685,6 @@ def _resolve_sync_targets(
                     log.error(f'Invalid changelist number: {c}')
                     return None
 
-    # Targets are synced in the given order, so they must be strictly
-    # increasing: no syncing back and forth.
     numbers = [cl for cl, _ in targets]
     for prev, curr in zip(numbers, numbers[1:]):
         if curr <= prev:
@@ -750,9 +692,6 @@ def _resolve_sync_targets(
                       f'got {prev} then {curr}')
             return None
 
-    # Syncing to a changelist older than the current one needs --force.
-    # Targets are strictly increasing, so the smallest is numbers[0]; an
-    # equal-to-current changelist (dropped just below) is not "older".
     if last_sync and numbers[0] < last_sync.changelist:
         if not force:
             log.error(
@@ -763,9 +702,6 @@ def _resolve_sync_targets(
             f'Syncing to older CL {numbers[0]} '
             f'(currently at CL {last_sync.changelist}) with --force')
 
-    # Drop a target equal to the last synced changelist: we are already
-    # there, so there is nothing to sync or commit for it. An explicitly
-    # requested *older* changelist is kept and synced as the user asked.
     if last_sync and last_sync.changelist in numbers:
         log.info(f'Skipping CL {last_sync.changelist} (already synced)')
         targets = [(cl, lbl) for cl, lbl in targets
@@ -794,8 +730,6 @@ def sync_command(args: argparse.Namespace) -> int:
     else:
         log.warning('No previous sync found')
 
-    # Users given with -u are checked up front with the other arguments, so
-    # a misspelled name fails before any work is done.
     extra_split_users = vars(args).get('split_user') or []
     if extra_split_users:
         extra_split_users = _check_split_user_args(extra_split_users,
@@ -806,13 +740,9 @@ def sync_command(args: argparse.Namespace) -> int:
                               else get_split_users(workspace_dir))
     split_users = configured_split_users + extra_split_users
 
-    # Work out what the sync will do before touching either workspace, so a
-    # run with nothing to sync gets through without checks or hooks.
     lowered = [c.lower() for c in args.changelist]
 
-    # "last-synced" is a keyword that only makes sense on its own. It re-syncs
-    # the changelist git is already at rather than advancing, so it resolves
-    # to no targets and takes its own path further down.
+    # "last-synced" re-syncs the current changelist and takes its own path below.
     resync_last_synced = 'last-synced' in lowered
     targets: list[tuple[int, str]] = []
     if resync_last_synced:
@@ -834,9 +764,7 @@ def sync_command(args: argparse.Namespace) -> int:
             return 0
         targets = resolved_targets
 
-    # Splitting only moves forward from a known starting point: it syncs
-    # the changelist before each of the split users' submits, which needs
-    # a range to look for them in.
+    # Splitting needs a previous sync to look forward from.
     split = False
     if split_users and not resync_last_synced:
         if not last_sync:
@@ -850,28 +778,16 @@ def sync_command(args: argparse.Namespace) -> int:
 
     dry_run = vars(args).get('dry_run', False)
 
-    # Workspace line ending governs how staged git content is normalized so
-    # the post-sync merge doesn't conflict on LF-vs-CRLF differences alone.
-    # The clobber option changes whether git-ignored writable files survive
-    # the sync, which the prepare summary needs to report accurately.
-    # (client_spec was fetched above to resolve the depot root.)
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)
     allwrite = bool(client_spec and client_spec.allwrite)
 
-    # A dry run syncs nothing, so it skips the clobber prompt, the
-    # workspace checks and the hooks.
+    # A dry run syncs nothing, so it skips the prompt, the checks and the hooks.
     if not dry_run:
-        # Prompted before the preflight so declining here costs nothing: no
-        # workspace queries, and no hooks fired for a sync that is abandoned.
         if not _handle_clobber_warning(clobber, workspace_dir):
             return 1
 
-        # The single gate: no blocking processes, both workspaces clean,
-        # then the pre-sync hooks. Runs once for the whole sync, covering the
-        # catch-up pass as well. It runs before splitting, whose queries are
-        # the costly part, so a blocking process, a dirty workspace or a
-        # vetoing hook gets to say so first.
+        # Before splitting, whose queries are the costly part.
         if not sync_preflight(depot_root, workspace_dir, invocation_dir,
                               ignore_blocking_processes):
             return 1
@@ -899,8 +815,6 @@ def sync_command(args: argparse.Namespace) -> int:
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
 
-    # Temp root for staging HEAD/baseline file content between classification
-    # and the post-sync merge. Cleaned up automatically on exit.
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
         if resync_last_synced:
             prep = _sync_pass(last_sync.changelist, LAST_SYNCED_LABEL,
@@ -916,10 +830,7 @@ def sync_command(args: argparse.Namespace) -> int:
         all_synced: list[str] = []
         last_changelist = last_sync.changelist if last_sync else None
 
-        # Catch-up pass to the last synced changelist. This makes locally
-        # modified (writable) files read-only and stages their content so the
-        # post-sync merge can restore local changes; its result is folded into
-        # the first target commit.
+        # Catch-up pass to the last synced changelist, folded into the first commit.
         if last_changelist is not None:
             prep = _sync_pass(last_changelist, LAST_SYNCED_LABEL,
                               depot_root, workspace_dir, pre_sync_head_commit,
@@ -929,9 +840,7 @@ def sync_command(args: argparse.Namespace) -> int:
             all_not_synced.extend(prep.not_synced)
             all_synced.extend(prep.synced)
 
-        # Sync each target changelist in turn, committing pure Perforce state
-        # for each. Local changes are merged back once at the very end so the
-        # intermediate commits stay clean.
+        # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for changelist, changelist_label in targets:
             prep = _sync_pass(changelist, changelist_label, depot_root,
                               workspace_dir, pre_sync_head_commit, temp_root,
@@ -949,18 +858,13 @@ def sync_command(args: argparse.Namespace) -> int:
             commit(commit_msg, workspace_dir, allow_empty=True)
             log.success(f'Committed {len(dirty_files)} files')
 
-        # Post-commit: merge changed files back. Dedup by filepath in case
-        # the same file shows up in multiple sync passes.
+        # Dedup files that showed up in several sync passes.
         by_path: dict[str, ChangedFile] = {}
         for cf in all_changed:
             by_path[cf.filepath] = cf
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         _merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        # Report git-ignored writable files. Left writable, they are only
-        # preserved because p4 refuses to clobber them; with clobber on p4
-        # overwrites them during the sync instead. With allwrite p4 refuses
-        # only the locally modified ones, so report what it actually skipped.
         if clobber:
             reported = all_ignored
             heading = ('Git-ignored writable files overwritten by p4 '

@@ -71,7 +71,7 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
         return None
 
     commit_hash, subject = parts
-    pattern = r"^(\d+|pergit|git-p4son): p4 sync //.+@(\d+)$"
+    pattern = r"^(\d+|git-p4son): p4 sync //.+@(\d+)$"
     match = re.search(pattern, subject)
     if not match:
         return None

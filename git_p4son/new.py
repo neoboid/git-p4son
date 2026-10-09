@@ -20,15 +20,11 @@ def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
 
-    # Opening and reverting files relies on every tracked file matching
-    # HEAD, so refuse before creating anything. Also runs on dry run, so
-    # it reports the same problem the real run would hit.
+    # Opening and reverting files relies on every tracked file matching HEAD.
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
-    # Validate alias name and availability before creating the changelist.
-    # Also runs on dry run, so it reports the same alias problems the real
-    # run would hit.
+    # Validate the alias before creating the changelist.
     if args.alias:
         error = validate_alias_name(args.alias)
         if error:
@@ -40,7 +36,6 @@ def new_command(args: argparse.Namespace) -> int:
                 f'(use -f/--force to overwrite)')
             return 1
 
-    # Create new changelist
     log.heading('Creating changelist')
     changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
@@ -55,29 +50,23 @@ def new_command(args: argparse.Namespace) -> int:
         else:
             log.success(f'Created CL {changelist}')
 
-    # Open changed files for edit in the new changelist
     if not args.no_edit:
         log.heading('Opening files for edit')
         open_changes_for_edit(
             changelist, args.base_branch, workspace_dir, args.dry_run)
         log.success('Done')
 
-        # Drop files that are no longer part of the git change, e.g. an
-        # edit undone by a later commit, so the changelist and the shelf
-        # only contain real changes.
         log.heading('Reverting unchanged files')
         count = revert_stale_files(changelist, workspace_dir, args.dry_run)
         log.success(f'{count} would be reverted' if args.dry_run
                     else f'{count} reverted')
 
-    # Add #review keyword to changelist description
     if args.review:
         log.heading('Adding review keyword')
         add_review_keyword_to_changelist(
             changelist, workspace_dir, dry_run=args.dry_run)
         log.success('Done')
 
-    # Shelve the changelist
     if args.shelve or args.review:
         log.heading('Shelving')
         p4_shelve_changelist(

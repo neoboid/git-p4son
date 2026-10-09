@@ -56,8 +56,7 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
         git_dir = result.stdout[0].strip() if result.stdout else None
         if not git_dir:
             return None
-        # git prints the dir relative to its cwd (usually just ".git");
-        # resolve it against the workspace, not the process cwd.
+        # git prints the dir relative to its cwd; resolve it against the workspace.
         head_name_file = os.path.join(workspace_dir, git_dir,
                                       'rebase-merge', 'head-name')
         with open(head_name_file) as f:
@@ -156,9 +155,7 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     """Get local git changes between base_branch and HEAD."""
     ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
 
-    # quotepath off: non-ASCII filenames are emitted verbatim instead of
-    # C-quoted octal escapes ("b\303\244ck.txt") that would never match a
-    # file on disk or in p4.
+    # quotepath off: non-ASCII filenames verbatim, not C-quoted ("b\303\244ck.txt").
     res = run(['git', '-c', 'core.quotepath=off', 'diff', '--name-status',
                f'{ancestor}..HEAD'],
               cwd=workspace_dir)
@@ -184,8 +181,7 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
             to_filename = tokens[2]
             changes.moves.append((from_filename, to_filename))
         elif re.search(copypattern, status):
-            # Copy (with diff.renames=copies): the source is untouched,
-            # only the destination is a new file.
+            # Copy: the source is untouched, only the destination is new.
             changes.adds.append(tokens[2])
         else:
             raise CommandError(f'Unknown git status in "{line}"')
@@ -197,9 +193,7 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 
 def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
     """Get git log --oneline lines for non-merge commits since base branch."""
-    # Explicit format instead of --oneline: a user's log.decorate=short
-    # config would otherwise prepend "(HEAD -> branch)" decorations to
-    # every subject in pick lines and changelist descriptions.
+    # Not --oneline: log.decorate config would prepend "(HEAD -> branch)" to subjects.
     res = run(['git', 'log', '--format=%h %s', '--no-decorate',
                '--reverse', '--no-merges',
                f'{base_branch}..HEAD'], cwd=workspace_dir)
@@ -235,8 +229,7 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     tracked: set[str] = set()
     chunks = _chunk_paths_by_length(
         list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
-    # -z output is NUL-separated and verbatim; without it paths with
-    # non-ASCII characters are C-quoted and would never match.
+    # -z: non-ASCII paths verbatim, not C-quoted.
     command = ['git', 'ls-files', '-z', '--']
     with batched_command_log(command, len(by_git_path), len(chunks)):
         for chunk in chunks:
@@ -250,9 +243,7 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
 
 def list_tracked_files(workspace_dir: str) -> list[str]:
     """Return every file tracked by git, as repo-relative slash paths."""
-    # -z output is NUL-separated and verbatim, so non-ASCII paths come back
-    # as-is rather than C-quoted. run() splits its output on newlines, so
-    # they are rejoined first in case a path contains one.
+    # -z: non-ASCII paths verbatim. Undo run()'s newline split in case a path contains one.
     result = run(['git', 'ls-files', '-z'], cwd=workspace_dir)
     return [path for path in '\n'.join(result.stdout).split('\0') if path]
 
@@ -281,14 +272,12 @@ def get_blob_oids(items: list[tuple[str, str]],
         # Git uses forward slashes in tree paths, even on Windows
         git_path = filepath.replace('\\', '/')
         queries.append(f'{commit}:{git_path}')
-    # cat-file --batch-check reads object names from stdin and emits exactly
-    # one line per input line, so results map back to items by position.
+    # --batch-check emits one line per input line, so results map back by position.
     result = run(['git', 'cat-file', '--batch-check'], cwd=workspace_dir,
                  input='\n'.join(queries) + '\n')
     oids: dict[tuple[str, str], str | None] = {}
     for item, line in zip(items, result.stdout):
-        # Found objects print "<oid> <type> <size>"; anything else
-        # (missing, ambiguous) means no blob at that commit.
+        # Found objects print "<oid> <type> <size>"; anything else means no blob.
         parts = line.split()
         if len(parts) == 3 and parts[2].isdigit():
             oids[item] = parts[0]
@@ -306,8 +295,7 @@ def get_head_commit(workspace_dir: str) -> str:
 # Substring identifying git-p4son sync commit subjects.
 SYNC_SUBJECT_MARKER = ': p4 sync //'
 
-# Conservative limit for pathspec arguments per git invocation; Windows
-# caps the whole command line at 32767 characters.
+# Pathspec budget per git call; Windows caps a command line at 32767 characters.
 _PATHSPEC_LENGTH_BUDGET = 20000
 
 

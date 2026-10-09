@@ -7,9 +7,7 @@ from .config import load_config, save_config
 from .log import log
 from .perforce import get_existing_p4_users, get_p4_user
 
-# Placeholder allowed in the split users list, substituted with the current
-# Perforce user each time the list is used, so the config survives a change
-# of p4 user and can be shared between people.
+# Substituted with the current p4 user on each use, so the list can be shared.
 USER_PLACEHOLDER = '$(user)'
 
 
@@ -67,8 +65,7 @@ def _list(workspace_dir: str) -> int:
         log.info('No split users configured. Add yourself with: '
                  'git p4son sync-split-users add --me')
         return 0
-    # Show who $(user) stands for, but a p4 hiccup should not stop the
-    # list from printing: the placeholder is shown bare instead.
+    # If the p4 user lookup fails, show the placeholder bare.
     current = (current_p4_user(workspace_dir)
                if USER_PLACEHOLDER in users else None)
     for user in users:
@@ -113,9 +110,7 @@ def _add(workspace_dir: str, names: list[str], me: bool) -> int:
         log.error('Give one or more user names, or --me for yourself')
         return 1
 
-    # A misspelled name would never match a changelist owner, so every name
-    # is checked before anything is written. $(user) is resolved each time
-    # it is used, so there is nothing to check for it here.
+    # Check every name before writing; $(user) is resolved on use, so it is skipped.
     real = [name for name in requested if name != USER_PLACEHOLDER]
     canonical: dict[str, str] = {}
     if real:
@@ -153,8 +148,7 @@ def _delete(workspace_dir: str, names: list[str], me: bool) -> int:
     present = {user.lower() for user in users}
     missing = [name for name in requested if name.lower() not in present]
     if missing:
-        # Naming yourself when the list holds $(user) is an easy slip, since
-        # list shows the placeholder next to your name.
+        # An easy slip, since list shows your name next to $(user).
         current = (current_p4_user(workspace_dir)
                    if USER_PLACEHOLDER in users else None)
         for name in missing:

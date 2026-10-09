@@ -90,16 +90,12 @@ def _apply_off(workspace_dir: str) -> int:
         return 1
     log.success(spec.name)
     if spec.allwrite:
-        # The client spec asks for every file to be writable, and p4 keeps
-        # them that way on sync, so making them read-only would fight it.
+        # p4 keeps allwrite files writable, so making them read-only would fight it.
         log.warning('The workspace has the allwrite option, '
                     'leaving tracked files writable')
         return 0
 
-    # A file opened in any changelist is being worked on through Perforce
-    # (for example by new or update), so it keeps its write bit. The whole
-    # client is queried, not just the depot root, since a tracked file can
-    # be opened anywhere in the workspace.
+    # Opened files keep their write bit. The whole client is queried, not just the depot root.
     log.heading('Finding files opened in Perforce')
     opened = {os.path.normcase(path) for path, _change in
               p4_get_opened_files(f'//{spec.name}', workspace_dir)}

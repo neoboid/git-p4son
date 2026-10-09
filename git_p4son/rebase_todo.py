@@ -40,7 +40,6 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
     log.success(f'Saved as {todo_file}')
 
     try:
-        # Run git rebase -i with our sequence editor
         log.heading('Running interactive rebase')
         env = os.environ.copy()
         env['GIT_SEQUENCE_EDITOR'] = 'git-p4son _sequence-editor'
@@ -60,7 +59,6 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
         log.success('Done')
         return 0
     finally:
-        # Clean up the todo file
         if os.path.exists(todo_file):
             os.remove(todo_file)
 
@@ -74,12 +72,10 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
         log.error(f'No review todo file found at {todo_file}')
         return 1
 
-    # Read the original git todo file to preserve comment lines
     with open(args.filename, 'r') as f:
         original_lines = f.readlines()
     comment_lines = [line for line in original_lines if line.startswith('#')]
 
-    # Read our generated todo
     with open(todo_file, 'r') as f:
         todo_content = f.read()
 
@@ -99,9 +95,7 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
             'No git editor configured. Set one with: git config core.editor <editor>')
         return 1
 
-    # Open the editor on the todo file
-    # The editor command may contain arguments (e.g. "code --wait"),
-    # so we need to split it
+    # The editor command may carry arguments, e.g. "code --wait"
     editor_cmd = shlex.split(editor) + [args.filename]
     editor_result = subprocess.run(editor_cmd, cwd=workspace_dir)
     return editor_result.returncode

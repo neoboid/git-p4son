@@ -115,9 +115,7 @@ class RunResult:
         self.elapsed: timedelta | None = elapsed
 
 
-# Commands that take a list of files pass it after a `--` separator. With
-# thousands of files synced, printing every one buries the output, so a
-# longer list is logged as a count. Verbose mode still prints it in full.
+# File lists after `--` longer than this are logged as a count, except in verbose mode.
 _MAX_LOGGED_PATHS = 3
 
 
@@ -179,8 +177,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     if env:
         command_env.update(env)
 
-    # Decode output as UTF-8 regardless of locale: git emits UTF-8, but
-    # Windows would otherwise decode with the ANSI code page (cp1252).
+    # Decode as UTF-8: git emits it, but Windows would decode with cp1252.
     try:
         result = subprocess.run(command,
                                 cwd=cwd,
@@ -191,8 +188,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
                                 errors='replace' if text else None,
                                 input=input)
     except OSError:
-        # E.g. the executable is missing; without this the spinner thread
-        # keeps rewriting the line under the error message.
+        # E.g. a missing executable: stop the spinner overwriting the error.
         log.stop_spinner()
         raise
 
@@ -256,8 +252,7 @@ def run_with_output(command: list[str], cwd: str = '.',
     if env:
         command_env.update(env)
 
-    # UTF-8 for the same reason as in run(); a decode error would
-    # otherwise kill the reader threads silently.
+    # UTF-8 as in run(); a decode error would silently kill the reader threads.
     try:
         process_cm = subprocess.Popen(command,
                                       cwd=cwd,
@@ -268,8 +263,7 @@ def run_with_output(command: list[str], cwd: str = '.',
                                       encoding='utf-8',
                                       errors='replace')
     except OSError:
-        # E.g. the executable is missing; without this the spinner thread
-        # keeps rewriting the line under the error message.
+        # E.g. a missing executable: stop the spinner overwriting the error.
         log.stop_spinner()
         raise
 
@@ -299,11 +293,7 @@ def run_with_output(command: list[str], cwd: str = '.',
                 pass
 
         try:
-            # The reader threads own the pipes and exit at EOF, so they are
-            # the source of truth for "no more output is coming". Looping on
-            # process.poll() instead would race: the process can exit while
-            # lines are still in the pipe buffer, and anything enqueued after
-            # the last drain would be lost.
+            # Loop on the readers, not process.poll(): the process can exit with output still buffered.
             while out_thread.is_alive() or err_thread.is_alive():
                 drain_queue(output_queue, stdout_lines, sys.stdout)
                 drain_queue(error_queue, stderr_lines, sys.stderr)
@@ -324,8 +314,7 @@ def run_with_output(command: list[str], cwd: str = '.',
             _terminate(process)
             sys.exit(1)
         except Exception:
-            # on_output raising aborts the command: stop the subprocess
-            # rather than letting it run on unobserved.
+            # on_output raised: stop the subprocess rather than leave it running unobserved.
             log.stop_spinner()
             _terminate(process)
             raise

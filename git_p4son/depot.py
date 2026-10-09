@@ -6,10 +6,7 @@ from .config import load_config
 from .log import log
 from .perforce import P4ClientSpec, get_client_spec
 
-# Placeholder allowed in a stored depot root, substituted with the live
-# Perforce client (workspace) name each time the root is used. Storing e.g.
-# root = "//$(workspace)/Engine" keeps the config working after the workspace
-# is renamed, at the cost of one client-name lookup per command.
+# Substituted with the client name on each use, so the config survives a workspace rename.
 WORKSPACE_PLACEHOLDER = '$(workspace)'
 
 

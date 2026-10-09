@@ -28,8 +28,7 @@ from .writable import is_writable_mode, make_writable
 # Heading written above the enumerated commit list in descriptions.
 COMMIT_LIST_MARKER = 'Changes included:'
 
-# A Swarm review keyword on a line of its own: #review, which Swarm turns
-# into #review-<id> once the review exists.
+# #review on a line of its own, which Swarm turns into #review-<id>.
 _REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
 
 
@@ -101,7 +100,6 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     """Create a changelist from message and, unless commit_list is False, the git commits.
 
     On dry run, returns the placeholder '<changelist>'."""
-    # Build description: user message + enumerated commits
     commit_lines = []
     if commit_list:
         commit_lines = get_enumerated_commit_lines_since(
@@ -116,14 +114,11 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
         log.info('\n'.join(description_lines))
         return '<changelist>'
 
-    # Prepare the changelist spec content
     tabbed_description = "\n\t".join(description_lines)
     spec_content = f"Change: new\n\nDescription:\n\t{tabbed_description}\n"
 
-    # Create the changelist using p4 change -i
     result = run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec_content)
 
-    # Extract changelist number from output
     # Format: "Change 12345 created."
     for line in result.stdout:
         if 'Change' in line and 'created' in line:
@@ -143,8 +138,7 @@ def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,
                     for line in old_commit_lines]
     new_subjects = get_commit_subjects_since(base_branch, workspace_dir)
 
-    # Drop old entries covered by the new range. Counted, not a set, so
-    # repeated subjects (e.g. two "fixup" commits) replace one-for-one.
+    # Counted, not a set, so repeated subjects replace one-for-one.
     replaced = Counter(new_subjects)
     kept_subjects = []
     for subject in old_subjects:
@@ -160,16 +154,13 @@ def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
                       message: str | None = None, commit_list: bool = True) -> None:
     """Update a changelist description, merging commits since base_branch into its commit list."""
-    # Fetch existing spec
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
 
-    # Extract and split description into lines
     description_lines = extract_description_lines(spec_text)
     message_lines, old_commit_lines, trailing_lines = split_description_lines(
         description_lines)
 
-    # Without a commit list the keyword #review appends is part of the
-    # message lines. Move it to the end so it survives a new message.
+    # Without a commit list, #review sits in the message lines; move it so it survives a new message.
     message_lines, keywords = _split_review_keywords(message_lines)
     if message is not None:
         message_lines = message.splitlines()
@@ -184,13 +175,11 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     else:
         commit_lines = old_commit_lines
 
-    # Add the marker for descriptions that did not have it yet (e.g.
-    # created with no commits), so later splits anchor on it.
+    # Add a missing marker so later splits anchor on it.
     if commit_lines and not any(line.strip() == COMMIT_LIST_MARKER
                                 for line in message_lines):
         message_lines = message_lines + ['', COMMIT_LIST_MARKER]
 
-    # Rebuild description: message + commit list + trailing
     new_description_lines = message_lines + commit_lines + trailing_lines
 
     if dry_run:
@@ -198,7 +187,6 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
         log.info('\n'.join(new_description_lines))
         return
 
-    # Replace description in spec and submit
     new_spec = replace_description_in_spec(spec_text, new_description_lines)
     run(['p4', 'change', '-i'], cwd=workspace_dir, input=new_spec)
 
@@ -222,11 +210,9 @@ def revert_stale_files(changelist: str, workspace_dir: str,
     opened = get_opened_files_in_changelist(changelist, workspace_dir)
     tracked = get_tracked_files([path for path, _ in opened], workspace_dir)
 
-    # Unchanged edits and missing adds: revert -a picks out the ones that
-    # qualify, so changed files stay opened.
+    # revert -a only reverts the unchanged ones, so changed files stay opened.
     revert_if_unchanged = []
-    # Opened for delete although git has the file: deleted in one commit
-    # and restored in a later one.
+    # Deleted in one commit and restored in a later one.
     stale_deletes = []
     for path, action in opened:
         exists = os.path.lexists(os.path.join(workspace_dir, path))
@@ -248,8 +234,7 @@ def revert_stale_files(changelist: str, workspace_dir: str,
         run(['git', 'restore', path], cwd=workspace_dir, dry_run=dry_run)
 
     if not dry_run and is_writable_mode(workspace_dir):
-        # p4 revert leaves files read-only. Files still opened are already
-        # writable, so there is no need to pick out the reverted ones.
+        # p4 revert leaves files read-only; the still opened ones are writable already.
         make_writable([os.path.join(workspace_dir, path)
                        for path in revert_if_unchanged + stale_deletes
                        if path in tracked])

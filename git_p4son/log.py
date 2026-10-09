@@ -7,10 +7,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 
-# Heading prefix — single constant, easy to change later.
 HEADING_PREFIX = '#'
 
-# ANSI color codes.
 _GREEN = '\033[32m'
 _YELLOW = '\033[33m'
 _CYAN = '\033[36m'
@@ -74,7 +72,6 @@ def _truncate_to_terminal_width(line: str) -> str:
     return f'{line[:prefix_len]}{placeholder}{line[-suffix_len:]}'
 
 
-# Spinner characters — simple ASCII set.
 _SPINNER_CHARS = '|/-\\'
 _SPINNER_INTERVAL = 0.1  # seconds between frames
 
@@ -84,9 +81,7 @@ class Log:
 
     def __init__(self) -> None:
         self.verbose_mode: bool = False
-        # Suppresses all stdout-facing output (status lines, command
-        # echoes, spinner). Used by shell completion, where stdout is
-        # reserved for completion candidates.
+        # Silences stdout, which shell completion reserves for candidates.
         self.quiet_mode: bool = False
         self._heading_count: int = 0
         self._command_line_open: bool = False
@@ -94,8 +89,7 @@ class Log:
         self._spinner_stop: threading.Event = threading.Event()
         self._spinner_line: str = ''
         self._spinner_final_line: str = ''
-        # Nesting depth of command_batch: while above zero, the commands run
-        # inside the batch are not echoed individually.
+        # Nesting depth of command_batch; commands inside a batch are not echoed.
         self._batch_depth: int = 0
 
     def heading(self, text: str) -> None:
@@ -133,8 +127,7 @@ class Log:
             return
         full_line = f'> {cmd}'
         if not _is_tty(sys.stdout):
-            # No spinner or line rewriting without a terminal; print the
-            # full line at once so redirected output stays clean.
+            # No terminal: print the full line once, without a spinner.
             print(self._format_command_line(full_line))
             self._command_line_open = False
             return
@@ -221,8 +214,7 @@ class Log:
             # A command inside a batch: the batch's spinner keeps running.
             return
         if self._spinner_thread is None:
-            # No spinner ran (non-TTY, quiet mode, or never started); the
-            # command line, if any, may still need its newline.
+            # No spinner ran, but the command line may still need its newline.
             self.end_command()
             return
         self._spinner_stop.set()
@@ -268,5 +260,4 @@ class Log:
             idx += 1
 
 
-# Module-level singleton, imported everywhere.
 log = Log()

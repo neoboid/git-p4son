@@ -1,10 +1,4 @@
-"""
-Split users for git-p4son.
-
-Split users are the Perforce users whose submitted changelists sync gives a
-git commit each, holding nothing but that change. They are stored as a list
-in the [sync] section of .git-p4son/config.toml.
-"""
+"""Split users: the Perforce users whose changelists sync commits separately."""
 
 import argparse
 
@@ -20,10 +14,7 @@ USER_PLACEHOLDER = '$(user)'
 
 
 def get_split_users(workspace_dir: str) -> list[str]:
-    """The configured split users, in the order they were added.
-
-    Anything other than a list of strings, e.g. from a hand-edited config,
-    is ignored rather than guessed at."""
+    """The configured split users in order; a malformed config value is ignored."""
     config = load_config(workspace_dir)
     users = config.get('sync', {}).get('split-users', [])
     if not isinstance(users, list):
@@ -37,9 +28,7 @@ def set_split_users(workspace_dir: str, users: list[str]) -> None:
 
 
 def current_p4_user(workspace_dir: str) -> str | None:
-    """The current Perforce user, or None when p4 cannot tell.
-
-    OSError covers p4 not being installed at all."""
+    """The current Perforce user, or None when p4 cannot tell."""
     try:
         return get_p4_user(workspace_dir)
     except (CommandError, OSError):
@@ -48,9 +37,8 @@ def current_p4_user(workspace_dir: str) -> str | None:
 
 def resolve_split_users(users: list[str],
                         workspace_dir: str) -> list[str] | None:
-    """Substitute the current Perforce user for $(user).
+    """Substitute the current Perforce user for $(user) and drop repeats.
 
-    Repeated names are collapsed, keeping the order they were given in.
     Returns None (with an error logged) when $(user) cannot be resolved."""
     current = None
     if USER_PLACEHOLDER in users:
@@ -92,9 +80,7 @@ def _list(workspace_dir: str) -> int:
 
 
 def _requested(names: list[str], me: bool) -> list[str]:
-    """The names given on the command line, --me as $(user) first.
-
-    Repeated names are collapsed, keeping the order they were given in."""
+    """The names given on the command line, --me as $(user) first, without repeats."""
     requested: list[str] = []
     seen: set[str] = set()
     for name in ([USER_PLACEHOLDER] if me else []) + names:
@@ -106,10 +92,7 @@ def _requested(names: list[str], me: bool) -> list[str]:
 
 def check_p4_users(names: list[str],
                    workspace_dir: str) -> dict[str, str] | None:
-    """Check names against the server, mapping each to its server spelling.
-
-    Returns None (with an error logged per unknown name) if any is not a
-    Perforce user."""
+    """Map names to their server spelling, or None (with errors logged) if any is unknown."""
     log.heading('Checking Perforce users')
     existing = {user.lower(): user
                 for user in get_existing_p4_users(names, workspace_dir)}

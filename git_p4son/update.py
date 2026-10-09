@@ -1,10 +1,4 @@
-"""
-Update command implementation for git-p4son.
-
-Updates an existing Perforce changelist description, opens files for edit,
-and optionally re-shelves. With --per-commit, does so once per commit since
-the base branch, through an interactive rebase.
-"""
+"""Update command: updates an existing changelist from the git change."""
 
 import argparse
 import shlex

@@ -1,7 +1,4 @@
-"""Perforce abstraction layer.
-
-All functions that interact directly with the p4 CLI live here.
-"""
+"""Perforce abstraction layer: all direct p4 CLI calls live here."""
 
 import re
 import sys
@@ -34,11 +31,7 @@ def parse_ztag_output(lines: list[str]) -> dict[str, str]:
 
 
 def parse_ztag_multi_output(lines: list[str]) -> list[dict[str, str]]:
-    """Parse p4 -ztag output with multiple records into a list of dicts.
-
-    Records are separated by blank lines. A non-blank line without the
-    '... ' prefix is a continuation of the previous field's value (e.g.
-    a multiline desc), not a record boundary."""
+    """Parse p4 -ztag output with multiple records into a list of dicts."""
     records = []
     current: dict[str, str] = {}
     last_key: str | None = None
@@ -91,11 +84,7 @@ class P4ClientSpec:
 
 
 def get_client_spec(cwd: str) -> P4ClientSpec | None:
-    """Get the client spec, or None if not in a valid workspace.
-
-    Uses the presence of 'Update' in the ztag output to distinguish a real
-    workspace from the default spec p4 returns when CWD is outside any workspace.
-    """
+    """Get the client spec, or None if not in a valid workspace."""
     result = run(['p4', '-ztag', 'client', '-o'], cwd=cwd)
     fields = parse_ztag_output(result.stdout)
     if 'Update' not in fields:
@@ -128,14 +117,7 @@ def find_end_of_indented_section(lines: list[str], start: int) -> int:
 
 
 def extract_description_lines(spec_text: str) -> list[str]:
-    """
-    Extract the Description field from a p4 changelist spec.
-
-    The spec has tab-indented continuation lines under the Description: header.
-
-    Returns:
-        List of description lines with tabs stripped.
-    """
+    """Extract the Description field lines from a p4 changelist spec."""
     lines = spec_text.splitlines()
     start = find_line_starting_with(lines, 'Description:') + 1
     end = find_end_of_indented_section(lines, start)
@@ -236,11 +218,7 @@ def get_p4_user(workspace_dir: str) -> str | None:
 
 
 def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
-    """Look up which of names are Perforce users.
-
-    Returns the ones that exist, spelled as the server spells them. p4
-    reports an unknown name as "NAME - no such user(s).", which only leaves
-    it out; any other failure raises."""
+    """Return the names that are Perforce users, spelled as the server spells them."""
     res = run(['p4', '-ztag', 'users', *names], cwd=workspace_dir,
               fail_on_returncode=False)
     errors = [line for line in res.stderr
@@ -265,14 +243,7 @@ def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str
 
 def _open_in_changelist(filename: str, p4_action: str, changelist: str,
                         workspace_dir: str, dry_run: bool) -> None:
-    """Run a p4 open action (add/edit/delete) and warn if it did not open.
-
-    Per-file problems must not abort the whole command: p4 exits 0 for
-    some ("can't add existing file", "file(s) not in client view") and
-    non-zero for others ("ignored file can't be added" for files matching
-    .p4ignore), only printing the reason either way. A successful open is
-    confirmed by its "opened for" output line; anything else is surfaced
-    as a warning with p4's message so the user can act on it."""
+    """Run a p4 open action (add/edit/delete), warning instead of failing if it did not open."""
     result = run(['p4', p4_action, '-c', changelist, filename],
                  cwd=workspace_dir, dry_run=dry_run,
                  fail_on_returncode=False)
@@ -287,13 +258,7 @@ def _open_in_changelist(filename: str, p4_action: str, changelist: str,
 
 def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
                           workspace_dir: str, dry_run: bool) -> None:
-    """Ensure a file is opened with the correct action in the given changelist.
-
-    If the file is not yet opened, run the specified p4 action (add, edit, delete).
-    If it's already opened with a different action, revert and reopen.
-    If it's already opened with the correct action in a different changelist, reopen it.
-    If it's already in the correct changelist with the correct action, do nothing.
-    """
+    """Ensure a file is opened with the given action in the given changelist."""
     result = get_changelist_for_file(filename, workspace_dir)
     if result is None:
         _open_in_changelist(filename, p4_action, changelist,
@@ -352,13 +317,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
 
 def get_opened_files_in_changelist(changelist: str,
                                    workspace_dir: str) -> list[tuple[str, str]]:
-    """Return (path, action) for files opened in a changelist.
-
-    Paths are workspace-relative slash paths; files opened outside the
-    workspace dir are left out. fstat is used rather than opened since it
-    reports local paths, though only with -Op. It exits non-zero when
-    nothing is opened, which is not an error here; anything else is
-    warned about, since the changelist would otherwise look empty."""
+    """Return (path, action) for files opened in a changelist, as workspace-relative paths."""
     res = run(['p4', '-ztag', 'fstat', '-Ro', '-Op',
                '-T', 'path,clientFile,action,change', '...'],
               cwd=workspace_dir, fail_on_returncode=False)
@@ -382,12 +341,7 @@ def get_opened_files_in_changelist(changelist: str,
 
 def p4_revert_unchanged(filenames: list[str], changelist: str,
                         workspace_dir: str, dry_run: bool = False) -> list[str]:
-    """Revert the files that are unchanged, or missing and opened for add.
-
-    Uses revert -a, which leaves changed files opened, and -n on dry run
-    to preview instead. The file list is read from stdin so it does not
-    hit the command-line length limit. Returns p4's lines for the
-    reverted files."""
+    """Revert files that are unchanged, or missing and opened for add; returns p4's lines."""
     if not filenames:
         return []
     args = ['p4', '-x', '-', 'revert', '-a']
@@ -431,13 +385,7 @@ def p4_get_opened_files(depot_root: str,
 # --- shelving ---
 
 def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """Shelve a changelist to make it available for review.
-
-    -r replaces the whole shelf with the files currently open, so it
-    leaves no stale entries for files no longer open (e.g. a file added
-    in one commit and deleted in a later one). -a leaveunchanged keeps
-    unchanged open files out of the shelf, so no-op edits do not show up
-    in the review."""
+    """Shelve a changelist's open files, replacing the shelf and leaving unchanged files out."""
     run(['p4', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
          '-c', changelist],
         cwd=workspace_dir, dry_run=dry_run)
@@ -534,10 +482,7 @@ class P4FileInfo:
 
 def p4_fstat_file_info(filenames: list[str],
                        workspace_dir: str) -> dict[str, P4FileInfo]:
-    """Get the Perforce file type for a list of files.
-
-    Returns a mapping of local path to P4FileInfo. Files not found are omitted.
-    """
+    """Map local paths to P4FileInfo; files not found are omitted."""
     if not filenames:
         return {}
     # Use -x - so the path list doesn't hit the command-line length limit.
@@ -567,20 +512,14 @@ def is_always_writable_file_type(head_type: str) -> bool:
 
 @dataclass
 class P4SyncPreviewFile:
-    """A file a sync would affect, from p4 sync -n output.
-
-    mode reflects p4's have-list: 'add' means the client has never had the
-    file, 'upd' an update of a file the client has, 'del' a delete."""
+    """A file a sync would affect; mode is 'add', 'upd' or 'del' relative to the have-list."""
     mode: str
     filepath: str
 
 
 def p4_sync_preview(changelist: int, depot_root: str,
                     workspace_dir: str) -> list[P4SyncPreviewFile]:
-    """Preview which files would be synced without actually syncing.
-
-    Returns the affected files as P4SyncPreviewFile with local paths.
-    """
+    """Preview which files would be synced without actually syncing."""
     log.heading(f'Previewing sync to CL {changelist}')
     output_processor = P4SyncOutputProcessor()
     result = run_with_output(

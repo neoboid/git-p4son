@@ -1,6 +1,4 @@
-"""
-List-changes command implementation for git-p4son.
-"""
+"""List-changes command implementation for git-p4son."""
 
 import argparse
 from .git import get_commit_subjects_since

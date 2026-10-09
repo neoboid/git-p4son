@@ -1,6 +1,4 @@
-"""
-Common utilities shared between sync and edit commands.
-"""
+"""Common utilities shared between git-p4son commands."""
 
 import ntpath
 import os
@@ -20,13 +18,7 @@ from .log import log
 
 
 def _env_with_pwd(cwd: str) -> dict[str, str]:
-    """Return a copy of os.environ with PWD set to abspath(cwd).
-
-    subprocess only changes the child's kernel cwd; PWD is inherited from
-    the parent. Tools that read PWD for relative-path resolution (notably
-    'p4 add') would otherwise resolve paths against the wrong directory
-    when git-p4son is invoked from a subdirectory of the workspace.
-    """
+    """Return a copy of os.environ with PWD set to abspath(cwd), which 'p4 add' resolves paths against."""
     env = os.environ.copy()
     env['PWD'] = os.path.abspath(cwd)
     return env
@@ -38,12 +30,7 @@ def branch_to_alias(branch_name: str) -> str:
 
 
 def prompt_choice(prefix: str, options: list[str]) -> str | None:
-    """Prompt until the response matches an option or its first letter.
-
-    The choices are rendered from the options, e.g. "[y]es / [n]o", so the
-    prompt and the accepted keys cannot drift apart. Options must have
-    unique first letters. Returns the chosen option, or None on EOF.
-    """
+    """Prompt until the response matches an option or its first letter; None on EOF."""
     shorthands = {option[0]: option for option in options}
     rendered = ' / '.join(f'[{option[0]}]{option[1:]}' for option in options)
     keys = list(shorthands)
@@ -157,10 +144,7 @@ def _command_line_for_log(command: list[str]) -> str:
 
 def batched_command_log(prefix: list[str], path_count: int,
                         batch_count: int) -> AbstractContextManager[None]:
-    """Log a command run over a path list in several batches as one line.
-
-    prefix is the command up to and including its `--` separator. A single
-    batch is logged as the command itself."""
+    """Log a command run over a path list in several batches as one line."""
     if batch_count <= 1:
         return nullcontext()
     return log.command_batch(
@@ -174,21 +158,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         text: bool = True,
         fail_on_returncode: bool = True
         ) -> RunResult:
-    """
-    Run a command and return the result.
-
-    Args:
-        command: List of command arguments
-        cwd: Working directory to run the command in
-        dry_run: If True, only print the command without executing
-        input: Optional string to pass to the subprocess via stdin
-        env: Optional environment variables to add or override
-        text: False to get raw bytes instead of decoded lines.
-        fail_on_returncode: False to not raise on non-zero return codes.
-
-    Returns:
-        RunResult object with returncode, stdout, and stderr
-    """
+    """Run a command and return a RunResult, raising on failure unless fail_on_returncode is False."""
     use_spinner = input is None and not dry_run
     log.command(_command_line_for_log(command),
                 truncate_for_spinner=use_spinner)
@@ -269,22 +239,9 @@ def _terminate(process: subprocess.Popen) -> None:
 def run_with_output(command: list[str], cwd: str = '.',
                     on_output: Callable[..., None] | None = None,
                     env: dict[str, str] | None = None) -> RunResult:
-    """
-    Run a command with real-time output processing.
+    """Run a command, passing each output line and its stream to on_output as it is written.
 
-    Args:
-        command: List of command arguments
-        cwd: Working directory to run the command in
-        on_output: Callback function for processing output lines
-                   If set the funciton will be called with each
-                   line and stream (stdout/stderr) as they are written.
-                   An exception raised from it terminates the command
-                   and propagates.
-        env: Optional environment variables to add or override
-
-    Returns:
-        RunResult object with returncode, stdout, and stderr
-    """
+    An exception raised from on_output terminates the command and propagates."""
     log.command(_command_line_for_log(command),
                 truncate_for_spinner=True)
     log.start_spinner()

@@ -1,10 +1,4 @@
-"""
-Writable mode for git-p4son.
-
-Writable mode keeps git-tracked files writable so they can be edited without a
-manual p4 edit: git-p4son opens them in Perforce itself when creating or
-updating changelists. Git-ignored files are left to Perforce as usual.
-"""
+"""Writable mode: keeps git-tracked files writable and opens them in Perforce on demand."""
 
 import argparse
 import os
@@ -30,10 +24,7 @@ def set_writable_mode(workspace_dir: str, enabled: bool) -> None:
 
 
 def _regular_file_mode(path: str) -> int | None:
-    """Permission bits of path if it is a regular file, else None.
-
-    lstat, not stat: a symlink is never followed, so a link pointing outside
-    the repo cannot get its target's permissions changed."""
+    """Permission bits of path if it is a regular file (symlinks not followed), else None."""
     try:
         st = os.lstat(path)
     except OSError:
@@ -44,10 +35,7 @@ def _regular_file_mode(path: str) -> int | None:
 
 
 def make_writable(paths: list[str]) -> int:
-    """Add user write permission to each regular file that lacks it.
-
-    Symlinks, directories and missing paths are skipped. Returns how many
-    files were changed."""
+    """Add user write permission to each regular file lacking it; returns how many changed."""
     changed = 0
     for path in paths:
         mode = _regular_file_mode(path)
@@ -59,10 +47,7 @@ def make_writable(paths: list[str]) -> int:
 
 
 def make_read_only(paths: list[str]) -> int:
-    """Remove user write permission from each regular file that has it.
-
-    Symlinks, directories and missing paths are skipped. Returns how many
-    files were changed."""
+    """Remove user write permission from each regular file having it; returns how many changed."""
     changed = 0
     for path in paths:
         mode = _regular_file_mode(path)

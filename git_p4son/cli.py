@@ -1,6 +1,4 @@
-"""
-Main CLI entry point for git-p4son.
-"""
+"""Main CLI entry point for git-p4son."""
 
 import argparse
 import os
@@ -578,11 +576,7 @@ Examples:
 
 
 def _resolve_branch_keyword(workspace_dir: str) -> str | None:
-    """Resolve current git branch to an alias name.
-
-    Returns the resolved alias name, or None if resolution fails.
-    Prints an error message on failure.
-    """
+    """Resolve the current git branch to an alias name, or None (with an error printed)."""
     branch = get_current_branch(workspace_dir)
     if not branch:
         log.error(

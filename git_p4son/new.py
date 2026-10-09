@@ -1,9 +1,4 @@
-"""
-New command implementation for git-p4son.
-
-Creates a new Perforce changelist, opens files for edit, and optionally
-creates a Swarm review.
-"""
+"""New command: creates a Perforce changelist from the git change."""
 
 import argparse
 from .changelist_store import (

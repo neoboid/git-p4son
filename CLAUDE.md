@@ -97,8 +97,12 @@ When bumping the minimum Python version, update all of these locations:
 
 ## Code Style
 
-- Prefer short one-line docstrings. Avoid verbose Args/Returns sections when the function signature already makes the
-  purpose and parameters obvious.
+- Comments and docstrings must not obscure the code. Keep the commentary sparse; the code should carry the meaning.
+- Docstrings are one line. Add a second short paragraph only for a contract the caller can't see from the signature,
+  such as an exception raised or a special return value. No Args/Returns sections, no implementation walkthroughs.
+- Write a `#` comment only for what the code cannot show: a data format, a platform quirk, or a non-obvious reason.
+  Keep it to one line, two at most. Never restate the code or the `log.heading`/`log.error` next to it.
+- Design rationale, history and the reasoning behind a fix belong in the commit message, not in comments.
 
 ## Git Conventions
 

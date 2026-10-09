@@ -133,8 +133,7 @@ class TestRunHooks(unittest.TestCase):
     @mock.patch('git_p4son.hooks.run')
     def test_failing_hook_does_not_stop_remaining_hooks(
             self, mock_run, _is_windows, mock_log):
-        """Hooks are independent: one failure is reported but the rest
-        still run."""
+        """One failing hook is reported and the rest still run."""
         mock_run.side_effect = [
             make_run_result(returncode=1, stderr=['boom']),
             make_run_result(),

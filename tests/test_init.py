@@ -93,8 +93,7 @@ class TestSelectDepotRoot(unittest.TestCase):
     def test_entire_workspace_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
         result = _select_depot_root('my-ws', '/ws/sub', '/ws')
-        # The stored root keeps the placeholder; validation uses the resolved
-        # path so p4 sees a real depot.
+        # The stored root keeps the placeholder; validation uses the resolved path.
         self.assertEqual(result, '//$(workspace)')
         mock_validate.assert_called_once_with('//my-ws', '/ws/sub')
 
@@ -151,8 +150,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.init.save_config')
     def test_existing_template_root_validated_resolved(self, mock_save,
                                                        mock_get, mock_validate):
-        """An existing $(workspace) root is validated against the resolved
-        path, not the literal placeholder."""
+        """An existing $(workspace) root is validated against the resolved path."""
         result = _configure_depot_root('my-ws', '/ws', '/ws')
         self.assertTrue(result)
         mock_validate.assert_called_once_with('//my-ws/Engine', '/ws')
@@ -383,7 +381,6 @@ class TestInitCommand(unittest.TestCase):
                      mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
-        # Should have called git init, git add, git commit
         self.assertEqual(mock_run.call_count, 3)
 
     @mock.patch('git_p4son.init.get_client_spec', return_value=None)
@@ -419,9 +416,7 @@ class TestInitCommand(unittest.TestCase):
     def test_existing_repo_without_commits_creates_initial_commit(
             self, mock_cwd, mock_exists, mock_spec, mock_depot, mock_run,
             mock_has_commits, mock_gitignore, mock_editor):
-        """A previous init may have failed at the commit step (e.g.
-        user.email not configured); re-running init must recover instead
-        of treating the unborn repo as fully initialized."""
+        """Re-running init on a repo without commits creates the initial commit."""
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # git add + git commit, but no git init

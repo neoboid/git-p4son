@@ -57,8 +57,7 @@ class TestGetOpenedFilesInChangelist(unittest.TestCase):
 
     @mock.patch('git_p4son.perforce.run')
     def test_record_without_path_is_skipped(self, mock_run):
-        """Without -Op fstat reports no path; such records must not
-        crash, and clientFile syntax is never inside the workspace."""
+        """A record without a path is skipped instead of crashing."""
         mock_run.return_value = make_run_result(stdout=[
             '... clientFile //client/a.txt',
             '... action edit',
@@ -155,8 +154,7 @@ class TestRevertStaleFiles(unittest.TestCase):
             ['a.txt'], '100', self.ws, False)
 
     def test_untracked_edit_is_never_reverted(self):
-        """A p4-only binary checked out by hand stays opened, even when
-        unchanged."""
+        """A p4-only file checked out by hand stays opened, even when unchanged."""
         self._setup([('Asset.uasset', 'edit')], [], ['Asset.uasset'])
         revert_stale_files('100', self.ws)
         self.assertEqual(self._unchanged_candidates(), [])
@@ -192,8 +190,7 @@ class TestRevertStaleFiles(unittest.TestCase):
         self.assertEqual(self._run_commands(), [])
 
     def test_tracked_add_present_on_disk_is_left_alone(self):
-        """A real new file: there is no depot version to be unchanged
-        against."""
+        """A real new file stays opened; there is no depot version to compare with."""
         self._setup([('new.txt', 'add')], ['new.txt'], ['new.txt'])
         revert_stale_files('100', self.ws)
         self.assertEqual(self._unchanged_candidates(), [])

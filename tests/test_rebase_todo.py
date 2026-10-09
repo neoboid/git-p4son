@@ -22,8 +22,7 @@ class TestSequenceEditorCommand(unittest.TestCase):
     def test_success(self, mock_subprocess_run):
         todo_content = "pick abc First\nexec git p4son new feat --review -m 'msg'\n"
 
-        # First call: git var GIT_EDITOR
-        # Second call: editor
+        # git var GIT_EDITOR, then the editor
         mock_subprocess_run.side_effect = [
             mock.Mock(returncode=0, stdout='vim\n'),
             mock.Mock(returncode=0),
@@ -38,10 +37,8 @@ class TestSequenceEditorCommand(unittest.TestCase):
                 rc = sequence_editor_command(args)
 
         self.assertEqual(rc, 0)
-        # Verify git var GIT_EDITOR was called
         first_call = mock_subprocess_run.call_args_list[0]
         self.assertEqual(first_call[0][0], ['git', 'var', 'GIT_EDITOR'])
-        # Verify editor was called with the filename
         second_call = mock_subprocess_run.call_args_list[1]
         self.assertEqual(second_call[0][0], ['vim', '/tmp/git-rebase-todo'])
 
@@ -113,10 +110,8 @@ class TestSequenceEditorCommand(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         full_output = ''.join(written)
-        # Our todo content is included
         self.assertIn("pick abc First", full_output)
         self.assertIn("exec git p4son new feat", full_output)
-        # Git's comment lines are preserved
         self.assertIn("# Commands:", full_output)
         self.assertIn("# p, pick <commit> = use commit", full_output)
         # Non-comment lines from git's original are NOT included

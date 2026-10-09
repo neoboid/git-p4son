@@ -103,8 +103,7 @@ class TestWriteBitHelpers(unittest.TestCase):
         self.assertEqual(make_read_only([missing, subdir]), 0)
 
     def test_symlink_target_is_never_changed(self):
-        """chmod follows symlinks, so a link pointing outside the repo
-        could otherwise change a file the user never asked about."""
+        """A symlink target is never changed."""
         with tempfile.TemporaryDirectory() as outside:
             target = os.path.join(outside, 'target.txt')
             with open(target, 'w') as f:
@@ -187,8 +186,7 @@ class TestWritableCommand(unittest.TestCase):
     @mock.patch('git_p4son.writable.get_client_spec')
     def test_apply_off_keeps_opened_files_writable(self, mock_spec,
                                                    mock_opened):
-        """A file opened in Perforce is being worked on, so it keeps its
-        write bit; ignored files are never touched."""
+        """apply off keeps p4-opened files writable and never touches ignored files."""
         mock_spec.return_value = mock.Mock(allwrite=False)
         mock_spec.return_value.name = 'ws'
         mock_opened.return_value = [('src/open.cpp', 'modify')]

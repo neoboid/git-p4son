@@ -90,8 +90,7 @@ class TestSaveConfig(unittest.TestCase):
             self.assertEqual(loaded, config)
 
     def test_preserves_other_sections(self):
-        """Saving one section (e.g. depot from re-running init) must not
-        delete other configured sections like [hooks]."""
+        """Saving one section keeps the other sections, like [hooks]."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = config_path(tmpdir)
             os.makedirs(os.path.dirname(path))

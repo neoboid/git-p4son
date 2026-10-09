@@ -11,8 +11,7 @@ from git_p4son.log import Log, _truncate_to_terminal_width
 
 class TestNonTtyOutput(unittest.TestCase):
     def test_command_output_is_clean_when_redirected(self):
-        """Redirected output (git p4son sync > log.txt) must not contain
-        spinner frames, carriage returns, or escape sequences."""
+        """Redirected output has no spinner frames, carriage returns or escape sequences."""
         log = Log()
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -29,8 +28,7 @@ class TestNonTtyOutput(unittest.TestCase):
             log.stop_spinner()
 
     def test_input_command_line_not_doubled(self):
-        """The input path calls end_command explicitly; the line is
-        already terminated in non-TTY mode."""
+        """The input command line is not terminated twice in non-TTY mode."""
         log = Log()
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):

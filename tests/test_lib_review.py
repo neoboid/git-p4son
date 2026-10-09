@@ -14,9 +14,7 @@ from tests.helpers import make_run_result
 class TestP4ShelveChangelist(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_replaces_shelf_leaving_unchanged_files_out(self, mock_run):
-        """-r replaces the shelf so it mirrors the open files, without
-        stale entries for files no longer open; -a leaveunchanged keeps
-        no-op edits out of it."""
+        """The shelf is replaced to mirror the open files, leaving unchanged files out."""
         mock_run.return_value = make_run_result()
         p4_shelve_changelist('100', '/ws')
         self.assertEqual(mock_run.call_args_list, [
@@ -77,7 +75,6 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
             make_run_result(),
         ]
         add_review_keyword_to_changelist('100', '/ws')
-        # Verify p4 change -i was called with updated spec
         call_kwargs = mock_run.call_args_list[1]
         spec_input = call_kwargs.kwargs.get('input')
         self.assertIn('#review', spec_input)
@@ -96,8 +93,7 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
 
     @mock.patch('git_p4son.perforce.run')
     def test_dry_run_does_not_touch_the_server(self, mock_run):
-        """Dry run must not even fetch the spec - the changelist may be a
-        placeholder from a dry-run create."""
+        """A dry run does not fetch the spec; the changelist may be a placeholder."""
         add_review_keyword_to_changelist(
             '<changelist>', '/ws', dry_run=True)
         mock_run.assert_not_called()

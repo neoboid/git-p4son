@@ -60,8 +60,7 @@ class TestGetTrackedFiles(GitRepoTestCase):
         self.assertEqual(result, {'src/main.py'})
 
     def test_tracked_file_matching_ignore_pattern_is_tracked(self):
-        """A tracked file that matches a .gitignore pattern (common when
-        .gitignore was copied from .p4ignore) is still git's to manage."""
+        """A tracked file matching a .gitignore pattern is still tracked."""
         self._write_file('.gitignore', '*.ini\n')
         self._write_file('config.ini', 'tracked anyway')
         subprocess.run(['git', 'add', '-f', 'config.ini', '.gitignore'],
@@ -83,8 +82,7 @@ class TestGetTrackedFiles(GitRepoTestCase):
         self.assertEqual(result, {abs_path})
 
     def test_non_ascii_paths_match(self):
-        """ls-files would C-quote non-ASCII paths without -z, which would
-        never match the input paths."""
+        """Non-ASCII paths match the input paths rather than coming back C-quoted."""
         name = 'bäck.py'
         self._write_file(name, 'code')
         self._commit()
@@ -104,8 +102,7 @@ class TestGetTrackedFiles(GitRepoTestCase):
         self.assertEqual(result, {'a.py', 'b.py'})
 
     def test_batches_are_logged_as_one_line(self):
-        """Thousands of synced files mean dozens of chunks; each chunk's
-        command must not get its own output line."""
+        """A batch of chunked commands is logged as one line."""
         self._write_file('a.py', 'a')
         self._write_file('b.py', 'b')
         self._commit()
@@ -206,8 +203,7 @@ class TestGetBlobOids(GitRepoTestCase):
         self.assertEqual(oids, {('HEAD', 'nonexistent.txt'): None})
 
     def test_resolves_all_pairs_in_one_call(self):
-        """Mixed commits, equal/changed content and missing files all
-        resolve from a single invocation."""
+        """Mixed commits, equal and changed content and missing files resolve in one call."""
         self._write_file('foo.txt', 'version 1')
         self._write_file('copy.txt', 'version 1')
         self._commit('first')
@@ -294,8 +290,7 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_falls_back_to_introducing_commit(self):
-        """Files never touched by a sync commit fall back to the commit that
-        added them (e.g. an initial bulk import), even the root commit."""
+        """Files never touched by a sync commit fall back to the commit that added them."""
         self._write_file('a.cpp', 'X')
         self._commit('initial bulk import')
         s0 = self._rev_parse()
@@ -306,8 +301,7 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_fallback_is_most_recent_add_when_readded(self):
-        """If the file was deleted and re-added, the most recent add starts
-        the current lineage."""
+        """A deleted and re-added file falls back to its most recent add."""
         self._write_file('a.cpp', 'X')
         self._commit('add a.cpp')
         os.remove(os.path.join(self.tmpdir, 'a.cpp'))
@@ -320,8 +314,7 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result, {'a.cpp': s_readd})
 
     def test_sync_commit_wins_over_more_recent_add(self):
-        """A sync commit touching the file is the baseline even when the
-        file was re-added by a user commit afterwards."""
+        """A sync commit touching the file wins over a later re-add by a user commit."""
         self._write_file('a.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
@@ -361,8 +354,7 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result, {'src\\engine\\test.cpp': s0})
 
     def test_non_ascii_paths_match(self):
-        """Paths git would normally C-quote in --name-status output must
-        still match (core.quotePath is disabled for the walk)."""
+        """Paths git would C-quote in --name-status output still match."""
         self._write_file('bäck.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
@@ -385,8 +377,7 @@ class TestFindBaseCommits(GitRepoTestCase):
                                   'missing.cpp': None})
 
     def test_chunking_preserves_results(self):
-        """A tiny pathspec budget forces one walk per file; results must be
-        identical to the single-walk case."""
+        """A tiny pathspec budget forces one walk per file without changing the results."""
         self._write_file('a.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')
         s_sync = self._rev_parse()

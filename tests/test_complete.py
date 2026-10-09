@@ -25,11 +25,7 @@ class TestRunCompleteOutput(unittest.TestCase):
         log.quiet_mode = False
 
     def test_emits_only_candidates(self):
-        """Completion stdout must contain nothing but candidates.
-
-        get_current_branch runs a real git subprocess; its command echo
-        and spinner used to leak to stdout and be offered by the shell
-        as completion candidates."""
+        """Completion stdout holds nothing but candidates, no command echo or spinner."""
         with tempfile.TemporaryDirectory() as ws:
             for cmd in (['git', 'init'],
                         ['git', 'config', 'user.email', 't@t'],

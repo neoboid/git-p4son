@@ -93,9 +93,7 @@ class TestGetHeadSubject(unittest.TestCase):
 
 class TestGetRebaseBranch(unittest.TestCase):
     def test_relative_git_dir_resolved_against_workspace(self):
-        """git prints the dir relative to its own cwd (usually just
-        '.git'); it must resolve against the workspace, not the process
-        cwd."""
+        """git's relative git dir resolves against the workspace, not the process cwd."""
         with tempfile.TemporaryDirectory() as tmpdir:
             rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
             os.makedirs(rebase_dir)
@@ -195,8 +193,7 @@ class TestJoinCommandLine(unittest.TestCase):
 
 
 class TestLoggedCommandLine(unittest.TestCase):
-    """Long file lists are summarized in the printed command line; the
-    command that runs is unchanged."""
+    """Long file lists are summarized in the printed command line, not in the command run."""
 
     def _logged(self, command, verbose=False):
         with mock.patch('git_p4son.common.log') as mock_log, \
@@ -253,8 +250,7 @@ class TestIsWorkspaceDir(unittest.TestCase):
             self.assertFalse(is_workspace_dir(tmpdir))
 
     def test_returns_true_when_git_is_a_file(self):
-        """In linked worktrees and submodules .git is a file pointing at
-        the real git dir."""
+        """In linked worktrees and submodules .git is a file pointing at the real git dir."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with open(os.path.join(tmpdir, '.git'), 'w') as f:
                 f.write('gitdir: /repo/.git/worktrees/feature\n')
@@ -278,8 +274,7 @@ class TestGetWorkspaceDir(unittest.TestCase):
             self.assertIsNone(result)
 
     def test_stops_at_worktree_root_inside_another_repo(self):
-        """Detection must stop at a linked worktree root (.git file)
-        instead of walking up to an enclosing unrelated repo."""
+        """Detection stops at a linked worktree root instead of an enclosing unrelated repo."""
         with tempfile.TemporaryDirectory() as tmpdir:
             os.makedirs(os.path.join(tmpdir, '.git'))
             worktree = os.path.join(tmpdir, 'wt')
@@ -385,10 +380,7 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertIn('hello', callback_lines)
 
     def test_captures_all_output_from_fast_exiting_process(self):
-        """A process that bursts output and exits must not lose tail lines.
-
-        The drain loop used to poll process.poll() and could break while the
-        reader threads still held undrained lines, silently dropping them."""
+        """A process that bursts output and exits loses no trailing lines."""
         code = (
             'import sys\n'
             'sys.stdout.write("".join(f"line{i}\\n" for i in range(5000)))\n'
@@ -443,8 +435,7 @@ class TestMissingExecutable(unittest.TestCase):
 
 
 class TestSubprocessEncoding(unittest.TestCase):
-    """Output must decode as UTF-8 on every platform; Windows would
-    otherwise use the ANSI code page and garble non-ASCII output."""
+    """Output decodes as UTF-8 on every platform, not the Windows ANSI code page."""
 
     _CODE = 'import sys; sys.stdout.buffer.write("bäck\\n".encode("utf-8"))'
 

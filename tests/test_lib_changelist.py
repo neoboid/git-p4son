@@ -91,7 +91,6 @@ class TestReplaceDescriptionInSpec(unittest.TestCase):
             SAMPLE_SPEC, ['New description', 'Line 2'])
         self.assertIn('\tNew description\n', new_spec)
         self.assertIn('\tLine 2\n', new_spec)
-        # Old description should be gone
         self.assertNotIn('Fix the login bug', new_spec)
 
     def test_preserves_other_fields(self):
@@ -136,8 +135,7 @@ class TestSplitDescriptionLines(unittest.TestCase):
         self.assertEqual(trailing, [])
 
     def test_numbered_list_in_user_message_not_mistaken_for_commits(self):
-        """A numbered list inside the user's own message must stay in the
-        message; the commit list is anchored on the marker heading."""
+        """A numbered list in the user's message is not mistaken for the commit list."""
         lines = [
             'Reasons for this change:',
             '1. performance',
@@ -166,7 +164,6 @@ class TestCreateChangelist(unittest.TestCase):
             stdout=['Change 99999 created.'])
         cl_num = create_changelist('My message', 'HEAD~1', '/ws')
         self.assertEqual(cl_num, '99999')
-        # Verify spec was passed via stdin
         call_kwargs = mock_run.call_args
         spec_input = call_kwargs.kwargs.get('input')
         self.assertIn('My message', spec_input)
@@ -237,8 +234,7 @@ class TestUpdateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_appends_commits_outside_the_range(self, mock_get_spec,
                                                mock_subjects, mock_run):
-        """Subjects not in the old list append after it (the review rebase
-        flow updates with -b HEAD~1 per picked commit)."""
+        """Subjects not in the old list are appended after it."""
         mock_get_spec.return_value = SAMPLE_SPEC
         mock_subjects.return_value = ['New commit A', 'New commit B']
         mock_run.return_value = make_run_result(
@@ -250,7 +246,6 @@ class TestUpdateChangelist(unittest.TestCase):
         self.assertIn('2. Fix redirect', spec_input)
         self.assertIn('3. New commit A', spec_input)
         self.assertIn('4. New commit B', spec_input)
-        # user message preserved
         self.assertIn('Fix the login bug', spec_input)
 
     @mock.patch('git_p4son.lib.run')
@@ -258,8 +253,7 @@ class TestUpdateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_replaces_entries_covered_by_the_range(self, mock_get_spec,
                                                    mock_subjects, mock_run):
-        """An old entry whose subject is in the range is replaced, not
-        duplicated; entries outside the range are kept."""
+        """Old entries covered by the range are replaced, others are kept."""
         mock_get_spec.return_value = SAMPLE_SPEC
         mock_subjects.return_value = ['Fix redirect', 'New commit A']
         mock_run.return_value = make_run_result(
@@ -277,8 +271,7 @@ class TestUpdateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_rerunning_same_update_is_idempotent(self, mock_get_spec,
                                                  mock_subjects, mock_run):
-        """Running update again with the same range must not duplicate
-        the commit list."""
+        """Running the same update again does not duplicate the commit list."""
         mock_get_spec.return_value = SAMPLE_SPEC
         mock_subjects.return_value = ['Add validation', 'Fix redirect']
         mock_run.return_value = make_run_result(

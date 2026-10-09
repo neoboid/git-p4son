@@ -138,8 +138,7 @@ class TestAliasCleanCommand(unittest.TestCase):
         mock_delete.assert_called_once_with('feature-a', '/ws')
 
     def test_interactive_all_deletes_remaining(self, _list, mock_delete):
-        """Answering no through the aliases worth keeping and then all
-        sweeps the remainder without further prompts."""
+        """Answering no to the aliases worth keeping, then all, sweeps the rest without prompts."""
         with mock.patch('builtins.input',
                         side_effect=['i', 'n', 'a']) as mock_input:
             rc = alias_clean_command(_args())

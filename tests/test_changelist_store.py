@@ -14,8 +14,7 @@ from git_p4son.changelist_store import (
 
 
 class TestAliasStoreValidatesNames(unittest.TestCase):
-    """load and delete must validate names like save does - a raw name
-    such as ../../somefile must never escape the store directory."""
+    """load and delete validate names like save, so ../../somefile cannot escape the store."""
 
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
@@ -125,8 +124,7 @@ class TestValidateAliasName(unittest.TestCase):
         self.assertIsNotNone(validate_alias_name('..'))
 
     def test_all_digit_rejected(self):
-        """Digit strings always parse as changelist numbers, so an
-        all-digit alias could never be referenced."""
+        """An all-digit alias would parse as a changelist number, so it is rejected."""
         self.assertIsNotNone(validate_alias_name('12345'))
 
     def test_digits_with_letters_allowed(self):

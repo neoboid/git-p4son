@@ -60,8 +60,7 @@ class TestRestoreWritable(unittest.TestCase):
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
     def test_only_tracked_files_are_made_writable(self, _mode, mock_tracked,
                                                   mock_make):
-        """Git-ignored files (content, p4-only) are left to Perforce, and a
-        file synced by several passes is only looked up once."""
+        """Only tracked files are made writable, each looked up once."""
         mock_tracked.return_value = {'/ws/a.cpp', '/ws/b.h'}
         _restore_writable(
             ['/ws/b.h', '/ws/a.cpp', '/ws/Content/x.uasset', '/ws/a.cpp'],
@@ -72,8 +71,7 @@ class TestRestoreWritable(unittest.TestCase):
 
 
 class TestHandleClobberWarning(unittest.TestCase):
-    """The clobber warning is interactive, so it must never block
-    automation and must respect a permanent dismissal."""
+    """The clobber warning never blocks automation and respects a permanent dismissal."""
 
     def test_no_prompt_when_clobber_off(self):
         with mock.patch('git_p4son.sync.prompt_choice') as mock_prompt:
@@ -100,8 +98,7 @@ class TestHandleClobberWarning(unittest.TestCase):
     @mock.patch('git_p4son.sync.is_clobber_warning_dismissed',
                 return_value=False)
     def test_continue_persists_and_proceeds(self, _dismissed, mock_dismiss):
-        """Choosing to continue implies acceptance, so it also dismisses
-        the warning permanently."""
+        """Choosing continue also dismisses the warning permanently."""
         with mock.patch('git_p4son.sync.sys.stdin') as mock_stdin, \
                 mock.patch('git_p4son.sync.prompt_choice',
                            return_value='continue'):
@@ -391,8 +388,7 @@ class TestGitLastSync(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.run_with_output')
     def test_uses_git_grep_to_search_history(self, mock_rwo):
-        """Verifies git log --grep is used so sync commits are found
-        even when HEAD is not a sync commit."""
+        """git log --grep finds sync commits even when HEAD is not one."""
         mock_rwo.return_value = make_run_result(stdout=[
             f'{self.HASH} git-p4son: p4 sync //...@99999'
         ])
@@ -560,8 +556,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
     def test_user_unchanged_file_not_in_changed(self, _tracked, mock_fstat,
                                                 _find_base, _get_file,
                                                 _oids):
-        """File whose HEAD blob matches its blob at the last sync that
-        touched it is unchanged from the user's perspective."""
+        """A file whose HEAD blob matches its baseline blob is unchanged."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -586,8 +581,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=lambda paths, ws: set(paths))
     def test_allwrite_keeps_unchanged_file_writable(
             self, _tracked, mock_fstat, _find_base, _get_file, _oids):
-        """An allwrite workspace is writable by design, and p4 overwrites
-        an unchanged file regardless of clobber, so the write bit stays."""
+        """With allwrite an unchanged file keeps its write bit."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -610,8 +604,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=lambda paths, ws: set(paths))
     def test_allwrite_makes_changed_file_read_only(
             self, _tracked, mock_fstat, _find_base, _get_file, mock_oids):
-        """With allwrite plus noclobber p4 digest-compares and would refuse
-        on exactly the modified files, so those still go read-only."""
+        """With allwrite a changed file still goes read-only."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -635,8 +628,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=lambda paths, ws: set(paths))
     def test_no_baseline_treated_as_changed(self, _tracked, mock_fstat,
                                             _find_base, _get_file):
-        """If no baseline commit can be found we have nothing to compare
-        against and must queue for merge."""
+        """A file without a baseline commit is queued for merge."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -683,8 +675,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
     def test_crlf_workspace_stages_text_content_as_crlf(
             self, _tracked, mock_fstat, _find_base, mock_get_file,
             mock_oids):
-        """With uses_crlf, staged ours/base (git LF blobs) are written as
-        CRLF so the post-sync merge doesn't conflict on endings alone."""
+        """In a CRLF workspace staged text content is written as CRLF."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -744,8 +735,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
     def test_crlf_workspace_leaves_binary_content_untouched(
             self, _tracked, mock_fstat, _find_base, mock_get_file,
             mock_oids):
-        """Binary ours blobs are restored verbatim, so CRLF normalization
-        must skip them even when the workspace uses CRLF."""
+        """In a CRLF workspace binary content is staged verbatim."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'image.png')
@@ -775,9 +765,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=lambda paths, ws: set(paths))
     def test_added_both_locally_and_upstream(self, _tracked, mock_fstat,
                                              _get_file, mock_find_base):
-        """A file p4 previews as 'add' over locally committed content is an
-        add/add: always queued for merge against an empty base, skipping the
-        git baseline comparison entirely."""
+        """A file p4 adds over local content is merged against an empty base."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
@@ -825,8 +813,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertTrue(mode & stat.S_IWUSR)
 
     def test_always_writable_ignored_file_not_reported_as_unsynced(self):
-        """A git-ignored file whose Perforce type is +w is meant to be
-        writable; p4 overwrites it on sync, so no warning is due."""
+        """A git-ignored +w file is not reported as unsynced."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'Tool.exe')
@@ -850,8 +837,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertTrue(mode & stat.S_IWUSR)
 
     def test_always_writable_files_excluded_from_expected_clobber(self):
-        """+w files must not be classified as ignored: a clobber error on
-        one is unexpected and should still surface."""
+        """+w files are not expected clobber errors."""
         from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             always = self._make_file(ws, 'Tool.exe')
@@ -873,9 +859,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
     def _run_with_tracked_and_ignored(self, ws, clobber, allwrite=False,
                                       level='warning'):
-        """Prepare one unchanged tracked file plus one ignored file so the
-        summary block (which reports ignored files) is reached, and return
-        the concatenated messages logged at level."""
+        """Prepare one unchanged tracked and one ignored file, returning the messages logged at level."""
         tracked = self._make_file(ws, 'a.txt')
         ignored = self._make_file(ws, 'build.log')
         with mock.patch('git_p4son.sync.get_tracked_files',
@@ -900,17 +884,14 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertNotIn('overwritten', warnings)
 
     def test_ignored_message_with_clobber(self):
-        """With clobber enabled p4 overwrites these files, so the message
-        must not claim they will be preserved."""
+        """With clobber the summary says ignored files will be overwritten."""
         with tempfile.TemporaryDirectory() as ws:
             warnings = self._run_with_tracked_and_ignored(ws, clobber=True)
             self.assertIn('overwritten', warnings)
             self.assertNotIn('will not be synced', warnings)
 
     def test_ignored_message_with_allwrite(self):
-        """With allwrite p4 digest-compares before refusing to clobber, so
-        unchanged ignored files do sync: the summary must not claim none
-        will, and cannot yet say which will not."""
+        """With allwrite the summary says ignored files sync unless modified."""
         with tempfile.TemporaryDirectory() as ws:
             warnings = self._run_with_tracked_and_ignored(
                 ws, clobber=False, allwrite=True)
@@ -940,9 +921,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
 
 class TestBuildSyncTargets(unittest.TestCase):
-    """The sequence must isolate each of the user's own changelists in a
-    commit of its own while staying strictly increasing, and visit every
-    required changelist."""
+    """Each of the user's changelists gets its own commit, in a strictly increasing sequence."""
 
     def test_single_own_changelist(self):
         changes = make_changes((100, 'other'), (101, 'other'),
@@ -958,16 +937,14 @@ class TestBuildSyncTargets(unittest.TestCase):
         self.assertEqual(targets, [101, 102, 104, 105, 106])
 
     def test_back_to_back_own_changelists(self):
-        """A predecessor that is itself one of the user's changelists is
-        already a target, so it must not be repeated."""
+        """A predecessor that is itself one of the user's changelists is not repeated."""
         changes = make_changes((100, 'other'), (101, 'other'),
                                (102, 'me'), (103, 'me'))
         targets = build_sync_targets(changes, ['me'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
     def test_predecessor_is_last_synced(self):
-        """The changelist before the user's own submit is already in git,
-        so only the user's own submit is synced separately."""
+        """When the predecessor is last synced, only the user's changelist is added."""
         changes = make_changes((100, 'other'), (101, 'me'), (102, 'other'))
         targets = build_sync_targets(changes, ['me'], 100, [102])
         self.assertEqual(targets, [101, 102])
@@ -983,8 +960,7 @@ class TestBuildSyncTargets(unittest.TestCase):
         self.assertEqual(targets, [102])
 
     def test_no_changes_at_all(self):
-        """Nothing affected the depot root in the range, so the upper bound
-        is still synced: it may be a changelist elsewhere in the depot."""
+        """With no changes in the range the upper bound is still synced."""
         targets = build_sync_targets([], ['me'], 100, [120])
         self.assertEqual(targets, [120])
 
@@ -1001,8 +977,7 @@ class TestBuildSyncTargets(unittest.TestCase):
         self.assertEqual(targets, [101, 102, 104, 105, 106])
 
     def test_adjacent_changelists_from_two_selected_users(self):
-        """alice's changelist is the predecessor of bob's, so it is already
-        a target and must not be repeated."""
+        """alice's changelist, the predecessor of bob's, is not repeated."""
         changes = make_changes((100, 'other'), (101, 'other'),
                                (102, 'alice'), (103, 'bob'))
         targets = build_sync_targets(changes, ['alice', 'bob'], 100, [103])
@@ -1037,8 +1012,7 @@ class TestBuildSyncTargets(unittest.TestCase):
         self.assertEqual(targets, [101, 102, 104, 105, 106])
 
     def test_required_changelist_outside_the_depot_root(self):
-        """A required changelist need not be in changes: it may have been
-        submitted elsewhere in the depot."""
+        """A required changelist outside the depot root is still synced."""
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
                                (103, 'other'))
         targets = build_sync_targets(changes, ['me'], 100, [110])
@@ -1056,14 +1030,12 @@ class TestSyncCommand(unittest.TestCase):
     _last_sync = LastSync(changelist=10000, commit='abc123')
 
     def setUp(self):
-        # sync_command queries the client spec for line-ending handling;
-        # default to "no spec" so these tests never shell out to p4.
+        # Default to no client spec, so these tests never shell out to p4.
         patcher = mock.patch('git_p4son.depot.get_client_spec',
                              return_value=None)
         patcher.start()
         self.addCleanup(patcher.stop)
-        # The clean-workspace check lives in lib; default to clean. The
-        # sync.get_dirty_files mocks below cover the commit step.
+        # Default the clean-workspace check in lib to clean.
         patcher = mock.patch('git_p4son.lib.get_dirty_files',
                              return_value=[])
         self.mock_workspace_dirty = patcher.start()
@@ -1111,8 +1083,7 @@ class TestSyncCommand(unittest.TestCase):
             self, _depot, mock_spec, _p4clean, mock_last_sync, _head,
             _preview, mock_prep, _p4sync, _git_clean, _add, _commit, _merge,
             mock_log):
-        """With allwrite p4 syncs unchanged ignored files and refuses only
-        the modified ones, so the report lists what it actually skipped."""
+        """With allwrite only the ignored files p4 refused are reported."""
         spec = mock.Mock(uses_crlf=False, clobber=False, allwrite=True)
         spec.name = 'myclient'
         mock_spec.return_value = spec
@@ -1147,10 +1118,7 @@ class TestSyncCommand(unittest.TestCase):
             self, _depot, _p4clean, mock_last_sync, _head, mock_preview,
             mock_prep, _p4sync, _git_clean, _add, _commit, _merge, _mode,
             mock_restore):
-        """The catch-up pass and each target pass all feed the restore
-        step, and writable mode leaves sync on the noallwrite path: p4 would
-        refuse every writable file there, so they must all still be made
-        read-only before the sync."""
+        """Every pass feeds the writable restore, and all writable files go read-only first."""
         mock_last_sync.return_value = self._last_sync
         mock_preview.side_effect = [[_upd('/ws/a.cpp')],
                                     [_upd('/ws/b.cpp')]]
@@ -1200,8 +1168,7 @@ class TestSyncCommand(unittest.TestCase):
                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
-        # The $(workspace) placeholder is resolved to the live client name
-        # before any p4 command runs against the depot.
+        # $(workspace) is resolved before any p4 command runs against the depot.
         self.assertEqual(
             mock_preview.call_args.args[1], '//real-client/Engine')
 
@@ -1318,8 +1285,7 @@ class TestSyncCommand(unittest.TestCase):
         args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
-        # Nothing to sync, so the whole preflight is skipped: no workspace
-        # queries and no hooks, not merely no hooks.
+        # Nothing to sync, so the whole preflight is skipped, not merely the hooks.
         mock_git_clean.assert_not_called()
         mock_p4clean.assert_not_called()
         mock_run_hooks.assert_not_called()
@@ -1483,8 +1449,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_explicit_head_keyword(self, _depot, _p4clean, mock_last_sync,
                                    _head, _preview, mock_prep, _p4sync,
                                    mock_git_clean, _commit, mock_get_latest):
-        """An explicit "head" argument syncs to the latest changelist, same
-        as omitting the argument."""
+        """An explicit "head" syncs to the latest changelist."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
@@ -1509,8 +1474,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_multiple_changelists_commit_each(
             self, _depot, _p4clean, mock_last_sync, _head, _preview, mock_prep,
             mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """Multiple increasing changelists are synced in sequence, each with
-        its own commit, after a catch-up pass to the last synced changelist."""
+        """Multiple changelists sync in sequence after a catch-up pass, one commit each."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist=['123', '156', '178'], force=False,
@@ -1546,8 +1510,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_explicit_last_synced_in_list_is_skipped(
             self, _depot, _p4clean, mock_last_sync, _head, _preview, mock_prep,
             mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """A specified changelist equal to the last synced one is skipped: no
-        commit for it, only the newer changelists are synced."""
+        """A specified changelist equal to the last synced one is skipped."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist=['100', '156'], force=False,
@@ -1573,8 +1536,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_older_changelist_in_list_synced_with_force(
             self, _depot, _p4clean, mock_last_sync, _head, _preview, mock_prep,
             mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """An explicitly requested changelist older than the current one is
-        synced (not skipped) when --force is given."""
+        """An older changelist is synced, not skipped, with --force."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist=['50', '156'], force=True,
@@ -1602,9 +1564,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_three_changelists_starting_backward_with_force(
             self, _depot, _p4clean, mock_last_sync, _head, _preview, mock_prep,
             mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """The first target may be older than the last synced changelist (with
-        --force) as long as the rest of the sequence keeps increasing; each is
-        synced and committed in order."""
+        """With --force the first target may be older than the last synced changelist."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist=['50', '156', '178'], force=True,
@@ -1702,8 +1662,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_trailing_head_resolves_and_syncs(
             self, _depot, _p4clean, mock_last_sync, _head, _preview, mock_prep,
             mock_p4sync, _git_clean, _add, mock_commit, _merge, _latest):
-        """A trailing "head" is resolved to the latest changelist and synced
-        as the final target in the sequence."""
+        """A trailing "head" resolves to the latest changelist and is synced last."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         args = mock.Mock(changelist=['123', '156', 'head'], force=False,
@@ -1726,8 +1685,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_trailing_head_below_preceding_cl_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
             _latest):
-        """If the resolved "head" is not greater than a preceding changelist,
-        the strictly-increasing check rejects the sequence."""
+        """A "head" not above the preceding changelist fails the strictly increasing check."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         args = mock.Mock(changelist=['123', '156', 'head'], force=False,
                          workspace_dir='/ws')
@@ -1736,8 +1694,7 @@ class TestSyncCommand(unittest.TestCase):
 
 
 class TestSyncDryRun(unittest.TestCase):
-    """A dry run resolves the sync sequence, prints it and stops before
-    anything that touches the workspaces or asks the user."""
+    """A dry run prints the sync sequence and stops before touching the workspaces."""
 
     def setUp(self):
         for target, value in (
@@ -1812,8 +1769,7 @@ class TestSyncDryRun(unittest.TestCase):
 
 
 class TestSyncSplitting(unittest.TestCase):
-    """sync splits out the split users' changelists: configured ones unless
-    --no-split, plus any given with -u."""
+    """sync splits out the configured split users unless --no-split, plus any given with -u."""
 
     # Last synced at 100, latest 106; "me" submitted 102 and 105.
     _changes = make_changes(
@@ -1993,8 +1949,7 @@ class TestSyncSplitting(unittest.TestCase):
 
 
 class TestSyncPreflight(unittest.TestCase):
-    """The gate before a sync: blocking processes, workspace checks then
-    hooks, in that order."""
+    """The preflight runs blocking processes, workspace checks, then hooks, in that order."""
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
@@ -2067,8 +2022,7 @@ class TestMergeChangedFiles(unittest.TestCase):
         self._tempdir.cleanup()
 
     def _stage(self, suffix, content):
-        """Write content to a temp file under self.temp_root and return its
-        path. Each call uses a unique name."""
+        """Write content to a uniquely named temp file under self.temp_root and return its path."""
         if not hasattr(self, '_stage_counter'):
             self._stage_counter = 0
         self._stage_counter += 1
@@ -2080,8 +2034,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.merge_file')
     def test_writes_to_readonly_file_after_force_sync(self, mock_merge):
-        """After p4 sync -f, files are read-only. _merge_changed_files must
-        handle writing merged content to read-only files."""
+        """Merged content is written to files left read-only by the sync."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'test.cpp')
             with open(filepath, 'wb') as f:
@@ -2105,8 +2058,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.merge_file')
     def test_binary_file_restores_user_version(self, mock_merge):
-        """Binary files (identified by Perforce type) should restore the
-        user's version instead of attempting a three-way merge."""
+        """A binary file gets the user's version restored instead of a three-way merge."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'image.png')
             with open(filepath, 'wb') as f:
@@ -2127,12 +2079,9 @@ class TestMergeChangedFiles(unittest.TestCase):
             mock_merge.assert_not_called()
 
     def test_deleted_upstream_with_local_changes_not_restored(self):
-        """When p4 deletes a file (potentially along with its parent dir),
-        we don't try to restore the user's local version to disk. The local
-        edits remain recoverable via git history."""
+        """A file deleted upstream with local changes is not restored."""
         with tempfile.TemporaryDirectory() as workspace:
-            # Parent directory does not exist; emulates p4 removing it along
-            # with the file.
+            # Emulates p4 removing the parent directory along with the file.
             filepath = os.path.join(workspace, 'gone', 'test.cpp')
 
             from git_p4son.sync import _merge_changed_files
@@ -2146,8 +2095,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             self.assertFalse(os.path.exists(filepath))
 
     def test_deleted_upstream_unchanged_local_not_restored(self):
-        """When p4 deletes a file and the local version is unchanged from
-        the last sync, the delete should stand (file not restored)."""
+        """A file deleted upstream without local changes is not restored."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'test.cpp')
             content = b'unchanged content'
@@ -2161,12 +2109,10 @@ class TestMergeChangedFiles(unittest.TestCase):
                     base_path=self._stage('.base', content))],
                 workspace, self.temp_root)
 
-            # File should NOT be restored - upstream delete stands
             self.assertFalse(os.path.exists(filepath))
 
     def test_added_both_merges_against_empty_base(self):
-        """An add/add file (no base) merges against an empty base: differing
-        content yields one conflict block containing both full versions."""
+        """An add/add with differing content conflicts with both full versions."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'test.cpp')
             with open(filepath, 'wb') as f:
@@ -2188,8 +2134,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             self.assertIn(b'>>>>>>> local\n', merged)
 
     def test_added_both_identical_content_merges_clean(self):
-        """An add/add file whose local content matches what p4 adds merges
-        cleanly against the empty base."""
+        """An add/add with identical content merges cleanly."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'test.cpp')
             with open(filepath, 'wb') as f:
@@ -2208,8 +2153,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.merge_file')
     def test_merge_passes_staged_paths_directly(self, mock_merge):
-        """The merge passes the staged ours/base temp paths straight through
-        to merge_file - no extra reads or writes."""
+        """The staged ours/base paths are passed straight to merge_file."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath = os.path.join(workspace, 'test.cpp')
             with open(filepath, 'wb') as f:
@@ -2231,9 +2175,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.merge_file')
     def test_no_base_uses_shared_empty_file(self, mock_merge):
-        """When the ChangedFile has no base_path (no baseline commit), the
-        merge step stages a shared empty file once and reuses it for every
-        such file."""
+        """Files without a base share one empty base file."""
         with tempfile.TemporaryDirectory() as workspace:
             filepath_a = os.path.join(workspace, 'a.cpp')
             filepath_b = os.path.join(workspace, 'b.cpp')

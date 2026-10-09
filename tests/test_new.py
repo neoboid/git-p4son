@@ -17,11 +17,7 @@ def _args(**overrides):
 
 
 class TestNewCommandDryRun(unittest.TestCase):
-    """Dry run must walk every optional step without executing anything.
-
-    run() is deliberately left unmocked: all calls that reach it must
-    carry dry_run=True, and the placeholder changelist must survive
-    command-line rendering (a None changelist used to crash there)."""
+    """A dry run walks every optional step and passes dry_run to every run() call."""
 
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.perforce.get_changelist_for_file',

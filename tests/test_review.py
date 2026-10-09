@@ -55,7 +55,6 @@ class TestGenerateTodo(unittest.TestCase):
                                 "It's a feature", force=False)
         # shlex.quote wraps in quotes and escapes the apostrophe
         self.assertIn('exec git p4son new feat --review -m', result)
-        # The result should be shell-safe (shlex.quote handles escaping)
         self.assertIn("It", result)
         self.assertIn("a feature", result)
 
@@ -137,7 +136,6 @@ class TestReviewCommand(unittest.TestCase):
                     rc = review_command(args)
 
         self.assertEqual(rc, 0)
-        # Verify git rebase was called with GIT_SEQUENCE_EDITOR
         mock_subprocess_run.assert_called_once()
         call_args = mock_subprocess_run.call_args
         self.assertEqual(call_args[0][0], ['git', 'rebase', '-i', 'main'])
@@ -180,8 +178,7 @@ class TestReviewCommand(unittest.TestCase):
         )
 
     def test_multiline_message_rejected(self):
-        """The rebase todo is line-based; an embedded newline in the
-        message would split the exec line."""
+        """A multi-line -m message is rejected, since the rebase todo is line-based."""
         args = mock.Mock(
             alias='my-feature',
             message='Line one\nLine two',

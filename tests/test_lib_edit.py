@@ -142,8 +142,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
 
     @mock.patch('git_p4son.git.run')
     def test_copy_treated_as_add_of_destination(self, mock_run):
-        """C### (with diff.renames=copies) leaves the source untouched;
-        only the destination is a new file."""
+        """A copy is an add of the destination; the source is untouched."""
         mock_run.side_effect = [
             make_run_result(stdout=['abc123']),
             make_run_result(stdout=['C100\tsrc.txt\tcopy.txt']),
@@ -171,8 +170,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
 
 class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
     def test_non_ascii_filename_returned_verbatim(self):
-        """git C-quotes non-ASCII paths by default ("b\\303\\244ck.txt");
-        such a string would never match a file on disk or in p4."""
+        """Non-ASCII filenames are returned verbatim, not C-quoted."""
         with tempfile.TemporaryDirectory() as ws:
             def git(*args):
                 subprocess.run(['git', *args], cwd=ws,
@@ -195,8 +193,7 @@ class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
 
 
 class TestOpenWarnings(unittest.TestCase):
-    """p4 exits 0 for per-file problems and only prints the reason, so a
-    file that did not open must be surfaced as a warning."""
+    """A file p4 did not open is surfaced as a warning, since p4 still exits 0."""
 
     @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.get_changelist_for_file',
@@ -217,8 +214,7 @@ class TestOpenWarnings(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_p4_ignored_file_warns_and_continues(self, mock_run, _check,
                                                  mock_log):
-        """p4 add exits non-zero for files matching .p4ignore; the file
-        is skipped with a warning and the remaining files still open."""
+        """A file matching .p4ignore is skipped with a warning and the rest still open."""
         mock_run.side_effect = [
             make_run_result(
                 returncode=1,

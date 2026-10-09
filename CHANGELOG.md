@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.1
+
 - Remove `sync-split`, deprecated in 0.5.0. `sync` splits out the configured split users; see `sync-split-users`
 - Remove `update --no-desc`, deprecated in 0.5.0. Use `update --no-commit-list` instead
 - `sync` only recognizes sync commits with the `git-p4son:` subject prefix. Subjects from older versions are no

@@ -51,6 +51,12 @@ def _sync_args(changelist, **overrides):
     return args
 
 
+def _files_at_commits(content):
+    """Fake get_files_at_commits from content(rel_path, commit, workspace_dir)."""
+    return lambda items, ws: {(commit, rel): content(rel, commit, ws)
+                              for commit, rel in items}
+
+
 @mock.patch('git_p4son.sync.make_writable', return_value=0)
 @mock.patch('git_p4son.sync.get_tracked_files')
 class TestRestoreWritable(unittest.TestCase):
@@ -403,7 +409,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             return f.read()
 
     @mock.patch('git_p4son.sync.get_blob_oids')
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -425,7 +431,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             def fake_get_file(rel, commit, _ws):
                 return b'head content' if commit == 'head123' \
                     else b'sync content'
-            mock_get_file.side_effect = fake_get_file
+            mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root)
@@ -436,13 +442,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(self._read(cf.ours_path), b'head content')
             self.assertEqual(self._read(cf.base_path), b'sync content')
             self.assertEqual(result.ignored, [])
+            mock_get_file.assert_called_once_with(
+                [('head123', 'a.txt'), ('sync456', 'a.txt')], ws)
             mode = os.stat(path).st_mode
             self.assertFalse(mode & stat.S_IWUSR)
 
     @mock.patch('git_p4son.sync.get_blob_oids',
                 return_value={('head123', 'a.txt'): 'same_oid',
                               ('sync456', 'a.txt'): 'same_oid'})
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -468,7 +476,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_blob_oids',
                 return_value={('head123', 'a.txt'): 'same_oid',
                               ('sync456', 'a.txt'): 'same_oid'})
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -490,8 +498,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertTrue(mode & stat.S_IWUSR)
 
     @mock.patch('git_p4son.sync.get_blob_oids')
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'head content')
+    @mock.patch('git_p4son.sync.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -514,8 +522,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertFalse(mode & stat.S_IWUSR)
 
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'head content')
+    @mock.patch('git_p4son.sync.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': None})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -539,8 +547,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertIsNone(cf.base_path)
             self.assertEqual(self._read(cf.ours_path), b'head content')
 
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'head content')
+    @mock.patch('git_p4son.sync.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'image.png': None})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -561,7 +569,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertTrue(result.changed[0].is_binary)
 
     @mock.patch('git_p4son.sync.get_blob_oids')
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -581,7 +589,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             def fake_get_file(rel, commit, _ws):
                 return b'a\nb\n' if commit == 'head123' else b'c\nd\n'
-            mock_get_file.side_effect = fake_get_file
+            mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root, uses_crlf=True)
@@ -591,7 +599,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(self._read(cf.base_path), b'c\r\nd\r\n')
 
     @mock.patch('git_p4son.sync.get_blob_oids')
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -611,7 +619,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             def fake_get_file(rel, commit, _ws):
                 return b'a\r\nb\r\n' if commit == 'head123' else b'c\nd\n'
-            mock_get_file.side_effect = fake_get_file
+            mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root, uses_crlf=True)
@@ -621,7 +629,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(self._read(cf.base_path), b'c\r\nd\r\n')
 
     @mock.patch('git_p4son.sync.get_blob_oids')
-    @mock.patch('git_p4son.sync.get_file_at_commit')
+    @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'image.png': 'sync456'})
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
@@ -643,7 +651,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             def fake_get_file(rel, commit, _ws):
                 return b'\x00a\nb\n' if commit == 'head123' \
                     else b'\x00c\nd\n'
-            mock_get_file.side_effect = fake_get_file
+            mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root, uses_crlf=True)
@@ -653,8 +661,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(self._read(cf.ours_path), b'\x00a\nb\n')
 
     @mock.patch('git_p4son.sync.find_base_commits', return_value={})
-    @mock.patch('git_p4son.sync.get_file_at_commit',
-                return_value=b'local content')
+    @mock.patch('git_p4son.sync.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'local content'))
     @mock.patch('git_p4son.sync.p4_fstat_file_info')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))

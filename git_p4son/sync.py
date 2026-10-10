@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
-    get_file_at_commit, get_head_commit, get_staged_files, get_tracked_files,
+    get_files_at_commits, get_head_commit, get_staged_files, get_tracked_files,
     format_sync_subject, git_last_sync, LastSync, merge_file,
 )
 from .hooks import run_hooks
@@ -94,17 +94,11 @@ def _to_crlf(content: bytes) -> bytes:
     return content.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
 
 
-def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
-                        workspace_dir: str, temp_root: str,
-                        is_binary: bool, uses_crlf: bool) -> ChangedFile:
+def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
+                        ours: bytes | None, base: bytes | None,
+                        temp_root: str, is_binary: bool,
+                        uses_crlf: bool) -> ChangedFile:
     """Stage HEAD and baseline content of a changed file, text in the workspace line ending."""
-    rel_path = os.path.relpath(meta.filepath, workspace_dir)
-    ours = get_file_at_commit(
-        rel_path, pre_sync_head_commit, workspace_dir)
-    base = None
-    if meta.base_commit is not None:
-        base = get_file_at_commit(
-            rel_path, meta.base_commit, workspace_dir)
 
     if uses_crlf and not is_binary:
         if ours is not None:
@@ -272,12 +266,20 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         log.success('')
 
         log.heading('Staging tracked changed files for post-sync merge')
+        queries = []
         for m in metas:
+            queries.append((pre_sync_head_commit, rel_paths[m.filepath]))
+            if m.base_commit is not None:
+                queries.append((m.base_commit, rel_paths[m.filepath]))
+        contents = get_files_at_commits(queries, workspace_dir)
+        for m in metas:
+            rel = rel_paths[m.filepath]
             info = file_info.get(m.filepath)
             is_binary = bool(info and is_binary_file_type(info.head_type))
             result.changed.append(_stage_changed_file(
-                m, pre_sync_head_commit, workspace_dir, temp_root,
-                is_binary, uses_crlf))
+                m, rel, contents[(pre_sync_head_commit, rel)],
+                contents.get((m.base_commit, rel)), temp_root, is_binary,
+                uses_crlf))
         log.success('')
 
     _log_prepare_summary(result, workspace_dir, clobber, unchanged_count,

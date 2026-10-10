@@ -245,16 +245,34 @@ def list_tracked_files(workspace_dir: str) -> list[str]:
 
 # --- file retrieval ---
 
-def get_file_at_commit(filepath: str, commit: str,
-                       workspace_dir: str) -> bytes | None:
-    """Retrieve file content at a specific commit. Returns None if the file doesn't exist."""
-    # Git uses forward slashes in tree paths, even on Windows
-    git_path = filepath.replace('\\', '/')
-    result = run(['git', 'show', f'{commit}:{git_path}'],
-                 cwd=workspace_dir, text=False, fail_on_returncode=False)
-    if result.returncode != 0:
-        return None
-    return result.stdout
+def get_files_at_commits(items: list[tuple[str, str]],
+                         workspace_dir: str) -> dict[tuple[str, str], bytes | None]:
+    """Map (commit, filepath) pairs to file content, or None where the file doesn't exist at that commit."""
+    if not items:
+        return {}
+    queries = []
+    for commit, filepath in items:
+        # Git uses forward slashes in tree paths, even on Windows
+        git_path = filepath.replace('\\', '/')
+        queries.append(f'{commit}:{git_path}')
+    # --batch answers each input line in order, so results map back by position.
+    result = run(['git', 'cat-file', '--batch'], cwd=workspace_dir,
+                 input='\n'.join(queries) + '\n', text=False)
+    out = result.stdout
+    contents: dict[tuple[str, str], bytes | None] = {}
+    pos = 0
+    for item in items:
+        end = out.index(b'\n', pos)
+        header = out[pos:end].split()
+        pos = end + 1
+        # Found objects print "<oid> <type> <size>", then the content and a newline; missing ones only a line.
+        contents[item] = None
+        if len(header) == 3 and header[2].isdigit():
+            size = int(header[2])
+            if header[1] == b'blob':
+                contents[item] = out[pos:pos + size]
+            pos += size + 1
+    return contents
 
 
 def get_blob_oids(items: list[tuple[str, str]],

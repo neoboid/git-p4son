@@ -13,7 +13,7 @@ from git_p4son.git import (
     find_base_commits,
     format_sync_subject,
     get_blob_oids,
-    get_file_at_commit,
+    get_files_at_commits,
     get_head_commit,
     get_staged_files,
     get_tracked_files,
@@ -175,42 +175,44 @@ class TestListTrackedFiles(GitRepoTestCase):
         self.assertEqual(list_tracked_files(self.tmpdir), [])
 
 
-class TestGetFileAtCommit(GitRepoTestCase):
-    def test_returns_file_content(self):
-        self._write_file('foo.txt', 'hello world')
-        self._commit()
-        content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
-        self.assertEqual(content, b'hello world')
-
-    def test_returns_none_for_missing_file(self):
-        self._write_file('foo.txt', 'hello')
-        self._commit()
-        content = get_file_at_commit('nonexistent.txt', 'HEAD', self.tmpdir)
-        self.assertIsNone(content)
-
-    def test_backslash_paths_normalized(self):
-        self._write_file('src/engine/test.cpp', 'hello')
-        self._commit()
-        content = get_file_at_commit(
-            'src\\engine\\test.cpp', 'HEAD', self.tmpdir)
-        self.assertEqual(content, b'hello')
-
-    def test_retrieves_from_specific_commit(self):
+class TestGetFilesAtCommits(GitRepoTestCase):
+    def test_reads_every_pair_in_one_call(self):
         self._write_file('foo.txt', 'version 1')
+        self._write_file('src/engine/test.cpp', 'hello')
         self._commit('first')
-        result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'], cwd=self.tmpdir,
-            capture_output=True, text=True)
-        first_sha = result.stdout.strip()
-
-        self._write_file('foo.txt', 'version 2')
+        first_sha = get_head_commit(self.tmpdir)
+        self._write_file('foo.txt', 'version 2\nwith\nlines\n')
         self._commit('second')
 
-        content = get_file_at_commit('foo.txt', first_sha, self.tmpdir)
-        self.assertEqual(content, b'version 1')
+        items = [('HEAD', 'foo.txt'), (first_sha, 'foo.txt'),
+                 ('HEAD', 'missing.txt'), ('HEAD', 'src'),
+                 ('HEAD', 'src\\engine\\test.cpp')]
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            contents = get_files_at_commits(items, self.tmpdir)
+        commands = [line for line in buffer.getvalue().splitlines()
+                    if line.startswith('>')]
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(contents, {
+            ('HEAD', 'foo.txt'): b'version 2\nwith\nlines\n',
+            (first_sha, 'foo.txt'): b'version 1',
+            ('HEAD', 'missing.txt'): None,
+            ('HEAD', 'src'): None,
+            ('HEAD', 'src\\engine\\test.cpp'): b'hello',
+        })
 
-        content = get_file_at_commit('foo.txt', 'HEAD', self.tmpdir)
-        self.assertEqual(content, b'version 2')
+    def test_binary_content_is_returned_verbatim(self):
+        path = os.path.join(self.tmpdir, 'blob.bin')
+        data = bytes(range(256)) + b'\r\n\n\x00'
+        with open(path, 'wb') as f:
+            f.write(data)
+        self._commit()
+        self.assertEqual(
+            get_files_at_commits([('HEAD', 'blob.bin')], self.tmpdir),
+            {('HEAD', 'blob.bin'): data})
+
+    def test_empty_input(self):
+        self.assertEqual(get_files_at_commits([], self.tmpdir), {})
 
 
 class TestGetBlobOids(GitRepoTestCase):

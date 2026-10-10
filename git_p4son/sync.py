@@ -309,10 +309,8 @@ def _merge_changed_files(changed_files: list[ChangedFile],
         rel_path = os.path.relpath(filepath, workspace_dir)
         log.info(f'{rel_path}: base = {cf.base_commit or "(none)"}')
 
-        theirs_exists = os.path.exists(filepath)
-
         # Deleted upstream: let the delete stand, local edits stay in git history.
-        if not theirs_exists:
+        if not os.path.exists(filepath):
             if cf.ours_path is not None:
                 deleted_upstream_with_local_changes.append(filepath)
             continue

@@ -677,12 +677,11 @@ def sync_command(args: argparse.Namespace) -> int:
     clobber = bool(client_spec and client_spec.clobber)
     allwrite = bool(client_spec and client_spec.allwrite)
 
-    # A dry run syncs nothing, so it skips the checks and the hooks.
-    if not dry_run:
-        # Before splitting, whose queries are the costly part.
-        if not sync_preflight(depot_root, workspace_dir, invocation_dir,
-                              ignore_blocking_processes):
-            return 1
+    # A dry run skips the checks and hooks, which run before the costly split queries.
+    if not dry_run and not sync_preflight(depot_root, workspace_dir,
+                                          invocation_dir,
+                                          ignore_blocking_processes):
+        return 1
 
     if split:
         log.heading('Finding split users')

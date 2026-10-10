@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `sync` no longer reports "No previous sync found" when the newest commit mentioning a sync subject, such as a
+  revert of one, is not itself a sync commit. It now finds the last real sync commit
 - `sync last-synced` now merges local changes back and reports files p4 did not sync, like any other sync.
   Before, it re-synced and left locally modified writable files read-only at the Perforce version
 - `sync` no longer warns when the workspace has the clobber option enabled. git-p4son has not needed clobber

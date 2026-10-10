@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
-    get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
+    get_file_at_commit, get_head_commit, get_staged_files, get_tracked_files,
     format_sync_subject, git_last_sync, LastSync, merge_file,
 )
 from .hooks import run_hooks
@@ -721,12 +721,11 @@ def sync_command(args: argparse.Namespace) -> int:
             preps.append(sync_pass(changelist, changelist_label))
 
             log.heading(f'Committing git changes for CL {changelist}')
-            dirty_files = get_dirty_files(workspace_dir)
-            if dirty_files:
-                add_all_files(workspace_dir)
+            add_all_files(workspace_dir)
+            staged = get_staged_files(workspace_dir)
             commit(format_sync_subject(depot_root, changelist), workspace_dir,
                    allow_empty=True)
-            log.success(f'Committed {len(dirty_files)} files')
+            log.success(f'Committed {len(staged)} files')
 
         # Dedup files that showed up in several sync passes.
         by_path = {cf.filepath: cf for p in preps for cf in p.changed}

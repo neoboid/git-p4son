@@ -762,27 +762,14 @@ def sync_command(args: argparse.Namespace) -> int:
             run_hooks('post-sync', workspace_dir, invocation_dir)
             return 0
 
-        all_changed: list[ChangedFile] = []
-        all_ignored: list[str] = []
-        all_not_synced: list[str] = []
-        all_synced: list[str] = []
-        last_changelist = last_sync.changelist if last_sync else None
-
+        preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
-        if last_changelist is not None:
-            prep = sync_pass(last_changelist, LAST_SYNCED_LABEL)
-            all_changed.extend(prep.changed)
-            all_ignored.extend(prep.ignored)
-            all_not_synced.extend(prep.not_synced)
-            all_synced.extend(prep.synced)
+        if last_sync:
+            preps.append(sync_pass(last_sync.changelist, LAST_SYNCED_LABEL))
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for changelist, changelist_label in targets:
-            prep = sync_pass(changelist, changelist_label)
-            all_changed.extend(prep.changed)
-            all_ignored.extend(prep.ignored)
-            all_not_synced.extend(prep.not_synced)
-            all_synced.extend(prep.synced)
+            preps.append(sync_pass(changelist, changelist_label))
 
             log.heading(f'Committing git changes for CL {changelist}')
             dirty_files = get_dirty_files(workspace_dir)
@@ -793,28 +780,25 @@ def sync_command(args: argparse.Namespace) -> int:
             log.success(f'Committed {len(dirty_files)} files')
 
         # Dedup files that showed up in several sync passes.
-        by_path: dict[str, ChangedFile] = {}
-        for cf in all_changed:
-            by_path[cf.filepath] = cf
+        by_path = {cf.filepath: cf for p in preps for cf in p.changed}
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         _merge_changed_files(changed_files, workspace_dir, temp_root)
 
         if clobber:
-            reported = all_ignored
-            heading = ('Git-ignored writable files overwritten by p4 '
-                       '(clobber enabled)')
+            reported = [f for p in preps for f in p.ignored]
+            heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
         elif allwrite:
-            reported = all_not_synced
+            reported = [f for p in preps for f in p.not_synced]
             heading = 'Files not synced (git-ignored and locally modified)'
         else:
-            reported = all_ignored
+            reported = [f for p in preps for f in p.ignored]
             heading = 'Files not synced (git-ignored and writable)'
         if reported:
             log.heading(heading)
             for f in sorted(set(reported)):
                 log.info(os.path.relpath(f, workspace_dir))
 
-        _restore_writable(all_synced, workspace_dir)
+        _restore_writable([f for p in preps for f in p.synced], workspace_dir)
 
         run_hooks('post-sync', workspace_dir, invocation_dir)
         return 0

@@ -186,7 +186,8 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
                                 text=text,
                                 encoding='utf-8' if text else None,
                                 errors='replace' if text else None,
-                                input=input)
+                                input=input if text or input is None
+                                else input.encode('utf-8'))
     except OSError:
         # E.g. a missing executable: stop the spinner overwriting the error.
         log.stop_spinner()

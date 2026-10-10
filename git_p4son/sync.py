@@ -99,7 +99,6 @@ def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
                         temp_root: str, is_binary: bool,
                         uses_crlf: bool) -> ChangedFile:
     """Stage HEAD and baseline content of a changed file, text in the workspace line ending."""
-
     if uses_crlf and not is_binary:
         if ours is not None:
             ours = _to_crlf(ours)

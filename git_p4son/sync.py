@@ -635,7 +635,7 @@ def sync_command(args: argparse.Namespace) -> int:
 
     lowered = [c.lower() for c in args.changelist]
 
-    # "last-synced" re-syncs the current changelist and takes its own path below.
+    # "last-synced" re-syncs the current changelist: no targets, only the catch-up pass.
     resync_last_synced = 'last-synced' in lowered
     targets: list[tuple[int, str]] = []
     if resync_last_synced:

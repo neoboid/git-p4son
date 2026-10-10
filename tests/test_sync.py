@@ -846,6 +846,12 @@ class TestBuildSyncTargets(unittest.TestCase):
         targets = build_sync_targets(changes, ['me'], 100, [103])
         self.assertEqual(targets, [101, 102, 103])
 
+    def test_user_names_match_case_insensitively(self):
+        changes = make_changes((100, 'other'), (101, 'other'),
+                               (102, 'Me'), (103, 'other'))
+        targets = build_sync_targets(changes, ['me'], 100, [103])
+        self.assertEqual(targets, [101, 102, 103])
+
     def test_two_own_changelists(self):
         changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
                                (103, 'other'), (104, 'other'), (105, 'me'),

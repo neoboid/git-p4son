@@ -478,6 +478,14 @@ def _restore_writable(synced: list[str], workspace_dir: str) -> None:
     log.success(f'{changed} of {len(tracked)} tracked files made writable')
 
 
+def _split_user_changes(changes: list[P4Change], users: list[str],
+                        last_synced: int) -> list[P4Change]:
+    """The changes submitted by one of users after last_synced, matching names case-insensitively."""
+    lowered = {u.lower() for u in users}
+    return [c for c in changes
+            if c.change > last_synced and c.user.lower() in lowered]
+
+
 def build_sync_targets(changes: list[P4Change], users: list[str],
                        last_synced: int, required: list[int]) -> list[int]:
     """Build the sync sequence that splits out the given users' changelists.
@@ -485,10 +493,11 @@ def build_sync_targets(changes: list[P4Change], users: list[str],
     Each of their changelists is preceded by the one submitted just before it,
     so it lands in a commit of its own. changes is oldest first.
     """
+    to_split = {c.change for c in _split_user_changes(
+        changes, users, last_synced)}
     split: list[int] = []
-    lowered = {u.lower() for u in users}
     for i, change in enumerate(changes):
-        if change.change <= last_synced or change.user.lower() not in lowered:
+        if change.change not in to_split:
             continue
         last = split[-1] if split else last_synced
         if i > 0 and changes[i - 1].change > last:
@@ -522,9 +531,7 @@ def _split_targets(targets: list[tuple[int, str]], users: list[str],
                                     workspace_dir)
     log.success(f'{len(changes)} changelists')
 
-    lowered = {u.lower() for u in users}
-    matched = [c for c in changes
-               if c.change > last_synced and c.user.lower() in lowered]
+    matched = _split_user_changes(changes, users, last_synced)
     log.heading('Finding changelists to split into their own commits')
     if matched:
         for change in matched:

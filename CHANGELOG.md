@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `sync` no longer warns when the workspace has the clobber option enabled. git-p4son has not needed clobber
+  since 0.3.0. A leftover `.git-p4son/state.toml`, which only remembered dismissing the warning, can be deleted
+
 ## 0.5.1
 
 - Remove `sync-split`, deprecated in 0.5.0. `sync` splits out the configured split users; see `sync-split-users`

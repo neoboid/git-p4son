@@ -11,6 +11,7 @@ from unittest import mock
 from git_p4son.common import RunError
 from git_p4son.git import (
     find_base_commits,
+    format_sync_subject,
     get_blob_oids,
     get_file_at_commit,
     get_head_commit,
@@ -18,6 +19,7 @@ from git_p4son.git import (
     git_last_sync,
     list_tracked_files,
     merge_file,
+    parse_sync_subject,
 )
 from tests.helpers import make_run_result
 
@@ -462,7 +464,33 @@ class TestGitLastSync(unittest.TestCase):
         result = git_last_sync('/ws')
         self.assertEqual(result.changelist, 99999)
         cmd = mock_rwo.call_args[0][0]
-        self.assertIn('--grep=: p4 sync //', cmd)
+        self.assertIn('--grep=^git-p4son: p4 sync ', cmd)
+
+
+class TestGitLastSyncInRepo(GitRepoTestCase):
+    def test_skips_commits_that_only_mention_a_sync_subject(self):
+        self._write_file('a.cpp', 'X')
+        self._commit('git-p4son: p4 sync //ws/...@100')
+        s_sync = get_head_commit(self.tmpdir)
+        self._write_file('a.cpp', 'Y')
+        self._commit('Revert "git-p4son: p4 sync //ws/...@200"')
+
+        result = git_last_sync(self.tmpdir)
+        self.assertEqual(result.changelist, 100)
+        self.assertEqual(result.commit, s_sync)
+
+
+class TestSyncSubject(unittest.TestCase):
+    def test_round_trip(self):
+        subject = format_sync_subject('//ws/Engine', 12345)
+        self.assertEqual(subject, 'git-p4son: p4 sync //ws/Engine/...@12345')
+        self.assertEqual(parse_sync_subject(subject), 12345)
+
+    def test_other_subjects_are_not_sync_subjects(self):
+        for subject in ['other: p4 sync //ws/...@1', 'Fix p4 sync //ws/...@1',
+                        'git-p4son: p4 sync //ws/...@head', 'git-p4son: p4 sync //ws/...@1 extra']:
+            with self.subTest(subject=subject):
+                self.assertIsNone(parse_sync_subject(subject))
 
 
 class TestMergeFile(unittest.TestCase):

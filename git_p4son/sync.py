@@ -608,19 +608,16 @@ def _resolve_sync_targets(
         log.error('The "head" keyword must come last')
         return None
 
-    if not raw:
-        targets = [_latest_target(depot_root, workspace_dir)]
-    else:
-        targets = []
-        for c in raw:
-            if c.lower() == 'head':
-                targets.append(_latest_target(depot_root, workspace_dir))
-            else:
-                try:
-                    targets.append((int(c), 'specified'))
-                except ValueError:
-                    log.error(f'Invalid changelist number: {c}')
-                    return None
+    targets = []
+    for c in raw or ['head']:
+        if c.lower() == 'head':
+            targets.append(_latest_target(depot_root, workspace_dir))
+        else:
+            try:
+                targets.append((int(c), 'specified'))
+            except ValueError:
+                log.error(f'Invalid changelist number: {c}')
+                return None
 
     numbers = [cl for cl, _ in targets]
     for prev, curr in zip(numbers, numbers[1:]):

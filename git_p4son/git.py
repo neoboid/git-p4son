@@ -306,40 +306,21 @@ def _chunk_paths_by_length(paths: list[str], budget: int) -> list[list[str]]:
 def find_base_commits(filepaths: list[str], before_commit: str,
                       workspace_dir: str) -> dict[str, str | None]:
     """Map each path to its most recent sync commit before before_commit, else its latest add, else None."""
-    result: dict[str, str | None] = {}
+    result: dict[str, str | None] = dict.fromkeys(filepaths)
     if not filepaths:
         return result
     # Git uses forward slashes in tree paths, even on Windows
     by_git_path = {fp.replace('\\', '/'): fp for fp in filepaths}
-    chunks = _chunk_paths_by_length(
-        list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
-    with batched_command_log(_find_base_commits_command(before_commit),
-                             len(by_git_path), len(chunks)):
-        for chunk in chunks:
-            chunk_result = _find_base_commits_chunk(
-                chunk, before_commit, workspace_dir)
-            for git_path, sha in chunk_result.items():
-                result[by_git_path[git_path]] = sha
-    return result
-
-
-def _find_base_commits_command(before_commit: str) -> list[str]:
-    """The history walk behind find_base_commits, up to its `--`."""
-    return ['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
-            '--name-status', '--pretty=format:%x01%H%x01%s',
-            before_commit, '--']
-
-
-def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
-                             workspace_dir: str) -> dict[str, str | None]:
-    """Resolve baselines for git_paths in one newest-first history walk."""
-    result: dict[str, str | None] = dict.fromkeys(git_paths)
-    res = run(_find_base_commits_command(before_commit) + git_paths,
-              cwd=workspace_dir, fail_on_returncode=False)
+    # Paths go on stdin after `--`, so any number of them takes a single history walk.
+    res = run(['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
+               '--name-status', '--pretty=format:%x01%H%x01%s', '--stdin',
+               before_commit],
+              cwd=workspace_dir, input='--\n' + '\n'.join(by_git_path) + '\n',
+              fail_on_returncode=False)
     if res.returncode != 0:
         return result
 
-    remaining = set(git_paths)
+    remaining = set(by_git_path)
     fallback_add: dict[str, str] = {}
     current_sha = ''
     current_is_sync = False
@@ -352,12 +333,12 @@ def _find_base_commits_chunk(git_paths: list[str], before_commit: str,
         if not sep or path not in remaining:
             continue
         if current_is_sync:
-            result[path] = current_sha
+            result[by_git_path[path]] = current_sha
             remaining.discard(path)
         elif status.startswith('A') and path not in fallback_add:
             fallback_add[path] = current_sha
     for path in remaining:
-        result[path] = fallback_add.get(path)
+        result[by_git_path[path]] = fallback_add.get(path)
     return result
 
 

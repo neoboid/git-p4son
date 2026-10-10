@@ -376,8 +376,8 @@ class TestFindBaseCommits(GitRepoTestCase):
                                   'b.cpp': s_add,
                                   'missing.cpp': None})
 
-    def test_chunking_preserves_results(self):
-        """A tiny pathspec budget forces one walk per file without changing the results."""
+    def test_one_walk_for_any_number_of_paths(self):
+        """All paths go on stdin, so a single git log call resolves them all."""
         self._write_file('a.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')
         s_sync = self._rev_parse()
@@ -385,19 +385,18 @@ class TestFindBaseCommits(GitRepoTestCase):
         self._commit('user: add b.cpp')
         s_add = self._rev_parse()
 
+        missing = [f'missing/file{i}.cpp' for i in range(5000)]
         buffer = io.StringIO()
-        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1), \
-                contextlib.redirect_stdout(buffer):
+        with contextlib.redirect_stdout(buffer):
             result = find_base_commits(
-                ['a.cpp', 'b.cpp', 'missing.cpp'], 'HEAD', self.tmpdir)
+                ['a.cpp', 'b.cpp'] + missing, 'HEAD', self.tmpdir)
         commands = [line for line in buffer.getvalue().splitlines()
                     if line.startswith('>')]
         self.assertEqual(len(commands), 1)
-        self.assertTrue(commands[0].endswith(' <3 paths in 3 batches>'),
-                        commands[0])
-        self.assertEqual(result, {'a.cpp': s_sync,
-                                  'b.cpp': s_add,
-                                  'missing.cpp': None})
+        self.assertIn('--stdin', commands[0])
+        self.assertEqual(result['a.cpp'], s_sync)
+        self.assertEqual(result['b.cpp'], s_add)
+        self.assertEqual({result[f] for f in missing}, {None})
 
     def test_empty_input(self):
         self.assertEqual(find_base_commits([], 'HEAD', self.tmpdir), {})

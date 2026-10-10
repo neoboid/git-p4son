@@ -3,6 +3,7 @@
 import os
 import os.path
 import re
+from dataclasses import dataclass
 
 from .common import (
     CommandError,
@@ -278,8 +279,42 @@ def get_head_commit(workspace_dir: str) -> str:
     return result.stdout[0].strip()
 
 
+# --- sync commits ---
+
 # Substring identifying git-p4son sync commit subjects.
 SYNC_SUBJECT_MARKER = ': p4 sync //'
+
+
+@dataclass
+class LastSync:
+    """Info about the most recent p4son sync commit."""
+    changelist: int
+    commit: str
+
+
+def git_last_sync(workspace_dir: str) -> LastSync | None:
+    """Get the changelist number and commit SHA of the most recent sync commit."""
+    res = run_with_output(
+        ['git', 'log', '-1', '--pretty=%H %s',
+         f'--grep={SYNC_SUBJECT_MARKER}'],
+        cwd=workspace_dir)
+    if len(res.stdout) == 0:
+        return None
+
+    line = res.stdout[0]
+    # Format: "<commit_hash> <subject>"
+    parts = line.split(' ', 1)
+    if len(parts) != 2:
+        return None
+
+    commit_hash, subject = parts
+    pattern = r"^git-p4son: p4 sync //.+@(\d+)$"
+    match = re.search(pattern, subject)
+    if not match:
+        return None
+
+    return LastSync(changelist=int(match.group(1)), commit=commit_hash)
+
 
 # Pathspec budget per git call; Windows caps a command line at 32767 characters.
 _PATHSPEC_LENGTH_BUDGET = 20000

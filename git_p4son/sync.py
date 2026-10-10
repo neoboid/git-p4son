@@ -3,7 +3,6 @@
 import argparse
 import functools
 import os
-import re
 import shutil
 import stat
 import tempfile
@@ -13,7 +12,7 @@ from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
-    merge_file, SYNC_SUBJECT_MARKER,
+    git_last_sync, LastSync, merge_file,
 )
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
@@ -46,37 +45,6 @@ from .perforce import (
 
 LAST_SYNCED_LABEL = 'last synced'
 SPLIT_LABEL = 'split'
-
-
-@dataclass
-class LastSync:
-    """Info about the most recent p4son sync commit."""
-    changelist: int
-    commit: str
-
-
-def git_last_sync(workspace_dir: str) -> LastSync | None:
-    """Get the changelist number and commit SHA of the most recent sync commit."""
-    res = run_with_output(
-        ['git', 'log', '-1', '--pretty=%H %s',
-         f'--grep={SYNC_SUBJECT_MARKER}'],
-        cwd=workspace_dir)
-    if len(res.stdout) == 0:
-        return None
-
-    line = res.stdout[0]
-    # Format: "<commit_hash> <subject>"
-    parts = line.split(' ', 1)
-    if len(parts) != 2:
-        return None
-
-    commit_hash, subject = parts
-    pattern = r"^git-p4son: p4 sync //.+@(\d+)$"
-    match = re.search(pattern, subject)
-    if not match:
-        return None
-
-    return LastSync(changelist=int(match.group(1)), commit=commit_hash)
 
 
 @dataclass

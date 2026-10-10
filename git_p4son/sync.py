@@ -1,6 +1,7 @@
 """Sync command implementation for git-p4son."""
 
 import argparse
+import functools
 import os
 import re
 import shutil
@@ -750,10 +751,13 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success(f'{pre_sync_head_commit}')
 
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
+        sync_pass = functools.partial(
+            _sync_pass, depot_root=depot_root, workspace_dir=workspace_dir,
+            pre_sync_head_commit=pre_sync_head_commit, temp_root=temp_root,
+            uses_crlf=uses_crlf, clobber=clobber, allwrite=allwrite)
+
         if resync_last_synced:
-            prep = _sync_pass(last_sync.changelist, LAST_SYNCED_LABEL,
-                              depot_root, workspace_dir, pre_sync_head_commit,
-                              temp_root, uses_crlf, clobber, allwrite)
+            prep = sync_pass(last_sync.changelist, LAST_SYNCED_LABEL)
             _restore_writable(prep.synced, workspace_dir)
             run_hooks('post-sync', workspace_dir, invocation_dir)
             return 0
@@ -766,9 +770,7 @@ def sync_command(args: argparse.Namespace) -> int:
 
         # Catch-up pass to the last synced changelist, folded into the first commit.
         if last_changelist is not None:
-            prep = _sync_pass(last_changelist, LAST_SYNCED_LABEL,
-                              depot_root, workspace_dir, pre_sync_head_commit,
-                              temp_root, uses_crlf, clobber, allwrite)
+            prep = sync_pass(last_changelist, LAST_SYNCED_LABEL)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             all_not_synced.extend(prep.not_synced)
@@ -776,9 +778,7 @@ def sync_command(args: argparse.Namespace) -> int:
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for changelist, changelist_label in targets:
-            prep = _sync_pass(changelist, changelist_label, depot_root,
-                              workspace_dir, pre_sync_head_commit, temp_root,
-                              uses_crlf, clobber, allwrite)
+            prep = sync_pass(changelist, changelist_label)
             all_changed.extend(prep.changed)
             all_ignored.extend(prep.ignored)
             all_not_synced.extend(prep.not_synced)

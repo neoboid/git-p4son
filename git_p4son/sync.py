@@ -610,7 +610,6 @@ def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
     invocation_dir = args.invocation_dir
-    ignore_blocking_processes = args.ignore_blocking_processes
 
     resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
@@ -671,16 +670,14 @@ def sync_command(args: argparse.Namespace) -> int:
         else:
             split = True
 
-    dry_run = args.dry_run
-
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)
     allwrite = bool(client_spec and client_spec.allwrite)
 
     # A dry run skips the checks and hooks, which run before the costly split queries.
-    if not dry_run and not sync_preflight(depot_root, workspace_dir,
-                                          invocation_dir,
-                                          ignore_blocking_processes):
+    if not args.dry_run and not sync_preflight(
+            depot_root, workspace_dir, invocation_dir,
+            args.ignore_blocking_processes):
         return 1
 
     if split:
@@ -692,13 +689,13 @@ def sync_command(args: argparse.Namespace) -> int:
         targets = _split_targets(targets, users, last_sync.changelist,
                                  depot_root, workspace_dir)
 
-    if split or dry_run:
+    if split or args.dry_run:
         log.heading('Sync sequence')
         if resync_last_synced:
             log.success(f'{last_sync.changelist} ({LAST_SYNCED_LABEL})')
         else:
             log.success(' '.join(str(cl) for cl, _ in targets))
-    if dry_run:
+    if args.dry_run:
         log.info('Dry run, nothing synced.')
         return 0
 

@@ -1132,7 +1132,7 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.sync.git_last_sync', return_value=None)
-    @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
+    @mock.patch('git_p4son.sync.get_tracked_files', return_value={'foo.txt'})
     @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('foo.txt', 'modify')])
@@ -1151,7 +1151,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
-    @mock.patch('git_p4son.sync.is_file_tracked', return_value=False)
+    @mock.patch('git_p4son.sync.get_tracked_files', return_value=set())
     @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('ignored.bin', 'modify')])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
@@ -1918,7 +1918,7 @@ class TestSyncPreflight(unittest.TestCase):
         mock_run_hooks.assert_not_called()
 
     @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.is_file_tracked', return_value=True)
+    @mock.patch('git_p4son.sync.get_tracked_files', return_value={'a.txt'})
     @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('a.txt', 'modify')])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])

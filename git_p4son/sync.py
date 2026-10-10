@@ -636,7 +636,6 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # "last-synced" re-syncs the current changelist: no targets, only the catch-up pass.
     resync_last_synced = 'last-synced' in lowered
-    targets: list[tuple[int, str]] = []
     if resync_last_synced:
         if lowered != ['last-synced']:
             log.error('The "last-synced" keyword cannot be combined with '
@@ -645,16 +644,16 @@ def sync_command(args: argparse.Namespace) -> int:
         if not last_sync:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
+        targets = []
     else:
-        resolved_targets = _resolve_sync_targets(
+        targets = _resolve_sync_targets(
             args.changelist, last_sync, depot_root, workspace_dir, args.force)
-        if resolved_targets is None:
+        if targets is None:
             return 1
-        if not resolved_targets:
+        if not targets:
             log.info('Already synced, nothing to do.')
             log.heading('Skipping post-sync hooks')
             return 0
-        targets = resolved_targets
 
     # Splitting needs a previous sync to look forward from.
     split = False

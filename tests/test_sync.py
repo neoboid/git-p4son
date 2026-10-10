@@ -969,7 +969,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -979,10 +979,10 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_sync_specific_cl(self, _depot, _p4clean, mock_last_sync,
                               _head, _preview, mock_prep, _p4sync,
-                              mock_git_clean, _git_add, _git_commit):
+                              mock_staged, _git_add, _git_commit):
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = [('file.txt', 'modify')]
+        mock_staged.return_value = ['file.txt']
         args = _sync_args(changelist=['12345'],
                           force=False, workspace_dir='/ws')
         rc = sync_command(args)
@@ -992,7 +992,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync', return_value=['/ws/edited.log'])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1029,7 +1029,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync', return_value=[])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview')
@@ -1063,7 +1063,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -1076,7 +1076,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_workspace_placeholder_resolved(self, _depot, mock_spec,
                                             _p4clean, mock_last_sync, _head,
                                             mock_preview, mock_prep, _p4sync,
-                                            mock_git_clean, _git_add,
+                                            mock_staged, _git_add,
                                             _git_commit):
         spec = mock.Mock()
         spec.name = 'real-client'
@@ -1086,7 +1086,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_spec.return_value = spec
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = [('file.txt', 'modify')]
+        mock_staged.return_value = ['file.txt']
         args = _sync_args(changelist=['12345'],
                           force=False, workspace_dir='/ws')
         rc = sync_command(args)
@@ -1115,7 +1115,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.git_last_sync', return_value=None)
     @mock.patch('git_p4son.sync.get_tracked_files', return_value={'foo.txt'})
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_get_opened_files',
                 return_value=[('foo.txt', 'modify')])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
@@ -1127,7 +1127,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -1140,10 +1140,10 @@ class TestSyncCommand(unittest.TestCase):
     def test_untracked_p4_opened_files_are_allowed(
             self, _depot, _p4clean, _tracked, mock_last_sync,
             _head, _preview, mock_prep, _p4sync,
-            mock_git_clean, _add, _commit):
+            mock_staged, _add, _commit):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = []
+        mock_staged.return_value = []
         args = _sync_args(changelist=['200'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -1151,7 +1151,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_older_cl_without_force_aborts(self, _depot, _git_clean,
                                            _p4clean, mock_last_sync, _head):
@@ -1162,7 +1162,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -1173,10 +1173,10 @@ class TestSyncCommand(unittest.TestCase):
     def test_older_cl_with_force_proceeds(self, _depot, _p4clean,
                                           mock_last_sync, _head, _preview,
                                           mock_prep, _p4sync,
-                                          mock_git_clean, _add, _commit):
+                                          mock_staged, _add, _commit):
         mock_last_sync.return_value = LastSync(changelist=200, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = [('file.txt', 'modify')]
+        mock_staged.return_value = ['file.txt']
         args = _sync_args(changelist=['100'], force=True, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
@@ -1208,7 +1208,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_last_synced(self, _depot, _git_clean, _p4clean,
                          mock_last_sync, _head, _preview, mock_prep,
@@ -1236,7 +1236,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_last_synced_restores_writable_files(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
@@ -1258,7 +1258,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_last_synced_merges_local_changes_without_committing(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
@@ -1281,7 +1281,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_last_synced_skips_sync_when_preview_empty(
             self, _depot, _git_clean, _p4clean, mock_last_sync,
@@ -1304,7 +1304,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_failing_pre_sync_hook_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
@@ -1331,7 +1331,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_pre_sync_hook_runs_once_for_multiple_changelists(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
@@ -1351,9 +1351,10 @@ class TestSyncCommand(unittest.TestCase):
         ]
         self.assertEqual(len(pre_sync_calls), 1)
 
+    @mock.patch('git_p4son.sync.add_all_files', mock.Mock())
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -1363,18 +1364,19 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_latest_keyword(self, _depot, _p4clean, mock_last_sync, _head,
                             _preview, mock_prep, _p4sync,
-                            mock_git_clean, _commit, mock_get_latest):
+                            mock_staged, _commit, mock_get_latest):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = []
+        mock_staged.return_value = []
         args = _sync_args(changelist=[], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
+    @mock.patch('git_p4son.sync.add_all_files', mock.Mock())
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.get_dirty_files')
+    @mock.patch('git_p4son.sync.get_staged_files')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
@@ -1384,12 +1386,12 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_explicit_head_keyword(self, _depot, _p4clean, mock_last_sync,
                                    _head, _preview, mock_prep, _p4sync,
-                                   mock_git_clean, _commit, mock_get_latest):
+                                   mock_staged, _commit, mock_get_latest):
         """An explicit "head" syncs to the latest changelist."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
-        mock_git_clean.return_value = []
+        mock_staged.return_value = []
         args = _sync_args(changelist=['head'],
                           force=False, workspace_dir='/ws')
         rc = sync_command(args)
@@ -1399,7 +1401,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1435,7 +1437,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1461,7 +1463,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1489,7 +1491,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1521,7 +1523,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_older_changelist_in_list_without_force_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
@@ -1534,7 +1536,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_non_increasing_changelists_abort(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
@@ -1547,7 +1549,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_duplicate_changelists_abort(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
@@ -1560,7 +1562,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_last_synced_combined_with_number_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
@@ -1573,7 +1575,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_head_not_last_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
@@ -1587,7 +1589,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
@@ -1617,7 +1619,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_trailing_head_below_preceding_cl_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
@@ -1727,7 +1729,8 @@ class TestSyncSplitting(unittest.TestCase):
                 ('git_p4son.sync.sync_preflight', True),
                 ('git_p4son.sync.get_head_commit', 'def456'),
                 ('git_p4son.sync._sync_pass', WritableSyncFileSet()),
-                ('git_p4son.sync.get_dirty_files', []),
+                ('git_p4son.sync.get_staged_files', []),
+                ('git_p4son.sync.add_all_files', None),
                 ('git_p4son.sync.commit', None),
                 ('git_p4son.sync._merge_changed_files', None),
                 ('git_p4son.sync._restore_writable', None),

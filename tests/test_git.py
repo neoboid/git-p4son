@@ -15,6 +15,7 @@ from git_p4son.git import (
     get_blob_oids,
     get_file_at_commit,
     get_head_commit,
+    get_staged_files,
     get_tracked_files,
     git_last_sync,
     list_tracked_files,
@@ -131,6 +132,27 @@ class TestGetTrackedFiles(GitRepoTestCase):
     def test_empty_input(self):
         result = get_tracked_files([], self.tmpdir)
         self.assertEqual(result, set())
+
+
+class TestGetStagedFiles(GitRepoTestCase):
+    def test_lists_each_staged_file_including_new_folders(self):
+        self._write_file('a.txt', 'A')
+        self._write_file('b.txt', 'B')
+        self._commit('initial')
+        self._write_file('a.txt', 'A2')
+        os.remove(os.path.join(self.tmpdir, 'b.txt'))
+        self._write_file('new/one.txt', '1')
+        self._write_file('new/two.txt', '2')
+        subprocess.run(['git', 'add', '.'], cwd=self.tmpdir,
+                       capture_output=True, check=True)
+
+        self.assertEqual(sorted(get_staged_files(self.tmpdir)),
+                         ['a.txt', 'b.txt', 'new/one.txt', 'new/two.txt'])
+
+    def test_nothing_staged(self):
+        self._write_file('a.txt', 'A')
+        self._commit('initial')
+        self.assertEqual(get_staged_files(self.tmpdir), [])
 
 
 class TestListTrackedFiles(GitRepoTestCase):

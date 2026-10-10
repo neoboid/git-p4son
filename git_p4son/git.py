@@ -110,6 +110,14 @@ def add_all_files(workspace_dir: str) -> None:
     run_with_output(['git', 'add', '.'], cwd=workspace_dir)
 
 
+def get_staged_files(workspace_dir: str) -> list[str]:
+    """Return the files staged for the next commit, as repo-relative slash paths."""
+    # Compares the index with HEAD without scanning the worktree.
+    result = run(['git', 'diff', '--cached', '--name-only', '-z'],
+                 cwd=workspace_dir)
+    return [path for path in '\n'.join(result.stdout).split('\0') if path]
+
+
 def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
     """Commit changes to git."""
     args = ['commit', '-m', message]

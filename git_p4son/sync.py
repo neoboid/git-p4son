@@ -515,7 +515,7 @@ def _check_split_user_args(names: list[str],
     """Return the -u users as the server spells them, or None if any is unknown."""
     real = [name for name in names if name != USER_PLACEHOLDER]
     if not real:
-        return list(names)
+        return names
     checked = check_p4_users(real, workspace_dir)
     if checked is None:
         return None

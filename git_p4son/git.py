@@ -84,20 +84,6 @@ def get_head_subject(workspace_dir: str) -> str | None:
 
 # --- status ---
 
-def is_file_tracked(filename: str, workspace_dir: str) -> bool:
-    """Return whether a file is tracked by git."""
-    repo_path = normalize_workspace_path(filename, workspace_dir)
-    if repo_path is None:
-        return False
-
-    try:
-        run(['git', 'ls-files', '--error-unmatch', '--', repo_path],
-            cwd=workspace_dir)
-        return True
-    except RunError:
-        return False
-
-
 def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for dirty files."""
     res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)

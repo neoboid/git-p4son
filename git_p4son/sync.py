@@ -13,7 +13,7 @@ from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
-    is_file_tracked, merge_file,
+    merge_file,
 )
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
@@ -498,11 +498,9 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
     """Report whether the p4 workspace has no git-tracked files opened."""
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
-    tracked_opened_files = [
-        (filename, change)
-        for filename, change in opened_files
-        if is_file_tracked(filename, workspace_dir)
-    ]
+    tracked = get_tracked_files([f for f, _ in opened_files], workspace_dir)
+    tracked_opened_files = [(f, change) for f, change in opened_files
+                            if f in tracked]
     if tracked_opened_files:
         for filename, change in tracked_opened_files:
             log.file_change(filename, change)

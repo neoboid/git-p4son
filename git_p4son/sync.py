@@ -5,13 +5,11 @@ import os
 import re
 import shutil
 import stat
-import sys
 import tempfile
 from dataclasses import dataclass, field
 from typing import IO
 
-from .common import RunError, prompt_choice, run_with_output
-from .state import dismiss_clobber_warning, is_clobber_warning_dismissed
+from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
@@ -496,27 +494,6 @@ def p4_sync(changelist: int, label: str, depot_root: str,
         return writable_files
 
 
-def _handle_clobber_warning(clobber: bool, workspace_dir: str) -> bool:
-    """Warn that clobber is no longer needed; return False if the user aborts."""
-    if not clobber or is_clobber_warning_dismissed(workspace_dir):
-        return True
-    if not sys.stdin.isatty():
-        return True
-
-    log.heading('Clobber option enabled')
-    log.warning(
-        'Clobber is enabled on your workspace but git-p4son no longer needs '
-        'it. You can safely disable it in perforce.')
-    choice = prompt_choice('How to proceed?', ['continue', 'abort'])
-    if choice == 'abort':
-        log.info('Aborting')
-        return False
-    if choice == 'continue':
-        dismiss_clobber_warning(workspace_dir)
-        log.success('Will not warn about clobber again')
-    return True
-
-
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
     """Report whether the p4 workspace has no git-tracked files opened."""
     log.heading('Checking p4 workspace')
@@ -782,11 +759,8 @@ def sync_command(args: argparse.Namespace) -> int:
     clobber = bool(client_spec and client_spec.clobber)
     allwrite = bool(client_spec and client_spec.allwrite)
 
-    # A dry run syncs nothing, so it skips the prompt, the checks and the hooks.
+    # A dry run syncs nothing, so it skips the checks and the hooks.
     if not dry_run:
-        if not _handle_clobber_warning(clobber, workspace_dir):
-            return 1
-
         # Before splitting, whose queries are the costly part.
         if not sync_preflight(depot_root, workspace_dir, invocation_dir,
                               ignore_blocking_processes):

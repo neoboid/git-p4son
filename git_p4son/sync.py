@@ -8,7 +8,6 @@ import shutil
 import stat
 import tempfile
 from dataclasses import dataclass, field
-from typing import IO
 
 from .common import RunError, run_with_output
 from .git import (

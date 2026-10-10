@@ -12,7 +12,7 @@ from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
-    git_last_sync, LastSync, merge_file,
+    format_sync_subject, git_last_sync, LastSync, merge_file,
 )
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
@@ -718,8 +718,8 @@ def sync_command(args: argparse.Namespace) -> int:
             dirty_files = get_dirty_files(workspace_dir)
             if dirty_files:
                 add_all_files(workspace_dir)
-            commit_msg = f'git-p4son: p4 sync {depot_root}/...@{changelist}'
-            commit(commit_msg, workspace_dir, allow_empty=True)
+            commit(format_sync_subject(depot_root, changelist), workspace_dir,
+                   allow_empty=True)
             log.success(f'Committed {len(dirty_files)} files')
 
         # Dedup files that showed up in several sync passes.

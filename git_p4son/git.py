@@ -284,6 +284,21 @@ def get_head_commit(workspace_dir: str) -> str:
 # Substring identifying git-p4son sync commit subjects.
 SYNC_SUBJECT_MARKER = ': p4 sync //'
 
+_SYNC_SUBJECT_PREFIX = 'git-p4son: p4 sync '
+_SYNC_SUBJECT_RE = re.compile(
+    '^' + re.escape(_SYNC_SUBJECT_PREFIX) + r'//.+@(\d+)$')
+
+
+def format_sync_subject(depot_root: str, changelist: int) -> str:
+    """Subject of the commit sync makes for a changelist."""
+    return f'{_SYNC_SUBJECT_PREFIX}{depot_root}/...@{changelist}'
+
+
+def parse_sync_subject(subject: str) -> int | None:
+    """Return the changelist of a sync commit subject, or None for any other subject."""
+    match = _SYNC_SUBJECT_RE.match(subject)
+    return int(match.group(1)) if match else None
+
 
 @dataclass
 class LastSync:
@@ -296,24 +311,17 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
     """Get the changelist number and commit SHA of the most recent sync commit."""
     res = run_with_output(
         ['git', 'log', '-1', '--pretty=%H %s',
-         f'--grep={SYNC_SUBJECT_MARKER}'],
+         f'--grep=^{_SYNC_SUBJECT_PREFIX}'],
         cwd=workspace_dir)
-    if len(res.stdout) == 0:
+    if not res.stdout:
         return None
 
-    line = res.stdout[0]
     # Format: "<commit_hash> <subject>"
-    parts = line.split(' ', 1)
-    if len(parts) != 2:
+    commit_hash, _, subject = res.stdout[0].partition(' ')
+    changelist = parse_sync_subject(subject)
+    if changelist is None:
         return None
-
-    commit_hash, subject = parts
-    pattern = r"^git-p4son: p4 sync //.+@(\d+)$"
-    match = re.search(pattern, subject)
-    if not match:
-        return None
-
-    return LastSync(changelist=int(match.group(1)), commit=commit_hash)
+    return LastSync(changelist=changelist, commit=commit_hash)
 
 
 # Pathspec budget per git call; Windows caps a command line at 32767 characters.

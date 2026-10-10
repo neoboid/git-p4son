@@ -403,6 +403,17 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result['b.cpp'], s_add)
         self.assertEqual({result[f] for f in missing}, {None})
 
+    def test_only_git_p4son_sync_subjects_are_baselines(self):
+        """A commit whose subject merely looks like a sync is not a baseline."""
+        self._write_file('a.cpp', 'X')
+        self._commit('git-p4son: p4 sync //ws/...@100')
+        s_sync = self._rev_parse()
+        self._write_file('a.cpp', 'Y')
+        self._commit('other: p4 sync //ws/...@200')
+
+        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        self.assertEqual(result, {'a.cpp': s_sync})
+
     def test_empty_input(self):
         self.assertEqual(find_base_commits([], 'HEAD', self.tmpdir), {})
 

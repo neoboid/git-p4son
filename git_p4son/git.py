@@ -281,9 +281,6 @@ def get_head_commit(workspace_dir: str) -> str:
 
 # --- sync commits ---
 
-# Substring identifying git-p4son sync commit subjects.
-SYNC_SUBJECT_MARKER = ': p4 sync //'
-
 _SYNC_SUBJECT_PREFIX = 'git-p4son: p4 sync '
 _SYNC_SUBJECT_RE = re.compile(
     '^' + re.escape(_SYNC_SUBJECT_PREFIX) + r'//.+@(\d+)$')
@@ -370,7 +367,7 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     for line in res.stdout:
         if line.startswith('\x01'):
             _, current_sha, subject = line.split('\x01', 2)
-            current_is_sync = SYNC_SUBJECT_MARKER in subject
+            current_is_sync = parse_sync_subject(subject) is not None
             continue
         status, sep, path = line.partition('\t')
         if not sep or path not in remaining:

@@ -736,6 +736,28 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(result.changed, [])
             self.assertEqual(result.ignored, [])
 
+    @mock.patch('git_p4son.sync.get_tracked_files')
+    def test_symlink_to_writable_file_left_to_p4(self, mock_tracked):
+        """A symlink is never treated as writable, so its target keeps its write bit."""
+        with tempfile.TemporaryDirectory() as ws, \
+                tempfile.TemporaryDirectory() as outside:
+            target = os.path.join(outside, 'target.txt')
+            with open(target, 'w') as f:
+                f.write('outside\n')
+            link = os.path.join(ws, 'link.txt')
+            try:
+                os.symlink(target, link)
+            except (OSError, NotImplementedError):
+                self.skipTest('symlinks not supported here')
+
+            result = prepare_writable_files([_upd(link)], ws, 'head123',
+                                            self.temp_root)
+
+            self.assertEqual(result.changed, [])
+            self.assertEqual(result.ignored, [])
+            self.assertTrue(os.stat(target).st_mode & stat.S_IWUSR)
+            mock_tracked.assert_not_called()
+
     def test_untracked_files_treated_as_ignored_and_not_made_readonly(self):
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'build.log')

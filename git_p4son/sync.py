@@ -737,12 +737,6 @@ def sync_command(args: argparse.Namespace) -> int:
             pre_sync_head_commit=pre_sync_head_commit, temp_root=temp_root,
             uses_crlf=uses_crlf, clobber=clobber, allwrite=allwrite)
 
-        if resync_last_synced:
-            prep = sync_pass(last_sync.changelist, LAST_SYNCED_LABEL)
-            _restore_writable(prep.synced, workspace_dir)
-            run_hooks('post-sync', workspace_dir, invocation_dir)
-            return 0
-
         preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
         if last_sync:

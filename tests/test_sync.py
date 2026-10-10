@@ -1288,6 +1288,33 @@ class TestSyncCommand(unittest.TestCase):
         self.assertEqual(sync_command(args), 0)
         mock_restore.assert_called_once_with(['/ws/a.txt'], '/ws')
 
+    @mock.patch('git_p4son.sync.commit')
+    @mock.patch('git_p4son.sync._merge_changed_files')
+    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
+    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync.prepare_writable_files')
+    @mock.patch('git_p4son.sync.p4_sync_preview',
+                return_value=[_upd('/ws/a.txt')])
+    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
+    @mock.patch('git_p4son.sync.git_last_sync')
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync.get_dirty_files', return_value=[])
+    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
+    def test_last_synced_merges_local_changes_without_committing(
+            self, _depot, _git_clean, _p4clean, mock_last_sync, _head,
+            _preview, mock_prep, _p4sync, _hooks, mock_merge, mock_commit):
+        """last-synced is a catch-up pass: local changes are merged back and nothing is committed."""
+        mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
+        changed = ChangedFile(filepath='/ws/a.txt', base_commit='abc',
+                              ours_path='/tmp/a.ours', base_path='/tmp/a.base')
+        mock_prep.return_value = WritableSyncFileSet(changed=[changed])
+        args = mock.Mock(changelist=['last-synced'], force=False,
+                         workspace_dir='/ws', invocation_dir='/invoked')
+        self.assertEqual(sync_command(args), 0)
+        mock_merge.assert_called_once()
+        self.assertEqual(mock_merge.call_args.args[0], [changed])
+        mock_commit.assert_not_called()
+
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_sync')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])

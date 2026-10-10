@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `sync last-synced` now merges local changes back and reports files p4 did not sync, like any other sync.
+  Before, it re-synced and left locally modified writable files read-only at the Perforce version
 - `sync` no longer warns when the workspace has the clobber option enabled. git-p4son has not needed clobber
   since 0.3.0. A leftover `.git-p4son/state.toml`, which only remembered dismissing the warning, can be deleted
 

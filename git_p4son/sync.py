@@ -20,7 +20,9 @@ from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
 from .log import log
 from .processes import check_no_blocking_processes
-from .writable import is_writable_mode, make_writable
+from .writable import (
+    is_writable_mode, make_read_only, make_writable, regular_file_mode,
+)
 from .sync_split_users import (
     USER_PLACEHOLDER,
     check_p4_users,
@@ -209,14 +211,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     writable = []
     added_upstream = set()
     for entry in preview_files:
-        try:
-            mode = os.stat(entry.filepath).st_mode
-            if mode & stat.S_IWUSR:
-                writable.append(entry.filepath)
-                if entry.mode == 'add':
-                    added_upstream.add(entry.filepath)
-        except OSError:
-            pass
+        mode = regular_file_mode(entry.filepath)
+        if mode is not None and mode & stat.S_IWUSR:
+            writable.append(entry.filepath)
+            if entry.mode == 'add':
+                added_upstream.add(entry.filepath)
 
     log.success(f'{len(writable)}/{len(preview_files)} are writable')
     if not writable:
@@ -252,7 +251,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     log.heading('Detecting modified tracked writable files')
     if not allwrite:
         # noclobber refuses any writable file; the merge restores the modified ones.
-        _clear_write_bits(tracked)
+        make_read_only(tracked)
 
     rel_paths = {f: os.path.relpath(f, workspace_dir) for f in tracked}
     candidates = [f for f in tracked if f not in added_upstream]
@@ -295,7 +294,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
     if allwrite:
         # p4 overwrites unmodified files cleanly; only strip the ones it would refuse.
-        _clear_write_bits([m.filepath for m in metas])
+        make_read_only([m.filepath for m in metas])
 
     # Pass 2: file types of the changed files. Pass 3: stage their content.
     if metas:
@@ -316,20 +315,6 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     _log_prepare_summary(result, workspace_dir, clobber, unchanged_count,
                          allwrite)
     return result
-
-
-def _clear_write_bits(filepaths: list[str]) -> None:
-    """Remove user write permission so p4 is willing to overwrite the files."""
-    for filepath in filepaths:
-        mode = os.stat(filepath).st_mode
-        os.chmod(filepath, mode & ~stat.S_IWUSR)
-
-
-def _make_writable(filepath: str) -> None:
-    """Add user write permission to a file if it is read-only."""
-    mode = os.stat(filepath).st_mode
-    if not mode & stat.S_IWUSR:
-        os.chmod(filepath, mode | stat.S_IWUSR)
 
 
 def _merge_changed_files(changed_files: list[ChangedFile],
@@ -370,7 +355,7 @@ def _merge_changed_files(changed_files: list[ChangedFile],
             continue
 
         if cf.is_binary:
-            _make_writable(filepath)
+            make_writable([filepath])
             shutil.copyfile(cf.ours_path, filepath)
             binary_file_list.append(filepath)
             continue
@@ -383,7 +368,7 @@ def _merge_changed_files(changed_files: list[ChangedFile],
             base_path = empty_base_path
 
         clean, merged = merge_file(filepath, base_path, cf.ours_path)
-        _make_writable(filepath)
+        make_writable([filepath])
         with open(filepath, 'wb') as f:
             f.write(merged)
 

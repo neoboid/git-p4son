@@ -14,7 +14,7 @@ from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_dirty_files, get_file_at_commit, get_head_commit, get_tracked_files,
-    merge_file,
+    merge_file, SYNC_SUBJECT_MARKER,
 )
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
@@ -58,7 +58,7 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
     """Get the changelist number and commit SHA of the most recent sync commit."""
     res = run_with_output(
         ['git', 'log', '-1', '--pretty=%H %s',
-         '--grep=: p4 sync //'],
+         f'--grep={SYNC_SUBJECT_MARKER}'],
         cwd=workspace_dir)
     if len(res.stdout) == 0:
         return None

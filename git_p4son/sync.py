@@ -193,15 +193,14 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     if result.ignored:
         log.heading('Checking ignored files for the +w (always writable) type')
         ignored_info = p4_fstat_file_info(result.ignored, workspace_dir)
-        always_writable = set()
+        ignored = []
         for f in result.ignored:
             info = ignored_info.get(f)
             if info and is_always_writable_file_type(info.head_type):
-                always_writable.add(f)
-        result.always_writable = [f for f in result.ignored
-                                  if f in always_writable]
-        result.ignored = [f for f in result.ignored
-                          if f not in always_writable]
+                result.always_writable.append(f)
+            else:
+                ignored.append(f)
+        result.ignored = ignored
         log.success(f'{len(result.always_writable)} always writable (+w)')
 
     if not tracked:

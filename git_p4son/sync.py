@@ -151,6 +151,18 @@ def _stage_changed_file(meta: _ChangedFileMeta, pre_sync_head_commit: str,
                        is_binary=is_binary, added_both=meta.added_both)
 
 
+def _log_file_group(log_fn, files: list[str], singular: str, plural: str,
+                    text: str, workspace_dir: str | None = None) -> None:
+    """Log how many files are in a group, then list them if workspace_dir is given."""
+    if not files:
+        return
+    label = singular if len(files) == 1 else plural
+    log_fn(f'{len(files)} {label} {text}')
+    if workspace_dir is not None:
+        for f in files:
+            log.info(os.path.relpath(f, workspace_dir))
+
+
 def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
                          clobber: bool, unchanged_count: int = 0,
                          allwrite: bool = False) -> None:
@@ -162,38 +174,25 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
             f'{unchanged_count} writable {label} unchanged, '
             'skipping merge')
 
-    if result.always_writable:
-        count = len(result.always_writable)
-        label = 'file is' if count == 1 else 'files are'
-        log.success(
-            f'{count} git-ignored {label} always writable (+w), '
-            'p4 syncs them normally')
+    _log_file_group(log.success, result.always_writable,
+                    'git-ignored file is', 'git-ignored files are',
+                    'always writable (+w), p4 syncs them normally')
+    _log_file_group(log.warning, [cf.filepath for cf in result.changed],
+                    'file has', 'files have',
+                    'local changes, will merge after sync', workspace_dir)
 
-    if result.changed:
-        count = len(result.changed)
-        label = 'file has' if count == 1 else 'files have'
-        log.warning(f'{count} {label} local changes, will merge after sync')
-        for cf in result.changed:
-            log.info(os.path.relpath(cf.filepath, workspace_dir))
-
-    if result.ignored:
-        count = len(result.ignored)
-        label = 'file' if count == 1 else 'files'
-        if clobber:
-            log.warning(
-                f'{count} git-ignored writable {label} will be overwritten '
-                'by p4 (clobber is enabled on the workspace)')
-        elif allwrite:
-            # The skipped ones are only known after the sync, which lists them.
-            log.info(
-                f'{count} git-ignored writable {label} will be synced '
-                'unless modified locally')
-            return
-        else:
-            log.warning(
-                f'{count} git-ignored writable {label} will not be synced')
-        for f in result.ignored:
-            log.info(os.path.relpath(f, workspace_dir))
+    singular, plural = 'git-ignored writable file', 'git-ignored writable files'
+    if clobber:
+        _log_file_group(log.warning, result.ignored, singular, plural,
+                        'will be overwritten by p4 (clobber is enabled on the workspace)',
+                        workspace_dir)
+    elif allwrite:
+        # The skipped ones are only known after the sync, which lists them.
+        _log_file_group(log.info, result.ignored, singular, plural,
+                        'will be synced unless modified locally')
+    else:
+        _log_file_group(log.warning, result.ignored, singular, plural,
+                        'will not be synced', workspace_dir)
 
 
 def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
@@ -395,65 +394,28 @@ def _merge_changed_files(changed_files: list[ChangedFile],
         else:
             merged_conflicts.append(filepath)
 
-    if merged_clean:
-        count = len(merged_clean)
-        label = 'file' if count == 1 else 'files'
-        log.success(f'{count} {label} merged successfully')
-        for f in merged_clean:
-            log.info(os.path.relpath(f, workspace_dir))
+    groups = [
+        (log.success, merged_clean, 'file', 'files', 'merged successfully'),
+        (log.warning, merged_conflicts, 'file', 'files', 'merged with conflicts'),
+        (log.warning, added_both_conflicts, 'file was', 'files were',
+         'added both locally and in Perforce - no common baseline, conflict markers show both full versions'),
+        (log.warning, binary_file_list, 'binary file has', 'binary files have',
+         'local changes, local version restored'),
+        (log.warning, deleted_upstream_with_local_changes, 'file', 'files',
+         'deleted in Perforce but modified locally, local edits available via git history'),
+        (log.warning, deleted_local_added_upstream, 'file', 'files',
+         'deleted locally but modified in Perforce'),
+    ]
+    for log_fn, files, singular, plural, text in groups:
+        _log_file_group(log_fn, files, singular, plural, text, workspace_dir)
 
-    if merged_conflicts:
-        count = len(merged_conflicts)
-        label = 'file' if count == 1 else 'files'
-        log.warning(f'{count} {label} merged with conflicts')
-        for f in merged_conflicts:
-            log.info(os.path.relpath(f, workspace_dir))
-
-    if added_both_conflicts:
-        count = len(added_both_conflicts)
-        label = 'file was' if count == 1 else 'files were'
-        log.warning(
-            f'{count} {label} added both locally and in Perforce - '
-            'no common baseline, conflict markers show both full versions')
-        for f in added_both_conflicts:
-            log.info(os.path.relpath(f, workspace_dir))
-
-    if binary_file_list:
-        count = len(binary_file_list)
-        label = 'binary file has' if count == 1 else 'binary files have'
-        log.warning(f'{count} {label} local changes, local version restored')
-        for f in binary_file_list:
-            log.info(os.path.relpath(f, workspace_dir))
-
-    if deleted_upstream_with_local_changes:
-        count = len(deleted_upstream_with_local_changes)
-        label = 'file' if count == 1 else 'files'
-        log.warning(
-            f'{count} {label} deleted in Perforce but modified locally, '
-            'local edits available via git history')
-        for f in deleted_upstream_with_local_changes:
-            log.info(os.path.relpath(f, workspace_dir))
-
-    if deleted_local_added_upstream:
-        count = len(deleted_local_added_upstream)
-        label = 'file' if count == 1 else 'files'
-        log.warning(
-            f'{count} {label} deleted locally but modified in Perforce')
-        for f in deleted_local_added_upstream:
-            log.info(os.path.relpath(f, workspace_dir))
-
-    needs_attention = (merged_clean or merged_conflicts
-                       or added_both_conflicts or binary_file_list
-                       or deleted_upstream_with_local_changes
-                       or deleted_local_added_upstream)
-    if needs_attention:
-        if merged_conflicts or added_both_conflicts:
-            log.info('')
-            log.info(
-                'Manually review changes, resolve conflicts and commit when ready.')
-        else:
-            log.info('')
-            log.info('Manually review changes and commit when ready.')
+    if not any(files for _, files, *_ in groups):
+        return
+    log.info('')
+    if merged_conflicts or added_both_conflicts:
+        log.info('Manually review changes, resolve conflicts and commit when ready.')
+    else:
+        log.info('Manually review changes and commit when ready.')
 
 
 def p4_sync(changelist: int, label: str, depot_root: str,

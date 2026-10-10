@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son.cli import create_parser
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     P4SyncAbortError,
@@ -34,6 +35,20 @@ from git_p4son.sync import (
     sync_preflight,
 )
 from tests.helpers import make_changes, make_run_result
+
+
+def _sync_args(changelist, **overrides):
+    """Parse a sync command line with the real CLI, then apply overrides like run_command does."""
+    args = create_parser().parse_args(['sync', *changelist])
+    args.workspace_dir = '/ws'
+    args.invocation_dir = None
+    for name, value in overrides.items():
+        if not hasattr(args, name):
+            raise AttributeError(f'sync has no argument {name!r}')
+        setattr(args, name, value)
+    if args.invocation_dir is None:
+        args.invocation_dir = args.workspace_dir
+    return args
 
 
 @mock.patch('git_p4son.sync.make_writable', return_value=0)
@@ -962,8 +977,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = [('file.txt', 'modify')]
-        args = mock.Mock(changelist=['12345'],
-                         force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['12345'],
+                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
@@ -992,8 +1007,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = WritableSyncFileSet(
             ignored=['/ws/pristine.log', '/ws/edited.log'])
-        args = mock.Mock(changelist=['12345'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['12345'], force=False,
+                          workspace_dir='/ws')
         self.assertEqual(sync_command(args), 0)
 
         headings = [str(c.args[0]) for c in mock_log.heading.call_args_list]
@@ -1025,8 +1040,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_preview.side_effect = [[_upd('/ws/a.cpp')],
                                     [_upd('/ws/b.cpp')]]
         mock_prep.side_effect = [self._empty_prep(), self._empty_prep()]
-        args = mock.Mock(changelist=['12345'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['12345'], force=False,
+                          workspace_dir='/ws')
         self.assertEqual(sync_command(args), 0)
 
         mock_restore.assert_called_once_with(['/ws/a.cpp', '/ws/b.cpp'],
@@ -1036,7 +1051,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.depot.get_depot_root', return_value=None)
     def test_no_depot_root_aborts(self, _depot):
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1066,8 +1081,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = [('file.txt', 'modify')]
-        args = mock.Mock(changelist=['12345'],
-                         force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['12345'],
+                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         # $(workspace) is resolved before any p4 command runs against the depot.
@@ -1080,7 +1095,7 @@ class TestSyncCommand(unittest.TestCase):
                 return_value='//$(workspace)/Engine')
     def test_workspace_placeholder_without_client_spec_aborts(
             self, _depot, _spec, _p4clean):
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1088,7 +1103,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_dirty_git_workspace_aborts(self, _depot, _last_sync):
         self.mock_workspace_dirty.return_value = [('file.txt', 'modify')]
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1100,7 +1115,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
     def test_dirty_p4_workspace_aborts(self, _depot, _p4clean, _git_clean,
                                        _tracked, _last_sync):
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1123,7 +1138,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = []
-        args = mock.Mock(changelist=['200'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['200'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
@@ -1135,7 +1150,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_older_cl_without_force_aborts(self, _depot, _git_clean,
                                            _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=200, commit='abc')
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1156,7 +1171,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=200, commit='abc')
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = [('file.txt', 'modify')]
-        args = mock.Mock(changelist=['100'], force=True, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=True, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
@@ -1170,7 +1185,7 @@ class TestSyncCommand(unittest.TestCase):
     def test_same_cl_is_noop(self, _depot, mock_git_clean, mock_p4clean,
                              mock_last_sync, _head, mock_run_hooks, mock_log):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['100'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         # Nothing to sync, so the whole preflight is skipped, not merely the hooks.
@@ -1196,8 +1211,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_prep.return_value = self._empty_prep()
         mock_p4sync.return_value = None
         mock_run_hooks.return_value = []
-        args = mock.Mock(changelist=['last-synced'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['last-synced'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_called_once_with(
@@ -1222,8 +1237,8 @@ class TestSyncCommand(unittest.TestCase):
             _preview, mock_prep, _p4sync, _hooks, mock_restore):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['last-synced'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['last-synced'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         self.assertEqual(sync_command(args), 0)
         mock_restore.assert_called_once_with(['/ws/a.txt'], '/ws')
 
@@ -1247,8 +1262,8 @@ class TestSyncCommand(unittest.TestCase):
         changed = ChangedFile(filepath='/ws/a.txt', base_commit='abc',
                               ours_path='/tmp/a.ours', base_path='/tmp/a.base')
         mock_prep.return_value = WritableSyncFileSet(changed=[changed])
-        args = mock.Mock(changelist=['last-synced'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['last-synced'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         self.assertEqual(sync_command(args), 0)
         mock_merge.assert_called_once()
         self.assertEqual(mock_merge.call_args.args[0], [changed])
@@ -1267,8 +1282,8 @@ class TestSyncCommand(unittest.TestCase):
             _head, _preview, mock_p4sync, mock_run_hooks):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_run_hooks.return_value = []
-        args = mock.Mock(changelist=['last-synced'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['last-synced'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_p4sync.assert_not_called()
@@ -1292,8 +1307,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         mock_run_hooks.return_value = [make_run_result(returncode=1)]
-        args = mock.Mock(changelist=['200'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['200'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
         mock_p4sync.assert_not_called()
@@ -1320,8 +1335,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
         mock_run_hooks.return_value = []
-        args = mock.Mock(changelist=['150', '200'], force=False,
-                         workspace_dir='/ws', invocation_dir='/invoked')
+        args = _sync_args(changelist=['150', '200'], force=False,
+                          workspace_dir='/ws', invocation_dir='/invoked')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         pre_sync_calls = [
@@ -1347,7 +1362,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = []
-        args = mock.Mock(changelist=[], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=[], force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
@@ -1369,7 +1384,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_get_latest.return_value = 200
         mock_prep.return_value = self._empty_prep()
         mock_git_clean.return_value = []
-        args = mock.Mock(changelist=['head'], force=False, workspace_dir='/ws')
+        args = _sync_args(changelist=['head'],
+                          force=False, workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         mock_get_latest.assert_called_once()
@@ -1392,8 +1408,8 @@ class TestSyncCommand(unittest.TestCase):
         """Multiple changelists sync in sequence after a catch-up pass, one commit each."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['123', '156', '178'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['123', '156', '178'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
 
@@ -1428,8 +1444,8 @@ class TestSyncCommand(unittest.TestCase):
         """A specified changelist equal to the last synced one is skipped."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['100', '156'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['100', '156'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
@@ -1454,8 +1470,8 @@ class TestSyncCommand(unittest.TestCase):
         """An older changelist is synced, not skipped, with --force."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['50', '156'], force=True,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['50', '156'], force=True,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
@@ -1482,8 +1498,8 @@ class TestSyncCommand(unittest.TestCase):
         """With --force the first target may be older than the last synced changelist."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['50', '156', '178'], force=True,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['50', '156', '178'], force=True,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
@@ -1504,8 +1520,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_older_changelist_in_list_without_force_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['50', '156'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['50', '156'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1517,8 +1533,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_non_increasing_changelists_abort(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['156', '123'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['156', '123'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1530,8 +1546,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_duplicate_changelists_abort(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['123', '123'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['123', '123'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1543,8 +1559,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_last_synced_combined_with_number_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['last-synced', '123'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['last-synced', '123'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1556,8 +1572,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_head_not_last_aborts(
             self, _depot, _git_clean, _p4clean, mock_last_sync, _head):
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['head', '123'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['head', '123'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1580,8 +1596,8 @@ class TestSyncCommand(unittest.TestCase):
         """A trailing "head" resolves to the latest changelist and is synced last."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
         mock_prep.return_value = self._empty_prep()
-        args = mock.Mock(changelist=['123', '156', 'head'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['123', '156', 'head'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 0)
         commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
@@ -1602,8 +1618,8 @@ class TestSyncCommand(unittest.TestCase):
             _latest):
         """A "head" not above the preceding changelist fails the strictly increasing check."""
         mock_last_sync.return_value = LastSync(changelist=100, commit='abc')
-        args = mock.Mock(changelist=['123', '156', 'head'], force=False,
-                         workspace_dir='/ws')
+        args = _sync_args(changelist=['123', '156', 'head'], force=False,
+                          workspace_dir='/ws')
         rc = sync_command(args)
         self.assertEqual(rc, 1)
 
@@ -1636,8 +1652,8 @@ class TestSyncDryRun(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def _run(self, changelist, force=False):
-        args = mock.Mock(changelist=changelist, force=force,
-                         workspace_dir='/ws', dry_run=True)
+        args = _sync_args(changelist=changelist, force=force,
+                          workspace_dir='/ws', dry_run=True)
         return sync_command(args)
 
     def _sequence(self):
@@ -1724,9 +1740,9 @@ class TestSyncSplitting(unittest.TestCase):
     def _run(self, *changelist, configured=(), split_user=None,
              no_split=False, force=False, dry_run=False):
         self.patches['get_split_users'].return_value = list(configured)
-        args = mock.Mock(changelist=list(changelist), force=force,
-                         workspace_dir='/ws', dry_run=dry_run,
-                         split_user=split_user, no_split=no_split)
+        args = _sync_args(changelist=list(changelist), force=force,
+                          workspace_dir='/ws', dry_run=dry_run,
+                          split_user=split_user, no_split=no_split)
         return sync_command(args)
 
     def _synced(self):

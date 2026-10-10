@@ -600,9 +600,8 @@ def _resolve_sync_targets(
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
-    invocation_dir = vars(args).get('invocation_dir', workspace_dir)
-    ignore_blocking_processes = vars(args).get('ignore_blocking_processes',
-                                               False)
+    invocation_dir = args.invocation_dir
+    ignore_blocking_processes = args.ignore_blocking_processes
 
     resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
@@ -617,13 +616,13 @@ def sync_command(args: argparse.Namespace) -> int:
     else:
         log.warning('No previous sync found')
 
-    extra_split_users = vars(args).get('split_user') or []
+    extra_split_users = args.split_user or []
     if extra_split_users:
         extra_split_users = _check_split_user_args(extra_split_users,
                                                    workspace_dir)
         if extra_split_users is None:
             return 1
-    configured_split_users = ([] if vars(args).get('no_split', False)
+    configured_split_users = ([] if args.no_split
                               else get_split_users(workspace_dir))
     split_users = configured_split_users + extra_split_users
 
@@ -663,7 +662,7 @@ def sync_command(args: argparse.Namespace) -> int:
         else:
             split = True
 
-    dry_run = vars(args).get('dry_run', False)
+    dry_run = args.dry_run
 
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber = bool(client_spec and client_spec.clobber)

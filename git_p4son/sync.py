@@ -209,7 +209,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
     # Pass 1: find modified files by comparing blob OIDs, in batched git calls.
     log.heading('Detecting modified tracked writable files')
-    if clobber_mode is not ClobberMode.ALLWRITE:
+    if clobber_mode is ClobberMode.NOCLOBBER:
         # noclobber refuses any writable file; the merge restores the modified ones.
         make_read_only(tracked)
 

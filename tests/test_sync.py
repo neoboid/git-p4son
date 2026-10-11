@@ -523,6 +523,31 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertFalse(mode & stat.S_IWUSR)
 
+    @mock.patch('git_p4son.sync.get_blob_oids')
+    @mock.patch('git_p4son.sync.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'head content'))
+    @mock.patch('git_p4son.sync.find_base_commits',
+                return_value={'a.txt': 'sync456'})
+    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.get_tracked_files',
+                side_effect=lambda paths, ws: set(paths))
+    def test_clobber_keeps_changed_file_writable(
+            self, _tracked, mock_fstat, _find_base, _get_file, mock_oids):
+        """With clobber p4 overwrites writable files, so even a changed one keeps its write bit."""
+        from git_p4son.perforce import P4FileInfo
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'a.txt')
+            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
+                                      ('sync456', 'a.txt'): 'oid_base'}
+
+            result = prepare_writable_files([_upd(path)], ws, 'head123',
+                                            self.temp_root, clobber_mode=ClobberMode.CLOBBER)
+
+            self.assertEqual([cf.filepath for cf in result.changed], [path])
+            mode = os.stat(path).st_mode
+            self.assertTrue(mode & stat.S_IWUSR)
+
     @mock.patch('git_p4son.sync.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',

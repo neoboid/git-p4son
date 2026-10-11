@@ -601,6 +601,24 @@ def _resolve_sync_targets(
     return targets
 
 
+def _report_not_synced(preps: list[WritableSyncFileSet],
+                       clobber_mode: ClobberMode, workspace_dir: str) -> None:
+    """Log the git-ignored writable files p4 refused or overwrote."""
+    if clobber_mode is ClobberMode.CLOBBER:
+        reported = [f for p in preps for f in p.ignored]
+        heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
+    elif clobber_mode is ClobberMode.ALLWRITE:
+        reported = [f for p in preps for f in p.not_synced]
+        heading = 'Files not synced (git-ignored and locally modified)'
+    else:
+        reported = [f for p in preps for f in p.ignored]
+        heading = 'Files not synced (git-ignored and writable)'
+    if reported:
+        log.heading(heading)
+        for f in sorted(set(reported)):
+            log.info(os.path.relpath(f, workspace_dir))
+
+
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
@@ -724,19 +742,7 @@ def sync_command(args: argparse.Namespace) -> int:
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         _merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        if clobber_mode is ClobberMode.CLOBBER:
-            reported = [f for p in preps for f in p.ignored]
-            heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
-        elif clobber_mode is ClobberMode.ALLWRITE:
-            reported = [f for p in preps for f in p.not_synced]
-            heading = 'Files not synced (git-ignored and locally modified)'
-        else:
-            reported = [f for p in preps for f in p.ignored]
-            heading = 'Files not synced (git-ignored and writable)'
-        if reported:
-            log.heading(heading)
-            for f in sorted(set(reported)):
-                log.info(os.path.relpath(f, workspace_dir))
+        _report_not_synced(preps, clobber_mode, workspace_dir)
 
         _restore_writable([f for p in preps for f in p.synced], workspace_dir)
 

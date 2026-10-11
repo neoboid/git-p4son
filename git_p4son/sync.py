@@ -29,6 +29,7 @@ from .sync_split_users import (
     resolve_split_users,
 )
 from .perforce import (
+    ClobberMode,
     get_latest_changelist,
     get_submitted_changes,
     get_writable_files,
@@ -127,8 +128,8 @@ def _log_file_group(log_fn, files: list[str], singular: str, plural: str,
 
 
 def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
-                         clobber: bool, unchanged_count: int = 0,
-                         allwrite: bool = False) -> None:
+                         clobber_mode: ClobberMode,
+                         unchanged_count: int = 0) -> None:
     """Log what the writable-file classification found."""
     log.heading('Prepare sync summary')
     if unchanged_count:
@@ -145,11 +146,11 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
                     'local changes, will merge after sync', workspace_dir)
 
     singular, plural = 'git-ignored writable file', 'git-ignored writable files'
-    if clobber:
+    if clobber_mode is ClobberMode.CLOBBER:
         _log_file_group(log.warning, result.ignored, singular, plural,
                         'will be overwritten by p4 (clobber is enabled on the workspace)',
                         workspace_dir)
-    elif allwrite:
+    elif clobber_mode is ClobberMode.ALLWRITE:
         # The skipped ones are only known after the sync, which lists them.
         _log_file_group(log.info, result.ignored, singular, plural,
                         'will be synced unless modified locally')
@@ -163,8 +164,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            pre_sync_head_commit: str,
                            temp_root: str,
                            uses_crlf: bool = False,
-                           clobber: bool = False,
-                           allwrite: bool = False) -> WritableSyncFileSet:
+                           clobber_mode: ClobberMode = ClobberMode.NOCLOBBER
+                           ) -> WritableSyncFileSet:
     """Classify the preview's writable files and stage the modified ones for post-sync merge."""
     result = WritableSyncFileSet()
 
@@ -203,13 +204,12 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         log.success(f'{len(result.always_writable)} always writable (+w)')
 
     if not tracked:
-        _log_prepare_summary(result, workspace_dir, clobber,
-                             allwrite=allwrite)
+        _log_prepare_summary(result, workspace_dir, clobber_mode)
         return result
 
     # Pass 1: find modified files by comparing blob OIDs, in batched git calls.
     log.heading('Detecting modified tracked writable files')
-    if not allwrite:
+    if clobber_mode is not ClobberMode.ALLWRITE:
         # noclobber refuses any writable file; the merge restores the modified ones.
         make_read_only(tracked)
 
@@ -252,7 +252,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
     log.success(f'{len(metas)} changed, {unchanged_count} unchanged')
 
-    if allwrite:
+    if clobber_mode is ClobberMode.ALLWRITE:
         # p4 overwrites unmodified files cleanly; only strip the ones it would refuse.
         make_read_only([m.filepath for m in metas])
 
@@ -280,8 +280,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                 uses_crlf))
         log.success('')
 
-    _log_prepare_summary(result, workspace_dir, clobber, unchanged_count,
-                         allwrite)
+    _log_prepare_summary(result, workspace_dir, clobber_mode, unchanged_count)
     return result
 
 
@@ -451,13 +450,13 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
 
 def _sync_pass(changelist: int, label: str, depot_root: str,
                workspace_dir: str, pre_sync_head_commit: str, temp_root: str,
-               uses_crlf: bool, clobber: bool,
-               allwrite: bool) -> WritableSyncFileSet:
+               uses_crlf: bool,
+               clobber_mode: ClobberMode) -> WritableSyncFileSet:
     """Run one sync pass: preview, prepare writable files, and p4 sync."""
     preview = p4_sync_preview(changelist, depot_root, workspace_dir)
     prep = prepare_writable_files(preview, workspace_dir, pre_sync_head_commit,
                                   temp_root, uses_crlf=uses_crlf,
-                                  clobber=clobber, allwrite=allwrite)
+                                  clobber_mode=clobber_mode)
     if preview:
         prep.not_synced = p4_sync(changelist, label, depot_root,
                                   workspace_dir,
@@ -666,8 +665,8 @@ def sync_command(args: argparse.Namespace) -> int:
             split = True
 
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
-    clobber = bool(client_spec and client_spec.clobber)
-    allwrite = bool(client_spec and client_spec.allwrite)
+    clobber_mode = (client_spec.clobber_mode if client_spec
+                    else ClobberMode.NOCLOBBER)
 
     # A dry run skips the checks and hooks, which run before the costly split queries.
     if not args.dry_run and not sync_preflight(
@@ -702,7 +701,7 @@ def sync_command(args: argparse.Namespace) -> int:
         sync_pass = functools.partial(
             _sync_pass, depot_root=depot_root, workspace_dir=workspace_dir,
             pre_sync_head_commit=pre_sync_head_commit, temp_root=temp_root,
-            uses_crlf=uses_crlf, clobber=clobber, allwrite=allwrite)
+            uses_crlf=uses_crlf, clobber_mode=clobber_mode)
 
         preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
@@ -725,10 +724,10 @@ def sync_command(args: argparse.Namespace) -> int:
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         _merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        if clobber:
+        if clobber_mode is ClobberMode.CLOBBER:
             reported = [f for p in preps for f in p.ignored]
             heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
-        elif allwrite:
+        elif clobber_mode is ClobberMode.ALLWRITE:
             reported = [f for p in preps for f in p.not_synced]
             heading = 'Files not synced (git-ignored and locally modified)'
         else:

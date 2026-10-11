@@ -10,6 +10,7 @@ from unittest import mock
 from git_p4son.cli import create_parser
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
+    ClobberMode,
     P4SyncAbortError,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
@@ -491,7 +492,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, allwrite=True)
+                                            self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
 
             self.assertEqual(result.changed, [])
             mode = os.stat(path).st_mode
@@ -516,7 +517,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                                       ('sync456', 'a.txt'): 'oid_base'}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, allwrite=True)
+                                            self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             mode = os.stat(path).st_mode
@@ -782,8 +783,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(result.ignored, [ignored])
             self.assertEqual(result.always_writable, [always])
 
-    def _run_with_tracked_and_ignored(self, ws, clobber, allwrite=False,
-                                      level='warning'):
+    def _run_with_tracked_and_ignored(self, ws, mode, level='warning'):
         """Prepare one unchanged tracked and one ignored file, returning the messages logged at level."""
         tracked = self._make_file(ws, 'a.txt')
         ignored = self._make_file(ws, 'build.log')
@@ -797,21 +797,23 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 mock.patch('git_p4son.sync.log') as mock_log:
             result = prepare_writable_files(
                 [_upd(tracked), _upd(ignored)], ws, 'head123',
-                self.temp_root, clobber=clobber, allwrite=allwrite)
+                self.temp_root, clobber_mode=mode)
         self.assertEqual(result.ignored, [ignored])
         return ' '.join(str(c.args[0]) for c in
                         getattr(mock_log, level).call_args_list)
 
     def test_ignored_message_without_clobber(self):
         with tempfile.TemporaryDirectory() as ws:
-            warnings = self._run_with_tracked_and_ignored(ws, clobber=False)
+            warnings = self._run_with_tracked_and_ignored(
+                ws, ClobberMode.NOCLOBBER)
             self.assertIn('will not be synced', warnings)
             self.assertNotIn('overwritten', warnings)
 
     def test_ignored_message_with_clobber(self):
         """With clobber the summary says ignored files will be overwritten."""
         with tempfile.TemporaryDirectory() as ws:
-            warnings = self._run_with_tracked_and_ignored(ws, clobber=True)
+            warnings = self._run_with_tracked_and_ignored(
+                ws, ClobberMode.CLOBBER)
             self.assertIn('overwritten', warnings)
             self.assertNotIn('will not be synced', warnings)
 
@@ -819,19 +821,12 @@ class TestPrepareWritableFiles(unittest.TestCase):
         """With allwrite the summary says ignored files sync unless modified."""
         with tempfile.TemporaryDirectory() as ws:
             warnings = self._run_with_tracked_and_ignored(
-                ws, clobber=False, allwrite=True)
+                ws, ClobberMode.ALLWRITE)
             self.assertNotIn('will not be synced', warnings)
             infos = self._run_with_tracked_and_ignored(
-                ws, clobber=False, allwrite=True, level='info')
+                ws, ClobberMode.ALLWRITE, level='info')
             self.assertIn('unless modified locally', infos)
             self.assertNotIn('build.log', infos)
-
-    def test_ignored_message_with_allwrite_and_clobber(self):
-        """clobber overwrites regardless, so it wins over allwrite."""
-        with tempfile.TemporaryDirectory() as ws:
-            warnings = self._run_with_tracked_and_ignored(
-                ws, clobber=True, allwrite=True)
-            self.assertIn('overwritten', warnings)
 
     def test_nonexistent_files_skipped(self):
         result = prepare_writable_files(
@@ -1015,7 +1010,7 @@ class TestSyncCommand(unittest.TestCase):
             _preview, mock_prep, _p4sync, _git_clean, _add, _commit, _merge,
             mock_log):
         """With allwrite only the ignored files p4 refused are reported."""
-        spec = mock.Mock(uses_crlf=False, clobber=False, allwrite=True)
+        spec = mock.Mock(uses_crlf=False, clobber_mode=ClobberMode.ALLWRITE)
         spec.name = 'myclient'
         mock_spec.return_value = spec
         mock_last_sync.return_value = self._last_sync
@@ -1061,7 +1056,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_restore.assert_called_once_with(['/ws/a.cpp', '/ws/b.cpp'],
                                              '/ws')
         for call in mock_prep.call_args_list:
-            self.assertFalse(call.kwargs['allwrite'])
+            self.assertIs(call.kwargs['clobber_mode'], ClobberMode.NOCLOBBER)
 
     @mock.patch('git_p4son.depot.get_depot_root', return_value=None)
     def test_no_depot_root_aborts(self, _depot):
@@ -1089,8 +1084,7 @@ class TestSyncCommand(unittest.TestCase):
         spec = mock.Mock()
         spec.name = 'real-client'
         spec.uses_crlf = False
-        spec.clobber = False
-        spec.allwrite = False
+        spec.clobber_mode = ClobberMode.NOCLOBBER
         mock_spec.return_value = spec
         mock_last_sync.return_value = self._last_sync
         mock_prep.return_value = self._empty_prep()

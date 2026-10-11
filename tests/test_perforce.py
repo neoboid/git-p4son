@@ -5,7 +5,7 @@ from unittest import mock
 
 from git_p4son.common import RunError
 from git_p4son.perforce import (
-    P4ClientSpec, P4FileInfo, P4SyncPreviewFile, get_client_spec,
+    ClobberMode, P4ClientSpec, P4FileInfo, P4SyncPreviewFile, get_client_spec,
     get_existing_p4_users, get_p4_user, get_submitted_changes,
     is_always_writable_file_type,
     is_binary_file_type,
@@ -125,6 +125,18 @@ class TestP4ClientSpec(unittest.TestCase):
             options=['noallwrite', 'noclobber', 'nocompress'], stream=None,
             line_end='local')
         self.assertFalse(spec.clobber)
+
+    def test_clobber_mode(self):
+        cases = [
+            (['noallwrite', 'noclobber'], ClobberMode.NOCLOBBER),
+            (['noallwrite', 'clobber'], ClobberMode.CLOBBER),
+            (['allwrite', 'noclobber'], ClobberMode.ALLWRITE),
+            (['allwrite', 'clobber'], ClobberMode.CLOBBER),
+        ]
+        for options, expected in cases:
+            spec = P4ClientSpec(name='ws', root='/ws', options=options,
+                                stream=None, line_end='local')
+            self.assertIs(spec.clobber_mode, expected, options)
 
     @mock.patch('git_p4son.perforce.sys')
     def test_uses_crlf_local_on_windows(self, mock_sys):

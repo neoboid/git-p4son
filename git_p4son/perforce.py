@@ -3,6 +3,7 @@
 import re
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from typing import IO
 
 from .common import (
@@ -56,6 +57,14 @@ def parse_ztag_multi_output(lines: list[str]) -> list[dict[str, str]]:
 
 # --- client spec ---
 
+class ClobberMode(Enum):
+    """How p4 sync treats writable files in the workspace."""
+
+    NOCLOBBER = 'noclobber'
+    CLOBBER = 'clobber'
+    ALLWRITE = 'allwrite'
+
+
 @dataclass
 class P4ClientSpec:
     """Parsed Perforce client specification."""
@@ -73,6 +82,15 @@ class P4ClientSpec:
     @property
     def allwrite(self) -> bool:
         return 'allwrite' in self.options
+
+    @property
+    def clobber_mode(self) -> ClobberMode:
+        # clobber overwrites writable files regardless, so it wins over allwrite.
+        if self.clobber:
+            return ClobberMode.CLOBBER
+        if self.allwrite:
+            return ClobberMode.ALLWRITE
+        return ClobberMode.NOCLOBBER
 
     @property
     def uses_crlf(self) -> bool:

@@ -532,6 +532,22 @@ def _collect_split_users(args: argparse.Namespace,
     return configured + extra
 
 
+def _should_split(split_users: list[str], last_sync: LastSync | None,
+                  targets: list[tuple[int, str]]) -> bool:
+    """Whether to split out the split users' changelists before the targets."""
+    if not split_users or not targets:
+        return False
+    if not last_sync:
+        log.info('Not splitting out changelists: '
+                 'no previous sync to start from')
+        return False
+    if targets[0][0] < last_sync.changelist:
+        log.info('Not splitting out changelists: '
+                 'syncing to an older changelist')
+        return False
+    return True
+
+
 def _split_targets(targets: list[tuple[int, str]], users: list[str],
                    last_synced: int, depot_root: str,
                    workspace_dir: str) -> list[tuple[int, str]]:
@@ -679,17 +695,7 @@ def sync_command(args: argparse.Namespace) -> int:
             log.heading('Skipping post-sync hooks')
             return 0
 
-    # Splitting needs a previous sync to look forward from.
-    split = False
-    if split_users and not resync_last_synced:
-        if not last_sync:
-            log.info('Not splitting out changelists: '
-                     'no previous sync to start from')
-        elif targets[0][0] < last_sync.changelist:
-            log.info('Not splitting out changelists: '
-                     'syncing to an older changelist')
-        else:
-            split = True
+    split = _should_split(split_users, last_sync, targets)
 
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber_mode = (client_spec.clobber_mode if client_spec

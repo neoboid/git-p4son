@@ -30,6 +30,7 @@ from git_p4son.sync import (
     WritableSyncFileSet,
     _collect_split_users,
     _restore_writable,
+    _should_split,
     build_sync_targets,
     p4_sync,
     prepare_writable_files,
@@ -1004,6 +1005,28 @@ class TestCollectSplitUsers(unittest.TestCase):
 
     def test_unknown_extra_user_returns_none(self):
         self.assertIsNone(self._collect(['alice'], split_user=['nobody']))
+
+
+class TestShouldSplit(unittest.TestCase):
+    _last_sync = LastSync(changelist=100, commit='abc123')
+
+    def test_splits_forward_from_the_last_sync(self):
+        self.assertTrue(_should_split(['me'], self._last_sync,
+                                      [(106, 'latest')]))
+
+    def test_no_split_users(self):
+        self.assertFalse(_should_split([], self._last_sync, [(106, 'latest')]))
+
+    def test_no_targets(self):
+        self.assertFalse(_should_split(['me'], self._last_sync, []))
+
+    @mock.patch('git_p4son.sync.log')
+    def test_no_previous_sync(self, _log):
+        self.assertFalse(_should_split(['me'], None, [(106, 'latest')]))
+
+    @mock.patch('git_p4son.sync.log')
+    def test_syncing_backwards(self, _log):
+        self.assertFalse(_should_split(['me'], self._last_sync, [(90, '90')]))
 
 
 class TestSyncCommand(unittest.TestCase):

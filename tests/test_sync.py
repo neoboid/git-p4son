@@ -28,6 +28,7 @@ from git_p4son.git import (
 from git_p4son.sync import (
     ChangedFile,
     WritableSyncFileSet,
+    _collect_split_users,
     _restore_writable,
     build_sync_targets,
     p4_sync,
@@ -974,6 +975,35 @@ class TestBuildSyncTargets(unittest.TestCase):
                                (102, 'other'), (103, 'other'))
         targets = build_sync_targets(changes, ['me'], 100, [101, 103])
         self.assertEqual(targets, [101, 103])
+
+
+class TestCollectSplitUsers(unittest.TestCase):
+    def _collect(self, configured, split_user=None, no_split=False,
+                 known=None):
+        args = _sync_args(changelist=[], split_user=split_user,
+                          no_split=no_split)
+        with mock.patch('git_p4son.sync.get_split_users',
+                        return_value=configured), \
+                mock.patch('git_p4son.sync.check_p4_users',
+                           return_value=known):
+            return _collect_split_users(args, '/ws')
+
+    def test_configured_users(self):
+        self.assertEqual(self._collect(['alice']), ['alice'])
+
+    def test_extra_users_follow_the_configured_ones(self):
+        self.assertEqual(
+            self._collect(['alice'], split_user=['BOB'], known={'BOB': 'bob'}),
+            ['alice', 'bob'])
+
+    def test_no_split_keeps_only_the_extra_users(self):
+        self.assertEqual(
+            self._collect(['alice'], split_user=['bob'], no_split=True,
+                          known={'bob': 'bob'}),
+            ['bob'])
+
+    def test_unknown_extra_user_returns_none(self):
+        self.assertIsNone(self._collect(['alice'], split_user=['nobody']))
 
 
 class TestSyncCommand(unittest.TestCase):

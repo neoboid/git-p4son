@@ -517,6 +517,21 @@ def _check_split_user_args(names: list[str],
     return [checked.get(name, name) for name in names]
 
 
+def _collect_split_users(args: argparse.Namespace,
+                         workspace_dir: str) -> list[str] | None:
+    """Return the configured split users (unless --no-split) followed by the -u ones.
+
+    Returns None if a -u user is unknown.
+    """
+    extra = args.split_user or []
+    if extra:
+        extra = _check_split_user_args(extra, workspace_dir)
+        if extra is None:
+            return None
+    configured = [] if args.no_split else get_split_users(workspace_dir)
+    return configured + extra
+
+
 def _split_targets(targets: list[tuple[int, str]], users: list[str],
                    last_synced: int, depot_root: str,
                    workspace_dir: str) -> list[tuple[int, str]]:
@@ -637,15 +652,9 @@ def sync_command(args: argparse.Namespace) -> int:
     else:
         log.warning('No previous sync found')
 
-    extra_split_users = args.split_user or []
-    if extra_split_users:
-        extra_split_users = _check_split_user_args(extra_split_users,
-                                                   workspace_dir)
-        if extra_split_users is None:
-            return 1
-    configured_split_users = ([] if args.no_split
-                              else get_split_users(workspace_dir))
-    split_users = configured_split_users + extra_split_users
+    split_users = _collect_split_users(args, workspace_dir)
+    if split_users is None:
+        return 1
 
     lowered = [c.lower() for c in args.changelist]
 

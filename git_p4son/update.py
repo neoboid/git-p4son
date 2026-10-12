@@ -46,10 +46,6 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     """Update the changelist once per commit since the base branch."""
     workspace_dir = args.workspace_dir
 
-    # The rebase needs a clean workspace even with --no-edit
-    if not check_git_workspace_clean(workspace_dir):
-        return 1
-
     log.heading('Finding commits')
     commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)
     if not commit_lines:

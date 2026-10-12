@@ -87,6 +87,12 @@ class TestGetCommitLines(unittest.TestCase):
 
 
 class TestReviewCommand(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean',
+                             return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.get_commit_lines_since')

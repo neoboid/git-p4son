@@ -7,6 +7,7 @@ import subprocess
 from . import CONFIG_DIR
 from .config import ensure_config_dir
 from .git import resolve_editor
+from .lib import check_git_workspace_clean
 from .log import log
 
 # Relative to the workspace root, where git runs the todo's exec lines.
@@ -46,6 +47,9 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
     """
+    if not check_git_workspace_clean(workspace_dir):
+        return 1
+
     if edit_todo:
         log.heading('Checking editor')
         editor = _resolve_editor_or_fail(workspace_dir)

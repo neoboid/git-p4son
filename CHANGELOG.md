@@ -2,10 +2,11 @@
 
 ## Unreleased
 
+- `review` refuses to start with uncommitted changes, like `update --per-commit`. Before, git only stopped the
+  rebase once it had started
 - `review` and `update --per-commit` save the message to `.git-p4son/reviews/message` and pass that to the rebase
   steps. A `-m` message may now span multiple lines, and a `-F` file can be edited or removed once the command has
   started
-
 - `sync` no longer reports "No previous sync found" when the newest commit mentioning a sync subject, such as a
   revert of one, is not itself a sync commit. It now finds the last real sync commit
 - `sync last-synced` now merges local changes back and reports files p4 did not sync, like any other sync.

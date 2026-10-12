@@ -144,8 +144,7 @@ class TestGeneratePerCommitTodo(unittest.TestCase):
 @mock.patch('git_p4son.update.get_commit_lines_since', return_value=COMMITS)
 @mock.patch('git_p4son.update.update_changelist')
 class TestUpdatePerCommit(unittest.TestCase):
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_runs_rebase_without_editor(self, _dirty, mock_update,
+    def test_runs_rebase_without_editor(self, mock_update,
                                         mock_commits, mock_rebase):
         rc = update_command(_args(per_commit=True, base_branch='HEAD~2',
                                   shelve=True))
@@ -157,39 +156,27 @@ class TestUpdatePerCommit(unittest.TestCase):
         self.assertFalse(mock_rebase.call_args.kwargs['edit_todo'])
         self.assertIn('exec git p4son update 100 --shelve', todo)
 
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.update.load_changelist_alias', return_value='200')
-    def test_alias_resolved_to_changelist(self, _load, _dirty, _update,
+    def test_alias_resolved_to_changelist(self, _load, _update,
                                           _commits, mock_rebase):
         rc = update_command(_args(per_commit=True, changelist='feat'))
         self.assertEqual(rc, 0)
         self.assertIn('exec git p4son update 200',
                       mock_rebase.call_args.args[0])
 
-    @mock.patch('git_p4son.lib.get_dirty_files',
-                return_value=[('mod.txt', 'modify')])
-    def test_refuses_dirty_workspace_with_no_edit(
-            self, _dirty, _update, _commits, mock_rebase):
-        rc = update_command(_args(per_commit=True, no_edit=True))
-        self.assertEqual(rc, 1)
-        mock_rebase.assert_not_called()
-
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_no_commits(self, _dirty, _update, mock_commits, mock_rebase):
+    def test_no_commits(self, _update, mock_commits, mock_rebase):
         mock_commits.return_value = []
         rc = update_command(_args(per_commit=True))
         self.assertEqual(rc, 1)
         mock_rebase.assert_not_called()
 
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_dry_run_passed_to_the_rebase(self, _dirty, _update, _commits,
+    def test_dry_run_passed_to_the_rebase(self, _update, _commits,
                                           mock_rebase):
         rc = update_command(_args(per_commit=True, dry_run=True))
         self.assertEqual(rc, 0)
         self.assertTrue(mock_rebase.call_args.kwargs['dry_run'])
 
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_message_passed_to_the_rebase(self, _dirty, _update, _commits,
+    def test_message_passed_to_the_rebase(self, _update, _commits,
                                           mock_rebase):
         rc = update_command(_args(per_commit=True, message='One\nTwo'))
         self.assertEqual(rc, 0)

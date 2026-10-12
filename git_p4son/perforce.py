@@ -172,6 +172,16 @@ def p4_create_changelist(description_lines: list[str],
         'Failed to extract changelist number from p4 change output')
 
 
+def p4_depot_root_exists(depot_root: str, workspace_dir: str) -> bool:
+    """Report whether p4 accepts the depot root as a path to query changelists for."""
+    try:
+        run(['p4', 'changes', '-m1', '-s', 'submitted', f'{depot_root}/...'],
+            cwd=workspace_dir)
+        return True
+    except CommandError:
+        return False
+
+
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
     res = run(['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',

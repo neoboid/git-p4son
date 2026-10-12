@@ -4,11 +4,10 @@ import argparse
 import os
 import shutil
 
-from .common import CommandError, run
 from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
-from .perforce import get_client_spec
+from .perforce import get_client_spec, p4_depot_root_exists
 from .skill import claude_config_dir, install_skill, is_skill_installed
 from .git import (
     add_files,
@@ -25,16 +24,6 @@ from .sync_split_users import (
     set_split_users,
 )
 from .writable import is_writable_mode, set_writable_mode
-
-
-def _validate_depot_root(depot_root: str, cwd: str) -> bool:
-    """Validate a depot root by querying p4 for changelists."""
-    try:
-        run(['p4', 'changes', '-m1', '-s', 'submitted',
-             f'{depot_root}/...'], cwd=cwd)
-        return True
-    except CommandError:
-        return False
 
 
 def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
@@ -82,7 +71,7 @@ def _select_depot_root(client_name: str, cwd: str,
             continue
 
         resolved = expand_depot_root(depot_root, client_name)
-        if _validate_depot_root(resolved, cwd):
+        if p4_depot_root_exists(resolved, cwd):
             return depot_root
 
         log.error(f'Depot root {resolved}/... is not valid')
@@ -101,7 +90,7 @@ def _configure_depot_root(client_name: str, cwd: str,
     if depot_root:
         log.heading('Validating depot root')
         resolved = expand_depot_root(depot_root, client_name)
-        if _validate_depot_root(resolved, cwd):
+        if p4_depot_root_exists(resolved, cwd):
             log.success('all good')
             return True
         else:

@@ -3,13 +3,13 @@
 import unittest
 from unittest import mock
 
-from git_p4son.common import RunError
+from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode, P4ClientSpec, P4SyncPreviewFile, get_client_spec,
     get_existing_p4_users, get_p4_user, get_submitted_changes,
     is_always_writable_file_type,
     is_binary_file_type,
-    p4_head_types, p4_sync_preview, parse_ztag_multi_output,
+    p4_depot_root_exists, p4_head_types, p4_sync_preview, parse_ztag_multi_output,
     parse_ztag_output,
 )
 from tests.helpers import make_run_result
@@ -95,6 +95,21 @@ class TestParseZtagMultiOutput(unittest.TestCase):
     def test_no_records(self):
         lines = ['some other output', '']
         self.assertEqual(parse_ztag_multi_output(lines), [])
+
+
+class TestP4DepotRootExists(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_valid_root(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['Change 12345 on 2024/01/01'])
+        self.assertTrue(p4_depot_root_exists('//my-ws', '/ws'))
+        mock_run.assert_called_once_with(
+            ['p4', 'changes', '-m1', '-s', 'submitted', '//my-ws/...'],
+            cwd='/ws')
+
+    @mock.patch('git_p4son.perforce.run', side_effect=CommandError('p4 error'))
+    def test_invalid_root(self, mock_run):
+        self.assertFalse(p4_depot_root_exists('//bad-root', '/ws'))
 
 
 class TestP4ClientSpec(unittest.TestCase):

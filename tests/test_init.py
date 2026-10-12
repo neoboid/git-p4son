@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError
 from git_p4son.config import load_config
 from git_p4son.init import (
     _ask_yes_no,
@@ -15,13 +14,11 @@ from git_p4son.init import (
     _configure_split_users,
     _configure_writable_mode,
     _setup_gitignore,
-    _validate_depot_root,
     init_command,
 )
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-from tests.helpers import make_run_result
 
 
 class TestComputeCwdDepotRoot(unittest.TestCase):
@@ -36,21 +33,6 @@ class TestComputeCwdDepotRoot(unittest.TestCase):
     def test_nested_subdirectory(self):
         result = _compute_cwd_depot_root('/ws/a/b/c', '/ws')
         self.assertEqual(result, '//$(workspace)/a/b/c')
-
-
-class TestValidateDepotRoot(unittest.TestCase):
-    @mock.patch('git_p4son.init.run')
-    def test_valid_root(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=['Change 12345 on 2024/01/01'])
-        self.assertTrue(_validate_depot_root('//my-ws', '/ws'))
-        mock_run.assert_called_once_with(
-            ['p4', 'changes', '-m1', '-s', 'submitted', '//my-ws/...'],
-            cwd='/ws')
-
-    @mock.patch('git_p4son.init.run', side_effect=CommandError('p4 error'))
-    def test_invalid_root(self, mock_run):
-        self.assertFalse(_validate_depot_root('//bad-root', '/ws'))
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -88,7 +70,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         result = _select_depot_root('client', '/ws/sub', '/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
     @mock.patch('builtins.input', return_value='1')
     def test_entire_workspace_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
@@ -97,7 +79,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         self.assertEqual(result, '//$(workspace)')
         mock_validate.assert_called_once_with('//my-ws', '/ws/sub')
 
-    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
     @mock.patch('builtins.input', return_value='2')
     def test_current_directory_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
@@ -108,7 +90,7 @@ class TestSelectDepotRoot(unittest.TestCase):
 
 
 class TestConfigureDepotRoot(unittest.TestCase):
-    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot')
     @mock.patch('git_p4son.init.save_config')
     def test_existing_valid_root_skips_save(self, mock_save, mock_get, mock_validate):
@@ -117,7 +99,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
         mock_save.assert_not_called()
 
     @mock.patch('git_p4son.init._select_depot_root', return_value='//depot/new')
-    @mock.patch('git_p4son.init._validate_depot_root', return_value=False)
+    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=False)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot/old')
     @mock.patch('git_p4son.init.save_config')
     def test_existing_invalid_root_prompts_and_saves(self, mock_save, mock_get,
@@ -144,7 +126,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
         self.assertFalse(result)
         mock_save.assert_not_called()
 
-    @mock.patch('git_p4son.init._validate_depot_root', return_value=True)
+    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root',
                 return_value='//$(workspace)/Engine')
     @mock.patch('git_p4son.init.save_config')

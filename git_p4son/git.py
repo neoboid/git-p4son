@@ -108,7 +108,7 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
 # --- staging and committing ---
 
 def add_all_files(workspace_dir: str) -> None:
-    """Add all files to git."""
+    """Stage every change in the workspace, untracked files included."""
     run_with_output(['git', 'add', '.'], cwd=workspace_dir)
 
 
@@ -121,7 +121,7 @@ def get_staged_files(workspace_dir: str) -> list[str]:
 
 
 def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
-    """Commit changes to git."""
+    """Commit the staged changes."""
     command = ['git', 'commit', '-m', message]
     if allow_empty:
         command.append('--allow-empty')
@@ -132,7 +132,7 @@ def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
 
 @dataclass
 class LocalChanges:
-    """Container for local git changes."""
+    """Files changed between the base branch and HEAD, by kind."""
     adds: list[str] = field(default_factory=list)
     mods: list[str] = field(default_factory=list)
     dels: list[str] = field(default_factory=list)
@@ -182,7 +182,7 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 # --- log ---
 
 def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get git log --oneline lines for non-merge commits since base branch."""
+    """Return "<short sha> <subject>" lines for the non-merge commits since base_branch, oldest first."""
     # Not --oneline: log.decorate config would prepend "(HEAD -> branch)" to subjects.
     res = run(['git', 'log', '--format=%h %s', '--no-decorate',
                '--reverse', '--no-merges',
@@ -191,7 +191,7 @@ def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
 
 
 def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]:
-    """Get commit subjects from git log since base branch."""
+    """Return the subjects of the non-merge commits since base_branch, oldest first."""
     return [line.split(' ', 1)[-1]
             for line in get_commit_lines_since(base_branch, workspace_dir)]
 
@@ -318,7 +318,6 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
     if not res.stdout:
         return None
 
-    # Format: "<commit_hash> <subject>"
     commit_hash, _, subject = res.stdout[0].partition(' ')
     changelist = parse_sync_subject(subject)
     if changelist is None:

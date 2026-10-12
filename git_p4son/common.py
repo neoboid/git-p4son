@@ -8,7 +8,6 @@ import re
 import subprocess
 import sys
 import threading
-import time
 from timeit import default_timer as timer
 from datetime import timedelta
 from typing import IO, Callable
@@ -191,10 +190,12 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
                      result.stderr, elapsed=elapsed)
 
 
-def enqueue_lines(stream: IO[str], output_queue: queue.Queue[str]) -> None:
-    """Enqueue lines from a stream into a queue."""
-    for line in iter(stream.readline, ''):
-        output_queue.put(line.rstrip())
+def _read_lines(pipe: IO[str], index: int,
+                output_queue: queue.Queue[tuple[int, str | None]]) -> None:
+    """Queue (index, line) for each line of pipe, then (index, None) at its end."""
+    for line in iter(pipe.readline, ''):
+        output_queue.put((index, line.rstrip()))
+    output_queue.put((index, None))
 
 
 def _terminate(process: subprocess.Popen) -> None:
@@ -222,9 +223,9 @@ def run_with_output(command: list[str], cwd: str = '.',
     start_timestamp = timer()
 
     stdout_lines: list[str] = []
-    kept_stdout = stdout_lines if keep_stdout else None
     stderr_lines: list[str] = []
-    returncode: int | None = None
+    collected = (stdout_lines if keep_stdout else None, stderr_lines)
+    streams = (sys.stdout, sys.stderr)
 
     command_env = _env_with_pwd(cwd)
     if env:
@@ -232,58 +233,41 @@ def run_with_output(command: list[str], cwd: str = '.',
 
     # UTF-8 as in run(); a decode error would silently kill the reader threads.
     try:
-        process_cm = subprocess.Popen(command,
-                                      cwd=cwd,
-                                      env=command_env,
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
-                                      text=True,
-                                      encoding='utf-8',
-                                      errors='replace')
+        process = subprocess.Popen(command,
+                                   cwd=cwd,
+                                   env=command_env,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,
+                                   text=True,
+                                   encoding='utf-8',
+                                   errors='replace')
     except OSError:
         # E.g. a missing executable: stop the spinner overwriting the error.
         log.stop_spinner()
         raise
 
-    with process_cm as process:
-
-        output_queue: queue.Queue[str] = queue.Queue()
-        out_thread = threading.Thread(
-            target=enqueue_lines, args=(process.stdout, output_queue))
-        out_thread.daemon = True
-
-        error_queue: queue.Queue[str] = queue.Queue()
-        err_thread = threading.Thread(
-            target=enqueue_lines, args=(process.stderr, error_queue))
-        err_thread.daemon = True
-
-        out_thread.start()
-        err_thread.start()
-
-        def drain_queue(q, lines, stream):
-            try:
-                while not q.empty():
-                    line = q.get_nowait()
-                    if lines is not None:
-                        lines.append(line)
-                    if on_output:
-                        on_output(line=line, stream=stream)
-            except queue.Empty:
-                pass
+    with process:
+        output_queue: queue.Queue[tuple[int, str | None]] = queue.Queue()
+        for index, pipe in enumerate((process.stdout, process.stderr)):
+            threading.Thread(target=_read_lines, args=(pipe, index, output_queue),
+                             daemon=True).start()
 
         try:
-            # Loop on the readers, not process.poll(): the process can exit with output still buffered.
-            while out_thread.is_alive() or err_thread.is_alive():
-                drain_queue(output_queue, kept_stdout, sys.stdout)
-                drain_queue(error_queue, stderr_lines, sys.stderr)
-                time.sleep(0.05)
-
-            out_thread.join()
-            err_thread.join()
-
-            # Final drain for lines enqueued after the last pass above.
-            drain_queue(output_queue, kept_stdout, sys.stdout)
-            drain_queue(error_queue, stderr_lines, sys.stderr)
+            # on_output runs here, not in the readers, so its exceptions and Ctrl-C reach the handlers below.
+            open_pipes = 2
+            while open_pipes:
+                try:
+                    # A timeout keeps Ctrl-C responsive on Windows.
+                    index, line = output_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                if line is None:
+                    open_pipes -= 1
+                    continue
+                if collected[index] is not None:
+                    collected[index].append(line)
+                if on_output:
+                    on_output(line=line, stream=streams[index])
 
             returncode = process.wait()
 

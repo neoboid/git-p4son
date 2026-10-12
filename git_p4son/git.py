@@ -411,13 +411,14 @@ def find_base_commits(filepaths: list[str], before_commit: str,
 
 # --- merge ---
 
-def merge_file(current_path: str, base_path: str,
-               other_path: str) -> tuple[bool, bytes]:
+def merge_file(current_path: str, base_path: str, other_path: str,
+               labels: tuple[str, str, str]) -> tuple[bool, bytes]:
     """Three-way merge of file paths using git merge-file; returns (clean, merged_content)."""
+    current_label, base_label, other_label = labels
     result = run(
         ['git', 'merge-file', '-p',
          '--marker-size=7',
-         '-L', 'Perforce', '-L', 'base', '-L', 'local',
+         '-L', current_label, '-L', base_label, '-L', other_label,
          current_path, base_path, other_path],
         text=False, fail_on_returncode=False)
     # git merge-file -p: exit 0 = clean, >0 = conflicts (count), <0 = error

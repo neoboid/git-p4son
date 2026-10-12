@@ -2193,7 +2193,7 @@ class TestMergeChangedFiles(unittest.TestCase):
                 workspace, self.temp_root)
 
             mock_merge.assert_called_once_with(
-                filepath, base_path, ours_path)
+                filepath, base_path, ours_path, ('Perforce', 'base', 'local'))
 
     @mock.patch('git_p4son.sync.merge_file')
     def test_no_base_uses_shared_empty_file(self, mock_merge):

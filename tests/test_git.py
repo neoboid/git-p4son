@@ -576,7 +576,8 @@ class TestMergeFile(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             p = self._write_inputs(tmpdir, current, base, other)
-            clean, merged = merge_file(p['current'], p['base'], p['other'])
+            clean, merged = merge_file(p['current'], p['base'], p['other'],
+                                       ('Perforce', 'base', 'local'))
             self.assertTrue(clean)
             self.assertIn(b'changed by p4', merged)
             self.assertIn(b'changed locally', merged)
@@ -588,7 +589,8 @@ class TestMergeFile(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             p = self._write_inputs(tmpdir, current, base, other)
-            clean, merged = merge_file(p['current'], p['base'], p['other'])
+            clean, merged = merge_file(p['current'], p['base'], p['other'],
+                                       ('Perforce', 'base', 'local'))
             self.assertFalse(clean)
             self.assertIn(b'<<<<<<< Perforce\n', merged)
             self.assertIn(b'>>>>>>> local\n', merged)

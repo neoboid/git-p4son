@@ -47,6 +47,8 @@ from .perforce import (
 LAST_SYNCED_LABEL = 'last synced'
 SPLIT_LABEL = 'split'
 
+_MERGE_LABELS = ('Perforce', 'base', 'local')
+
 
 @dataclass
 class ChangedFile:
@@ -332,7 +334,8 @@ def _merge_changed_files(changed_files: list[ChangedFile],
                 open(empty_base_path, 'wb').close()
             base_path = empty_base_path
 
-        clean, merged = merge_file(filepath, base_path, cf.ours_path)
+        clean, merged = merge_file(filepath, base_path, cf.ours_path,
+                                   _MERGE_LABELS)
         make_writable([filepath])
         with open(filepath, 'wb') as f:
             f.write(merged)

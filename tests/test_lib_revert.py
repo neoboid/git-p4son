@@ -115,6 +115,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             'revert_unchanged': mock.patch(
                 'git_p4son.lib.p4_revert_unchanged', return_value=[]),
             'run': mock.patch('git_p4son.lib.run'),
+            'restore': mock.patch('git_p4son.lib.restore_files'),
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
             'make_writable': mock.patch('git_p4son.lib.make_writable'),
@@ -154,12 +155,11 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
                     ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
         count = revert_unchanged_files('100', self.ws)
-        self.assertEqual(self._run_commands(), [
-            ['p4', '-x', '-', 'revert'],
-            ['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
-        ])
-        inputs = [c.kwargs['input'] for c in self.mocks['run'].call_args_list]
-        self.assertEqual(inputs, ['a.txt\nb.txt', 'a.txt\0b.txt'])
+        self.assertEqual(self._run_commands(), [['p4', '-x', '-', 'revert']])
+        self.assertEqual(self.mocks['run'].call_args.kwargs['input'],
+                         'a.txt\nb.txt')
+        self.mocks['restore'].assert_called_once_with(
+            ['a.txt', 'b.txt'], self.ws, False)
         self.assertEqual(count, 2)
 
     def test_real_delete_is_left_alone(self):

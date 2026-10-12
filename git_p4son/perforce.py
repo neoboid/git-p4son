@@ -13,7 +13,7 @@ from .common import (
     run,
     run_with_output,
 )
-from .git import LocalChanges
+from .git import LocalChanges, restore_files
 from .log import log
 
 
@@ -337,8 +337,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
     _run_p4_batch(['reopen', '-c', changelist], to_reopen,
                   'Moving files from other changelists', workspace_dir, dry_run)
     if to_restore:
-        run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
-            cwd=workspace_dir, input='\0'.join(to_restore), dry_run=dry_run)
+        restore_files(to_restore, workspace_dir, dry_run)
     if to_open and not dry_run:
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 

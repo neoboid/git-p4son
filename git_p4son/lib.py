@@ -11,6 +11,7 @@ from .git import (
     get_dirty_files,
     get_local_changes,
     get_tracked_files,
+    restore_files,
 )
 from .list_changes import get_enumerated_commit_lines_since
 from .log import log
@@ -249,9 +250,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
         # p4 revert writes the depot version to disk, so restore git's.
         run(['p4', '-x', '-', 'revert'], cwd=workspace_dir,
             input='\n'.join(stale_deletes), dry_run=dry_run)
-        run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
-            cwd=workspace_dir, input='\0'.join(stale_deletes),
-            dry_run=dry_run)
+        restore_files(stale_deletes, workspace_dir, dry_run)
 
     if not dry_run and is_writable_mode(workspace_dir):
         # p4 revert leaves files read-only; the still opened ones are writable already.

@@ -281,11 +281,13 @@ class TestOpenWarnings(unittest.TestCase):
 class TestIncludeChangesInChangelist(unittest.TestCase):
 
     def setUp(self):
+        self.mocks = {}
         for target, value in (('get_opened_files', {}),
-                              ('_warn_unopened', None)):
+                              ('_warn_unopened', None),
+                              ('restore_files', None)):
             patcher = mock.patch(f'git_p4son.perforce.{target}',
                                  return_value=value)
-            patcher.start()
+            self.mocks[target] = patcher.start()
             self.addCleanup(patcher.stop)
     # --- added files ---
 
@@ -444,11 +446,13 @@ class TestActionMismatch(unittest.TestCase):
     """Tests for reopening files when the p4 action doesn't match the desired action."""
 
     def setUp(self):
+        self.mocks = {}
         for target, value in (('get_opened_files', {}),
-                              ('_warn_unopened', None)):
+                              ('_warn_unopened', None),
+                              ('restore_files', None)):
             patcher = mock.patch(f'git_p4son.perforce.{target}',
                                  return_value=value)
-            patcher.start()
+            self.mocks[target] = patcher.start()
             self.addCleanup(patcher.stop)
 
     # --- edit -> delete ---
@@ -487,9 +491,9 @@ class TestActionMismatch(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
             (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt'),
-            (['git', 'restore', '--pathspec-from-file=-',
-              '--pathspec-file-nul'], 'file.txt')])
+            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
+        self.mocks['restore_files'].assert_called_once_with(
+            ['file.txt'], '/ws', False)
 
     @mock.patch('git_p4son.perforce._opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'delete')))
@@ -501,9 +505,9 @@ class TestActionMismatch(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
             (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt'),
-            (['git', 'restore', '--pathspec-from-file=-',
-              '--pathspec-file-nul'], 'file.txt')])
+            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
+        self.mocks['restore_files'].assert_called_once_with(
+            ['file.txt'], '/ws', False)
 
     # --- add -> edit (keep as add, file is new to depot) ---
     @mock.patch('git_p4son.perforce._opened_lookup',
@@ -541,6 +545,7 @@ class TestActionMismatch(unittest.TestCase):
 
 
 class TestBatchedActions(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.restore_files')
     @mock.patch('git_p4son.perforce._warn_unopened')
     @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
@@ -548,7 +553,7 @@ class TestBatchedActions(unittest.TestCase):
         'a.txt': ('100', 'delete'), 'b.txt': ('200', 'delete'),
         'c.txt': ('200', 'edit'), 'd.txt': ('300', 'edit')})
     def test_reverts_reopens_and_restores_in_one_call_each(
-            self, _opened, mock_run, mock_log, _warn):
+            self, _opened, mock_run, mock_log, _warn, mock_restore):
         changes = LocalChanges()
         changes.mods = ['a.txt', 'b.txt', 'c.txt', 'd.txt']
         include_changes_in_changelist(changes, '100', '/ws')
@@ -556,9 +561,8 @@ class TestBatchedActions(unittest.TestCase):
             (['p4', '-x', '-', 'revert'], 'a.txt\nb.txt'),
             (['p4', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
             (['p4', '-x', '-', 'reopen', '-c', '100'], 'c.txt\nd.txt'),
-            (['git', 'restore', '--pathspec-from-file=-',
-              '--pathspec-file-nul'], 'a.txt\0b.txt'),
         ])
+        mock_restore.assert_called_once_with(['a.txt', 'b.txt'], '/ws', False)
         logged = [c.args[0] for c in mock_log.info.call_args_list]
         self.assertIn('Moving files from other changelists:', logged)
         self.assertIn('  c.txt', logged)

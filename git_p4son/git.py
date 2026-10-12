@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from .common import (
     CommandError,
     RunError,
-    batched_command_log,
     normalize_workspace_path,
     run,
     run_with_output,
@@ -223,26 +222,13 @@ def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]
 # --- tracking ---
 
 def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
-    """Return the subset of filepaths that are tracked by git, batched."""
+    """Return the subset of filepaths that are tracked by git."""
     if not filepaths:
         return set()
-    by_git_path: dict[str, str] = {}
-    for filepath in filepaths:
-        git_path = normalize_workspace_path(filepath, workspace_dir)
-        if git_path is not None:
-            by_git_path[git_path] = filepath
-    tracked: set[str] = set()
-    chunks = _chunk_paths_by_length(
-        list(by_git_path), _PATHSPEC_LENGTH_BUDGET)
-    # -z: non-ASCII paths verbatim, not C-quoted.
-    command = ['git', 'ls-files', '-z', '--']
-    with batched_command_log(command, len(by_git_path), len(chunks)):
-        for chunk in chunks:
-            result = run(command + chunk, cwd=workspace_dir)
-            for git_path in _split_nul(result.stdout):
-                if git_path in by_git_path:
-                    tracked.add(by_git_path[git_path])
-    return tracked
+    # One listing of the index; pathspecs make git match every entry against every path.
+    tracked = set(list_tracked_files(workspace_dir))
+    return {filepath for filepath in filepaths
+            if normalize_workspace_path(filepath, workspace_dir) in tracked}
 
 
 def list_tracked_files(workspace_dir: str) -> list[str]:
@@ -347,28 +333,6 @@ def git_last_sync(workspace_dir: str) -> LastSync | None:
     if changelist is None:
         return None
     return LastSync(changelist=changelist, commit=commit_hash)
-
-
-# Pathspec budget per git call; Windows caps a command line at 32767 characters.
-_PATHSPEC_LENGTH_BUDGET = 20000
-
-
-def _chunk_paths_by_length(paths: list[str], budget: int) -> list[list[str]]:
-    """Split paths into chunks whose total argument length stays in budget."""
-    chunks: list[list[str]] = []
-    chunk: list[str] = []
-    used = 0
-    for path in paths:
-        cost = len(path) + 1
-        if chunk and used + cost > budget:
-            chunks.append(chunk)
-            chunk = []
-            used = 0
-        chunk.append(path)
-        used += cost
-    if chunk:
-        chunks.append(chunk)
-    return chunks
 
 
 def find_base_commits(filepaths: list[str], before_commit: str,

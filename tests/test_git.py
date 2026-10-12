@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import RunError
+from git_p4son.common import RunError, run
 from git_p4son.git import (
     add_files,
     find_base_commits,
@@ -126,38 +126,16 @@ class TestGetTrackedFiles(GitRepoTestCase):
         result = get_tracked_files([name], self.tmpdir)
         self.assertEqual(result, {name})
 
-    def test_chunking_preserves_results(self):
-        self._write_file('a.py', 'a')
-        self._write_file('b.py', 'b')
+    def test_one_listing_for_any_number_of_paths(self):
+        for name in ('a.py', 'b.py'):
+            self._write_file(name, name)
         self._commit()
         self._write_file('c.log', '')
-
-        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1):
+        with mock.patch('git_p4son.git.run', wraps=run) as mock_run:
             result = get_tracked_files(
-                ['a.py', 'b.py', 'c.log'], self.tmpdir)
+                ['a.py', 'b.py', 'c.log'] * 1000, self.tmpdir)
         self.assertEqual(result, {'a.py', 'b.py'})
-
-    def test_batches_are_logged_as_one_line(self):
-        """A batch of chunked commands is logged as one line."""
-        self._write_file('a.py', 'a')
-        self._write_file('b.py', 'b')
-        self._commit()
-        buffer = io.StringIO()
-        with mock.patch('git_p4son.git._PATHSPEC_LENGTH_BUDGET', 1), \
-                contextlib.redirect_stdout(buffer):
-            get_tracked_files(['a.py', 'b.py', 'c.log'], self.tmpdir)
-        commands = [line for line in buffer.getvalue().splitlines()
-                    if line.startswith('>')]
-        self.assertEqual(commands,
-                         ['>  git ls-files -z -- <3 paths in 3 batches>'])
-
-    def test_single_batch_logs_the_command(self):
-        self._write_file('a.py', 'a')
-        self._commit()
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            get_tracked_files(['a.py'], self.tmpdir)
-        self.assertIn('>  git ls-files -z -- a.py', buffer.getvalue())
+        mock_run.assert_called_once()
 
     def test_empty_input(self):
         result = get_tracked_files([], self.tmpdir)

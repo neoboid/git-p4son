@@ -14,80 +14,82 @@ from git_p4son.git import (
 )
 from git_p4son.lib import open_changes_for_edit
 from git_p4son.perforce import (
-    get_changelist_for_file,
+    _opened_state,
+    get_opened_files,
     include_changes_in_changelist,
 )
 from tests.helpers import make_run_result
 
 
-class TestGetChangelistForFile(unittest.TestCase):
+class TestGetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    def test_file_not_opened(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertIsNone(result)
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_file_in_default_changelist(self, mock_run):
+    def test_one_query_for_all_files(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
+            '... path /ws/a.txt',
             '... action edit',
-            '... change default',
-            '... type text',
-        ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('default', 'edit'))
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_file_in_numbered_changelist(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... action edit',
-            '... change 12345',
-            '... type text',
-        ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('12345', 'edit'))
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_file_opened_for_add(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... action add',
-            '... change 12345',
-        ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('12345', 'add'))
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_file_opened_for_delete(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... action delete',
-            '... change 12345',
-        ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('12345', 'delete'))
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_file_opened_for_move_add(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... action move/add',
-            '... change 12345',
-        ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('12345', 'move/add'))
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_add_in_default_changelist(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
+            '... change 100',
+            '',
+            '... path /ws/sub/b.txt',
             '... action add',
             '... change default',
         ])
-        result = get_changelist_for_file('foo.txt', '/ws')
-        self.assertEqual(result, ('default', 'add'))
+        opened = get_opened_files(['a.txt', 'sub/b.txt', 'c.txt'], '/ws')
+        self.assertEqual(opened, {'a.txt': ('100', 'edit'),
+                                  'sub/b.txt': ('default', 'add')})
+        mock_run.assert_called_once()
+        self.assertEqual(mock_run.call_args.args[0],
+                         ['p4', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
+                          '-T', 'path,clientFile,action,change'])
+        self.assertEqual(mock_run.call_args.kwargs['input'],
+                         'a.txt\nsub/b.txt\nc.txt')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_no_files_makes_no_query(self, mock_run):
+        self.assertEqual(get_opened_files([], '/ws'), {})
+        mock_run.assert_not_called()
+
+    @mock.patch('git_p4son.perforce.log')
+    @mock.patch('git_p4son.perforce.run')
+    def test_unopened_and_new_files_are_not_errors(self, mock_run, mock_log):
+        mock_run.return_value = make_run_result(returncode=1, stderr=[
+            'c.txt - file(s) not opened on this client.',
+            'new.txt - no such file(s).',
+        ])
+        self.assertEqual(get_opened_files(['c.txt', 'new.txt'], '/ws'), {})
+        mock_log.warning.assert_not_called()
+
+    @mock.patch('git_p4son.perforce.log')
+    @mock.patch('git_p4son.perforce.run')
+    def test_other_errors_warn(self, mock_run, mock_log):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['Perforce password (P4PASSWD) invalid.'])
+        self.assertEqual(get_opened_files(['a.txt'], '/ws'), {})
+        mock_log.warning.assert_called_once()
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_windows_paths(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... path D:\\p4\\Games\\Script\\a.as',
+            '... action edit',
+            '... change 100',
+        ])
+        opened = get_opened_files(['Script/a.as'], 'D:\\p4\\Games')
+        self.assertEqual(opened, {'Script/a.as': ('100', 'edit')})
+
+
+class TestOpenedState(unittest.TestCase):
+    def test_exact_match(self):
+        self.assertEqual(_opened_state({'a.txt': ('1', 'edit')}, 'a.txt'),
+                         ('1', 'edit'))
+
+    def test_case_differs(self):
+        """p4 may spell the path in the client's case."""
+        self.assertEqual(
+            _opened_state({'Source/A.cpp': ('1', 'edit')}, 'source/a.cpp'),
+            ('1', 'edit'))
+
+    def test_not_opened(self):
+        self.assertIsNone(_opened_state({'a.txt': ('1', 'edit')}, 'b.txt'))
 
 
 class TestFindCommonAncestor(unittest.TestCase):
@@ -195,8 +197,14 @@ class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
 class TestOpenWarnings(unittest.TestCase):
     """A file p4 did not open is surfaced as a warning, since p4 still exits 0."""
 
+    def setUp(self):
+        patcher = mock.patch('git_p4son.perforce.get_opened_files',
+                             return_value={})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @mock.patch('git_p4son.perforce.log')
-    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+    @mock.patch('git_p4son.perforce._opened_state',
                 return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_warns_when_p4_declines_to_open(self, mock_run, _check,
@@ -209,7 +217,7 @@ class TestOpenWarnings(unittest.TestCase):
         mock_log.warning.assert_called_once()
 
     @mock.patch('git_p4son.perforce.log')
-    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+    @mock.patch('git_p4son.perforce._opened_state',
                 return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_p4_ignored_file_warns_and_continues(self, mock_run, _check,
@@ -229,7 +237,7 @@ class TestOpenWarnings(unittest.TestCase):
         mock_log.warning.assert_called_once()
 
     @mock.patch('git_p4son.perforce.log')
-    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+    @mock.patch('git_p4son.perforce._opened_state',
                 return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_no_warning_when_opened(self, mock_run, _check, mock_log):
@@ -242,8 +250,15 @@ class TestOpenWarnings(unittest.TestCase):
 
 
 class TestIncludeChangesInChangelist(unittest.TestCase):
+
+    def setUp(self):
+        patcher = mock.patch('git_p4son.perforce.get_opened_files',
+                             return_value={})
+        patcher.start()
+        self.addCleanup(patcher.stop)
     # --- added files ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)
+
+    @mock.patch('git_p4son.perforce._opened_state', return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_adds_files(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -255,7 +270,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'add'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_added_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -267,7 +282,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_added_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -277,7 +292,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.assert_not_called()
 
     # --- modified files ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)
+    @mock.patch('git_p4son.perforce._opened_state', return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_edits_unchecked_out_file(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -289,7 +304,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'edit'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -301,7 +316,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'edit'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -311,7 +326,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.assert_not_called()
 
     # --- deleted files ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)
+    @mock.patch('git_p4son.perforce._opened_state', return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_deletes_files(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -323,7 +338,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False, fail_on_returncode=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'delete'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_deleted_file_in_different_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -335,7 +350,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
             cwd='/ws', dry_run=False,
         )
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'delete'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_skips_deleted_file_already_in_correct_changelist(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -345,7 +360,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.assert_not_called()
 
     # --- moved files ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)
+    @mock.patch('git_p4son.perforce._opened_state', return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_moves_files(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -358,7 +373,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
                          'p4', 'delete', '-c', '100', 'old.txt'])
         self.assertEqual(calls[1][0][0], ['p4', 'add', '-c', '100', 'new.txt'])
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file',
+    @mock.patch('git_p4son.perforce._opened_state',
                 side_effect=[('200', 'delete'), ('200', 'add')])
     @mock.patch('git_p4son.perforce.run')
     def test_reopens_moved_files_in_different_changelist(self, mock_run, mock_check):
@@ -374,7 +389,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
                          'p4', 'reopen', '-c', '100', 'new.txt'])
 
     # --- dry run ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=None)
+    @mock.patch('git_p4son.perforce._opened_state', return_value=None)
     @mock.patch('git_p4son.perforce.run')
     def test_dry_run(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -387,11 +402,31 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         )
 
 
+class TestOneOpenedQuery(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
+    @mock.patch('git_p4son.perforce.get_opened_files', return_value={})
+    def test_every_path_in_one_query(self, mock_opened, _run):
+        changes = LocalChanges()
+        changes.adds = ['new.txt']
+        changes.mods = ['mod.txt']
+        changes.dels = ['gone.txt']
+        changes.moves = [('old.txt', 'renamed.txt')]
+        include_changes_in_changelist(changes, '100', '/ws')
+        mock_opened.assert_called_once_with(
+            ['new.txt', 'mod.txt', 'gone.txt', 'old.txt', 'renamed.txt'], '/ws')
+
+
 class TestActionMismatch(unittest.TestCase):
     """Tests for reopening files when the p4 action doesn't match the desired action."""
 
+    def setUp(self):
+        patcher = mock.patch('git_p4son.perforce.get_opened_files',
+                             return_value={})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     # --- edit -> delete ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'edit'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_edit_to_delete_same_cl(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -404,7 +439,7 @@ class TestActionMismatch(unittest.TestCase):
         self.assertEqual(calls[1][0][0],
                          ['p4', 'delete', '-c', '100', 'file.txt'])
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'edit'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'edit'))
     @mock.patch('git_p4son.perforce.run')
     def test_edit_to_delete_different_cl(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -418,7 +453,7 @@ class TestActionMismatch(unittest.TestCase):
                          ['p4', 'delete', '-c', '100', 'file.txt'])
 
     # --- delete -> edit ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'delete'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_delete_to_edit_same_cl(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -433,7 +468,7 @@ class TestActionMismatch(unittest.TestCase):
         self.assertEqual(calls[2][0][0],
                          ['git', 'restore', 'file.txt'])
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'delete'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'delete'))
     @mock.patch('git_p4son.perforce.run')
     def test_delete_to_edit_different_cl(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -449,7 +484,7 @@ class TestActionMismatch(unittest.TestCase):
                          ['git', 'restore', 'file.txt'])
 
     # --- add -> edit (keep as add, file is new to depot) ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_add_to_edit_same_cl_keeps_add(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -458,7 +493,7 @@ class TestActionMismatch(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws')
         mock_run.assert_not_called()
 
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('200', 'add'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('200', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_add_to_edit_different_cl_reopens(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()
@@ -471,7 +506,7 @@ class TestActionMismatch(unittest.TestCase):
         )
 
     # --- add -> delete (revert only, no reopen) ---
-    @mock.patch('git_p4son.perforce.get_changelist_for_file', return_value=('100', 'add'))
+    @mock.patch('git_p4son.perforce._opened_state', return_value=('100', 'add'))
     @mock.patch('git_p4son.perforce.run')
     def test_add_to_delete_reverts_only(self, mock_run, mock_check):
         mock_run.return_value = make_run_result()

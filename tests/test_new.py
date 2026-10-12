@@ -20,8 +20,7 @@ class TestNewCommandDryRun(unittest.TestCase):
     """A dry run walks every optional step and passes dry_run to every run() call."""
 
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.perforce.get_changelist_for_file',
-                return_value=None)
+    @mock.patch('git_p4son.perforce.get_opened_files', return_value={})
     @mock.patch('git_p4son.lib.get_local_changes')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
                 return_value=['1. Commit'])

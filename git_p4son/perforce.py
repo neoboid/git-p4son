@@ -218,14 +218,44 @@ def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
 
 # --- file operations ---
 
-def get_changelist_for_file(filename: str, workspace_dir: str) -> tuple[str, str] | None:
-    """Return (changelist, action) for an opened file, or None if not opened."""
-    res = run(['p4', '-ztag', 'opened', filename], cwd=workspace_dir)
-    fields = parse_ztag_output(res.stdout)
-    change = fields.get('change')
-    if change is None:
-        return None
-    return (change, fields.get('action', ''))
+def get_opened_files(filenames: list[str],
+                     workspace_dir: str) -> dict[str, tuple[str, str]]:
+    """Return (changelist, action) for each of the files that is opened, keyed by workspace-relative path."""
+    if not filenames:
+        return {}
+    res = run(['p4', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
+               '-T', 'path,clientFile,action,change'],
+              cwd=workspace_dir, input='\n'.join(filenames),
+              fail_on_returncode=False)
+    # Files that are not opened, or not in the depot yet, are reported per file.
+    errors = [line for line in res.stderr
+              if 'not opened' not in line and 'no such file' not in line]
+    if res.returncode != 0 and errors:
+        log.warning('p4 fstat failed to list opened files:')
+        for line in errors:
+            log.info(f'  {line}')
+    opened = {}
+    for record in parse_ztag_multi_output(res.stdout):
+        client_path = record.get('path') or record.get('clientFile')
+        if not client_path:
+            continue
+        filename = normalize_workspace_path(client_path, workspace_dir)
+        if filename is not None:
+            opened[filename] = (record.get('change', ''),
+                                record.get('action', ''))
+    return opened
+
+
+def _opened_state(opened: dict[str, tuple[str, str]],
+                  filename: str) -> tuple[str, str] | None:
+    """Look filename up in get_opened_files' result, ignoring case if there is no exact match."""
+    state = opened.get(filename)
+    if state is None:
+        # p4 may spell a path in the client's case on case-insensitive file systems.
+        folded = filename.casefold()
+        state = next((value for path, value in opened.items()
+                      if path.casefold() == folded), None)
+    return state
 
 
 def _open_in_changelist(filename: str, p4_action: str, changelist: str,
@@ -243,16 +273,16 @@ def _open_in_changelist(filename: str, p4_action: str, changelist: str,
             log.info(f'  {line}')
 
 
-def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
+def _ensure_in_changelist(filename: str, p4_action: str,
+                          current: tuple[str, str] | None, changelist: str,
                           workspace_dir: str, dry_run: bool) -> None:
     """Ensure a file is opened with the given action in the given changelist."""
-    result = get_changelist_for_file(filename, workspace_dir)
-    if result is None:
+    if current is None:
         _open_in_changelist(filename, p4_action, changelist,
                             workspace_dir, dry_run)
         return
 
-    current_cl, current_action = result
+    current_cl, current_action = current
     if current_action != p4_action:
         # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
         # add -> edit: new to the depot, so it stays an add.
@@ -279,23 +309,17 @@ def _ensure_in_changelist(filename: str, p4_action: str, changelist: str,
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                                   workspace_dir: str, dry_run: bool = False) -> None:
     """Open local git changes for add/edit/delete in a Perforce changelist."""
-    for filename in changes.adds:
-        _ensure_in_changelist(filename, 'add', changelist,
-                              workspace_dir, dry_run)
-
-    for filename in changes.mods:
-        _ensure_in_changelist(filename, 'edit', changelist,
-                              workspace_dir, dry_run)
-
-    for filename in changes.dels:
-        _ensure_in_changelist(filename, 'delete',
-                              changelist, workspace_dir, dry_run)
-
+    wanted = ([(f, 'add') for f in changes.adds]
+              + [(f, 'edit') for f in changes.mods]
+              + [(f, 'delete') for f in changes.dels])
     for from_filename, to_filename in changes.moves:
-        _ensure_in_changelist(from_filename, 'delete',
-                              changelist, workspace_dir, dry_run)
-        _ensure_in_changelist(to_filename, 'add',
-                              changelist, workspace_dir, dry_run)
+        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
+
+    opened = get_opened_files([f for f, _ in wanted], workspace_dir)
+    for filename, p4_action in wanted:
+        _ensure_in_changelist(filename, p4_action,
+                              _opened_state(opened, filename), changelist,
+                              workspace_dir, dry_run)
 
 
 def get_opened_files_in_changelist(changelist: str,

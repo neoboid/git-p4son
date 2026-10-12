@@ -52,40 +52,28 @@ def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
     return others, keywords
 
 
+def _commit_list_start(lines: list[str]) -> int | None:
+    """Return the index of the commit list's first line, or None if there is no list."""
+    for i, line in enumerate(lines):
+        if line.strip() == COMMIT_LIST_MARKER:
+            following = next((j for j in range(i + 1, len(lines))
+                              if lines[j].strip()), None)
+            if following is not None and lines[following].startswith('1. '):
+                return following
+    # Fallback for descriptions written without the marker.
+    return next((i for i, line in enumerate(lines) if line.startswith('1. ')),
+                None)
+
+
 def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
     """Split description into (message_lines, commit_lines, trailing_lines)."""
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip() != COMMIT_LIST_MARKER:
-            continue
-        for j in range(i + 1, len(lines)):
-            if lines[j].startswith('1. '):
-                start = j
-                break
-            if lines[j].strip():
-                break  # something other than the list follows this marker
-        if start is not None:
-            break
-
-    if start is None:
-        # Fallback for descriptions written without the marker.
-        for i, line in enumerate(lines):
-            if line.startswith('1. '):
-                start = i
-                break
+    start = _commit_list_start(lines)
     if start is None:
         return (lines, [], [])
-
-    # Find end of numbered list (consecutive "<number>. " lines)
+    # The list runs on while the lines keep counting "2. ", "3. ", ...
     end = start + 1
-    expected_nr = 2
-    for j in range(end, len(lines)):
-        if lines[j].startswith(f'{expected_nr}. '):
-            expected_nr += 1
-            end = j + 1
-        else:
-            break
-
+    while end < len(lines) and lines[end].startswith(f'{end - start + 1}. '):
+        end += 1
     return (lines[:start], lines[start:end], lines[end:])
 
 

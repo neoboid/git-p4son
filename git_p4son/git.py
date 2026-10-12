@@ -15,6 +15,11 @@ from .common import (
 )
 
 
+def _git_path(filepath: str) -> str:
+    """Git uses forward slashes in tree paths, even on Windows."""
+    return filepath.replace('\\', '/')
+
+
 # --- workspace ---
 
 def is_workspace_dir(directory: str) -> bool:
@@ -245,9 +250,7 @@ def get_files_at_commits(items: list[tuple[str, str]],
         return {}
     queries = []
     for commit, filepath in items:
-        # Git uses forward slashes in tree paths, even on Windows
-        git_path = filepath.replace('\\', '/')
-        queries.append(f'{commit}:{git_path}')
+        queries.append(f'{commit}:{_git_path(filepath)}')
     # --batch answers each input line in order, so results map back by position.
     result = run(['git', 'cat-file', '--batch'], cwd=workspace_dir,
                  input='\n'.join(queries) + '\n', text=False)
@@ -275,9 +278,7 @@ def get_blob_oids(items: list[tuple[str, str]],
         return {}
     queries = []
     for commit, filepath in items:
-        # Git uses forward slashes in tree paths, even on Windows
-        git_path = filepath.replace('\\', '/')
-        queries.append(f'{commit}:{git_path}')
+        queries.append(f'{commit}:{_git_path(filepath)}')
     # --batch-check emits one line per input line, so results map back by position.
     result = run(['git', 'cat-file', '--batch-check'], cwd=workspace_dir,
                  input='\n'.join(queries) + '\n')
@@ -368,8 +369,7 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     result: dict[str, str | None] = dict.fromkeys(filepaths)
     if not filepaths:
         return result
-    # Git uses forward slashes in tree paths, even on Windows
-    by_git_path = {fp.replace('\\', '/'): fp for fp in filepaths}
+    by_git_path = {_git_path(fp): fp for fp in filepaths}
     # Paths go on stdin after `--`, so any number of them takes a single history walk.
     res = run(['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
                '--name-status', '--pretty=format:%x01%H%x01%s', '--stdin',

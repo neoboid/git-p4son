@@ -243,17 +243,20 @@ def list_tracked_files(workspace_dir: str) -> list[str]:
 
 # --- file retrieval ---
 
+def _cat_file_input(items: list[tuple[str, str]]) -> str:
+    """The "<commit>:<path>" lines git cat-file reads from stdin."""
+    return ''.join(f'{commit}:{_git_path(filepath)}\n'
+                   for commit, filepath in items)
+
+
 def get_files_at_commits(items: list[tuple[str, str]],
                          workspace_dir: str) -> dict[tuple[str, str], bytes | None]:
     """Map (commit, filepath) pairs to file content, or None where the file doesn't exist at that commit."""
     if not items:
         return {}
-    queries = []
-    for commit, filepath in items:
-        queries.append(f'{commit}:{_git_path(filepath)}')
     # --batch answers each input line in order, so results map back by position.
     result = run(['git', 'cat-file', '--batch'], cwd=workspace_dir,
-                 input='\n'.join(queries) + '\n', text=False)
+                 input=_cat_file_input(items), text=False)
     out = result.stdout
     contents: dict[tuple[str, str], bytes | None] = {}
     pos = 0
@@ -276,12 +279,9 @@ def get_blob_oids(items: list[tuple[str, str]],
     """Map (commit, filepath) pairs to blob OIDs, or None where the file doesn't exist at that commit."""
     if not items:
         return {}
-    queries = []
-    for commit, filepath in items:
-        queries.append(f'{commit}:{_git_path(filepath)}')
     # --batch-check emits one line per input line, so results map back by position.
     result = run(['git', 'cat-file', '--batch-check'], cwd=workspace_dir,
-                 input='\n'.join(queries) + '\n')
+                 input=_cat_file_input(items))
     oids: dict[tuple[str, str], str | None] = {}
     for item, line in zip(items, result.stdout):
         # Found objects print "<oid> <type> <size>"; anything else means no blob.

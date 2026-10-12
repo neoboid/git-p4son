@@ -12,30 +12,25 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
                    force: bool, message_file: str | None = None,
                    no_commit_list: bool = False) -> str:
     """Generate the rebase todo content with exec lines."""
+    if message_file:
+        message_arg = f'-F {shlex.quote(message_file)}'
+    else:
+        message_arg = f'-m {shlex.quote(message)}'
+    new_cmd = f'new {shlex.quote(alias)} --review {message_arg}'
+    if force:
+        new_cmd += ' --force'
+    update_cmd = f'update {shlex.quote(alias)} --shelve'
+
     lines = []
     last_index = len(commit_lines) - 1
     for i, commit_line in enumerate(commit_lines):
-        lines.append(pick_line(commit_line))
-
-        if i == 0:
-            # First commit: create new changelist with review
-            if message_file:
-                message_arg = f'-F {shlex.quote(message_file)}'
-            else:
-                message_arg = f'-m {shlex.quote(message)}'
-            cmd = f'new {shlex.quote(alias)} --review {message_arg}'
-            if force:
-                cmd += ' --force'
-        else:
-            # Subsequent commits: update and shelve
-            cmd = f'update {shlex.quote(alias)} --shelve'
-
+        cmd = new_cmd if i == 0 else update_cmd
         if no_commit_list:
             cmd += ' --no-commit-list'
-
         # Sleep after all exec lines except the last
         if i < last_index:
             cmd += ' --sleep 5'
+        lines.append(pick_line(commit_line))
         lines.append(f'exec git p4son {cmd}')
 
     return '\n'.join(lines) + '\n'

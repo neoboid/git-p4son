@@ -11,6 +11,7 @@ from git_p4son.cli import create_parser
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
+    P4SyncClobberError,
     P4SyncAbortError,
     P4SyncOutputProcessor,
     P4SyncPreviewFile,
@@ -31,8 +32,8 @@ from git_p4son.sync import (
     _collect_split_users,
     _restore_writable,
     _should_split,
+    _sync_changelist,
     build_sync_targets,
-    p4_sync,
     prepare_writable_files,
     sync_command,
     sync_preflight,
@@ -353,44 +354,30 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
                       'already exists.', sys.stderr)
 
 
-class TestP4Sync(unittest.TestCase):
-    @mock.patch('git_p4son.sync.run_with_output')
-    def test_success(self, mock_rwo):
-        mock_rwo.return_value = make_run_result()
-        p4_sync(12345, 'test', '//myclient', '/ws')
+@mock.patch('git_p4son.sync.p4_sync')
+class TestSyncChangelist(unittest.TestCase):
+    """p4 refusing an expected (git-ignored) file is tolerated; any other refusal raises."""
 
-    @mock.patch('git_p4son.sync.run_with_output')
-    def test_expected_clobber_tolerated(self, mock_rwo):
-        mock_rwo.side_effect = RunError(
-            'p4 sync failed', returncode=1,
-            stderr=["Can't clobber writable file /ws/a.txt",
-                    "Can't clobber writable file /ws/b.txt"])
-        refused = p4_sync(12345, 'test', '//myclient', '/ws',
-                          expected_clobber={'/ws/a.txt', '/ws/b.txt'})
-        self.assertEqual(sorted(refused), ['/ws/a.txt', '/ws/b.txt'])
+    def _clobber(self, *refused):
+        return P4SyncClobberError(
+            RunError('p4 sync failed', 1, []), list(refused))
 
-    @mock.patch('git_p4son.sync.run_with_output')
-    def test_clean_sync_refuses_nothing(self, mock_rwo):
-        mock_rwo.return_value = mock.Mock(elapsed=None)
+    def test_clean_sync_refuses_nothing(self, mock_p4_sync):
         self.assertEqual(
-            p4_sync(12345, 'test', '//myclient', '/ws'), [])
+            _sync_changelist(12345, 'test', '//myclient', '/ws'), [])
+        mock_p4_sync.assert_called_once_with(12345, '//myclient', '/ws')
 
-    @mock.patch('git_p4son.sync.run_with_output')
-    def test_unexpected_clobber_raises(self, mock_rwo):
-        mock_rwo.side_effect = RunError(
-            'p4 sync failed', returncode=1,
-            stderr=["Can't clobber writable file /ws/a.txt"])
-        with self.assertRaises(RunError):
-            p4_sync(12345, 'test', '//myclient', '/ws',
-                    expected_clobber=set())
+    def test_expected_clobber_tolerated(self, mock_p4_sync):
+        mock_p4_sync.side_effect = self._clobber('/ws/a.txt', '/ws/b.txt')
+        refused = _sync_changelist(12345, 'test', '//myclient', '/ws',
+                                   expected_clobber={'/ws/a.txt', '/ws/b.txt'})
+        self.assertEqual(refused, ['/ws/a.txt', '/ws/b.txt'])
 
-    @mock.patch('git_p4son.sync.run_with_output')
-    def test_non_clobber_error_raises(self, mock_rwo):
-        mock_rwo.side_effect = RunError(
-            'p4 sync failed', returncode=1,
-            stderr=['some other error'])
-        with self.assertRaises(RunError):
-            p4_sync(12345, 'test', '//myclient', '/ws')
+    def test_unexpected_clobber_raises(self, mock_p4_sync):
+        mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
+        with self.assertRaises(P4SyncClobberError):
+            _sync_changelist(12345, 'test', '//myclient', '/ws',
+                             expected_clobber=set())
 
 
 class TestPrepareWritableFiles(unittest.TestCase):
@@ -1042,7 +1029,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1065,7 +1052,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync', return_value=['/ws/edited.log'])
+    @mock.patch('git_p4son.sync._sync_changelist', return_value=['/ws/edited.log'])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/edited.log')])
@@ -1102,7 +1089,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview')
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1136,7 +1123,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1199,7 +1186,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1234,7 +1221,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1272,7 +1259,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_log.heading.assert_any_call('Skipping post-sync hooks')
 
     @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1300,7 +1287,7 @@ class TestSyncCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.sync._restore_writable')
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1322,7 +1309,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync', return_value=[])
+    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1347,7 +1334,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_commit.assert_not_called()
 
     @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_sync')
@@ -1368,7 +1355,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
 
     @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1395,7 +1382,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1426,7 +1413,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1448,7 +1435,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_latest_changelist')
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
@@ -1473,7 +1460,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1509,7 +1496,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1535,7 +1522,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1563,7 +1550,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])
@@ -1661,7 +1648,7 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
     @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_sync')
+    @mock.patch('git_p4son.sync._sync_changelist')
     @mock.patch('git_p4son.sync.prepare_writable_files')
     @mock.patch('git_p4son.sync.p4_sync_preview',
                 return_value=[_upd('/ws/a.txt')])

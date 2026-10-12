@@ -9,7 +9,8 @@ from git_p4son.perforce import (
     get_existing_p4_users, get_p4_user, get_submitted_changes,
     is_always_writable_file_type,
     is_binary_file_type,
-    p4_depot_root_exists, p4_head_types, p4_sync_preview, parse_ztag_multi_output,
+    P4SyncClobberError, p4_depot_root_exists, p4_head_types, p4_sync,
+    p4_sync_preview, parse_ztag_multi_output,
     parse_ztag_output,
 )
 from tests.helpers import make_run_result
@@ -362,3 +363,31 @@ class TestGetExistingP4Users(unittest.TestCase):
         with self.assertRaises(RunError) as ctx:
             get_existing_p4_users(['bob'], '/ws')
         self.assertIn('Connect to server failed', ctx.exception.stderr)
+
+
+class TestP4Sync(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run_with_output',
+                return_value=mock.Mock(elapsed=None))
+    def test_success(self, mock_rwo):
+        p4_sync(12345, '//myclient', '/ws')
+        self.assertEqual(mock_rwo.call_args.args[0],
+                         ['p4', 'sync', '//myclient/...@12345'])
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_clobber_errors_raise_with_the_refused_files(self, mock_rwo):
+        mock_rwo.side_effect = RunError(
+            'p4 sync failed', returncode=1,
+            stderr=["Can't clobber writable file /ws/a.txt",
+                    "Can't clobber writable file /ws/b.txt"])
+        with self.assertRaises(P4SyncClobberError) as ctx:
+            p4_sync(12345, '//myclient', '/ws')
+        self.assertEqual(ctx.exception.refused, ['/ws/a.txt', '/ws/b.txt'])
+        self.assertEqual(ctx.exception.returncode, 1)
+
+    @mock.patch('git_p4son.perforce.run_with_output')
+    def test_other_errors_raise_as_they_are(self, mock_rwo):
+        mock_rwo.side_effect = RunError(
+            'p4 sync failed', returncode=1, stderr=['some other error'])
+        with self.assertRaises(RunError) as ctx:
+            p4_sync(12345, '//myclient', '/ws')
+        self.assertNotIsInstance(ctx.exception, P4SyncClobberError)

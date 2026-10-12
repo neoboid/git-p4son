@@ -556,3 +556,32 @@ def p4_sync_preview(changelist: int, depot_root: str,
             files.append(P4SyncPreviewFile(mode=mode, filepath=filename))
     log.success(f'{len(files)} files would be synced')
     return files
+
+
+class P4SyncClobberError(RunError):
+    """p4 sync refused to overwrite writable files; refused lists them."""
+
+    def __init__(self, error: RunError, refused: list[str]) -> None:
+        super().__init__(str(error), error.returncode, error.stderr)
+        self.refused = refused
+
+
+def p4_sync(changelist: int, depot_root: str, workspace_dir: str) -> None:
+    """Sync the depot root to changelist.
+
+    Raises P4SyncClobberError when p4 refused to overwrite writable files.
+    """
+    output_processor = P4SyncOutputProcessor()
+    try:
+        result = run_with_output(
+            ['p4', 'sync', f'{depot_root}/...@{changelist}'],
+            cwd=workspace_dir, on_output=output_processor)
+        if result.elapsed:
+            log.elapsed(result.elapsed)
+    except RunError as e:
+        refused = get_writable_files(e.stderr)
+        if not refused:
+            raise
+        log.info(output_processor.get_summary())
+        raise P4SyncClobberError(e, refused) from e
+    log.success(output_processor.get_summary())

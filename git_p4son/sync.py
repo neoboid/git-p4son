@@ -8,7 +8,6 @@ import stat
 import tempfile
 from dataclasses import dataclass, field
 
-from .common import RunError, run_with_output
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_files_at_commits, get_head_commit, get_staged_files, get_tracked_files,
@@ -32,14 +31,14 @@ from .perforce import (
     ClobberMode,
     get_latest_changelist,
     get_submitted_changes,
-    get_writable_files,
     is_always_writable_file_type,
     is_binary_file_type,
     p4_head_types,
     p4_get_opened_files,
+    p4_sync,
     p4_sync_preview,
+    P4SyncClobberError,
     P4Change,
-    P4SyncOutputProcessor,
     P4SyncPreviewFile,
 )
 
@@ -371,42 +370,28 @@ def _merge_changed_files(changed_files: list[ChangedFile],
         log.info('Manually review changes and commit when ready.')
 
 
-def p4_sync(changelist: int, label: str, depot_root: str,
-            workspace_dir: str,
-            expected_clobber: set[str] | None = None) -> list[str]:
-    """Sync files from Perforce, returning the expected_clobber files p4 refused.
+def _sync_changelist(changelist: int, label: str, depot_root: str,
+                     workspace_dir: str,
+                     expected_clobber: set[str] | None = None) -> list[str]:
+    """Sync to changelist, returning the expected_clobber files p4 refused.
 
-    Any other clobber error raises.
+    Any other refused file raises.
     """
     log.heading(f'Syncing to {label} CL ({changelist})')
-
-    output_processor = P4SyncOutputProcessor()
     try:
-        result = run_with_output(
-            ['p4', 'sync', f'{depot_root}/...@{changelist}'],
-            cwd=workspace_dir, on_output=output_processor)
-        if result.elapsed:
-            log.elapsed(result.elapsed)
-        log.success(output_processor.get_summary())
+        p4_sync(changelist, depot_root, workspace_dir)
         return []
-    except RunError as e:
-        writable_files = get_writable_files(e.stderr)
-        if not writable_files:
-            raise
-
+    except P4SyncClobberError as e:
         expected = expected_clobber or set()
-        unexpected = [f for f in writable_files if f not in expected]
+        unexpected = [f for f in e.refused if f not in expected]
         if unexpected:
             log.error('Unexpected clobber errors:')
             for f in unexpected:
                 log.info(f)
             raise
-
-        log.info(output_processor.get_summary())
         log.warning(
-            f'{len(writable_files)} expected clobber errors (git-ignored files)'
-        )
-        return writable_files
+            f'{len(e.refused)} expected clobber errors (git-ignored files)')
+        return e.refused
 
 
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
@@ -461,9 +446,9 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
                                   temp_root, uses_crlf=uses_crlf,
                                   clobber_mode=clobber_mode)
     if preview:
-        prep.not_synced = p4_sync(changelist, label, depot_root,
-                                  workspace_dir,
-                                  expected_clobber=set(prep.ignored))
+        prep.not_synced = _sync_changelist(changelist, label, depot_root,
+                                           workspace_dir,
+                                           expected_clobber=set(prep.ignored))
         prep.synced = [entry.filepath for entry in preview]
     return prep
 

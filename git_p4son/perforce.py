@@ -371,6 +371,13 @@ def get_opened_files_in_changelist(changelist: str,
             for filename, record in _fstat_records(res, workspace_dir)]
 
 
+def p4_revert(filenames: list[str], workspace_dir: str,
+              dry_run: bool = False) -> None:
+    """Revert the given files, writing their depot version to disk."""
+    run(['p4', '-x', '-', 'revert'], cwd=workspace_dir,
+        input='\n'.join(filenames), dry_run=dry_run)
+
+
 def p4_revert_unchanged(filenames: list[str], changelist: str,
                         workspace_dir: str, dry_run: bool = False) -> list[str]:
     """Revert files that are unchanged, or missing and opened for add; returns p4's lines."""

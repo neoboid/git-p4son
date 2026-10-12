@@ -4,7 +4,6 @@ import os
 import re
 from collections import Counter
 
-from .common import run
 from .git import (
     LocalChanges,
     get_commit_subjects_since,
@@ -21,6 +20,7 @@ from .perforce import (
     get_opened_files_in_changelist,
     include_changes_in_changelist,
     p4_create_changelist,
+    p4_revert,
     p4_revert_unchanged,
     replace_description_in_spec,
     save_changelist_spec,
@@ -237,8 +237,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
 
     if stale_deletes:
         # p4 revert writes the depot version to disk, so restore git's.
-        run(['p4', '-x', '-', 'revert'], cwd=workspace_dir,
-            input='\n'.join(stale_deletes), dry_run=dry_run)
+        p4_revert(stale_deletes, workspace_dir, dry_run)
         restore_files(stale_deletes, workspace_dir, dry_run)
 
     if not dry_run and is_writable_mode(workspace_dir):

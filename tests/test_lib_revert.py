@@ -114,7 +114,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             'tracked': mock.patch('git_p4son.lib.get_tracked_files'),
             'revert_unchanged': mock.patch(
                 'git_p4son.lib.p4_revert_unchanged', return_value=[]),
-            'run': mock.patch('git_p4son.lib.run'),
+            'revert': mock.patch('git_p4son.lib.p4_revert'),
             'restore': mock.patch('git_p4son.lib.restore_files'),
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
@@ -134,9 +134,6 @@ class TestRevertUnchangedFiles(unittest.TestCase):
     def _unchanged_candidates(self):
         return self.mocks['revert_unchanged'].call_args.args[0]
 
-    def _run_commands(self):
-        return [c.args[0] for c in self.mocks['run'].call_args_list]
-
     def test_tracked_edit_is_revert_candidate(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
         revert_unchanged_files('100', self.ws)
@@ -149,15 +146,14 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self._setup([('Asset.uasset', 'edit')], [], ['Asset.uasset'])
         revert_unchanged_files('100', self.ws)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.assertEqual(self._run_commands(), [])
+        self.mocks['revert'].assert_not_called()
 
     def test_tracked_deletes_present_on_disk_are_reverted_and_restored(self):
         self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
                     ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
         count = revert_unchanged_files('100', self.ws)
-        self.assertEqual(self._run_commands(), [['p4', '-x', '-', 'revert']])
-        self.assertEqual(self.mocks['run'].call_args.kwargs['input'],
-                         'a.txt\nb.txt')
+        self.mocks['revert'].assert_called_once_with(
+            ['a.txt', 'b.txt'], self.ws, False)
         self.mocks['restore'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
         self.assertEqual(count, 2)
@@ -166,7 +162,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         """Opened for delete and gone from git and disk: a real delete."""
         self._setup([('gone.txt', 'delete')], [], [])
         revert_unchanged_files('100', self.ws)
-        self.assertEqual(self._run_commands(), [])
+        self.mocks['revert'].assert_not_called()
         self.assertEqual(self._unchanged_candidates(), [])
 
     def test_missing_add_is_revert_candidate_tracked_or_not(self):
@@ -180,7 +176,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self._setup([('New.uasset', 'add')], [], ['New.uasset'])
         revert_unchanged_files('100', self.ws)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.assertEqual(self._run_commands(), [])
+        self.mocks['revert'].assert_not_called()
 
     def test_tracked_add_present_on_disk_is_left_alone(self):
         """A real new file stays opened; there is no depot version to compare with."""
@@ -195,7 +191,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
                     ['m.txt', 'i.txt', 'b.txt'])
         revert_unchanged_files('100', self.ws)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.assertEqual(self._run_commands(), [])
+        self.mocks['revert'].assert_not_called()
 
     def test_counts_reverted_files(self):
         self._setup([('a.txt', 'edit'), ('b.txt', 'edit'),
@@ -211,8 +207,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         revert_unchanged_files('100', self.ws, dry_run=True)
         self.mocks['revert_unchanged'].assert_called_once_with(
             ['a.txt'], '100', self.ws, True)
-        for call in self.mocks['run'].call_args_list:
-            self.assertTrue(call.kwargs['dry_run'])
+        self.mocks['revert'].assert_called_once_with(['c.txt'], self.ws, True)
 
     def test_dry_run_placeholder_changelist_queries_nothing(self):
         count = revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws,

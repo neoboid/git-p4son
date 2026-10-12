@@ -101,28 +101,28 @@ class TestP4ClientSpec(unittest.TestCase):
     def test_clobber_enabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['noallwrite', 'clobber', 'nocompress'], stream=None,
+            options=['noallwrite', 'clobber', 'nocompress'],
             line_end='local')
         self.assertTrue(spec.clobber)
 
     def test_allwrite_enabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['allwrite', 'noclobber', 'nocompress'], stream=None,
+            options=['allwrite', 'noclobber', 'nocompress'],
             line_end='local')
         self.assertTrue(spec.allwrite)
 
     def test_allwrite_disabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['noallwrite', 'noclobber', 'nocompress'], stream=None,
+            options=['noallwrite', 'noclobber', 'nocompress'],
             line_end='local')
         self.assertFalse(spec.allwrite)
 
     def test_clobber_disabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
-            options=['noallwrite', 'noclobber', 'nocompress'], stream=None,
+            options=['noallwrite', 'noclobber', 'nocompress'],
             line_end='local')
         self.assertFalse(spec.clobber)
 
@@ -134,15 +134,15 @@ class TestP4ClientSpec(unittest.TestCase):
             (['allwrite', 'clobber'], ClobberMode.CLOBBER),
         ]
         for options, expected in cases:
-            spec = P4ClientSpec(name='ws', root='/ws', options=options,
-                                stream=None, line_end='local')
+            spec = P4ClientSpec(name='ws', root='/ws',
+                                options=options, line_end='local')
             self.assertIs(spec.clobber_mode, expected, options)
 
     @mock.patch('git_p4son.perforce.sys')
     def test_uses_crlf_local_on_windows(self, mock_sys):
         mock_sys.platform = 'win32'
         spec = P4ClientSpec(
-            name='ws', root='/ws', options=[], stream=None,
+            name='ws', root='/ws', options=[],
             line_end='local')
         self.assertTrue(spec.uses_crlf)
 
@@ -150,19 +150,19 @@ class TestP4ClientSpec(unittest.TestCase):
     def test_uses_crlf_local_on_unix(self, mock_sys):
         mock_sys.platform = 'linux'
         spec = P4ClientSpec(
-            name='ws', root='/ws', options=[], stream=None,
+            name='ws', root='/ws', options=[],
             line_end='local')
         self.assertFalse(spec.uses_crlf)
 
     def test_uses_crlf_win(self):
         spec = P4ClientSpec(
-            name='ws', root='/ws', options=[], stream=None,
+            name='ws', root='/ws', options=[],
             line_end='win')
         self.assertTrue(spec.uses_crlf)
 
     def test_uses_crlf_unix(self):
         spec = P4ClientSpec(
-            name='ws', root='/ws', options=[], stream=None,
+            name='ws', root='/ws', options=[],
             line_end='unix')
         self.assertFalse(spec.uses_crlf)
 
@@ -273,19 +273,7 @@ class TestGetClientSpec(unittest.TestCase):
         self.assertEqual(spec.name, 'my-ws')
         self.assertEqual(spec.root, '/home/user/workspace')
         self.assertTrue(spec.clobber)
-        self.assertEqual(spec.stream, '//projects/main')
         self.assertEqual(spec.line_end, 'local')
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_no_stream(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... Client my-ws',
-            '... Update 2026/02/28 09:26:06',
-            '... Root /ws',
-            '... Options noallwrite clobber nocompress',
-        ])
-        spec = get_client_spec('/ws')
-        self.assertIsNone(spec.stream)
 
     @mock.patch('git_p4son.perforce.run')
     def test_not_in_workspace(self, mock_run):

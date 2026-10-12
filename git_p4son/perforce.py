@@ -69,7 +69,6 @@ class P4ClientSpec:
     name: str
     root: str
     options: list[str]
-    stream: str | None
     line_end: str
 
     @property
@@ -108,7 +107,6 @@ def get_client_spec(cwd: str) -> P4ClientSpec | None:
         name=fields['Client'],
         root=fields['Root'],
         options=fields['Options'].split(),
-        stream=fields.get('Stream'),
         line_end=fields.get('LineEnd', 'local'),
     )
 

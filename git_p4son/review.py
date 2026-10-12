@@ -3,7 +3,7 @@
 import argparse
 import shlex
 from .changelist_store import alias_exists, validate_alias_name
-from .git import get_commit_lines_since, resolve_editor
+from .git import get_commit_lines_since
 from .log import log
 from .rebase_todo import MESSAGE_FILE, pick_line, run_todo_rebase
 
@@ -50,15 +50,6 @@ def review_command(args: argparse.Namespace) -> int:
                 f'(use -f/--force to overwrite)')
             return 1
         log.success('Done')
-
-    if not args.no_edit_todo:
-        log.heading('Checking editor')
-        editor = resolve_editor(workspace_dir)
-        if not editor:
-            log.error(
-                'No git editor configured. Set one with: git config core.editor <editor>')
-            return 1
-        log.success(editor)
 
     log.heading('Finding commits')
     commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)

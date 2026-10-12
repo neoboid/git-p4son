@@ -30,12 +30,28 @@ def pick_line(commit_line: str) -> str:
     return f'pick {parts[0]} {subject}'
 
 
+def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
+    """Return the git editor, logging an error if none is configured."""
+    editor = resolve_editor(workspace_dir)
+    if not editor:
+        log.error(
+            'No git editor configured. Set one with: git config core.editor <editor>')
+    return editor
+
+
 def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
                     edit_todo: bool, message: str | None = None) -> int:
     """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo.
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
     """
+    if edit_todo:
+        log.heading('Checking editor')
+        editor = _resolve_editor_or_fail(workspace_dir)
+        if not editor:
+            return 1
+        log.success(editor)
+
     reviews_dir = _reviews_dir(workspace_dir)
     ensure_config_dir(workspace_dir)
     os.makedirs(reviews_dir, exist_ok=True)
@@ -101,10 +117,8 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
     if args.no_edit:
         return 0
 
-    editor = resolve_editor(workspace_dir)
+    editor = _resolve_editor_or_fail(workspace_dir)
     if not editor:
-        log.error(
-            'No git editor configured. Set one with: git config core.editor <editor>')
         return 1
 
     # The editor command may carry arguments, e.g. "code --wait"

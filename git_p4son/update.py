@@ -61,16 +61,9 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(commit_lines, changelist, args)
 
-    if args.dry_run:
-        log.info('Generated rebase todo:')
-        log.info(todo_content)
-        if args.message is not None:
-            log.info(f'Message for {MESSAGE_FILE}:')
-            log.info(args.message)
-        return 0
-
     return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
-                           edit_todo=False, message=args.message)
+                           edit_todo=False, message=args.message,
+                           dry_run=args.dry_run)
 
 
 def update_command(args: argparse.Namespace) -> int:

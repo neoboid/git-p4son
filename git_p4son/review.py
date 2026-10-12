@@ -64,13 +64,6 @@ def review_command(args: argparse.Namespace) -> int:
         commit_lines, args.alias, args.force,
         no_commit_list=args.no_commit_list)
 
-    if args.dry_run:
-        log.info('Generated rebase todo:')
-        log.info(todo_content)
-        log.info(f'Message for {MESSAGE_FILE}:')
-        log.info(args.message)
-        return 0
-
     return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
                            edit_todo=not args.no_edit_todo,
-                           message=args.message)
+                           message=args.message, dry_run=args.dry_run)

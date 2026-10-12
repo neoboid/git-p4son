@@ -182,14 +182,11 @@ class TestUpdatePerCommit(unittest.TestCase):
         mock_rebase.assert_not_called()
 
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_dry_run_prints_todo(self, _dirty, _update, _commits,
-                                 mock_rebase):
-        with mock.patch('git_p4son.update.log') as mock_log:
-            rc = update_command(_args(per_commit=True, dry_run=True))
+    def test_dry_run_passed_to_the_rebase(self, _dirty, _update, _commits,
+                                          mock_rebase):
+        rc = update_command(_args(per_commit=True, dry_run=True))
         self.assertEqual(rc, 0)
-        mock_rebase.assert_not_called()
-        self.assertIn('exec git p4son update 100',
-                      mock_log.info.call_args_list[-1].args[0])
+        self.assertTrue(mock_rebase.call_args.kwargs['dry_run'])
 
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_message_passed_to_the_rebase(self, _dirty, _update, _commits,

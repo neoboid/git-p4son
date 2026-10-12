@@ -33,6 +33,19 @@ class TestRunTodoRebase(unittest.TestCase):
             self.assertFalse(os.path.exists(
                 os.path.join(ws, CONFIG_DIR, 'reviews', 'todo')))
 
+    def test_dry_run_prints_and_writes_nothing(self, mock_run):
+        with tempfile.TemporaryDirectory() as ws, \
+                mock.patch('git_p4son.rebase_todo.log') as mock_log:
+            rc = run_todo_rebase('pick abc First\n', 'main', ws,
+                                 edit_todo=False, message='Title',
+                                 dry_run=True)
+            self.assertEqual(rc, 0)
+            self.assertEqual(os.listdir(ws), [])
+        mock_run.assert_not_called()
+        printed = [c.args[0] for c in mock_log.info.call_args_list]
+        self.assertIn('pick abc First\n', printed)
+        self.assertIn('Title', printed)
+
     def test_no_message_writes_no_file(self, _run):
         with tempfile.TemporaryDirectory() as ws:
             run_todo_rebase('pick abc First\n', 'main', ws, edit_todo=False)

@@ -40,7 +40,8 @@ def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
 
 
 def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
-                    edit_todo: bool, message: str | None = None) -> int:
+                    edit_todo: bool, message: str | None = None,
+                    dry_run: bool = False) -> int:
     """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo.
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
@@ -51,6 +52,14 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
         if not editor:
             return 1
         log.success(editor)
+
+    if dry_run:
+        log.info('Generated rebase todo:')
+        log.info(todo_content)
+        if message is not None:
+            log.info(f'Message for {MESSAGE_FILE}:')
+            log.info(message)
+        return 0
 
     reviews_dir = _reviews_dir(workspace_dir)
     ensure_config_dir(workspace_dir)

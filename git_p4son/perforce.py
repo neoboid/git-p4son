@@ -441,7 +441,6 @@ class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
     def __init__(self) -> None:
-        self.synced_file_count: int = 0
         self.stats: dict[str, int] = {
             mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
@@ -464,7 +463,6 @@ class P4SyncOutputProcessor:
             return
 
         self.stats[mode] += 1
-        self.synced_file_count += 1
 
     def get_summary(self) -> str:
         """Get a one-line sync summary."""

@@ -334,7 +334,6 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
         processor = P4SyncOutputProcessor()
         processor('//depot/foo.txt#1 - added as /ws/foo.txt', sys.stdout)
         self.assertEqual(processor.stats['add'], 1)
-        self.assertEqual(processor.synced_file_count, 1)
 
     def test_tracks_deleted_file(self):
         processor = P4SyncOutputProcessor()
@@ -344,7 +343,7 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
     def test_up_to_date_message(self):
         processor = P4SyncOutputProcessor()
         processor('//...@12345 - file(s) up-to-date.', sys.stdout)
-        self.assertEqual(processor.synced_file_count, 0)
+        self.assertEqual(sum(processor.stats.values()), 0)
 
     def test_failed_rename_aborts(self):
         processor = P4SyncOutputProcessor()

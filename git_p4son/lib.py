@@ -1,10 +1,9 @@
 """Bridge functions that combine git and Perforce operations."""
 
 import os
-import re
-from collections import Counter
 from typing import Callable
 
+from .description import COMMIT_LIST_MARKER, Description
 from .git import (
     LocalChanges,
     get_commit_subjects_since,
@@ -31,53 +30,7 @@ from .perforce import (
 from .writable import is_writable_mode, make_writable
 
 
-# Heading written above the enumerated commit list in descriptions.
-COMMIT_LIST_MARKER = 'Changes included:'
-
 DRY_RUN_CHANGELIST = '<changelist>'
-
-# #review on a line of its own, which Swarm turns into #review-<id>.
-_REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
-
-
-def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
-    """Split standalone review keyword lines out; returns (other_lines, keyword_lines)."""
-    others, keywords = [], []
-    for line in lines:
-        if _REVIEW_KEYWORD_RE.match(line.strip()):
-            keywords.append(line)
-        else:
-            others.append(line)
-    if not keywords:
-        return lines, []
-    while others and not others[-1].strip():
-        others.pop()
-    return others, keywords
-
-
-def _commit_list_start(lines: list[str]) -> int | None:
-    """Return the index of the commit list's first line, or None if there is no list."""
-    for i, line in enumerate(lines):
-        if line.strip() == COMMIT_LIST_MARKER:
-            following = next((j for j in range(i + 1, len(lines))
-                              if lines[j].strip()), None)
-            if following is not None and lines[following].startswith('1. '):
-                return following
-    # Fallback for descriptions written without the marker.
-    return next((i for i, line in enumerate(lines) if line.startswith('1. ')),
-                None)
-
-
-def split_description_lines(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """Split description into (message_lines, commit_lines, trailing_lines)."""
-    start = _commit_list_start(lines)
-    if start is None:
-        return (lines, [], [])
-    # The list runs on while the lines keep counting "2. ", "3. ", ...
-    end = start + 1
-    while end < len(lines) and lines[end].startswith(f'{end - start + 1}. '):
-        end += 1
-    return (lines[:start], lines[start:end], lines[end:])
 
 
 def check_git_workspace_clean(workspace_dir: str) -> bool:
@@ -116,56 +69,17 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     return p4_create_changelist(description_lines, workspace_dir)
 
 
-def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,
-                        workspace_dir: str) -> list[str]:
-    """Merge the commits since base_branch into an enumerated commit list."""
-    old_subjects = [re.sub(r'^\d+\. ', '', line)
-                    for line in old_commit_lines]
-    new_subjects = get_commit_subjects_since(base_branch, workspace_dir)
-
-    # Counted, not a set, so repeated subjects replace one-for-one.
-    replaced = Counter(new_subjects)
-    kept_subjects = []
-    for subject in old_subjects:
-        if replaced[subject] > 0:
-            replaced[subject] -= 1
-        else:
-            kept_subjects.append(subject)
-
-    return [f'{number}. {subject}' for number, subject
-            in enumerate(kept_subjects + new_subjects, 1)]
-
-
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
                       message: str | None = None, commit_list: bool = True) -> None:
     """Update a changelist description, merging commits since base_branch into its commit list."""
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
-
-    description_lines = extract_description_lines(spec_text)
-    message_lines, old_commit_lines, trailing_lines = split_description_lines(
-        description_lines)
-
-    # Without a commit list, #review sits in the message lines; move it so it survives a new message.
-    message_lines, keywords = _split_review_keywords(message_lines)
+    description = Description.parse(extract_description_lines(spec_text))
     if message is not None:
-        message_lines = message.splitlines()
-    present = {line.strip() for line in message_lines + trailing_lines}
-    keywords = [line for line in keywords if line.strip() not in present]
-    if keywords:
-        trailing_lines = trailing_lines + [''] + keywords
-
+        description.set_message(message)
     if commit_list:
-        commit_lines = _merge_commit_lines(
-            old_commit_lines, base_branch, workspace_dir)
-    else:
-        commit_lines = old_commit_lines
-
-    # Add a missing marker so later splits anchor on it.
-    if commit_lines and not any(line.strip() == COMMIT_LIST_MARKER
-                                for line in message_lines):
-        message_lines = message_lines + ['', COMMIT_LIST_MARKER]
-
-    new_description_lines = message_lines + commit_lines + trailing_lines
+        description.merge_commits(
+            get_commit_subjects_since(base_branch, workspace_dir))
+    new_description_lines = description.format()
 
     if dry_run:
         log.info(f"Would update changelist {changelist_nr} with description:")

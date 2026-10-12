@@ -7,7 +7,6 @@ from git_p4son.common import CommandError, RunError
 from git_p4son.lib import (
     DRY_RUN_CHANGELIST,
     create_changelist,
-    split_description_lines,
     update_changelist,
 )
 from git_p4son.perforce import (
@@ -98,62 +97,6 @@ class TestReplaceDescriptionInSpec(unittest.TestCase):
         new_spec = replace_description_in_spec(SAMPLE_SPEC, ['Replaced'])
         self.assertIn('Change:\t12345', new_spec)
         self.assertIn('Files:', new_spec)
-
-
-class TestSplitDescriptionLines(unittest.TestCase):
-    def test_splits_message_and_commits(self):
-        lines = ['Fix the login bug', '1. Add validation', '2. Fix redirect']
-        msg, commits, trailing = split_description_lines(lines)
-        self.assertEqual(msg, ['Fix the login bug'])
-        self.assertEqual(commits, ['1. Add validation', '2. Fix redirect'])
-        self.assertEqual(trailing, [])
-
-    def test_no_commits(self):
-        lines = ['Just a message']
-        msg, commits, trailing = split_description_lines(lines)
-        self.assertEqual(msg, ['Just a message'])
-        self.assertEqual(commits, [])
-        self.assertEqual(trailing, [])
-
-    def test_trailing_text_after_commits(self):
-        lines = ['Message', '1. First', '2. Second', 'Trailing note']
-        msg, commits, trailing = split_description_lines(lines)
-        self.assertEqual(msg, ['Message'])
-        self.assertEqual(commits, ['1. First', '2. Second'])
-        self.assertEqual(trailing, ['Trailing note'])
-
-    def test_empty_description(self):
-        msg, commits, trailing = split_description_lines([])
-        self.assertEqual(msg, [])
-        self.assertEqual(commits, [])
-        self.assertEqual(trailing, [])
-
-    def test_multiline_message_before_commits(self):
-        lines = ['Line 1', 'Line 2', '1. Commit one']
-        msg, commits, trailing = split_description_lines(lines)
-        self.assertEqual(msg, ['Line 1', 'Line 2'])
-        self.assertEqual(commits, ['1. Commit one'])
-        self.assertEqual(trailing, [])
-
-    def test_numbered_list_in_user_message_not_mistaken_for_commits(self):
-        """A numbered list in the user's message is not mistaken for the commit list."""
-        lines = [
-            'Reasons for this change:',
-            '1. performance',
-            '2. simplicity',
-            '',
-            'Changes included:',
-            '1. Add cache',
-            '2. Remove old path',
-        ]
-        msg, commits, trailing = split_description_lines(lines)
-        self.assertEqual(msg, ['Reasons for this change:',
-                               '1. performance',
-                               '2. simplicity',
-                               '',
-                               'Changes included:'])
-        self.assertEqual(commits, ['1. Add cache', '2. Remove old path'])
-        self.assertEqual(trailing, [])
 
 
 class TestCreateChangelist(unittest.TestCase):

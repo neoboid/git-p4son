@@ -15,6 +15,11 @@ from .common import (
 )
 
 
+def _split_nul(stdout: list[str]) -> list[str]:
+    """Split -z output into paths, undoing run()'s newline split in case a path contains one."""
+    return [path for path in '\n'.join(stdout).split('\0') if path]
+
+
 def _git_path(filepath: str) -> str:
     """Git uses forward slashes in tree paths, even on Windows."""
     return filepath.replace('\\', '/')
@@ -120,7 +125,7 @@ def get_staged_files(workspace_dir: str) -> list[str]:
     # Compares the index with HEAD without scanning the worktree.
     result = run(['git', 'diff', '--cached', '--name-only', '-z'],
                  cwd=workspace_dir)
-    return [path for path in '\n'.join(result.stdout).split('\0') if path]
+    return _split_nul(result.stdout)
 
 
 def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
@@ -227,18 +232,17 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
     with batched_command_log(command, len(by_git_path), len(chunks)):
         for chunk in chunks:
             result = run(command + chunk, cwd=workspace_dir)
-            for line in result.stdout:
-                for git_path in line.split('\0'):
-                    if git_path in by_git_path:
-                        tracked.add(by_git_path[git_path])
+            for git_path in _split_nul(result.stdout):
+                if git_path in by_git_path:
+                    tracked.add(by_git_path[git_path])
     return tracked
 
 
 def list_tracked_files(workspace_dir: str) -> list[str]:
     """Return every file tracked by git, as repo-relative slash paths."""
-    # -z: non-ASCII paths verbatim. Undo run()'s newline split in case a path contains one.
+    # -z: non-ASCII paths verbatim, not C-quoted.
     result = run(['git', 'ls-files', '-z'], cwd=workspace_dir)
-    return [path for path in '\n'.join(result.stdout).split('\0') if path]
+    return _split_nul(result.stdout)
 
 
 # --- file retrieval ---

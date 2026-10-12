@@ -155,26 +155,20 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
               cwd=workspace_dir)
 
     changes = LocalChanges()
-    renamepattern = r"^r(\d+)$"
-    copypattern = r"^c(\d+)$"
     for line in res.stdout:
         tokens = line.split('\t')
         status = tokens[0].lower()
         filename = tokens[1]
-        if status == 'm':
-            changes.mods.append(filename)
-        elif status == 't':
-            # Typechange (e.g. symlink to regular file): content changed.
+        # T is a typechange (e.g. symlink to regular file): its content changed.
+        if status in ('m', 't'):
             changes.mods.append(filename)
         elif status == 'd':
             changes.dels.append(filename)
         elif status == 'a':
             changes.adds.append(filename)
-        elif re.search(renamepattern, status):
-            from_filename = filename
-            to_filename = tokens[2]
-            changes.moves.append((from_filename, to_filename))
-        elif re.search(copypattern, status):
+        elif status[:1] == 'r' and status[1:].isdigit():
+            changes.moves.append((filename, tokens[2]))
+        elif status[:1] == 'c' and status[1:].isdigit():
             # Copy: the source is untouched, only the destination is new.
             changes.adds.append(tokens[2])
         else:

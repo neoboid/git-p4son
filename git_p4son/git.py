@@ -95,22 +95,14 @@ def get_head_subject(workspace_dir: str) -> str | None:
 
 # --- status ---
 
+_PORCELAIN_KINDS = {'A': 'add', 'D': 'delete', '??': 'untracked'}
+
+
 def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for dirty files."""
     res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
-    files = []
-    for line in res.stdout:
-        status = line[:2].strip()
-        filename = line[3:]
-        if status == 'A':
-            files.append((filename, 'add'))
-        elif status == 'D':
-            files.append((filename, 'delete'))
-        elif status == '??':
-            files.append((filename, 'untracked'))
-        else:
-            files.append((filename, 'modify'))
-    return files
+    return [(line[3:], _PORCELAIN_KINDS.get(line[:2].strip(), 'modify'))
+            for line in res.stdout]
 
 
 # --- staging and committing ---

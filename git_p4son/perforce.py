@@ -86,11 +86,8 @@ class P4ClientSpec:
 
     @property
     def uses_crlf(self) -> bool:
-        if self.line_end == 'win':
-            return True
-        if self.line_end == 'local' and sys.platform == 'win32':
-            return True
-        return False
+        return self.line_end == 'win' or (self.line_end == 'local'
+                                          and sys.platform == 'win32')
 
 
 def get_client_spec(cwd: str) -> P4ClientSpec | None:
@@ -111,10 +108,8 @@ def get_client_spec(cwd: str) -> P4ClientSpec | None:
 
 def find_line_starting_with(lines: list[str], prefix: str) -> int:
     """Find the index of the first line starting with prefix, or len(lines) if not found."""
-    for i, line in enumerate(lines):
-        if line.startswith(prefix):
-            return i
-    return len(lines)
+    return next((i for i, line in enumerate(lines) if line.startswith(prefix)),
+                len(lines))
 
 
 def find_end_of_indented_section(lines: list[str], start: int) -> int:
@@ -190,9 +185,7 @@ def get_submitted_changes(depot_root: str, start: int, end: int,
 def get_p4_user(workspace_dir: str) -> str | None:
     """Get the Perforce user name of the current connection."""
     res = run(['p4', '-ztag', 'info'], cwd=workspace_dir)
-    fields = parse_ztag_output(res.stdout)
-    user = fields.get('userName')
-    return user or None
+    return parse_ztag_output(res.stdout).get('userName') or None
 
 
 def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
@@ -374,13 +367,13 @@ def p4_revert_unchanged(filenames: list[str], changelist: str,
     return [line for line in result.stdout if 'reverted' in line]
 
 
+_ACTION_TO_CHANGE = {'add': 'add', 'move/add': 'add',
+                     'delete': 'delete', 'move/delete': 'delete'}
+
+
 def _p4_action_to_change(action: str) -> str:
     """Convert a p4 action to a git-p4son change label."""
-    if action in ('add', 'move/add'):
-        return 'add'
-    if action in ('delete', 'move/delete'):
-        return 'delete'
-    return 'modify'
+    return _ACTION_TO_CHANGE.get(action, 'modify')
 
 
 def p4_get_opened_files(depot_root: str,
@@ -444,8 +437,8 @@ class P4SyncOutputProcessor:
     """Process p4 sync output in real-time."""
 
     def __init__(self) -> None:
-        self.stats: dict[str, int] = {
-            mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
+        self.stats: dict[str, int] = dict.fromkeys(
+            [mode for mode, _ in _SYNC_LINE_PATTERNS], 0)
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if _UP_TO_DATE_RE.search(line):
@@ -471,19 +464,10 @@ class P4SyncOutputProcessor:
         """Get a one-line sync summary."""
         synced_count = self.stats['add'] + \
             self.stats['upd'] - self.stats['clb']
-        parts = []
-        if self.stats['add']:
-            parts.append(f"add: {self.stats['add']}")
-        if self.stats['upd']:
-            parts.append(f"upd: {self.stats['upd']}")
-        if self.stats['del']:
-            parts.append(f"del: {self.stats['del']}")
-        if self.stats['clb']:
-            parts.append(f"clb: {self.stats['clb']}")
-        detail = ', '.join(parts)
-        if detail:
-            return f'synced {synced_count} files ({detail})'
-        return f'synced {synced_count} files'
+        detail = ', '.join(f'{mode}: {self.stats[mode]}'
+                           for mode in ('add', 'upd', 'del', 'clb')
+                           if self.stats[mode])
+        return f'synced {synced_count} files' + (f' ({detail})' if detail else '')
 
 
 def p4_head_types(filenames: list[str], workspace_dir: str) -> dict[str, str]:

@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import threading
-from timeit import default_timer as timer
+import time
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import IO, Callable
@@ -16,11 +16,9 @@ from typing import IO, Callable
 from .log import log
 
 
-def _env_with_pwd(cwd: str) -> dict[str, str]:
-    """Return a copy of os.environ with PWD set to abspath(cwd), which 'p4 add' resolves paths against."""
-    env = os.environ.copy()
-    env['PWD'] = os.path.abspath(cwd)
-    return env
+def _command_env(cwd: str, extra: dict[str, str] | None) -> dict[str, str]:
+    """Return os.environ plus extra, with PWD set to abspath(cwd), which 'p4 add' resolves paths against."""
+    return {**os.environ, 'PWD': os.path.abspath(cwd), **(extra or {})}
 
 
 def branch_to_alias(branch_name: str) -> str:
@@ -142,9 +140,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     else:
         log.start_spinner()
 
-    command_env = _env_with_pwd(cwd)
-    if env:
-        command_env.update(env)
+    command_env = _command_env(cwd, env)
 
     # Decode as UTF-8: git emits it, but Windows would decode with cp1252.
     try:
@@ -212,16 +208,14 @@ def run_with_output(command: list[str], cwd: str = '.',
                 truncate_for_spinner=True)
     log.start_spinner()
 
-    start_timestamp = timer()
+    start = time.monotonic()
 
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
     collected = (stdout_lines if keep_stdout else None, stderr_lines)
     streams = (sys.stdout, sys.stderr)
 
-    command_env = _env_with_pwd(cwd)
-    if env:
-        command_env.update(env)
+    command_env = _command_env(cwd, env)
 
     # UTF-8 as in run(); a decode error would silently kill the reader threads.
     try:
@@ -276,8 +270,7 @@ def run_with_output(command: list[str], cwd: str = '.',
 
     log.stop_spinner()
 
-    end_timestamp = timer()
-    elapsed = timedelta(seconds=end_timestamp - start_timestamp)
+    elapsed = timedelta(seconds=time.monotonic() - start)
 
     if returncode != 0:
         raise RunError(

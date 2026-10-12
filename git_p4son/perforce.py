@@ -72,17 +72,13 @@ class P4ClientSpec:
     line_end: str
 
     @property
-    def clobber(self) -> bool:
-        return 'clobber' in self.options
-
-    @property
     def allwrite(self) -> bool:
         return 'allwrite' in self.options
 
     @property
     def clobber_mode(self) -> ClobberMode:
         # clobber overwrites writable files regardless, so it wins over allwrite.
-        if self.clobber:
+        if 'clobber' in self.options:
             return ClobberMode.CLOBBER
         if self.allwrite:
             return ClobberMode.ALLWRITE

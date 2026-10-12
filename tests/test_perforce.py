@@ -98,13 +98,6 @@ class TestParseZtagMultiOutput(unittest.TestCase):
 
 
 class TestP4ClientSpec(unittest.TestCase):
-    def test_clobber_enabled(self):
-        spec = P4ClientSpec(
-            name='ws', root='/ws',
-            options=['noallwrite', 'clobber', 'nocompress'],
-            line_end='local')
-        self.assertTrue(spec.clobber)
-
     def test_allwrite_enabled(self):
         spec = P4ClientSpec(
             name='ws', root='/ws',
@@ -118,13 +111,6 @@ class TestP4ClientSpec(unittest.TestCase):
             options=['noallwrite', 'noclobber', 'nocompress'],
             line_end='local')
         self.assertFalse(spec.allwrite)
-
-    def test_clobber_disabled(self):
-        spec = P4ClientSpec(
-            name='ws', root='/ws',
-            options=['noallwrite', 'noclobber', 'nocompress'],
-            line_end='local')
-        self.assertFalse(spec.clobber)
 
     def test_clobber_mode(self):
         cases = [
@@ -272,7 +258,7 @@ class TestGetClientSpec(unittest.TestCase):
         self.assertIsNotNone(spec)
         self.assertEqual(spec.name, 'my-ws')
         self.assertEqual(spec.root, '/home/user/workspace')
-        self.assertTrue(spec.clobber)
+        self.assertIs(spec.clobber_mode, ClobberMode.CLOBBER)
         self.assertEqual(spec.line_end, 'local')
 
     @mock.patch('git_p4son.perforce.run')

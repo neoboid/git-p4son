@@ -301,8 +301,8 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
 def get_opened_files_in_changelist(changelist: str,
                                    workspace_dir: str) -> list[tuple[str, str]]:
     """Return (path, action) for files opened in a changelist, as workspace-relative paths."""
-    res = run(['p4', '-ztag', 'fstat', '-Ro', '-Op',
-               '-T', 'path,clientFile,action,change', '...'],
+    res = run(['p4', '-ztag', 'fstat', '-Ro', '-e', changelist, '-Op',
+               '-T', 'path,clientFile,action', '...'],
               cwd=workspace_dir, fail_on_returncode=False)
     errors = [line for line in res.stderr if 'not opened' not in line]
     if res.returncode != 0 and errors:
@@ -311,8 +311,6 @@ def get_opened_files_in_changelist(changelist: str,
             log.info(f'  {line}')
     files = []
     for record in parse_ztag_multi_output(res.stdout):
-        if record.get('change') != changelist:
-            continue
         client_path = record.get('path') or record.get('clientFile')
         if not client_path:
             continue

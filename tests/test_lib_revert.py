@@ -15,33 +15,26 @@ from tests.helpers import make_run_result
 
 class TestGetOpenedFilesInChangelist(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    def test_filters_to_changelist(self, mock_run):
+    def test_lists_files_opened_in_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
             '... path /ws/a.txt',
             '... action edit',
-            '... change 100',
-            '',
-            '... path /ws/other.txt',
-            '... action edit',
-            '... change 200',
             '',
             '... path /ws/sub/b.txt',
             '... action add',
-            '... change 100',
         ])
         files = get_opened_files_in_changelist('100', '/ws')
         self.assertEqual(files, [('a.txt', 'edit'), ('sub/b.txt', 'add')])
         self.assertEqual(
             mock_run.call_args.args[0],
-            ['p4', '-ztag', 'fstat', '-Ro', '-Op',
-             '-T', 'path,clientFile,action,change', '...'])
+            ['p4', '-ztag', 'fstat', '-Ro', '-e', '100', '-Op',
+             '-T', 'path,clientFile,action', '...'])
 
     @mock.patch('git_p4son.perforce.run')
     def test_skips_files_outside_workspace(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
             '... path /elsewhere/a.txt',
             '... action edit',
-            '... change 100',
         ])
         self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
 
@@ -50,7 +43,6 @@ class TestGetOpenedFilesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result(stdout=[
             '... path D:\\p4\\Games\\Script\\a.as',
             '... action edit',
-            '... change 100',
         ])
         files = get_opened_files_in_changelist('100', 'D:\\p4\\Games')
         self.assertEqual(files, [('Script/a.as', 'edit')])
@@ -61,10 +53,8 @@ class TestGetOpenedFilesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result(stdout=[
             '... clientFile //client/a.txt',
             '... action edit',
-            '... change 100',
             '',
             '... action edit',
-            '... change 100',
         ])
         self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
 

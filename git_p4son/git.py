@@ -173,20 +173,11 @@ class LocalChanges:
     moves: list[tuple[str, str]] = field(default_factory=list)
 
 
-def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:
-    """Find the common ancestor commit between two branches."""
-    res = run(['git', 'merge-base', branch1, branch2], cwd=workspace_dir)
-    if len(res.stdout) != 1:
-        raise CommandError('git merge-base returned unexpected output')
-    return res.stdout[0].strip()
-
-
 def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     """Get local git changes between base_branch and HEAD."""
-    ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
-
+    # ...HEAD diffs from the merge base, so changes on base_branch since the fork are left out.
     # -z: paths verbatim, not C-quoted, as "<status>\0<path>\0", with a second path for renames and copies.
-    res = run(['git', 'diff', '--name-status', '-z', f'{ancestor}..HEAD'],
+    res = run(['git', 'diff', '--name-status', '-z', f'{base_branch}...HEAD'],
               cwd=workspace_dir)
 
     changes = LocalChanges()

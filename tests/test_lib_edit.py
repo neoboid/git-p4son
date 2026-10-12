@@ -9,7 +9,6 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.git import (
     LocalChanges,
-    find_common_ancestor,
     get_local_changes,
 )
 from git_p4son.lib import open_changes_for_edit
@@ -101,82 +100,80 @@ class TestOpenedLookup(unittest.TestCase):
         self.assertIsNone(_opened_lookup({'a.txt': ('1', 'edit')})('b.txt'))
 
 
-class TestFindCommonAncestor(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_finds_ancestor(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=['abc123def456'])
-        ancestor = find_common_ancestor('main', 'HEAD', '/ws')
-        self.assertEqual(ancestor, 'abc123def456')
-
-    @mock.patch('git_p4son.git.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('merge-base failed')
-        with self.assertRaises(RunError):
-            find_common_ancestor('main', 'HEAD', '/ws')
-
-    @mock.patch('git_p4son.git.run')
-    def test_no_output(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        with self.assertRaises(CommandError):
-            find_common_ancestor('main', 'HEAD', '/ws')
-
-
 class TestGetLocalGitChanges(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_parses_all_change_types(self, mock_run):
-        mock_run.side_effect = [
-            # git merge-base
-            make_run_result(stdout=['abc123']),
-            # git diff --name-status -z
-            make_run_result(stdout=[
-                'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0'
-                'R100\0old_name.txt\0new_name.txt\0']),
-        ]
+        mock_run.return_value = make_run_result(stdout=[
+            'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0'
+            'R100\0old_name.txt\0new_name.txt\0'])
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['modified.txt'])
         self.assertEqual(changes.adds, ['added.txt'])
         self.assertEqual(changes.dels, ['deleted.txt'])
         self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
+        self.assertEqual(mock_run.call_args.args[0],
+                         ['git', 'diff', '--name-status', '-z', 'main...HEAD'])
 
     @mock.patch('git_p4son.git.run')
     def test_typechange_treated_as_modify(self, mock_run):
         """T (e.g. symlink to regular file) is a content change."""
-        mock_run.side_effect = [
-            make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['T\0link.txt\0']),
-        ]
+        mock_run.return_value = make_run_result(stdout=['T\0link.txt\0'])
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['link.txt'])
 
     @mock.patch('git_p4son.git.run')
     def test_copy_treated_as_add_of_destination(self, mock_run):
         """A copy is an add of the destination; the source is untouched."""
-        mock_run.side_effect = [
-            make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['C100\0src.txt\0copy.txt\0']),
-        ]
+        mock_run.return_value = make_run_result(
+            stdout=['C100\0src.txt\0copy.txt\0'])
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.adds, ['copy.txt'])
         self.assertEqual(changes.mods, [])
         self.assertEqual(changes.dels, [])
 
     @mock.patch('git_p4son.git.run')
-    def test_merge_base_failure(self, mock_run):
-        mock_run.side_effect = RunError('merge-base failed')
+    def test_diff_failure(self, mock_run):
+        mock_run.side_effect = RunError('diff failed')
         with self.assertRaises(RunError):
             get_local_changes('main', '/ws')
 
     @mock.patch('git_p4son.git.run')
     def test_unknown_status(self, mock_run):
-        mock_run.side_effect = [
-            make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['X\0unknown.txt\0']),
-        ]
+        mock_run.return_value = make_run_result(stdout=['X\0unknown.txt\0'])
         with self.assertRaises(CommandError):
             get_local_changes('main', '/ws')
 
 
 class TestGetLocalChangesInRepo(unittest.TestCase):
+    def test_changes_on_the_base_branch_since_the_fork_are_left_out(self):
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+
+            def write(name):
+                with open(os.path.join(ws, name), 'w') as f:
+                    f.write(name)
+
+            git('init', '-b', 'main')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            git('commit', '--allow-empty', '-m', 'base')
+            git('switch', '-c', 'feat')
+            write('feature.txt')
+            git('add', '.')
+            git('commit', '-m', 'feature')
+            git('switch', 'main')
+            write('upstream.txt')
+            git('add', '.')
+            git('commit', '-m', 'upstream')
+            git('switch', 'feat')
+
+            changes = get_local_changes('main', ws)
+
+        self.assertEqual(changes.adds, ['feature.txt'])
+        self.assertEqual(changes.dels, [])
+
     def test_non_ascii_filename_returned_verbatim(self):
         """Non-ASCII filenames are returned verbatim, not C-quoted."""
         with tempfile.TemporaryDirectory() as ws:

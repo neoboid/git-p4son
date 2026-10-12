@@ -3,7 +3,7 @@
 import os
 from typing import Callable
 
-from .description import COMMIT_LIST_MARKER, Description
+from .description import Description
 from .git import (
     LocalChanges,
     get_commit_subjects_since,
@@ -12,7 +12,6 @@ from .git import (
     get_tracked_files,
     restore_files,
 )
-from .list_changes import get_enumerated_commit_lines_since
 from .log import log
 from .perforce import (
     extract_description_lines,
@@ -50,16 +49,15 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
                       commit_list: bool = True, review: bool = False) -> str:
     """Create a changelist from message and, unless commit_list is False, the git commits.
 
-    With review, the description ends with #review unless the message has one. On dry run, creates
-    nothing and returns DRY_RUN_CHANGELIST."""
-    commit_lines = (get_enumerated_commit_lines_since(base_branch, workspace_dir)
-                    if commit_list else [])
-
-    description_lines = message.splitlines()
-    if commit_lines:
-        description_lines += ['', COMMIT_LIST_MARKER] + commit_lines
-    if review and not any('#review' in line for line in description_lines):
-        description_lines += ['', '#review']
+    With review, the description ends with #review unless the message has one on a line of its own.
+    On dry run, creates nothing and returns DRY_RUN_CHANGELIST."""
+    description = Description(
+        commits=get_commit_subjects_since(base_branch, workspace_dir)
+        if commit_list else [])
+    description.set_message(message)
+    if review and not description.keywords:
+        description.add_keyword('#review')
+    description_lines = description.format()
 
     if dry_run:
         log.info("Would create new changelist with description:")

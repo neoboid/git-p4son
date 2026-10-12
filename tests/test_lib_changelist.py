@@ -101,9 +101,9 @@ class TestReplaceDescriptionInSpec(unittest.TestCase):
 
 class TestCreateChangelist(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     def test_creates_changelist(self, mock_get_lines, mock_run):
-        mock_get_lines.return_value = ['1. Add feature', '2. Fix bug']
+        mock_get_lines.return_value = ['Add feature', 'Fix bug']
         mock_run.return_value = make_run_result(
             stdout=['Change 99999 created.'])
         cl_num = create_changelist('My message', 'HEAD~1', '/ws')
@@ -114,7 +114,7 @@ class TestCreateChangelist(unittest.TestCase):
         self.assertIn('1. Add feature', spec_input)
 
     @mock.patch('git_p4son.perforce.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     def test_no_commits(self, mock_get_lines, mock_run):
         mock_get_lines.return_value = []
         mock_run.return_value = make_run_result(
@@ -122,16 +122,16 @@ class TestCreateChangelist(unittest.TestCase):
         cl_num = create_changelist('Solo message', 'HEAD~1', '/ws')
         self.assertEqual(cl_num, '100')
 
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     def test_dry_run_returns_placeholder(self, mock_get_lines):
-        mock_get_lines.return_value = ['1. Commit']
+        mock_get_lines.return_value = ['Commit']
         cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
         self.assertEqual(cl_num, DRY_RUN_CHANGELIST)
 
     @mock.patch('git_p4son.perforce.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     def test_p4_failure(self, mock_get_lines, mock_run):
-        mock_get_lines.return_value = ['1. Commit']
+        mock_get_lines.return_value = ['Commit']
         mock_run.side_effect = RunError('p4 change failed')
         with self.assertRaises(RunError):
             create_changelist('Msg', 'HEAD~1', '/ws')
@@ -139,8 +139,8 @@ class TestCreateChangelist(unittest.TestCase):
 
 @mock.patch('git_p4son.perforce.run',
             return_value=make_run_result(stdout=['Change 100 created.']))
-@mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
-            return_value=['1. Add feature'])
+@mock.patch('git_p4son.lib.get_commit_subjects_since',
+            return_value=['Add feature'])
 class TestCreateChangelistWithReview(unittest.TestCase):
     def test_review_keyword_ends_the_description(self, _lines, mock_run):
         create_changelist('Title', 'HEAD~1', '/ws', review=True)
@@ -155,6 +155,19 @@ class TestCreateChangelistWithReview(unittest.TestCase):
         self.assertEqual(
             mock_run.call_args.kwargs['input'].count('#review'), 1)
 
+    def test_keyword_in_message_moves_to_the_end(self, _lines, mock_run):
+        create_changelist('Title\n\n#review-678', 'HEAD~1', '/ws',
+                          review=True)
+        self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
+            '\t1. Add feature\n\t\n\t#review-678\n'))
+
+    def test_a_mention_of_review_is_not_a_keyword(self, _lines, mock_run):
+        """Only #review on a line of its own counts; #reviewer is not it."""
+        create_changelist('Ask #reviewer about #review rules', 'HEAD~1', '/ws',
+                          review=True)
+        self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
+            '\t\n\t#review\n'))
+
     def test_without_review_there_is_no_keyword(self, _lines, mock_run):
         create_changelist('Title', 'HEAD~1', '/ws')
         self.assertNotIn('#review', mock_run.call_args.kwargs['input'])
@@ -162,7 +175,7 @@ class TestCreateChangelistWithReview(unittest.TestCase):
 
 class TestCreateChangelistWithoutCommitList(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
+    @mock.patch('git_p4son.lib.get_commit_subjects_since')
     def test_leaves_out_commit_list(self, mock_get_lines, mock_run):
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 created.'])

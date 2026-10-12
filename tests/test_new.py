@@ -22,8 +22,8 @@ class TestNewCommandDryRun(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.lib.get_opened_files', return_value={})
     @mock.patch('git_p4son.lib.get_local_changes')
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
-                return_value=['1. Commit'])
+    @mock.patch('git_p4son.lib.get_commit_subjects_since',
+                return_value=['Commit'])
     def test_dry_run_with_edit_review_and_shelve(self, _lines, mock_changes,
                                                  _opened, _dirty):
         changes = LocalChanges()
@@ -35,14 +35,14 @@ class TestNewCommandDryRun(unittest.TestCase):
         rc = new_command(_args(review=True, shelve=True))
         self.assertEqual(rc, 0)
 
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
+    @mock.patch('git_p4son.lib.get_commit_subjects_since',
                 return_value=[])
     def test_dry_run_reports_invalid_alias(self, _lines):
         rc = new_command(_args(alias='bad alias!', no_edit=True))
         self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.changelist_store.check_alias_available', return_value=False)
-    @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
+    @mock.patch('git_p4son.lib.get_commit_subjects_since',
                 return_value=[])
     def test_dry_run_reports_existing_alias(self, _lines, _exists):
         rc = new_command(_args(alias='taken', no_edit=True))

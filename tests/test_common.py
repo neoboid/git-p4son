@@ -92,56 +92,75 @@ class TestGetHeadSubject(unittest.TestCase):
 
 
 class TestGetRebaseBranch(unittest.TestCase):
-    def test_relative_git_dir_resolved_against_workspace(self):
-        """git's relative git dir resolves against the workspace, not the process cwd."""
+    _GIT_PATHS = ['.git/rebase-merge/head-name', '.git/rebase-apply/head-name']
+
+    def _read(self, state_dir, ref):
+        """Write ref as the head-name in state_dir and read it back."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
-            os.makedirs(rebase_dir)
-            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
-                f.write('refs/heads/feature\n')
-            with mock.patch('git_p4son.git.run') as mock_run:
-                mock_run.return_value = RunResult(0, ['.git'], [])
-                result = _get_rebase_branch(tmpdir)
-            self.assertEqual(result, 'feature')
+            if state_dir:
+                os.makedirs(os.path.join(tmpdir, '.git', state_dir))
+                with open(os.path.join(tmpdir, '.git', state_dir,
+                                       'head-name'), 'w') as f:
+                    f.write(ref + '\n')
+            with mock.patch('git_p4son.git.run',
+                            return_value=RunResult(0, self._GIT_PATHS, [])):
+                return _get_rebase_branch(tmpdir)
 
     def test_reads_branch_from_rebase_merge_state(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
-            os.makedirs(rebase_dir)
-            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
-                f.write('refs/heads/feat/my-feature\n')
-            with mock.patch('git_p4son.git.run') as mock_run:
-                mock_run.return_value = RunResult(
-                    0, [os.path.join(tmpdir, '.git')], [])
-                result = _get_rebase_branch(tmpdir)
-            self.assertEqual(result, 'feat/my-feature')
+        self.assertEqual(self._read('rebase-merge', 'refs/heads/feat/x'),
+                         'feat/x')
 
-    def test_strips_refs_heads_prefix(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rebase_dir = os.path.join(tmpdir, '.git', 'rebase-merge')
-            os.makedirs(rebase_dir)
-            with open(os.path.join(rebase_dir, 'head-name'), 'w') as f:
-                f.write('refs/heads/main\n')
-            with mock.patch('git_p4son.git.run') as mock_run:
-                mock_run.return_value = RunResult(
-                    0, [os.path.join(tmpdir, '.git')], [])
-                result = _get_rebase_branch(tmpdir)
-            self.assertEqual(result, 'main')
+    def test_reads_branch_from_rebase_apply_state(self):
+        self.assertEqual(self._read('rebase-apply', 'refs/heads/feat/x'),
+                         'feat/x')
+
+    def test_keeps_a_ref_outside_refs_heads(self):
+        self.assertEqual(self._read('rebase-merge', 'refs/other/x'),
+                         'refs/other/x')
 
     def test_returns_none_when_no_rebase_state(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.makedirs(os.path.join(tmpdir, '.git'))
-            with mock.patch('git_p4son.git.run') as mock_run:
-                mock_run.return_value = RunResult(
-                    0, [os.path.join(tmpdir, '.git')], [])
-                result = _get_rebase_branch(tmpdir)
-            self.assertIsNone(result)
+        self.assertIsNone(self._read(None, ''))
 
-    def test_returns_none_when_git_dir_fails(self):
+    def test_returns_none_when_rev_parse_fails(self):
         with mock.patch('git_p4son.git.run',
                         side_effect=RunError('failed', returncode=128)):
-            result = _get_rebase_branch('/ws')
-        self.assertIsNone(result)
+            self.assertIsNone(_get_rebase_branch('/ws'))
+
+
+class TestGetCurrentBranchDuringRebase(unittest.TestCase):
+    """Both rebase backends detach HEAD; the branch being rebased is still found."""
+
+    def _repo_mid_rebase(self, ws, *rebase_args):
+        def git(*args):
+            subprocess.run(['git', *args], cwd=ws, capture_output=True)
+
+        def commit(content):
+            with open(os.path.join(ws, 'f.txt'), 'w') as f:
+                f.write(content)
+            git('add', '.')
+            git('commit', '-m', content)
+
+        git('init', '-b', 'main')
+        git('config', 'user.email', 't@t')
+        git('config', 'user.name', 'T')
+        commit('base')
+        git('switch', '-c', 'feat/x')
+        commit('feature')
+        git('switch', 'main')
+        commit('main')
+        git('switch', 'feat/x')
+        # Both commits change f.txt, so the rebase stops on a conflict with HEAD detached.
+        git('rebase', *rebase_args, 'main')
+
+    def test_merge_backend(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self._repo_mid_rebase(ws, '--merge')
+            self.assertEqual(get_current_branch(ws), 'feat/x')
+
+    def test_apply_backend(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self._repo_mid_rebase(ws, '--apply')
+            self.assertEqual(get_current_branch(ws), 'feat/x')
 
 
 class TestBranchToAlias(unittest.TestCase):

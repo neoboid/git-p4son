@@ -61,23 +61,23 @@ def get_current_branch(workspace_dir: str) -> str | None:
 
 
 def _get_rebase_branch(workspace_dir: str) -> str | None:
-    """During interactive rebase, read the original branch from git state."""
+    """During a rebase, read the original branch from git state."""
+    # Interactive and merge rebases keep their state in rebase-merge, the apply backend in rebase-apply.
     try:
-        result = run(['git', 'rev-parse', '--git-dir'], cwd=workspace_dir)
-        git_dir = result.stdout[0].strip() if result.stdout else None
-        if not git_dir:
-            return None
-        # git prints the dir relative to its cwd; resolve it against the workspace.
-        head_name_file = os.path.join(workspace_dir, git_dir,
-                                      'rebase-merge', 'head-name')
-        with open(head_name_file) as f:
-            ref = f.read().strip()
-        prefix = 'refs/heads/'
-        if ref.startswith(prefix):
-            return ref[len(prefix):]
-        return ref
-    except (RunError, FileNotFoundError):
+        result = run(['git', 'rev-parse',
+                      '--git-path', 'rebase-merge/head-name',
+                      '--git-path', 'rebase-apply/head-name'],
+                     cwd=workspace_dir)
+    except RunError:
         return None
+    for head_name in result.stdout:
+        # git prints paths relative to its cwd; resolve them against the workspace.
+        try:
+            with open(os.path.join(workspace_dir, head_name.strip())) as f:
+                return f.read().strip().removeprefix('refs/heads/')
+        except FileNotFoundError:
+            continue
+    return None
 
 
 # --- HEAD ---

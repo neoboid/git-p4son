@@ -40,7 +40,7 @@ def review_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     # The rebase todo is line-based, so a multi-line message must come from a file.
-    if not args.file and args.message and '\n' in args.message:
+    if not args.file and '\n' in args.message:
         log.error(
             'Review message must be a single line (use -F for a multi-line message)')
         return 1

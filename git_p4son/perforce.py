@@ -273,37 +273,16 @@ def _open_in_changelist(filename: str, p4_action: str, changelist: str,
             log.info(f'  {line}')
 
 
-def _ensure_in_changelist(filename: str, p4_action: str,
-                          current: tuple[str, str] | None, changelist: str,
-                          workspace_dir: str, dry_run: bool) -> None:
-    """Ensure a file is opened with the given action in the given changelist."""
-    if current is None:
-        _open_in_changelist(filename, p4_action, changelist,
-                            workspace_dir, dry_run)
+def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
+                  workspace_dir: str, dry_run: bool) -> None:
+    """List filenames under summary, then run one p4 command over them all."""
+    if not filenames:
         return
-
-    current_cl, current_action = current
-    if current_action != p4_action:
-        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
-        # add -> edit: new to the depot, so it stays an add.
-        if current_action == 'add' and p4_action == 'edit':
-            if current_cl != changelist:
-                run(['p4', 'reopen', '-c', changelist, filename],
-                    cwd=workspace_dir, dry_run=dry_run)
-            return
-
-        run(['p4', 'revert', filename], cwd=workspace_dir, dry_run=dry_run)
-        # add -> delete: never in the depot, so just revert.
-        if current_action == 'add' and p4_action == 'delete':
-            return
-        _open_in_changelist(filename, p4_action, changelist,
-                            workspace_dir, dry_run)
-        if p4_action != 'delete':
-            run(['git', 'restore', filename],
-                cwd=workspace_dir, dry_run=dry_run)
-    elif current_cl != changelist:
-        run(['p4', 'reopen', '-c', changelist, filename],
-            cwd=workspace_dir, dry_run=dry_run)
+    log.info(f'{summary}:')
+    for filename in filenames:
+        log.info(f'  {filename}')
+    run(['p4', '-x', '-', *p4_args], cwd=workspace_dir,
+        input='\n'.join(filenames), dry_run=dry_run)
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
@@ -316,10 +295,41 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         wanted += [(from_filename, 'delete'), (to_filename, 'add')]
 
     opened = get_opened_files([f for f, _ in wanted], workspace_dir)
+    to_open = []
+    to_reopen = []
+    to_revert = []
+    to_restore = []
     for filename, p4_action in wanted:
-        _ensure_in_changelist(filename, p4_action,
-                              _opened_state(opened, filename), changelist,
-                              workspace_dir, dry_run)
+        current = _opened_state(opened, filename)
+        if current is None:
+            to_open.append((filename, p4_action))
+            continue
+        current_cl, current_action = current
+        # add -> edit: new to the depot, so it stays an add.
+        if current_action == p4_action or (current_action == 'add'
+                                           and p4_action == 'edit'):
+            if current_cl != changelist:
+                to_reopen.append(filename)
+            continue
+        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
+        to_revert.append(filename)
+        # add -> delete: never in the depot, so just revert.
+        if current_action == 'add' and p4_action == 'delete':
+            continue
+        to_open.append((filename, p4_action))
+        if p4_action != 'delete':
+            to_restore.append(filename)
+
+    _run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
+                  workspace_dir, dry_run)
+    for filename, p4_action in to_open:
+        _open_in_changelist(filename, p4_action, changelist,
+                            workspace_dir, dry_run)
+    _run_p4_batch(['reopen', '-c', changelist], to_reopen,
+                  'Moving files from other changelists', workspace_dir, dry_run)
+    if to_restore:
+        run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
+            cwd=workspace_dir, input='\0'.join(to_restore), dry_run=dry_run)
 
 
 def get_opened_files_in_changelist(changelist: str,

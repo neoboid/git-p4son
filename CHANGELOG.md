@@ -2,19 +2,13 @@
 
 ## Unreleased
 
-- `new --review` writes the `#review` keyword into the description as it creates the changelist, instead of
-  fetching and rewriting the description afterwards. `--dry-run` shows the keyword in the description
-- `review` refuses to start with uncommitted changes, like `update --per-commit`. Before, git only stopped the
-  rebase once it had started
-- `review` and `update --per-commit` save the message to `.git-p4son/reviews/message` and pass that to the rebase
-  steps. A `-m` message may now span multiple lines, and a `-F` file can be edited or removed once the command has
-  started
-- `sync` no longer reports "No previous sync found" when the newest commit mentioning a sync subject, such as a
-  revert of one, is not itself a sync commit. It now finds the last real sync commit
-- `sync last-synced` now merges local changes back and reports files p4 did not sync, like any other sync.
-  Before, it re-synced and left locally modified writable files read-only at the Perforce version
-- `sync` no longer warns when the workspace has the clobber option enabled. git-p4son has not needed clobber
-  since 0.3.0. A leftover `.git-p4son/state.toml`, which only remembered dismissing the warning, can be deleted
+- `new`, `update` and `review` make far fewer p4 calls: opening files for edit takes a fixed number of calls instead
+  of about two per file, and `new --review` adds `#review` as it creates the changelist
+- `review` and `update --per-commit` accept a multi-line `-m` message, and `review` refuses to start with
+  uncommitted changes
+- `sync` finds the last sync commit even when a later commit, such as a revert, mentions one, and `sync last-synced`
+  merges local changes back like any other sync
+- `sync` no longer warns about the clobber workspace option. A leftover `.git-p4son/state.toml` can be deleted
 
 ## 0.5.1
 

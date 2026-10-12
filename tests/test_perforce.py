@@ -373,6 +373,7 @@ class TestP4Sync(unittest.TestCase):
         p4_sync(12345, '//myclient', '/ws')
         self.assertEqual(mock_rwo.call_args.args[0],
                          ['p4', '-L', 'en', 'sync', '//myclient/...@12345'])
+        self.assertFalse(mock_rwo.call_args.kwargs['keep_stdout'])
 
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_clobber_errors_raise_with_the_refused_files(self, mock_rwo):

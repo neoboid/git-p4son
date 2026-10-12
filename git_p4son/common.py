@@ -209,10 +209,12 @@ def _terminate(process: subprocess.Popen) -> None:
 
 def run_with_output(command: list[str], cwd: str = '.',
                     on_output: Callable[..., None] | None = None,
-                    env: dict[str, str] | None = None) -> RunResult:
+                    env: dict[str, str] | None = None,
+                    keep_stdout: bool = True) -> RunResult:
     """Run a command, passing each output line and its stream to on_output as it is written.
 
-    An exception raised from on_output terminates the command and propagates."""
+    An exception raised from on_output terminates the command and propagates. Without keep_stdout,
+    the result's stdout is empty; on_output still sees every line."""
     log.command(join_command_line(command),
                 truncate_for_spinner=True)
     log.start_spinner()
@@ -220,6 +222,7 @@ def run_with_output(command: list[str], cwd: str = '.',
     start_timestamp = timer()
 
     stdout_lines: list[str] = []
+    kept_stdout = stdout_lines if keep_stdout else None
     stderr_lines: list[str] = []
     returncode: int | None = None
 
@@ -261,7 +264,8 @@ def run_with_output(command: list[str], cwd: str = '.',
             try:
                 while not q.empty():
                     line = q.get_nowait()
-                    lines.append(line)
+                    if lines is not None:
+                        lines.append(line)
                     if on_output:
                         on_output(line=line, stream=stream)
             except queue.Empty:
@@ -270,7 +274,7 @@ def run_with_output(command: list[str], cwd: str = '.',
         try:
             # Loop on the readers, not process.poll(): the process can exit with output still buffered.
             while out_thread.is_alive() or err_thread.is_alive():
-                drain_queue(output_queue, stdout_lines, sys.stdout)
+                drain_queue(output_queue, kept_stdout, sys.stdout)
                 drain_queue(error_queue, stderr_lines, sys.stderr)
                 time.sleep(0.05)
 
@@ -278,7 +282,7 @@ def run_with_output(command: list[str], cwd: str = '.',
             err_thread.join()
 
             # Final drain for lines enqueued after the last pass above.
-            drain_queue(output_queue, stdout_lines, sys.stdout)
+            drain_queue(output_queue, kept_stdout, sys.stdout)
             drain_queue(error_queue, stderr_lines, sys.stderr)
 
             returncode = process.wait()

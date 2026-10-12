@@ -465,10 +465,11 @@ class P4SyncPreviewFile:
 
 
 def _run_p4_sync(args: list[str], workspace_dir: str,
-                 processor: P4SyncOutputProcessor) -> RunResult:
+                 processor: P4SyncOutputProcessor,
+                 keep_stdout: bool = True) -> RunResult:
     """Run a p4 sync with processor watching its output, then log how long it took."""
     result = run_with_output([*_P4, 'sync', *args], cwd=workspace_dir,
-                             on_output=processor)
+                             on_output=processor, keep_stdout=keep_stdout)
     if result.elapsed:
         log.elapsed(result.elapsed)
     return result
@@ -505,8 +506,9 @@ def p4_sync(changelist: int, depot_root: str, workspace_dir: str) -> None:
     """
     output_processor = P4SyncOutputProcessor()
     try:
+        # The processor reads every line as it arrives; holding a large sync's output would only cost memory.
         _run_p4_sync([f'{depot_root}/...@{changelist}'], workspace_dir,
-                     output_processor)
+                     output_processor, keep_stdout=False)
     except RunError as e:
         refused = get_writable_files(e.stderr)
         if not refused:

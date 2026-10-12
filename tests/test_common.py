@@ -335,6 +335,16 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(call.kwargs['env']['PWD'], '/tmp')
         self.assertEqual(result.returncode, 0)
 
+    def test_without_keep_stdout_lines_reach_only_the_callback(self):
+        seen = []
+        with mock.patch('git_p4son.common.log'):
+            result = run_with_output(
+                [sys.executable, '-c', 'print("one"); print("two")'],
+                on_output=lambda line, stream: seen.append(line),
+                keep_stdout=False)
+        self.assertEqual(seen, ['one', 'two'])
+        self.assertEqual(result.stdout, [])
+
     @mock.patch('subprocess.Popen')
     def test_callback_is_invoked(self, mock_popen_cls):
         mock_process = mock.MagicMock()

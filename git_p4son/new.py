@@ -23,7 +23,6 @@ def new_command(args: argparse.Namespace) -> int:
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
-    # Validate the alias before creating the changelist.
     if args.alias:
         error = validate_alias_name(args.alias)
         if error:

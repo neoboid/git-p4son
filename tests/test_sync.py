@@ -320,7 +320,7 @@ class TestGetLatestChangelist(unittest.TestCase):
         cl = get_latest_changelist('//myclient', '/ws')
         self.assertEqual(cl, 54321)
         mock_run.assert_called_once_with(
-            ['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',
+            ['p4', '-L', 'en', '-ztag', 'changes', '-m1', '-s', 'submitted',
              '//myclient/...#head'], cwd='/ws')
 
     @mock.patch('git_p4son.perforce.run')

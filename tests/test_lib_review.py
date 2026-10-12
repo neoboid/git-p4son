@@ -15,7 +15,7 @@ class TestP4ShelveChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         p4_shelve_changelist('100', '/ws')
         self.assertEqual(mock_run.call_args_list, [
-            mock.call(['p4', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
+            mock.call(['p4', '-L', 'en', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
                        '-c', '100'],
                       cwd='/ws', dry_run=False),
         ])
@@ -31,7 +31,7 @@ class TestP4ShelveChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         p4_shelve_changelist('100', '/ws', dry_run=True)
         mock_run.assert_called_once_with(
-            ['p4', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
+            ['p4', '-L', 'en', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
              '-c', '100'],
             cwd='/ws', dry_run=True,
         )

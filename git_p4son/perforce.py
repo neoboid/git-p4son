@@ -17,6 +17,10 @@ from .common import (
 from .log import log
 
 
+# The output parsing matches p4's English messages, so ask for those whatever P4LANGUAGE says.
+_P4 = ['p4', '-L', 'en']
+
+
 # --- ztag output parsing ---
 
 def parse_ztag_output(lines: list[str]) -> dict[str, str]:
@@ -91,7 +95,7 @@ class P4ClientSpec:
 
 def get_client_spec(cwd: str) -> P4ClientSpec | None:
     """Get the client spec, or None if not in a valid workspace."""
-    result = run(['p4', '-ztag', 'client', '-o'], cwd=cwd)
+    result = run([*_P4, '-ztag', 'client', '-o'], cwd=cwd)
     fields = parse_ztag_output(result.stdout)
     if 'Update' not in fields:
         return None
@@ -148,13 +152,13 @@ def replace_description_in_spec(spec_text: str, new_description_lines: list[str]
 
 def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
     """Fetch the changelist spec from Perforce."""
-    result = run(['p4', 'change', '-o', changelist_nr], cwd=workspace_dir)
+    result = run([*_P4, 'change', '-o', changelist_nr], cwd=workspace_dir)
     return '\n'.join(result.stdout) + '\n'
 
 
 def save_changelist_spec(spec_text: str, workspace_dir: str) -> None:
     """Write a changelist spec back to Perforce."""
-    run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec_text)
+    run([*_P4, 'change', '-i'], cwd=workspace_dir, input=spec_text)
 
 
 def p4_create_changelist(description_lines: list[str],
@@ -162,7 +166,7 @@ def p4_create_changelist(description_lines: list[str],
     """Create a pending changelist with the given description and return its number."""
     tabbed_description = '\n\t'.join(description_lines)
     spec = f'Change: new\n\nDescription:\n\t{tabbed_description}\n'
-    result = run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec)
+    result = run([*_P4, 'change', '-i'], cwd=workspace_dir, input=spec)
     for line in result.stdout:
         match = re.search(r'Change (\d+) created', line)
         if match:
@@ -174,7 +178,7 @@ def p4_create_changelist(description_lines: list[str],
 def p4_depot_root_exists(depot_root: str, workspace_dir: str) -> bool:
     """Report whether p4 accepts the depot root as a path to query changelists for."""
     try:
-        run(['p4', 'changes', '-m1', '-s', 'submitted', f'{depot_root}/...'],
+        run([*_P4, 'changes', '-m1', '-s', 'submitted', f'{depot_root}/...'],
             cwd=workspace_dir)
         return True
     except CommandError:
@@ -183,7 +187,7 @@ def p4_depot_root_exists(depot_root: str, workspace_dir: str) -> bool:
 
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
-    res = run(['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',
+    res = run([*_P4, '-ztag', 'changes', '-m1', '-s', 'submitted',
               f'{depot_root}/...#head'], cwd=workspace_dir)
     fields = parse_ztag_output(res.stdout)
     if 'change' not in fields:
@@ -202,7 +206,7 @@ class P4Change:
 def get_submitted_changes(depot_root: str, start: int, end: int,
                           workspace_dir: str) -> list[P4Change]:
     """List changelists submitted to the depot root in [start, end], oldest first."""
-    res = run(['p4', '-ztag', 'changes', '-s', 'submitted',
+    res = run([*_P4, '-ztag', 'changes', '-s', 'submitted',
                f'{depot_root}/...@{start},@{end}'], cwd=workspace_dir)
     records = parse_ztag_multi_output(res.stdout)
     changes = [P4Change(change=int(r['change']), user=r.get('user', ''))
@@ -212,13 +216,13 @@ def get_submitted_changes(depot_root: str, start: int, end: int,
 
 def get_p4_user(workspace_dir: str) -> str | None:
     """Get the Perforce user name of the current connection."""
-    res = run(['p4', '-ztag', 'info'], cwd=workspace_dir)
+    res = run([*_P4, '-ztag', 'info'], cwd=workspace_dir)
     return parse_ztag_output(res.stdout).get('userName') or None
 
 
 def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
     """Return the names that are Perforce users, spelled as the server spells them."""
-    res = run(['p4', '-ztag', 'users', *names], cwd=workspace_dir,
+    res = run([*_P4, '-ztag', 'users', *names], cwd=workspace_dir,
               fail_on_returncode=False)
     errors = [line for line in res.stderr
               if line.strip() and 'no such user' not in line]
@@ -261,7 +265,7 @@ def get_opened_files(filenames: list[str],
     """Return (changelist, action) for each of the files that is opened, keyed by workspace-relative path."""
     if not filenames:
         return {}
-    res = run(['p4', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
+    res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
                '-T', 'path,clientFile,action,change'],
               cwd=workspace_dir, input='\n'.join(filenames),
               fail_on_returncode=False)
@@ -290,7 +294,7 @@ def run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
     log.info(f'{summary}:')
     for filename in filenames:
         log.info(f'  {filename}')
-    result = run(['p4', '-x', '-', *p4_args], cwd=workspace_dir,
+    result = run([*_P4, '-x', '-', *p4_args], cwd=workspace_dir,
                  input='\n'.join(filenames), dry_run=dry_run,
                  fail_on_returncode=fail_on_returncode)
     return result.stdout + result.stderr
@@ -299,7 +303,7 @@ def run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
 def get_opened_files_in_changelist(changelist: str,
                                    workspace_dir: str) -> list[tuple[str, str]]:
     """Return (path, action) for files opened in a changelist, as workspace-relative paths."""
-    res = run(['p4', '-ztag', 'fstat', '-Ro', '-e', changelist, '-Op',
+    res = run([*_P4, '-ztag', 'fstat', '-Ro', '-e', changelist, '-Op',
                '-T', 'path,clientFile,action', '...'],
               cwd=workspace_dir, fail_on_returncode=False)
     _warn_p4_errors(res, ('not opened',),
@@ -311,7 +315,7 @@ def get_opened_files_in_changelist(changelist: str,
 def p4_revert(filenames: list[str], workspace_dir: str,
               dry_run: bool = False) -> None:
     """Revert the given files, writing their depot version to disk."""
-    run(['p4', '-x', '-', 'revert'], cwd=workspace_dir,
+    run([*_P4, '-x', '-', 'revert'], cwd=workspace_dir,
         input='\n'.join(filenames), dry_run=dry_run)
 
 
@@ -320,7 +324,7 @@ def p4_revert_unchanged(filenames: list[str], changelist: str,
     """Revert files that are unchanged, or missing and opened for add; returns p4's lines."""
     if not filenames:
         return []
-    args = ['p4', '-x', '-', 'revert', '-a']
+    args = [*_P4, '-x', '-', 'revert', '-a']
     if dry_run:
         args.append('-n')
     args += ['-c', changelist]
@@ -343,7 +347,7 @@ def p4_get_opened_files(depot_root: str,
                         workspace_dir: str) -> list[tuple[str, str]]:
     """Return client paths and change types for files opened in Perforce."""
     res = run_with_output(
-        ['p4', '-ztag', 'fstat', '-Ro', '-Op', '-T',
+        [*_P4, '-ztag', 'fstat', '-Ro', '-Op', '-T',
          'depotFile,path,clientFile,action', f'{depot_root}/...'],
         cwd=workspace_dir)
     return [(filename, _p4_action_to_change(record['action']))
@@ -355,7 +359,7 @@ def p4_get_opened_files(depot_root: str,
 
 def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
     """Shelve a changelist's open files, replacing the shelf and leaving unchanged files out."""
-    run(['p4', 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
+    run([*_P4, 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
          '-c', changelist],
         cwd=workspace_dir, dry_run=dry_run)
 
@@ -433,7 +437,7 @@ def p4_head_types(filenames: list[str], workspace_dir: str) -> dict[str, str]:
     if not filenames:
         return {}
     # Use -x - so the path list doesn't hit the command-line length limit.
-    args = ['p4', '-x', '-', '-ztag', 'fstat',
+    args = [*_P4, '-x', '-', '-ztag', 'fstat',
             '-T', 'clientFile,headType']
     result = run(args, cwd=workspace_dir, input='\n'.join(filenames))
     return {record['clientFile']: record['headType']
@@ -463,7 +467,7 @@ class P4SyncPreviewFile:
 def _run_p4_sync(args: list[str], workspace_dir: str,
                  processor: P4SyncOutputProcessor) -> RunResult:
     """Run a p4 sync with processor watching its output, then log how long it took."""
-    result = run_with_output(['p4', 'sync', *args], cwd=workspace_dir,
+    result = run_with_output([*_P4, 'sync', *args], cwd=workspace_dir,
                              on_output=processor)
     if result.elapsed:
         log.elapsed(result.elapsed)

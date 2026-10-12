@@ -105,7 +105,7 @@ class TestP4DepotRootExists(unittest.TestCase):
             stdout=['Change 12345 on 2024/01/01'])
         self.assertTrue(p4_depot_root_exists('//my-ws', '/ws'))
         mock_run.assert_called_once_with(
-            ['p4', 'changes', '-m1', '-s', 'submitted', '//my-ws/...'],
+            ['p4', '-L', 'en', 'changes', '-m1', '-s', 'submitted', '//my-ws/...'],
             cwd='/ws')
 
     @mock.patch('git_p4son.perforce.run', side_effect=CommandError('p4 error'))
@@ -197,7 +197,8 @@ class TestP4SyncPreview(unittest.TestCase):
         mock_rwo.return_value = make_run_result(stdout=[])
         p4_sync_preview(100, '//depot', '/ws')
         cmd = mock_rwo.call_args[0][0]
-        self.assertEqual(cmd, ['p4', 'sync', '-n', '//depot/...@100'])
+        self.assertEqual(
+            cmd, ['p4', '-L', 'en', 'sync', '-n', '//depot/...@100'])
 
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_skips_unparsable_lines(self, mock_rwo):
@@ -307,7 +308,7 @@ class TestGetSubmittedChanges(unittest.TestCase):
         self.assertEqual([(c.change, c.user) for c in changes],
                          [(102, 'colleague'), (105, 'andreas')])
         mock_run.assert_called_once_with(
-            ['p4', '-ztag', 'changes', '-s', 'submitted',
+            ['p4', '-L', 'en', '-ztag', 'changes', '-s', 'submitted',
              '//myclient/...@100,@105'], cwd='/ws')
 
     @mock.patch('git_p4son.perforce.run')
@@ -326,7 +327,7 @@ class TestGetP4User(unittest.TestCase):
         ])
         self.assertEqual(get_p4_user('/ws'), 'andreas')
         mock_run.assert_called_once_with(
-            ['p4', '-ztag', 'info'], cwd='/ws')
+            ['p4', '-L', 'en', '-ztag', 'info'], cwd='/ws')
 
     @mock.patch('git_p4son.perforce.run')
     def test_missing_user_name(self, mock_run):
@@ -344,7 +345,7 @@ class TestGetExistingP4Users(unittest.TestCase):
         self.assertEqual(get_existing_p4_users(['alice', 'bob'], '/ws'),
                          ['Alice', 'bob'])
         mock_run.assert_called_once_with(
-            ['p4', '-ztag', 'users', 'alice', 'bob'], cwd='/ws',
+            ['p4', '-L', 'en', '-ztag', 'users', 'alice', 'bob'], cwd='/ws',
             fail_on_returncode=False)
 
     @mock.patch('git_p4son.perforce.run')
@@ -371,7 +372,7 @@ class TestP4Sync(unittest.TestCase):
     def test_success(self, mock_rwo):
         p4_sync(12345, '//myclient', '/ws')
         self.assertEqual(mock_rwo.call_args.args[0],
-                         ['p4', 'sync', '//myclient/...@12345'])
+                         ['p4', '-L', 'en', 'sync', '//myclient/...@12345'])
 
     @mock.patch('git_p4son.perforce.run_with_output')
     def test_clobber_errors_raise_with_the_refused_files(self, mock_rwo):

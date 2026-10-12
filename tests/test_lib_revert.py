@@ -27,7 +27,7 @@ class TestGetOpenedFilesInChangelist(unittest.TestCase):
         self.assertEqual(files, [('a.txt', 'edit'), ('sub/b.txt', 'add')])
         self.assertEqual(
             mock_run.call_args.args[0],
-            ['p4', '-ztag', 'fstat', '-Ro', '-e', '100', '-Op',
+            ['p4', '-L', 'en', '-ztag', 'fstat', '-Ro', '-e', '100', '-Op',
              '-T', 'path,clientFile,action', '...'])
 
     @mock.patch('git_p4son.perforce.run')
@@ -89,7 +89,7 @@ class TestP4RevertUnchanged(unittest.TestCase):
         reverted = p4_revert_unchanged(['a.txt', 'b.txt'], '100', '/ws')
         self.assertEqual(reverted, ['//depot/a.txt#3 - was edit, reverted'])
         mock_run.assert_called_once_with(
-            ['p4', '-x', '-', 'revert', '-a', '-c', '100'],
+            ['p4', '-L', 'en', '-x', '-', 'revert', '-a', '-c', '100'],
             cwd='/ws', input='a.txt\nb.txt', fail_on_returncode=False)
 
     @mock.patch('git_p4son.perforce.run')
@@ -98,7 +98,7 @@ class TestP4RevertUnchanged(unittest.TestCase):
         mock_run.return_value = make_run_result()
         p4_revert_unchanged(['a.txt'], '100', '/ws', dry_run=True)
         mock_run.assert_called_once_with(
-            ['p4', '-x', '-', 'revert', '-a', '-n', '-c', '100'],
+            ['p4', '-L', 'en', '-x', '-', 'revert', '-a', '-n', '-c', '100'],
             cwd='/ws', input='a.txt', fail_on_returncode=False)
 
 

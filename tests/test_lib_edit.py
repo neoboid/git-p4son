@@ -38,7 +38,7 @@ class TestGetOpenedFiles(unittest.TestCase):
                                   'sub/b.txt': ('default', 'add')})
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0],
-                         ['p4', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
+                         ['p4', '-L', 'en', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
                           '-T', 'path,clientFile,action,change'])
         self.assertEqual(mock_run.call_args.kwargs['input'],
                          'a.txt\nsub/b.txt\nc.txt')
@@ -294,7 +294,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.adds = ['new_file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'add', '-c', '100'], 'new_file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new_file.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'add')))
@@ -305,7 +305,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.adds = ['new_file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'new_file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'new_file.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('100', 'add')))
@@ -327,7 +327,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.mods = ['mod.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'mod.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'mod.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'edit')))
@@ -338,7 +338,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.mods = ['mod.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'mod.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'mod.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('100', 'edit')))
@@ -360,7 +360,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.dels = ['old.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'delete')))
@@ -371,7 +371,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.dels = ['old.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'old.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'old.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('100', 'delete')))
@@ -393,8 +393,8 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.moves = [('old.txt', 'new.txt')]
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'add', '-c', '100'], 'new.txt'),
-            (['p4', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(side_effect=[('200', 'delete'), ('200', 'add')]))
@@ -405,7 +405,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.moves = [('old.txt', 'new.txt')]
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'old.txt\nnew.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'old.txt\nnew.txt')])
 
     # --- dry run ---
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -417,7 +417,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.adds = ['new.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
         mock_run.assert_called_once_with(
-            ['p4', '-x', '-', 'add', '-c', '100'], cwd='/ws',
+            ['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], cwd='/ws',
             input='new.txt', dry_run=True, fail_on_returncode=False)
 
 
@@ -459,8 +459,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'edit')))
@@ -471,8 +471,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
 
     # --- delete -> edit ---
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -484,8 +484,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.mods = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
         self.mocks['restore_files'].assert_called_once_with(
             ['file.txt'], '/ws', False)
 
@@ -498,8 +498,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.mods = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'revert'], 'file.txt'),
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
         self.mocks['restore_files'].assert_called_once_with(
             ['file.txt'], '/ws', False)
 
@@ -523,7 +523,7 @@ class TestActionMismatch(unittest.TestCase):
         changes.mods = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'file.txt')])
 
     # --- add -> delete (revert only, no reopen) ---
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -535,7 +535,7 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-                         (['p4', '-x', '-', 'revert'], 'file.txt')])
+                         (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt')])
 
 
 class TestBatchedActions(unittest.TestCase):
@@ -552,9 +552,9 @@ class TestBatchedActions(unittest.TestCase):
         changes.mods = ['a.txt', 'b.txt', 'c.txt', 'd.txt']
         include_changes_in_changelist(changes, '100', '/ws')
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-x', '-', 'revert'], 'a.txt\nb.txt'),
-            (['p4', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
-            (['p4', '-x', '-', 'reopen', '-c', '100'], 'c.txt\nd.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert'], 'a.txt\nb.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'c.txt\nd.txt'),
         ])
         mock_restore.assert_called_once_with(['a.txt', 'b.txt'], '/ws', False)
         logged = [c.args[0] for c in mock_log.info.call_args_list]

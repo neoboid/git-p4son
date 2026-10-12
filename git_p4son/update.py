@@ -17,19 +17,15 @@ from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
 def _generate_todo(commit_lines: list[str], changelist: str,
                    args: argparse.Namespace) -> str:
     """Generate a rebase todo running update after each commit."""
-    flags = ''
-    if args.no_commit_list:
-        flags += ' --no-commit-list'
-    if args.no_edit:
-        flags += ' --no-edit'
-    if args.shelve:
-        flags += ' --shelve'
-    first_cmd = f'update {changelist}'
+    flags = ''.join(f' {flag}' for flag, on in (
+        ('--no-commit-list', args.no_commit_list),
+        ('--no-edit', args.no_edit),
+        ('--shelve', args.shelve)) if on)
+    cmd = f'update {changelist}'
     # The message only needs replacing once
-    if args.message is not None:
-        first_cmd += f' -F {shlex.quote(MESSAGE_FILE)}'
-    commands = ([first_cmd + flags]
-                + [f'update {changelist}{flags}'] * (len(commit_lines) - 1))
+    first_cmd = (f'{cmd} -F {shlex.quote(MESSAGE_FILE)}'
+                 if args.message is not None else cmd)
+    commands = [first_cmd + flags] + [cmd + flags] * (len(commit_lines) - 1)
     return build_todo(commit_lines, commands)
 
 

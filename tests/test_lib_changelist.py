@@ -5,6 +5,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError, RunError
 from git_p4son.lib import (
+    DRY_RUN_CHANGELIST,
     create_changelist,
     split_description_lines,
     update_changelist,
@@ -180,10 +181,9 @@ class TestCreateChangelist(unittest.TestCase):
 
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_dry_run_returns_placeholder(self, mock_get_lines):
-        """Dry run returns a placeholder usable in downstream commands."""
         mock_get_lines.return_value = ['1. Commit']
         cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
-        self.assertEqual(cl_num, '<changelist>')
+        self.assertEqual(cl_num, DRY_RUN_CHANGELIST)
 
     @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')

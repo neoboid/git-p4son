@@ -171,7 +171,6 @@ def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
                                      dry_run: bool = False) -> None:
     """Add the #review keyword to a changelist description."""
     if dry_run:
-        # A dry run must not query the server; the changelist may be a placeholder.
         log.info(f"Would add #review keyword to changelist {changelist}")
         return
 

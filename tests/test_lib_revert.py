@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.lib import revert_unchanged_files
+from git_p4son.lib import DRY_RUN_CHANGELIST, revert_unchanged_files
 from git_p4son.perforce import (
     get_opened_files_in_changelist,
     p4_revert_unchanged,
@@ -222,7 +222,8 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             self.assertTrue(call.kwargs['dry_run'])
 
     def test_dry_run_placeholder_changelist_queries_nothing(self):
-        count = revert_unchanged_files('<changelist>', self.ws, dry_run=True)
+        count = revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws,
+                                       dry_run=True)
         self.assertEqual(count, 0)
         self.mocks['opened'].assert_not_called()
         self.mocks['revert_unchanged'].assert_not_called()

@@ -93,9 +93,7 @@ class TestP4AddReviewKeywordToChangelist(unittest.TestCase):
 
     @mock.patch('git_p4son.perforce.run')
     def test_dry_run_does_not_touch_the_server(self, mock_run):
-        """A dry run does not fetch the spec; the changelist may be a placeholder."""
-        add_review_keyword_to_changelist(
-            '<changelist>', '/ws', dry_run=True)
+        add_review_keyword_to_changelist('100', '/ws', dry_run=True)
         mock_run.assert_not_called()
 
 

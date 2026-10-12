@@ -28,6 +28,8 @@ from .writable import is_writable_mode, make_writable
 # Heading written above the enumerated commit list in descriptions.
 COMMIT_LIST_MARKER = 'Changes included:'
 
+DRY_RUN_CHANGELIST = '<changelist>'
+
 # #review on a line of its own, which Swarm turns into #review-<id>.
 _REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
 
@@ -99,7 +101,7 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
                       commit_list: bool = True) -> str:
     """Create a changelist from message and, unless commit_list is False, the git commits.
 
-    On dry run, returns the placeholder '<changelist>'."""
+    On dry run, creates nothing and returns DRY_RUN_CHANGELIST."""
     commit_lines = []
     if commit_list:
         commit_lines = get_enumerated_commit_lines_since(
@@ -112,7 +114,7 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     if dry_run:
         log.info("Would create new changelist with description:")
         log.info('\n'.join(description_lines))
-        return '<changelist>'
+        return DRY_RUN_CHANGELIST
 
     tabbed_description = "\n\t".join(description_lines)
     spec_content = f"Change: new\n\nDescription:\n\t{tabbed_description}\n"
@@ -215,8 +217,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     """Revert files in a changelist that are no longer part of the git change.
 
     Requires a clean git workspace. Returns the number of files reverted."""
-    if dry_run and not changelist.isdigit():
-        # Placeholder from a dry-run new: there is no changelist to query.
+    if changelist == DRY_RUN_CHANGELIST:
         log.info(f'Would revert unchanged files in changelist {changelist}')
         return 0
 

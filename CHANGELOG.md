@@ -4,6 +4,8 @@
 
 - `new`, `update` and `review` make far fewer p4 calls: opening files for edit takes a fixed number of calls instead
   of about two per file, and `new --review` adds `#review` as it creates the changelist
+- `sync`, `new` and `update` check which files git tracks with a single listing of the index instead of one git
+  call per few hundred files. A large sync in writable mode no longer spends tens of seconds on it
 - `review` and `update --per-commit` accept a multi-line `-m` message, and `review` refuses to start with
   uncommitted changes
 - `sync` finds the last sync commit even when a later commit, such as a revert, mentions one, and `sync last-synced`

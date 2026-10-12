@@ -197,6 +197,19 @@ def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str,
     include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
 
 
+def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
+                                      workspace_dir: str, dry_run: bool) -> None:
+    """Open the git changes in the changelist, then revert the files no longer part of them."""
+    log.heading('Opening files for edit')
+    open_changes_for_edit(changelist, base_branch, workspace_dir, dry_run)
+    log.success('Done')
+
+    log.heading('Reverting unchanged files')
+    count = revert_stale_files(changelist, workspace_dir, dry_run)
+    log.success(f'{count} would be reverted' if dry_run
+                else f'{count} reverted')
+
+
 def revert_stale_files(changelist: str, workspace_dir: str,
                        dry_run: bool = False) -> int:
     """Revert files in a changelist that are no longer part of the git change.

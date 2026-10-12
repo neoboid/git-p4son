@@ -9,8 +9,7 @@ from .changelist_store import (
 from .lib import (
     check_git_workspace_clean,
     create_changelist,
-    open_changes_for_edit,
-    revert_stale_files,
+    open_changes_and_revert_unchanged,
 )
 from .perforce import add_review_keyword_to_changelist, p4_shelve_changelist
 from .log import log
@@ -49,15 +48,8 @@ def new_command(args: argparse.Namespace) -> int:
             log.success(f'Created CL {changelist}')
 
     if not args.no_edit:
-        log.heading('Opening files for edit')
-        open_changes_for_edit(
-            changelist, args.base_branch, workspace_dir, args.dry_run)
-        log.success('Done')
-
-        log.heading('Reverting unchanged files')
-        count = revert_stale_files(changelist, workspace_dir, args.dry_run)
-        log.success(f'{count} would be reverted' if args.dry_run
-                    else f'{count} reverted')
+        open_changes_and_revert_unchanged(changelist, args.base_branch,
+                                          workspace_dir, args.dry_run)
 
     if args.review:
         log.heading('Adding review keyword')

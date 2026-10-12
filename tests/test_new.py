@@ -90,9 +90,9 @@ class TestNewCommandRevertStep(unittest.TestCase):
         with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
                 mock.patch('git_p4son.new.create_changelist',
                            return_value='100'), \
-                mock.patch('git_p4son.new.open_changes_for_edit',
+                mock.patch('git_p4son.lib.open_changes_for_edit',
                            order.open), \
-                mock.patch('git_p4son.new.revert_stale_files',
+                mock.patch('git_p4son.lib.revert_stale_files',
                            order.revert), \
                 mock.patch('git_p4son.new.add_review_keyword_to_changelist',
                            order.keyword), \

@@ -6,8 +6,7 @@ from .changelist_store import load_changelist_alias
 from .git import get_commit_lines_since
 from .lib import (
     check_git_workspace_clean,
-    open_changes_for_edit,
-    revert_stale_files,
+    open_changes_and_revert_unchanged,
     update_changelist,
 )
 from .perforce import p4_shelve_changelist
@@ -83,15 +82,8 @@ def update_command(args: argparse.Namespace) -> int:
         log.success('Done')
 
     if not args.no_edit:
-        log.heading('Opening files for edit')
-        open_changes_for_edit(
-            changelist, args.base_branch, workspace_dir, args.dry_run)
-        log.success('Done')
-
-        log.heading('Reverting unchanged files')
-        count = revert_stale_files(changelist, workspace_dir, args.dry_run)
-        log.success(f'{count} would be reverted' if args.dry_run
-                    else f'{count} reverted')
+        open_changes_and_revert_unchanged(changelist, args.base_branch,
+                                          workspace_dir, args.dry_run)
 
     if args.shelve:
         log.heading('Shelving')

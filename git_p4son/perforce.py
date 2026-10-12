@@ -4,7 +4,7 @@ import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import IO
+from typing import IO, Callable
 
 from .common import (
     CommandError,
@@ -246,16 +246,13 @@ def get_opened_files(filenames: list[str],
     return opened
 
 
-def _opened_state(opened: dict[str, tuple[str, str]],
-                  filename: str) -> tuple[str, str] | None:
-    """Look filename up in get_opened_files' result, ignoring case if there is no exact match."""
-    state = opened.get(filename)
-    if state is None:
-        # p4 may spell a path in the client's case on case-insensitive file systems.
-        folded = filename.casefold()
-        state = next((value for path, value in opened.items()
-                      if path.casefold() == folded), None)
-    return state
+def _opened_lookup(opened: dict[str, tuple[str, str]]
+                   ) -> Callable[[str], tuple[str, str] | None]:
+    """Look files up in get_opened_files' result, ignoring case where there is no exact match."""
+    # p4 may spell a path in the client's case on case-insensitive file systems.
+    folded = {path.casefold(): state for path, state in opened.items()}
+    return lambda filename: (opened.get(filename)
+                             or folded.get(filename.casefold()))
 
 
 def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
@@ -276,9 +273,10 @@ def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
 def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
                    p4_output: list[str], workspace_dir: str) -> None:
     """Warn about the files p4 did not open as asked; p4 still exits 0 for most of them."""
-    opened = get_opened_files([f for f, _ in to_open], workspace_dir)
+    opened = _opened_lookup(
+        get_opened_files([f for f, _ in to_open], workspace_dir))
     unopened = [(f, action) for f, action in to_open
-                if _opened_state(opened, f) != (changelist, action)]
+                if opened(f) != (changelist, action)]
     if not unopened:
         return
     log.warning(f'p4 did not open {len(unopened)} of {len(to_open)} files:')
@@ -300,13 +298,14 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
     for from_filename, to_filename in changes.moves:
         wanted += [(from_filename, 'delete'), (to_filename, 'add')]
 
-    opened = get_opened_files([f for f, _ in wanted], workspace_dir)
+    opened = _opened_lookup(
+        get_opened_files([f for f, _ in wanted], workspace_dir))
     to_open = []
     to_reopen = []
     to_revert = []
     to_restore = []
     for filename, p4_action in wanted:
-        current = _opened_state(opened, filename)
+        current = opened(filename)
         if current is None:
             to_open.append((filename, p4_action))
             continue

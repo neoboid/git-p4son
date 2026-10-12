@@ -399,6 +399,30 @@ class TestFindBaseCommits(GitRepoTestCase):
         result = find_base_commits(['bäck.cpp'], 'HEAD', self.tmpdir)
         self.assertEqual(result, {'bäck.cpp': s0})
 
+    def test_paths_git_would_c_quote_match(self):
+        """Quotes and tabs come back verbatim, not as "we\\"ird.cpp"."""
+        names = ['we"ird.cpp', 'tab\tname.cpp']
+        for name in names:
+            self._write_file(name, 'X')
+        self._commit('git-p4son: p4 sync //ws/...@100')
+        s0 = self._rev_parse()
+        for name in names:
+            self._write_file(name, 'local')
+        self._commit('local change')
+
+        result = find_base_commits(names, 'HEAD', self.tmpdir)
+        self.assertEqual(result, {name: s0 for name in names})
+
+    @mock.patch('git_p4son.git.run')
+    def test_commit_without_file_entries_is_skipped(self, mock_run):
+        """A header with no status after it, e.g. a merge, does not swallow the next commit's entries."""
+        mock_run.return_value = make_run_result(stdout=[
+            '\x01m1\x01Merge branch\0'
+            '\x01s1\x01git-p4son: p4 sync //ws/...@100',
+            'M\0a.cpp\0'])
+        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        self.assertEqual(result, {'a.cpp': 's1'})
+
     def test_multiple_files_resolved_in_one_walk(self):
         self._write_file('a.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')

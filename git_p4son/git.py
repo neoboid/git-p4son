@@ -343,9 +343,8 @@ def find_base_commits(filepaths: list[str], before_commit: str,
         return result
     by_git_path = {_git_path(fp): fp for fp in filepaths}
     # Paths go on stdin after `--`, so any number of them takes a single history walk.
-    res = run(['git', '-c', 'core.quotePath=false', 'log', '--no-renames',
-               '--name-status', '--pretty=format:%x01%H%x01%s', '--stdin',
-               before_commit],
+    res = run(['git', 'log', '-z', '--no-renames', '--name-status',
+               '--pretty=format:%x01%H%x01%s', '--stdin', before_commit],
               cwd=workspace_dir, input='--\n' + '\n'.join(by_git_path) + '\n',
               fail_on_returncode=False)
     if res.returncode != 0:
@@ -355,13 +354,18 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     fallback_add: dict[str, str] = {}
     current_sha = ''
     current_is_sync = False
-    for line in res.stdout:
-        if line.startswith('\x01'):
-            _, current_sha, subject = line.split('\x01', 2)
+    tokens = iter(_split_nul(res.stdout))
+    for token in tokens:
+        # -z: "<status>\0<path>\0" pairs, each commit's header joined by a newline to its first status.
+        status = token
+        if token.startswith('\x01'):
+            header, _, status = token.partition('\n')
+            _, current_sha, subject = header.split('\x01', 2)
             current_is_sync = parse_sync_subject(subject) is not None
-            continue
-        status, sep, path = line.partition('\t')
-        if not sep or path not in remaining:
+            if not status:
+                continue
+        path = next(tokens, '')
+        if path not in remaining:
             continue
         if current_is_sync:
             result[by_git_path[path]] = current_sha

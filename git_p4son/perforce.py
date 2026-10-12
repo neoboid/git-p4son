@@ -483,28 +483,17 @@ class P4SyncOutputProcessor:
         return f'synced {synced_count} files'
 
 
-@dataclass
-class P4FileInfo:
-    """Perforce file metadata from fstat."""
-    head_type: str
-
-
-def p4_fstat_file_info(filenames: list[str],
-                       workspace_dir: str) -> dict[str, P4FileInfo]:
-    """Map local paths to P4FileInfo; files not found are omitted."""
+def p4_head_types(filenames: list[str], workspace_dir: str) -> dict[str, str]:
+    """Map local paths to their Perforce head file type; files not found are omitted."""
     if not filenames:
         return {}
     # Use -x - so the path list doesn't hit the command-line length limit.
     args = ['p4', '-x', '-', '-ztag', 'fstat',
             '-T', 'clientFile,headType']
     result = run(args, cwd=workspace_dir, input='\n'.join(filenames))
-    info = {}
-    for record in parse_ztag_multi_output(result.stdout):
-        client_file = record.get('clientFile')
-        head_type = record.get('headType')
-        if client_file and head_type:
-            info[client_file] = P4FileInfo(head_type=head_type)
-    return info
+    return {record['clientFile']: record['headType']
+            for record in parse_ztag_multi_output(result.stdout)
+            if record.get('clientFile') and record.get('headType')}
 
 
 def is_binary_file_type(head_type: str) -> bool:

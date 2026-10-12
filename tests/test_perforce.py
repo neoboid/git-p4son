@@ -5,11 +5,11 @@ from unittest import mock
 
 from git_p4son.common import RunError
 from git_p4son.perforce import (
-    ClobberMode, P4ClientSpec, P4FileInfo, P4SyncPreviewFile, get_client_spec,
+    ClobberMode, P4ClientSpec, P4SyncPreviewFile, get_client_spec,
     get_existing_p4_users, get_p4_user, get_submitted_changes,
     is_always_writable_file_type,
     is_binary_file_type,
-    p4_fstat_file_info, p4_sync_preview, parse_ztag_multi_output,
+    p4_head_types, p4_sync_preview, parse_ztag_multi_output,
     parse_ztag_output,
 )
 from tests.helpers import make_run_result
@@ -224,7 +224,7 @@ class TestIsAlwaysWritableFileType(unittest.TestCase):
         self.assertTrue(is_always_writable_file_type('binary+xw'))
 
 
-class TestP4FstatFileInfo(unittest.TestCase):
+class TestP4HeadTypes(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_returns_head_type(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
@@ -234,12 +234,12 @@ class TestP4FstatFileInfo(unittest.TestCase):
             '... clientFile /ws/bar.bin',
             '... headType binary+l',
         ])
-        result = p4_fstat_file_info(['/ws/foo.txt', '/ws/bar.bin'], '/ws')
-        self.assertEqual(result['/ws/foo.txt'].head_type, 'text')
-        self.assertEqual(result['/ws/bar.bin'].head_type, 'binary+l')
+        result = p4_head_types(['/ws/foo.txt', '/ws/bar.bin'], '/ws')
+        self.assertEqual(result['/ws/foo.txt'], 'text')
+        self.assertEqual(result['/ws/bar.bin'], 'binary+l')
 
     def test_empty_input(self):
-        result = p4_fstat_file_info([], '/ws')
+        result = p4_head_types([], '/ws')
         self.assertEqual(result, {})
 
 

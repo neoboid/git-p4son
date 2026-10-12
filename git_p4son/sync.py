@@ -35,7 +35,7 @@ from .perforce import (
     get_writable_files,
     is_always_writable_file_type,
     is_binary_file_type,
-    p4_fstat_file_info,
+    p4_head_types,
     p4_get_opened_files,
     p4_sync_preview,
     P4Change,
@@ -194,11 +194,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
 
     if result.ignored:
         log.heading('Checking ignored files for the +w (always writable) type')
-        ignored_info = p4_fstat_file_info(result.ignored, workspace_dir)
+        ignored_types = p4_head_types(result.ignored, workspace_dir)
         ignored = []
         for f in result.ignored:
-            info = ignored_info.get(f)
-            if info and is_always_writable_file_type(info.head_type):
+            head_type = ignored_types.get(f)
+            if head_type and is_always_writable_file_type(head_type):
                 result.always_writable.append(f)
             else:
                 ignored.append(f)
@@ -261,7 +261,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     # Pass 2: file types of the changed files. Pass 3: stage their content.
     if metas:
         log.heading('Finding file types (text/binary)')
-        file_info = p4_fstat_file_info(
+        head_types = p4_head_types(
             [m.filepath for m in metas], workspace_dir)
         log.success('')
 
@@ -274,8 +274,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         contents = get_files_at_commits(queries, workspace_dir)
         for m in metas:
             rel = rel_paths[m.filepath]
-            info = file_info.get(m.filepath)
-            is_binary = bool(info and is_binary_file_type(info.head_type))
+            head_type = head_types.get(m.filepath)
+            is_binary = bool(head_type and is_binary_file_type(head_type))
             result.changed.append(_stage_changed_file(
                 m, rel, contents[(pre_sync_head_commit, rel)],
                 contents.get((m.base_commit, rel)), temp_root, is_binary,

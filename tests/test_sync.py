@@ -419,18 +419,17 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_user_modified_file_added_to_changed(self, _tracked, mock_fstat,
                                                  _find_base, mock_get_file,
                                                  mock_oids):
         """File modified by the user since last sync is queued for merge."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
-                path: P4FileInfo(head_type='text')}
+                path: 'text'}
 
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
@@ -460,18 +459,17 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_user_unchanged_file_not_in_changed(self, _tracked, mock_fstat,
                                                 _find_base, _get_file,
                                                 _oids):
         """A file whose HEAD blob matches its baseline blob is unchanged."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
-                path: P4FileInfo(head_type='text')}
+                path: 'text'}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root)
@@ -486,16 +484,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_allwrite_keeps_unchanged_file_writable(
             self, _tracked, mock_fstat, _find_base, _get_file, _oids):
         """With allwrite an unchanged file keeps its write bit."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
@@ -509,16 +506,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_allwrite_makes_changed_file_read_only(
             self, _tracked, mock_fstat, _find_base, _get_file, mock_oids):
         """With allwrite a changed file still goes read-only."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
 
@@ -534,16 +530,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_clobber_keeps_changed_file_writable(
             self, _tracked, mock_fstat, _find_base, _get_file, mock_oids):
         """With clobber p4 overwrites writable files, so even a changed one keeps its write bit."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
 
@@ -558,17 +553,16 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': None})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_no_baseline_treated_as_changed(self, _tracked, mock_fstat,
                                             _find_base, _get_file):
         """A file without a baseline commit is queued for merge."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
-                path: P4FileInfo(head_type='text')}
+                path: 'text'}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root)
@@ -583,16 +577,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'image.png': None})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_binary_files_tracked(self, _tracked, mock_fstat, _find_base,
                                   _get_file):
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'image.png')
             mock_fstat.return_value = {
-                path: P4FileInfo(head_type='binary')}
+                path: 'binary'}
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
                                             self.temp_root)
@@ -604,17 +597,16 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_crlf_workspace_stages_text_content_as_crlf(
             self, _tracked, mock_fstat, _find_base, mock_get_file,
             mock_oids):
         """In a CRLF workspace staged text content is written as CRLF."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
 
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
@@ -634,17 +626,16 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_crlf_conversion_does_not_double_existing_crlf(
             self, _tracked, mock_fstat, _find_base, mock_get_file,
             mock_oids):
         """A git blob that already contains CRLF must not gain doubled \\r."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
 
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
@@ -664,17 +655,16 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.get_files_at_commits')
     @mock.patch('git_p4son.sync.find_base_commits',
                 return_value={'image.png': 'sync456'})
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_crlf_workspace_leaves_binary_content_untouched(
             self, _tracked, mock_fstat, _find_base, mock_get_file,
             mock_oids):
         """In a CRLF workspace binary content is staged verbatim."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'image.png')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='binary')}
+            mock_fstat.return_value = {path: 'binary'}
 
             mock_oids.return_value = {
                 ('head123', 'image.png'): 'oid_head',
@@ -695,16 +685,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync.find_base_commits', return_value={})
     @mock.patch('git_p4son.sync.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'local content'))
-    @mock.patch('git_p4son.sync.p4_fstat_file_info')
+    @mock.patch('git_p4son.sync.p4_head_types')
     @mock.patch('git_p4son.sync.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_added_both_locally_and_upstream(self, _tracked, mock_fstat,
                                              _get_file, mock_find_base):
         """A file p4 adds over local content is merged against an empty base."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: P4FileInfo(head_type='text')}
+            mock_fstat.return_value = {path: 'text'}
 
             result = prepare_writable_files(
                 [P4SyncPreviewFile(mode='add', filepath=path)],
@@ -758,7 +747,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             with mock.patch('git_p4son.sync.get_tracked_files',
                             return_value=set()), \
-                    mock.patch('git_p4son.sync.p4_fstat_file_info',
+                    mock.patch('git_p4son.sync.p4_head_types',
                                return_value={}):
                 result = prepare_writable_files([_upd(path)], ws, 'head123',
                                                 self.temp_root)
@@ -771,16 +760,15 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
     def test_always_writable_ignored_file_not_reported_as_unsynced(self):
         """A git-ignored +w file is not reported as unsynced."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'Tool.exe')
 
             with mock.patch('git_p4son.sync.get_tracked_files',
                             return_value=set()), \
                     mock.patch(
-                        'git_p4son.sync.p4_fstat_file_info',
+                        'git_p4son.sync.p4_head_types',
                         return_value={
-                            path: P4FileInfo(head_type='binary+w')}), \
+                            path: 'binary+w'}), \
                     mock.patch('git_p4son.sync.log') as mock_log:
                 result = prepare_writable_files([_upd(path)], ws, 'head123',
                                                 self.temp_root)
@@ -795,7 +783,6 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
     def test_always_writable_files_excluded_from_expected_clobber(self):
         """+w files are not expected clobber errors."""
-        from git_p4son.perforce import P4FileInfo
         with tempfile.TemporaryDirectory() as ws:
             always = self._make_file(ws, 'Tool.exe')
             ignored = self._make_file(ws, 'build.log')
@@ -803,10 +790,10 @@ class TestPrepareWritableFiles(unittest.TestCase):
             with mock.patch('git_p4son.sync.get_tracked_files',
                             return_value=set()), \
                     mock.patch(
-                        'git_p4son.sync.p4_fstat_file_info',
+                        'git_p4son.sync.p4_head_types',
                         return_value={
-                            always: P4FileInfo(head_type='binary+w'),
-                            ignored: P4FileInfo(head_type='text')}):
+                            always: 'binary+w',
+                            ignored: 'text'}):
                 result = prepare_writable_files(
                     [_upd(always), _upd(ignored)], ws, 'head123',
                     self.temp_root)
@@ -820,7 +807,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
         ignored = self._make_file(ws, 'build.log')
         with mock.patch('git_p4son.sync.get_tracked_files',
                         return_value={tracked}), \
-                mock.patch('git_p4son.sync.p4_fstat_file_info',
+                mock.patch('git_p4son.sync.p4_head_types',
                            return_value={}), \
                 mock.patch('git_p4son.sync.find_base_commits',
                            return_value={'a.txt': 'head123'}), \

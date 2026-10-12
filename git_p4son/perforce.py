@@ -167,32 +167,6 @@ def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
     return '\n'.join(result.stdout) + '\n'
 
 
-def add_review_keyword_to_changelist(changelist: str, workspace_dir: str,
-                                     dry_run: bool = False) -> None:
-    """Add the #review keyword to a changelist description."""
-    if dry_run:
-        log.info(f"Would add #review keyword to changelist {changelist}")
-        return
-
-    res = run(['p4', 'change', '-o', changelist], cwd=workspace_dir)
-
-    lines = res.stdout
-    desc_start = find_line_starting_with(lines, 'Description:')
-    if desc_start >= len(lines):
-        raise CommandError('No Description: field found in changelist spec')
-
-    desc_end = find_end_of_indented_section(lines, desc_start + 1)
-
-    if any('#review' in line for line in lines[desc_start:desc_end]):
-        log.info(f'Changelist {changelist} already has #review keyword')
-        return
-
-    lines[desc_end:desc_end] = ['\t', '\t#review']
-
-    run(['p4', 'change', '-i'], cwd=workspace_dir,
-        input='\n'.join(lines))
-
-
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
     res = run(['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',

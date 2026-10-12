@@ -89,29 +89,30 @@ class TestNewCommandRevertStep(unittest.TestCase):
         order = mock.Mock()
         with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
                 mock.patch('git_p4son.new.create_changelist',
-                           return_value='100'), \
+                           order.create), \
                 mock.patch('git_p4son.lib.open_changes_for_edit',
                            order.open), \
                 mock.patch('git_p4son.lib.revert_unchanged_files',
                            order.revert), \
-                mock.patch('git_p4son.new.add_review_keyword_to_changelist',
-                           order.keyword), \
                 mock.patch('git_p4son.new.p4_shelve_changelist',
                            order.shelve):
+            order.create.return_value = '100'
             order.revert.return_value = 0
             rc = new_command(_args(dry_run=False, **overrides))
         self.assertEqual(rc, 0)
         return order
 
-    def test_reverts_after_opening_and_before_review_and_shelve(self):
+    def test_reverts_after_opening_and_before_shelving(self):
         order = self._run(review=True)
         self.assertEqual([c[0] for c in order.mock_calls],
-                         ['open', 'revert', 'keyword', 'shelve'])
+                         ['create', 'open', 'revert', 'shelve'])
+        self.assertTrue(order.create.call_args.kwargs['review'])
         order.revert.assert_called_once_with('100', '/ws', False)
 
     def test_no_edit_skips_revert(self):
         order = self._run(no_edit=True, shelve=True)
-        self.assertEqual([c[0] for c in order.mock_calls], ['shelve'])
+        self.assertEqual([c[0] for c in order.mock_calls],
+                         ['create', 'shelve'])
 
 
 if __name__ == '__main__':

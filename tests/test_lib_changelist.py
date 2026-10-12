@@ -194,6 +194,29 @@ class TestCreateChangelist(unittest.TestCase):
             create_changelist('Msg', 'HEAD~1', '/ws')
 
 
+@mock.patch('git_p4son.lib.run',
+            return_value=make_run_result(stdout=['Change 100 created.']))
+@mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
+            return_value=['1. Add feature'])
+class TestCreateChangelistWithReview(unittest.TestCase):
+    def test_review_keyword_ends_the_description(self, _lines, mock_run):
+        create_changelist('Title', 'HEAD~1', '/ws', review=True)
+        self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
+            '\t1. Add feature\n\t\n\t#review\n'))
+        self.assertEqual(mock_run.call_count, 1)
+
+    def test_message_with_review_keyword_gets_no_second_one(
+            self, _lines, mock_run):
+        create_changelist('Title\n\n#review-678', 'HEAD~1', '/ws',
+                          review=True)
+        self.assertEqual(
+            mock_run.call_args.kwargs['input'].count('#review'), 1)
+
+    def test_without_review_there_is_no_keyword(self, _lines, mock_run):
+        create_changelist('Title', 'HEAD~1', '/ws')
+        self.assertNotIn('#review', mock_run.call_args.kwargs['input'])
+
+
 class TestCreateChangelistWithoutCommitList(unittest.TestCase):
     @mock.patch('git_p4son.lib.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')

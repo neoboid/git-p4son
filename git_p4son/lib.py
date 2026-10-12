@@ -98,10 +98,11 @@ def check_git_workspace_clean(workspace_dir: str) -> bool:
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
-                      commit_list: bool = True) -> str:
+                      commit_list: bool = True, review: bool = False) -> str:
     """Create a changelist from message and, unless commit_list is False, the git commits.
 
-    On dry run, creates nothing and returns DRY_RUN_CHANGELIST."""
+    With review, the description ends with #review unless the message has one. On dry run, creates
+    nothing and returns DRY_RUN_CHANGELIST."""
     commit_lines = []
     if commit_list:
         commit_lines = get_enumerated_commit_lines_since(
@@ -110,6 +111,8 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     description_lines = message.splitlines()
     if commit_lines:
         description_lines += ['', COMMIT_LIST_MARKER] + commit_lines
+    if review and not any('#review' in line for line in description_lines):
+        description_lines += ['', '#review']
 
     if dry_run:
         log.info("Would create new changelist with description:")

@@ -7,7 +7,7 @@ from .lib import (
     create_changelist,
     open_changes_and_revert_unchanged,
 )
-from .perforce import add_review_keyword_to_changelist, p4_shelve_changelist
+from .perforce import p4_shelve_changelist
 from .log import log
 
 
@@ -26,7 +26,7 @@ def new_command(args: argparse.Namespace) -> int:
     log.heading('Creating changelist')
     changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
-        commit_list=not args.no_commit_list)
+        commit_list=not args.no_commit_list, review=args.review)
 
     if not args.dry_run:
         if args.alias:
@@ -40,12 +40,6 @@ def new_command(args: argparse.Namespace) -> int:
     if not args.no_edit:
         open_changes_and_revert_unchanged(changelist, args.base_branch,
                                           workspace_dir, args.dry_run)
-
-    if args.review:
-        log.heading('Adding review keyword')
-        add_review_keyword_to_changelist(
-            changelist, workspace_dir, dry_run=args.dry_run)
-        log.success('Done')
 
     if args.shelve or args.review:
         log.heading('Shelving')

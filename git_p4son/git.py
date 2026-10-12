@@ -273,10 +273,8 @@ def get_blob_oids(items: list[tuple[str, str]],
     for item, line in zip(items, result.stdout):
         # Found objects print "<oid> <type> <size>"; anything else means no blob.
         parts = line.split()
-        if len(parts) == 3 and parts[2].isdigit():
-            oids[item] = parts[0]
-        else:
-            oids[item] = None
+        oids[item] = parts[0] if len(
+            parts) == 3 and parts[2].isdigit() else None
     return oids
 
 

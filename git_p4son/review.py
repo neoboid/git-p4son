@@ -80,8 +80,8 @@ def review_command(args: argparse.Namespace) -> int:
 
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(
-        commit_lines, args.alias, args.message, args.force, args.file,
-        args.no_commit_list)
+        commit_lines, args.alias, args.message, args.force,
+        message_file=args.file, no_commit_list=args.no_commit_list)
 
     if args.dry_run:
         log.info('Generated rebase todo:')

@@ -3,7 +3,7 @@
 import os
 import os.path
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .common import (
     CommandError,
@@ -128,14 +128,13 @@ def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
 
 # --- diff ---
 
+@dataclass
 class LocalChanges:
     """Container for local git changes."""
-
-    def __init__(self) -> None:
-        self.adds: list[str] = []
-        self.mods: list[str] = []
-        self.dels: list[str] = []
-        self.moves: list[tuple[str, str]] = []
+    adds: list[str] = field(default_factory=list)
+    mods: list[str] = field(default_factory=list)
+    dels: list[str] = field(default_factory=list)
+    moves: list[tuple[str, str]] = field(default_factory=list)
 
 
 def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:

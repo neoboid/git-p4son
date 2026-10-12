@@ -153,6 +153,20 @@ def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
     return '\n'.join(result.stdout) + '\n'
 
 
+def p4_create_changelist(description_lines: list[str],
+                         workspace_dir: str) -> str:
+    """Create a pending changelist with the given description and return its number."""
+    tabbed_description = '\n\t'.join(description_lines)
+    spec = f'Change: new\n\nDescription:\n\t{tabbed_description}\n'
+    result = run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec)
+    for line in result.stdout:
+        match = re.search(r'Change (\d+) created', line)
+        if match:
+            return match.group(1)
+    raise CommandError(
+        'Failed to extract changelist number from p4 change output')
+
+
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
     res = run(['p4', '-ztag', 'changes', '-m1', '-s', 'submitted',

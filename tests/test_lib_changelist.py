@@ -157,7 +157,7 @@ class TestSplitDescriptionLines(unittest.TestCase):
 
 
 class TestCreateChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_creates_changelist(self, mock_get_lines, mock_run):
         mock_get_lines.return_value = ['1. Add feature', '2. Fix bug']
@@ -170,7 +170,7 @@ class TestCreateChangelist(unittest.TestCase):
         self.assertIn('My message', spec_input)
         self.assertIn('1. Add feature', spec_input)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_no_commits(self, mock_get_lines, mock_run):
         mock_get_lines.return_value = []
@@ -185,7 +185,7 @@ class TestCreateChangelist(unittest.TestCase):
         cl_num = create_changelist('Msg', 'HEAD~1', '/ws', dry_run=True)
         self.assertEqual(cl_num, DRY_RUN_CHANGELIST)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_p4_failure(self, mock_get_lines, mock_run):
         mock_get_lines.return_value = ['1. Commit']
@@ -194,7 +194,7 @@ class TestCreateChangelist(unittest.TestCase):
             create_changelist('Msg', 'HEAD~1', '/ws')
 
 
-@mock.patch('git_p4son.lib.run',
+@mock.patch('git_p4son.perforce.run',
             return_value=make_run_result(stdout=['Change 100 created.']))
 @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
             return_value=['1. Add feature'])
@@ -218,7 +218,7 @@ class TestCreateChangelistWithReview(unittest.TestCase):
 
 
 class TestCreateChangelistWithoutCommitList(unittest.TestCase):
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since')
     def test_leaves_out_commit_list(self, mock_get_lines, mock_run):
         mock_run.return_value = make_run_result(

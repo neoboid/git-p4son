@@ -4,7 +4,7 @@ import os
 import re
 from collections import Counter
 
-from .common import CommandError, run
+from .common import run
 from .git import (
     LocalChanges,
     get_commit_subjects_since,
@@ -20,6 +20,7 @@ from .perforce import (
     get_changelist_spec,
     get_opened_files_in_changelist,
     include_changes_in_changelist,
+    p4_create_changelist,
     p4_revert_unchanged,
     replace_description_in_spec,
 )
@@ -120,21 +121,7 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
         log.info('\n'.join(description_lines))
         return DRY_RUN_CHANGELIST
 
-    tabbed_description = "\n\t".join(description_lines)
-    spec_content = f"Change: new\n\nDescription:\n\t{tabbed_description}\n"
-
-    result = run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec_content)
-
-    # Format: "Change 12345 created."
-    for line in result.stdout:
-        if 'Change' in line and 'created' in line:
-            match = re.search(r'Change (\d+) created', line)
-            if match:
-                return match.group(1)
-
-    raise CommandError(
-        'Failed to extract changelist number from p4 change output',
-    )
+    return p4_create_changelist(description_lines, workspace_dir)
 
 
 def _merge_commit_lines(old_commit_lines: list[str], base_branch: str,

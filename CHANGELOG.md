@@ -14,6 +14,8 @@
   merges local changes back like any other sync
 - `sync` no longer warns about the clobber workspace option. A leftover `.git-p4son/state.toml` can be deleted
 - git-p4son asks p4 for English messages, so it works when `P4LANGUAGE` is set to another language
+- `new --review` adds `#review` unless the message has one on a line of its own; a mention of `#reviewer` no
+  longer counts
 
 ## 0.5.1
 

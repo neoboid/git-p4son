@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 from timeit import default_timer as timer
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import IO, Callable
 
@@ -100,17 +101,14 @@ class RunError(CommandError):
         self.stderr = stderr or []
 
 
+@dataclass
 class RunResult:
-    """Result of a command execution."""
+    """A finished command's exit code and output; elapsed is set by run_with_output."""
 
-    def __init__(self, returncode: int,
-                 stdout: list[str] | bytes,
-                 stderr: list[str] | bytes,
-                 elapsed: timedelta | None = None) -> None:
-        self.returncode: int = returncode
-        self.stdout: list[str] | bytes = stdout
-        self.stderr: list[str] | bytes = stderr
-        self.elapsed: timedelta | None = elapsed
+    returncode: int
+    stdout: list[str] | bytes
+    stderr: list[str] | bytes
+    elapsed: timedelta | None = None
 
 
 def join_command_line(command: list[str]) -> str:
@@ -144,8 +142,6 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
     else:
         log.start_spinner()
 
-    start_timestamp = timer()
-
     command_env = _env_with_pwd(cwd)
     if env:
         command_env.update(env)
@@ -166,9 +162,6 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         log.stop_spinner()
         raise
 
-    end_timestamp = timer()
-    elapsed = timedelta(seconds=end_timestamp - start_timestamp)
-
     log.stop_spinner()
 
     if fail_on_returncode and result.returncode != 0:
@@ -185,9 +178,8 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     if text:
         return RunResult(result.returncode, result.stdout.splitlines(),
-                         result.stderr.splitlines(), elapsed=elapsed)
-    return RunResult(result.returncode, result.stdout,
-                     result.stderr, elapsed=elapsed)
+                         result.stderr.splitlines())
+    return RunResult(result.returncode, result.stdout, result.stderr)
 
 
 def _read_lines(pipe: IO[str], index: int,

@@ -205,13 +205,13 @@ def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
     log.success('Done')
 
     log.heading('Reverting unchanged files')
-    count = revert_stale_files(changelist, workspace_dir, dry_run)
+    count = revert_unchanged_files(changelist, workspace_dir, dry_run)
     log.success(f'{count} would be reverted' if dry_run
                 else f'{count} reverted')
 
 
-def revert_stale_files(changelist: str, workspace_dir: str,
-                       dry_run: bool = False) -> int:
+def revert_unchanged_files(changelist: str, workspace_dir: str,
+                           dry_run: bool = False) -> int:
     """Revert files in a changelist that are no longer part of the git change.
 
     Requires a clean git workspace. Returns the number of files reverted."""

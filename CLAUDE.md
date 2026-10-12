@@ -62,7 +62,7 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
 - **`list_changes.py`** — Lists git commit subjects since a base branch in chronological order. Used for generating changelist descriptions.
 
 **`lib.py`** contains all reusable Perforce/git library functions: changelist creation/update, file status checking,
-opening files for edit, reverting files no longer part of the git change (`revert_stale_files`), shelving, and Swarm
+opening files for edit, reverting files no longer part of the git change (`revert_unchanged_files`), shelving, and Swarm
 review keyword management.
 
 **`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in

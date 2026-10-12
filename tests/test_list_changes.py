@@ -62,13 +62,6 @@ class TestGetEnumeratedCommitLinesSince(unittest.TestCase):
         self.assertEqual(lines, [])
 
     @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_start_number_parameter(self, mock_subjects):
-        mock_subjects.return_value = ['New commit A', 'New commit B']
-        lines = get_enumerated_commit_lines_since(
-            'main', '/ws', start_number=4)
-        self.assertEqual(lines, ['4. New commit A', '5. New commit B'])
-
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
     def test_failure(self, mock_subjects):
         mock_subjects.side_effect = RunError('git log failed')
         with self.assertRaises(RunError):
@@ -87,13 +80,6 @@ class TestGetEnumeratedChangeDescriptionSince(unittest.TestCase):
         mock_subjects.return_value = []
         desc = get_enumerated_change_description_since('main', '/ws')
         self.assertIsNone(desc)
-
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_start_number_parameter(self, mock_subjects):
-        mock_subjects.return_value = ['New commit A', 'New commit B']
-        desc = get_enumerated_change_description_since(
-            'main', '/ws', start_number=4)
-        self.assertEqual(desc, '4. New commit A\n5. New commit B')
 
 
 class TestListChangesCommand(unittest.TestCase):

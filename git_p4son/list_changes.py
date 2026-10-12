@@ -1,21 +1,19 @@
 """List-changes command implementation for git-p4son."""
 
 import argparse
+from .description import number_commits
 from .git import get_commit_subjects_since
 from .log import log
 
 
-def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> list[str]:
+def get_enumerated_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
     """Get enumerated commit lines from git log since base branch."""
-    subjects = get_commit_subjects_since(base_branch, workspace_dir)
-    return [f"{i}. {subject}"
-            for i, subject in enumerate(subjects, start_number)]
+    return number_commits(get_commit_subjects_since(base_branch, workspace_dir))
 
 
-def get_enumerated_change_description_since(base_branch: str, workspace_dir: str, start_number: int = 1) -> str | None:
+def get_enumerated_change_description_since(base_branch: str, workspace_dir: str) -> str | None:
     """Get enumerated changelist description, or None if no commits found."""
-    lines = get_enumerated_commit_lines_since(
-        base_branch, workspace_dir, start_number)
+    lines = get_enumerated_commit_lines_since(base_branch, workspace_dir)
 
     if not lines:
         return None

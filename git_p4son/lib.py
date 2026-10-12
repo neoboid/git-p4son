@@ -99,10 +99,8 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
     With review, the description ends with #review unless the message has one. On dry run, creates
     nothing and returns DRY_RUN_CHANGELIST."""
-    commit_lines = []
-    if commit_list:
-        commit_lines = get_enumerated_commit_lines_since(
-            base_branch, workspace_dir)
+    commit_lines = (get_enumerated_commit_lines_since(base_branch, workspace_dir)
+                    if commit_list else [])
 
     description_lines = message.splitlines()
     if commit_lines:

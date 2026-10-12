@@ -3,7 +3,6 @@
 import argparse
 import shlex
 from .changelist_store import load_changelist_alias
-from .git import get_commit_lines_since
 from .lib import (
     check_git_workspace_clean,
     open_changes_and_revert_unchanged,
@@ -11,7 +10,9 @@ from .lib import (
 )
 from .perforce import p4_shelve_changelist
 from .log import log
-from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
+from .rebase_todo import (
+    MESSAGE_FILE, build_todo, find_commits, run_todo_rebase,
+)
 
 
 def _generate_todo(commit_lines: list[str], changelist: str,
@@ -33,12 +34,9 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     """Update the changelist once per commit since the base branch."""
     workspace_dir = args.workspace_dir
 
-    log.heading('Finding commits')
-    commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)
-    if not commit_lines:
-        log.error(f'No commits found since {args.base_branch}')
+    commit_lines = find_commits(args.base_branch, workspace_dir)
+    if commit_lines is None:
         return 1
-    log.success(f'{len(commit_lines)} commits since {args.base_branch}')
 
     # Steps name the changelist by number: HEAD is detached during the rebase.
     log.heading('Generating rebase todo')

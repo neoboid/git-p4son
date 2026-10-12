@@ -6,7 +6,7 @@ import shlex
 import subprocess
 from . import CONFIG_DIR
 from .config import ensure_config_dir
-from .git import resolve_editor
+from .git import get_commit_lines_since, resolve_editor
 from .lib import check_git_workspace_clean
 from .log import log
 
@@ -29,6 +29,17 @@ def pick_line(commit_line: str) -> str:
     parts = commit_line.split(' ', 1)
     subject = parts[1] if len(parts) > 1 else ''
     return f'pick {parts[0]} {subject}'
+
+
+def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
+    """Return the commit lines since base_branch, or None (logged) if there are none."""
+    log.heading('Finding commits')
+    commit_lines = get_commit_lines_since(base_branch, workspace_dir)
+    if not commit_lines:
+        log.error(f'No commits found since {base_branch}')
+        return None
+    log.success(f'{len(commit_lines)} commits since {base_branch}')
+    return commit_lines
 
 
 def build_todo(commit_lines: list[str], commands: list[str]) -> str:

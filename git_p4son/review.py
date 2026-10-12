@@ -3,9 +3,10 @@
 import argparse
 import shlex
 from .changelist_store import check_alias_available, validate_alias_name
-from .git import get_commit_lines_since
 from .log import log
-from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
+from .rebase_todo import (
+    MESSAGE_FILE, build_todo, find_commits, run_todo_rebase,
+)
 
 
 def _generate_todo(commit_lines: list[str], alias: str, force: bool,
@@ -39,13 +40,9 @@ def review_command(args: argparse.Namespace) -> int:
             return 1
         log.success('Done')
 
-    log.heading('Finding commits')
-    commit_lines = get_commit_lines_since(args.base_branch, workspace_dir)
-
-    if not commit_lines:
-        log.error(f'No commits found since {args.base_branch}')
+    commit_lines = find_commits(args.base_branch, workspace_dir)
+    if commit_lines is None:
         return 1
-    log.success(f'{len(commit_lines)} commits since {args.base_branch}')
 
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(

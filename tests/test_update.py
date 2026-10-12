@@ -141,7 +141,7 @@ class TestGeneratePerCommitTodo(unittest.TestCase):
 
 
 @mock.patch('git_p4son.update.run_todo_rebase', return_value=0)
-@mock.patch('git_p4son.update.get_commit_lines_since', return_value=COMMITS)
+@mock.patch('git_p4son.rebase_todo.get_commit_lines_since', return_value=COMMITS)
 @mock.patch('git_p4son.update.update_changelist')
 class TestUpdatePerCommit(unittest.TestCase):
     def test_runs_rebase_without_editor(self, mock_update,

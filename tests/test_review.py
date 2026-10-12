@@ -95,7 +95,7 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_success(self, mock_run, mock_resolve_editor, mock_subprocess_run):
         mock_run.return_value = [
             'abc1234 First commit',
@@ -131,7 +131,7 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value=None)
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_no_edit_todo(self, mock_run, mock_resolve_editor,
                           mock_subprocess_run):
         """Accepts the todo without an editor, so none needs configuring."""
@@ -163,7 +163,7 @@ class TestReviewCommand(unittest.TestCase):
         )
 
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_multiline_message_accepted(self, mock_run, _editor):
         """The message goes through a file, so -m may span lines too."""
         mock_run.return_value = ['abc1234 First commit']
@@ -184,7 +184,7 @@ class TestReviewCommand(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_no_commits(self, mock_run, mock_resolve_editor):
         mock_run.return_value = []
         args = mock.Mock(
@@ -204,7 +204,7 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value=None)
-    @mock.patch('git_p4son.review.get_commit_lines_since',
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since',
                 return_value=['abc1234 First commit'])
     def test_no_editor_fails_before_the_rebase(self, _commits, _editor,
                                                mock_subprocess_run):
@@ -224,7 +224,7 @@ class TestReviewCommand(unittest.TestCase):
         self.assertEqual(rc, 1)
         mock_subprocess_run.assert_not_called()
 
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_existing_alias_without_force(self, mock_run):
         args = mock.Mock(
             alias='my-feature',
@@ -242,7 +242,7 @@ class TestReviewCommand(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_dry_run_prints_todo(self, mock_run, mock_resolve_editor):
         mock_run.return_value = [
             'abc1234 First commit',
@@ -264,7 +264,7 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.review.get_commit_lines_since')
+    @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_rebase_failure(self, mock_run, mock_resolve_editor,
                             mock_subprocess_run):
         mock_run.return_value = [

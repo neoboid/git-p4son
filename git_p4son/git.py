@@ -192,17 +192,8 @@ def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
 
 def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]:
     """Get commit subjects from git log since base branch."""
-    lines = get_commit_lines_since(base_branch, workspace_dir)
-
-    subjects = []
-    for line in lines:
-        if ' ' in line:
-            subject = line.split(' ', 1)[1]
-            subjects.append(subject)
-        else:
-            subjects.append(line)
-
-    return subjects
+    return [line.split(' ', 1)[-1]
+            for line in get_commit_lines_since(base_branch, workspace_dir)]
 
 
 # --- tracking ---

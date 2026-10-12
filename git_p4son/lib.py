@@ -245,10 +245,13 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     for line in reverted:
         log.info(line)
 
-    for path in stale_deletes:
+    if stale_deletes:
         # p4 revert writes the depot version to disk, so restore git's.
-        run(['p4', 'revert', path], cwd=workspace_dir, dry_run=dry_run)
-        run(['git', 'restore', path], cwd=workspace_dir, dry_run=dry_run)
+        run(['p4', '-x', '-', 'revert'], cwd=workspace_dir,
+            input='\n'.join(stale_deletes), dry_run=dry_run)
+        run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
+            cwd=workspace_dir, input='\0'.join(stale_deletes),
+            dry_run=dry_run)
 
     if not dry_run and is_writable_mode(workspace_dir):
         # p4 revert leaves files read-only; the still opened ones are writable already.

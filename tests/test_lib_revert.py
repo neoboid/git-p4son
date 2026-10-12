@@ -150,14 +150,17 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self.assertEqual(self._unchanged_candidates(), [])
         self.assertEqual(self._run_commands(), [])
 
-    def test_tracked_delete_present_on_disk_is_reverted_and_restored(self):
-        self._setup([('a.txt', 'delete')], ['a.txt'], ['a.txt'])
+    def test_tracked_deletes_present_on_disk_are_reverted_and_restored(self):
+        self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
+                    ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
         count = revert_unchanged_files('100', self.ws)
         self.assertEqual(self._run_commands(), [
-            ['p4', 'revert', 'a.txt'],
-            ['git', 'restore', 'a.txt'],
+            ['p4', '-x', '-', 'revert'],
+            ['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
         ])
-        self.assertEqual(count, 1)
+        inputs = [c.kwargs['input'] for c in self.mocks['run'].call_args_list]
+        self.assertEqual(inputs, ['a.txt\nb.txt', 'a.txt\0b.txt'])
+        self.assertEqual(count, 2)
 
     def test_real_delete_is_left_alone(self):
         """Opened for delete and gone from git and disk: a real delete."""

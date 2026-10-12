@@ -151,30 +151,29 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     """Get local git changes between base_branch and HEAD."""
     ancestor = find_common_ancestor(base_branch, 'HEAD', workspace_dir)
 
-    # quotepath off: non-ASCII filenames verbatim, not C-quoted ("b\303\244ck.txt").
-    res = run(['git', '-c', 'core.quotepath=off', 'diff', '--name-status',
-               f'{ancestor}..HEAD'],
+    # -z: paths verbatim, not C-quoted, as "<status>\0<path>\0", with a second path for renames and copies.
+    res = run(['git', 'diff', '--name-status', '-z', f'{ancestor}..HEAD'],
               cwd=workspace_dir)
 
     changes = LocalChanges()
-    for line in res.stdout:
-        tokens = line.split('\t')
-        status = tokens[0].lower()
-        filename = tokens[1]
+    tokens = iter(_split_nul(res.stdout))
+    for token in tokens:
+        status = token.lower()
         # T is a typechange (e.g. symlink to regular file): its content changed.
         if status in ('m', 't'):
-            changes.mods.append(filename)
+            changes.mods.append(next(tokens))
         elif status == 'd':
-            changes.dels.append(filename)
+            changes.dels.append(next(tokens))
         elif status == 'a':
-            changes.adds.append(filename)
+            changes.adds.append(next(tokens))
         elif status[:1] == 'r' and status[1:].isdigit():
-            changes.moves.append((filename, tokens[2]))
+            changes.moves.append((next(tokens), next(tokens)))
         elif status[:1] == 'c' and status[1:].isdigit():
             # Copy: the source is untouched, only the destination is new.
-            changes.adds.append(tokens[2])
+            next(tokens)
+            changes.adds.append(next(tokens))
         else:
-            raise CommandError(f'Unknown git status in "{line}"')
+            raise CommandError(f'Unknown git status "{token}"')
 
     return changes
 

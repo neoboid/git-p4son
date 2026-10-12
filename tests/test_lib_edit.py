@@ -127,13 +127,10 @@ class TestGetLocalGitChanges(unittest.TestCase):
         mock_run.side_effect = [
             # git merge-base
             make_run_result(stdout=['abc123']),
-            # git diff --name-status
+            # git diff --name-status -z
             make_run_result(stdout=[
-                'M\tmodified.txt',
-                'A\tadded.txt',
-                'D\tdeleted.txt',
-                'R100\told_name.txt\tnew_name.txt',
-            ]),
+                'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0'
+                'R100\0old_name.txt\0new_name.txt\0']),
         ]
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['modified.txt'])
@@ -146,7 +143,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
         """T (e.g. symlink to regular file) is a content change."""
         mock_run.side_effect = [
             make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['T\tlink.txt']),
+            make_run_result(stdout=['T\0link.txt\0']),
         ]
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['link.txt'])
@@ -156,7 +153,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
         """A copy is an add of the destination; the source is untouched."""
         mock_run.side_effect = [
             make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['C100\tsrc.txt\tcopy.txt']),
+            make_run_result(stdout=['C100\0src.txt\0copy.txt\0']),
         ]
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.adds, ['copy.txt'])
@@ -173,13 +170,13 @@ class TestGetLocalGitChanges(unittest.TestCase):
     def test_unknown_status(self, mock_run):
         mock_run.side_effect = [
             make_run_result(stdout=['abc123']),
-            make_run_result(stdout=['X\tunknown.txt']),
+            make_run_result(stdout=['X\0unknown.txt\0']),
         ]
         with self.assertRaises(CommandError):
             get_local_changes('main', '/ws')
 
 
-class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
+class TestGetLocalChangesInRepo(unittest.TestCase):
     def test_non_ascii_filename_returned_verbatim(self):
         """Non-ASCII filenames are returned verbatim, not C-quoted."""
         with tempfile.TemporaryDirectory() as ws:
@@ -201,6 +198,35 @@ class TestGetLocalChangesNonAsciiPaths(unittest.TestCase):
             changes = get_local_changes(base, ws)
 
         self.assertEqual(changes.adds, ['bäck.txt'])
+
+    def test_special_characters_returned_verbatim(self):
+        """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
+        names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+            git('init')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            with open(os.path.join(ws, 'old.txt'), 'w') as f:
+                f.write('content to rename\n' * 10)
+            git('add', '.')
+            git('commit', '-m', 'base')
+            base = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=ws,
+                capture_output=True, text=True, check=True).stdout.strip()
+            for name in names:
+                with open(os.path.join(ws, name), 'w') as f:
+                    f.write(name)
+            git('mv', 'old.txt', 'new "name".txt')
+            git('add', '.')
+            git('commit', '-m', 'add files')
+
+            changes = get_local_changes(base, ws)
+
+        self.assertEqual(sorted(changes.adds), sorted(names))
+        self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])
 
 
 class TestOpenWarnings(unittest.TestCase):

@@ -55,30 +55,29 @@ def _path_module_for(*paths: str):
 
 def normalize_workspace_path(filename: str, workspace_dir: str,
                              allow_outside: bool = False) -> str | None:
-    """Return filename as a workspace-relative slash path."""
+    """Return filename as a workspace-relative slash path.
+
+    Returns None for a path outside the workspace, unless allow_outside."""
     pathmod = _path_module_for(filename, workspace_dir)
     normalized_workspace = pathmod.normpath(workspace_dir)
+    workspace_case = pathmod.normcase(normalized_workspace)
     normalized_filename = pathmod.normpath(filename)
 
     if pathmod.isabs(normalized_filename):
         try:
-            common = pathmod.commonpath([
-                pathmod.normcase(normalized_workspace),
-                pathmod.normcase(normalized_filename),
-            ])
+            common = pathmod.commonpath(
+                [workspace_case, pathmod.normcase(normalized_filename)])
         except ValueError:
             common = None
 
-        if common == pathmod.normcase(normalized_workspace):
+        if common == workspace_case:
             normalized_filename = pathmod.relpath(
                 normalized_filename, normalized_workspace)
         elif not allow_outside:
             return None
 
-    if not allow_outside:
-        parts = normalized_filename.split(pathmod.sep)
-        if parts and parts[0] == '..':
-            return None
+    if not allow_outside and normalized_filename.split(pathmod.sep)[0] == '..':
+        return None
 
     return normalized_filename.replace('\\', '/')
 
@@ -110,13 +109,7 @@ class RunResult:
 
 
 def join_command_line(command: list[str]) -> str:
-    command_line = ''
-    for c in command:
-        if ' ' in c:
-            command_line += f' "{c}"'
-        else:
-            command_line += f' {c}'
-    return command_line
+    return ''.join(f' "{c}"' if ' ' in c else f' {c}' for c in command)
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,

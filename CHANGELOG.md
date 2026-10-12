@@ -13,6 +13,7 @@
 - `sync` finds the last sync commit even when a later commit, such as a revert, mentions one, and `sync last-synced`
   merges local changes back like any other sync
 - `sync` no longer warns about the clobber workspace option. A leftover `.git-p4son/state.toml` can be deleted
+- git-p4son asks p4 for English messages, so it works when `P4LANGUAGE` is set to another language
 
 ## 0.5.1
 

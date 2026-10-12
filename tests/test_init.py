@@ -328,7 +328,7 @@ class TestInitCommand(unittest.TestCase):
         with mock.patch('git_p4son.init.resolve_editor', return_value='vim'), \
                 mock.patch('git_p4son.init._setup_gitignore',
                            return_value='created'), \
-                mock.patch('git_p4son.init._has_commits',
+                mock.patch('git_p4son.init.has_commits',
                            return_value=has_commits), \
                 mock.patch('git_p4son.init.run_with_output'), \
                 mock.patch('git_p4son.init._configure_depot_root',
@@ -370,18 +370,21 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
-    @mock.patch('git_p4son.init._has_commits', return_value=False)
+    @mock.patch('git_p4son.init.has_commits', return_value=False)
+    @mock.patch('git_p4son.init.init_repo')
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_spec, mock_depot,
-                     mock_run, mock_has_commits, mock_gitignore,
-                     mock_editor):
+                     mock_run, mock_init_repo, mock_has_commits,
+                     mock_gitignore, mock_editor):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
-        self.assertEqual(mock_run.call_count, 3)
+        mock_init_repo.assert_called_once_with('/ws')
+        # git add and git commit
+        self.assertEqual(mock_run.call_count, 2)
 
     @mock.patch('git_p4son.init.get_client_spec', return_value=None)
     @mock.patch('os.getcwd', return_value='/ws')
@@ -391,7 +394,7 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
-    @mock.patch('git_p4son.init._has_commits', return_value=True)
+    @mock.patch('git_p4son.init.has_commits', return_value=True)
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)
@@ -407,7 +410,7 @@ class TestInitCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
-    @mock.patch('git_p4son.init._has_commits', return_value=False)
+    @mock.patch('git_p4son.init.has_commits', return_value=False)
     @mock.patch('git_p4son.init.run_with_output')
     @mock.patch('git_p4son.init._configure_depot_root', return_value=True)
     @mock.patch('git_p4son.init.get_client_spec', return_value=_MOCK_SPEC)

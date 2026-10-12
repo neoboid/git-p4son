@@ -10,7 +10,12 @@ from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
 from .skill import claude_config_dir, install_skill, is_skill_installed
-from .git import resolve_editor
+from .git import (
+    has_commits,
+    init_repo,
+    is_workspace_dir,
+    resolve_editor,
+)
 from .sync_split_users import (
     USER_PLACEHOLDER,
     current_p4_user,
@@ -194,13 +199,6 @@ def _configure_claude_skill() -> None:
         log.success('not installed')
 
 
-def _has_commits(cwd: str) -> bool:
-    """Return whether the git repo has any commit (HEAD resolves)."""
-    result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
-                 cwd=cwd, fail_on_returncode=False)
-    return result.returncode == 0
-
-
 def _setup_gitignore(cwd: str) -> str:
     """Set up .gitignore file. Returns a description of what was done."""
     gitignore_path = os.path.join(cwd, '.gitignore')
@@ -244,16 +242,14 @@ def init_command(args: argparse.Namespace) -> int:
     log.success(result)
 
     log.heading('Checking git repo')
-    git_dir = os.path.join(cwd, '.git')
-    existing_repo = os.path.exists(git_dir)
-    if existing_repo:
+    if is_workspace_dir(cwd):
         log.success('.git/ already exists')
     else:
-        run_with_output(['git', 'init'], cwd=cwd)
+        init_repo(cwd)
         log.success('created new git repository')
 
     # Also covers a repo left without commits by an init that failed to commit.
-    if not _has_commits(cwd):
+    if not has_commits(cwd):
         log.heading('Creating initial commit')
         run_with_output(['git', 'add', '.gitignore'], cwd=cwd)
         run_with_output(

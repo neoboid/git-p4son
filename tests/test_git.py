@@ -18,6 +18,7 @@ from git_p4son.git import (
     get_staged_files,
     get_tracked_files,
     git_last_sync,
+    has_commits,
     list_tracked_files,
     merge_file,
     parse_sync_subject,
@@ -54,6 +55,14 @@ class GitRepoTestCase(unittest.TestCase):
                        capture_output=True, check=True)
         subprocess.run(['git', 'commit', '-m', message],
                        cwd=self.tmpdir, capture_output=True, check=True)
+
+
+class TestRepoSetup(GitRepoTestCase):
+    def test_has_commits(self):
+        self.assertFalse(has_commits(self.tmpdir))
+        self._write_file('a.txt', 'a')
+        self._commit()
+        self.assertTrue(has_commits(self.tmpdir))
 
 
 class TestRestoreFiles(GitRepoTestCase):

@@ -45,6 +45,18 @@ def get_workspace_dir() -> str | None:
         candidate_dir = parent_dir
 
 
+def init_repo(workspace_dir: str) -> None:
+    """Create a git repository in workspace_dir."""
+    run_with_output(['git', 'init'], cwd=workspace_dir)
+
+
+def has_commits(workspace_dir: str) -> bool:
+    """Return whether the repository has any commit (HEAD resolves)."""
+    result = run(['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
+                 cwd=workspace_dir, fail_on_returncode=False)
+    return result.returncode == 0
+
+
 # --- branch ---
 
 def get_current_branch(workspace_dir: str) -> str | None:

@@ -178,7 +178,8 @@ class TestReviewCommand(unittest.TestCase):
             no_commit_list=False,
             workspace_dir='/workspace',
         )
-        with mock.patch('git_p4son.review.alias_exists', return_value=False):
+        with mock.patch('git_p4son.review.check_alias_available',
+                        return_value=True):
             rc = review_command(args)
         self.assertEqual(rc, 0)
 

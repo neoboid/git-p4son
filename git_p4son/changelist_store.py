@@ -55,10 +55,13 @@ def _alias_path(name: str, workspace_dir: str) -> str | None:
     return os.path.join(_changelists_dir(workspace_dir), name)
 
 
-def alias_exists(name: str, workspace_dir: str) -> bool:
-    """Check whether a changelist alias exists."""
-    alias_path = os.path.join(_changelists_dir(workspace_dir), name)
-    return os.path.exists(alias_path)
+def check_alias_available(name: str, workspace_dir: str) -> bool:
+    """Report whether no changelist alias has this name yet."""
+    if os.path.exists(os.path.join(_changelists_dir(workspace_dir), name)):
+        log.error(
+            f'Alias "{name}" already exists (use -f/--force to overwrite)')
+        return False
+    return True
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
@@ -69,9 +72,7 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
 
     changelists_dir = _changelists_dir(workspace_dir)
 
-    if os.path.exists(alias_path) and not force:
-        log.error(
-            f'Alias "{name}" already exists (use -f/--force to overwrite)')
+    if not force and not check_alias_available(name, workspace_dir):
         return False
 
     ensure_config_dir(workspace_dir)

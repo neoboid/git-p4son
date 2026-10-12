@@ -2,7 +2,7 @@
 
 import argparse
 import shlex
-from .changelist_store import alias_exists, validate_alias_name
+from .changelist_store import check_alias_available, validate_alias_name
 from .git import get_commit_lines_since
 from .log import log
 from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
@@ -35,10 +35,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     if not args.force:
         log.heading(f'Checking alias "{args.alias}" is available')
-        if alias_exists(args.alias, workspace_dir):
-            log.error(
-                f'Alias "{args.alias}" already exists '
-                f'(use -f/--force to overwrite)')
+        if not check_alias_available(args.alias, workspace_dir):
             return 1
         log.success('Done')
 

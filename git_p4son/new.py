@@ -2,7 +2,7 @@
 
 import argparse
 from .changelist_store import (
-    alias_exists,
+    check_alias_available,
     save_changelist_alias,
     validate_alias_name,
 )
@@ -30,10 +30,8 @@ def new_command(args: argparse.Namespace) -> int:
         if error:
             log.error(error)
             return 1
-        if alias_exists(args.alias, workspace_dir) and not args.force:
-            log.error(
-                f'Alias "{args.alias}" already exists '
-                f'(use -f/--force to overwrite)')
+        if not args.force and not check_alias_available(args.alias,
+                                                        workspace_dir):
             return 1
 
     log.heading('Creating changelist')

@@ -406,22 +406,25 @@ def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = Fa
 
 # --- sync ---
 
+_CLOBBER_PREFIX = "Can't clobber writable file "
+_SYNC_LINE_PATTERNS = (
+    ('add', ' - added as '),
+    ('del', ' - deleted as '),
+    ('upd', ' - updating '),
+    ('clb', _CLOBBER_PREFIX),
+)
+_UP_TO_DATE_RE = re.compile(r"@\d+ - file\(s\) up-to-date\.")
+
+
 def get_writable_files(stderr_lines: list[str]) -> list[str]:
     """Extract writable files from p4 sync stderr output."""
-    prefix = "Can't clobber writable file "
-    return [line[len(prefix):].rstrip()
-            for line in stderr_lines if line.startswith(prefix)]
+    return [line[len(_CLOBBER_PREFIX):].rstrip()
+            for line in stderr_lines if line.startswith(_CLOBBER_PREFIX)]
 
 
 def parse_p4_sync_line(line: str) -> tuple[str | None, str | None]:
-    """Parse a line from p4 sync output."""
-    patterns = [
-        ('add', ' - added as '),
-        ('del', ' - deleted as '),
-        ('upd', ' - updating '),
-        ('clb', "Can't clobber writable file ")
-    ]
-    for mode, pattern in patterns:
+    """Return the (mode, path) of a p4 sync output line, or (None, None) for any other line."""
+    for mode, pattern in _SYNC_LINE_PATTERNS:
         tokens = line.split(pattern)
         if len(tokens) == 2:
             return (mode, tokens[1])
@@ -445,7 +448,7 @@ class P4SyncOutputProcessor:
             mode: 0 for mode in ['add', 'del', 'upd', 'clb']}
 
     def __call__(self, line: str, stream: IO[str]) -> None:
-        if re.search(r"@\d+ - file\(s\) up-to-date\.", line):
+        if _UP_TO_DATE_RE.search(line):
             log.info('all files up to date')
             return
 

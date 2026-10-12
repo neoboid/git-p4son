@@ -100,9 +100,18 @@ _PORCELAIN_KINDS = {'A': 'add', 'D': 'delete', '??': 'untracked'}
 
 def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for dirty files."""
-    res = run_with_output(['git', 'status', '--porcelain'], cwd=workspace_dir)
-    return [(line[3:], _PORCELAIN_KINDS.get(line[:2].strip(), 'modify'))
-            for line in res.stdout]
+    # -z: paths verbatim, not C-quoted, as "XY <path>\0", followed by the old path for renames and copies.
+    res = run_with_output(['git', 'status', '--porcelain', '-z'],
+                          cwd=workspace_dir)
+    files = []
+    entries = iter(_split_nul(res.stdout))
+    for entry in entries:
+        status = entry[:2]
+        files.append(
+            (entry[3:], _PORCELAIN_KINDS.get(status.strip(), 'modify')))
+        if 'R' in status or 'C' in status:
+            next(entries)
+    return files
 
 
 # --- staging and committing ---

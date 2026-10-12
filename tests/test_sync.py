@@ -150,41 +150,46 @@ class TestGitGetDirtyFiles(unittest.TestCase):
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_modified_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[' M file.txt'])
+        mock_rwo.return_value = make_run_result(stdout=[' M file.txt\0'])
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('file.txt', 'modify')])
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_added_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=['A  new.txt'])
+        mock_rwo.return_value = make_run_result(stdout=['A  new.txt\0'])
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('new.txt', 'add')])
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_deleted_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[' D gone.txt'])
+        mock_rwo.return_value = make_run_result(stdout=[' D gone.txt\0'])
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('gone.txt', 'delete')])
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_untracked_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=['?? unknown.txt'])
+        mock_rwo.return_value = make_run_result(stdout=['?? unknown.txt\0'])
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('unknown.txt', 'untracked')])
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_multiple_files(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
-            ' M mod.txt',
-            'A  add.txt',
-            '?? new.txt',
-        ])
+            ' M mod.txt\0A  add.txt\0?? new.txt\0'])
         result = get_dirty_files('/ws')
         self.assertEqual(result, [
             ('mod.txt', 'modify'),
             ('add.txt', 'add'),
             ('new.txt', 'untracked'),
         ])
+
+    @mock.patch('git_p4son.git.run_with_output')
+    def test_rename_lists_the_new_path_once(self, mock_rwo):
+        """A rename is "R  <new>\\0<old>\\0"; the old path is not a dirty file of its own."""
+        mock_rwo.return_value = make_run_result(stdout=[
+            'R  b "c".txt\0a.txt\0?? n\u00f6.txt\0'])
+        self.assertEqual(get_dirty_files('/ws'), [
+            ('b "c".txt', 'modify'), ('n\u00f6.txt', 'untracked')])
 
     @mock.patch('git_p4son.git.run_with_output')
     def test_command_failure(self, mock_rwo):

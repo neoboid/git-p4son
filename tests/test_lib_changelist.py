@@ -252,7 +252,7 @@ class TestUpdateChangelist(unittest.TestCase):
     def _spec_input(self, mock_run):
         return mock_run.call_args.kwargs.get('input')
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_appends_commits_outside_the_range(self, mock_get_spec,
@@ -271,7 +271,7 @@ class TestUpdateChangelist(unittest.TestCase):
         self.assertIn('4. New commit B', spec_input)
         self.assertIn('Fix the login bug', spec_input)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_replaces_entries_covered_by_the_range(self, mock_get_spec,
@@ -289,7 +289,7 @@ class TestUpdateChangelist(unittest.TestCase):
         self.assertIn('3. New commit A', spec_input)
         self.assertEqual(spec_input.count('Fix redirect'), 1)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_rerunning_same_update_is_idempotent(self, mock_get_spec,
@@ -315,7 +315,7 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = ['New commit']
         update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_no_existing_commits_starts_at_one(self, mock_get_spec,
@@ -327,7 +327,7 @@ class TestUpdateChangelist(unittest.TestCase):
         update_changelist('12345', 'HEAD~1', '/ws')
         self.assertIn('1. First commit', self._spec_input(mock_run))
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_message_replaces_text_above_commit_list(self, mock_get_spec,
@@ -346,7 +346,7 @@ class TestUpdateChangelist(unittest.TestCase):
             '\t1. Add validation\n\t2. Fix redirect\n\t3. New commit\n',
             spec_input)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_message_without_commit_list(self, mock_get_spec,
@@ -363,7 +363,7 @@ class TestUpdateChangelist(unittest.TestCase):
         self.assertNotIn('Just a message', spec_input)
         self.assertNotIn('Changes included:', spec_input)
 
-    @mock.patch('git_p4son.lib.run')
+    @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
     @mock.patch('git_p4son.lib.get_changelist_spec')
     def test_message_without_updating_commit_list(self, mock_get_spec,
@@ -381,7 +381,7 @@ class TestUpdateChangelist(unittest.TestCase):
             self._spec_input(mock_run))
 
 
-@mock.patch('git_p4son.lib.run')
+@mock.patch('git_p4son.perforce.run')
 @mock.patch('git_p4son.lib.get_commit_subjects_since')
 @mock.patch('git_p4son.lib.get_changelist_spec')
 class TestUpdateChangelistReviewKeyword(unittest.TestCase):

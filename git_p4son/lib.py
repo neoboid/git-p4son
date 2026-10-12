@@ -23,6 +23,7 @@ from .perforce import (
     p4_create_changelist,
     p4_revert_unchanged,
     replace_description_in_spec,
+    save_changelist_spec,
 )
 from .writable import is_writable_mode, make_writable
 
@@ -180,8 +181,9 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
         log.info('\n'.join(new_description_lines))
         return
 
-    new_spec = replace_description_in_spec(spec_text, new_description_lines)
-    run(['p4', 'change', '-i'], cwd=workspace_dir, input=new_spec)
+    save_changelist_spec(
+        replace_description_in_spec(spec_text, new_description_lines),
+        workspace_dir)
 
 
 def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:

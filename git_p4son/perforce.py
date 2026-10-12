@@ -153,6 +153,11 @@ def get_changelist_spec(changelist_nr: str, workspace_dir: str) -> str:
     return '\n'.join(result.stdout) + '\n'
 
 
+def save_changelist_spec(spec_text: str, workspace_dir: str) -> None:
+    """Write a changelist spec back to Perforce."""
+    run(['p4', 'change', '-i'], cwd=workspace_dir, input=spec_text)
+
+
 def p4_create_changelist(description_lines: list[str],
                          workspace_dir: str) -> str:
     """Create a pending changelist with the given description and return its number."""

@@ -482,7 +482,8 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `--shelve`: Re-shelve the changelist after updating
 - `--per-commit`: Update the changelist once per commit since the base branch, oldest first, through an
   interactive rebase. Steps sleep 5 seconds between them to give Perforce/Swarm time to process each shelf.
-  `--dry-run` prints the generated rebase todo
+  `--dry-run` prints the generated rebase todo. A message from `-m` or `-F` is saved to
+  `.git-p4son/reviews/message` for the first step
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
@@ -533,8 +534,7 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
 **Options:**
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
-  multiple lines. The generated `exec` line passes the file on to `git p4son new -F`, so keep it in place until the
-  rebase has finished
+  multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the generated rebase todo without executing

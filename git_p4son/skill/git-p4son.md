@@ -137,7 +137,6 @@ Notes:
 
 - Always pass `-b main` (or the branch you started from). The default base is `HEAD~1`, which only covers the last
   commit.
-- Keep the description file until the rebase has finished: each step reads it.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file. Use it for a
   single-commit change, where a one-entry list would just repeat the title.

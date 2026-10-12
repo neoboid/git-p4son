@@ -4,13 +4,15 @@ import argparse
 import os
 import shutil
 
-from .common import CommandError, run, run_with_output
+from .common import CommandError, run
 from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
 from .perforce import get_client_spec
 from .skill import claude_config_dir, install_skill, is_skill_installed
 from .git import (
+    add_files,
+    commit,
     has_commits,
     init_repo,
     is_workspace_dir,
@@ -251,10 +253,8 @@ def init_command(args: argparse.Namespace) -> int:
     # Also covers a repo left without commits by an init that failed to commit.
     if not has_commits(cwd):
         log.heading('Creating initial commit')
-        run_with_output(['git', 'add', '.gitignore'], cwd=cwd)
-        run_with_output(
-            ['git', 'commit', '-m', 'Initialize git-p4son repository'],
-            cwd=cwd)
+        add_files(['.gitignore'], cwd)
+        commit('Initialize git-p4son repository', cwd)
 
         log.heading('Next steps')
         log.info('* Review and edit .gitignore')

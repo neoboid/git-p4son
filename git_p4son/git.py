@@ -133,6 +133,12 @@ def add_all_files(workspace_dir: str) -> None:
     run_with_output(['git', 'add', '.'], cwd=workspace_dir)
 
 
+def add_files(filepaths: list[str], workspace_dir: str) -> None:
+    """Stage the given files."""
+    run(['git', 'add', '--pathspec-from-file=-', '--pathspec-file-nul'],
+        cwd=workspace_dir, input='\0'.join(filepaths))
+
+
 def restore_files(filepaths: list[str], workspace_dir: str,
                   dry_run: bool = False) -> None:
     """Restore the given files in the workspace from the index."""

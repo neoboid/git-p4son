@@ -10,6 +10,7 @@ from unittest import mock
 
 from git_p4son.common import RunError
 from git_p4son.git import (
+    add_files,
     find_base_commits,
     format_sync_subject,
     get_blob_oids,
@@ -63,6 +64,12 @@ class TestRepoSetup(GitRepoTestCase):
         self._write_file('a.txt', 'a')
         self._commit()
         self.assertTrue(has_commits(self.tmpdir))
+
+    def test_add_files_stages_only_those(self):
+        self._write_file('a.txt', 'a')
+        self._write_file('b.txt', 'b')
+        add_files(['a.txt'], self.tmpdir)
+        self.assertEqual(get_staged_files(self.tmpdir), ['a.txt'])
 
 
 class TestRestoreFiles(GitRepoTestCase):

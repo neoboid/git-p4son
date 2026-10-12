@@ -31,6 +31,18 @@ def pick_line(commit_line: str) -> str:
     return f'pick {parts[0]} {subject}'
 
 
+def build_todo(commit_lines: list[str], commands: list[str]) -> str:
+    """Build a rebase todo that runs git p4son with each command after its commit."""
+    lines = []
+    for i, (commit_line, cmd) in enumerate(zip(commit_lines, commands)):
+        # Give Swarm time to process each shelf before the next
+        if i < len(commit_lines) - 1:
+            cmd += ' --sleep 5'
+        lines.append(pick_line(commit_line))
+        lines.append(f'exec git p4son {cmd}')
+    return '\n'.join(lines) + '\n'
+
+
 def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
     """Return the git editor, logging an error if none is configured."""
     editor = resolve_editor(workspace_dir)

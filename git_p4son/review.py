@@ -5,7 +5,7 @@ import shlex
 from .changelist_store import alias_exists, validate_alias_name
 from .git import get_commit_lines_since
 from .log import log
-from .rebase_todo import MESSAGE_FILE, pick_line, run_todo_rebase
+from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
 
 
 def _generate_todo(commit_lines: list[str], alias: str, force: bool,
@@ -16,19 +16,10 @@ def _generate_todo(commit_lines: list[str], alias: str, force: bool,
     if force:
         new_cmd += ' --force'
     update_cmd = f'update {shlex.quote(alias)} --shelve'
-
-    lines = []
-    for i, commit_line in enumerate(commit_lines):
-        cmd = new_cmd if i == 0 else update_cmd
-        if no_commit_list:
-            cmd += ' --no-commit-list'
-        # Give Swarm time to process each shelf before the next
-        if i < len(commit_lines) - 1:
-            cmd += ' --sleep 5'
-        lines.append(pick_line(commit_line))
-        lines.append(f'exec git p4son {cmd}')
-
-    return '\n'.join(lines) + '\n'
+    commands = [new_cmd] + [update_cmd] * (len(commit_lines) - 1)
+    if no_commit_list:
+        commands = [cmd + ' --no-commit-list' for cmd in commands]
+    return build_todo(commit_lines, commands)
 
 
 def review_command(args: argparse.Namespace) -> int:

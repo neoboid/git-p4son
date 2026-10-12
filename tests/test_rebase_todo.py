@@ -7,7 +7,8 @@ from unittest import mock
 
 from git_p4son import CONFIG_DIR
 from git_p4son.rebase_todo import (
-    MESSAGE_FILE, pick_line, run_todo_rebase, sequence_editor_command,
+    MESSAGE_FILE, build_todo, pick_line, run_todo_rebase,
+    sequence_editor_command,
 )
 
 
@@ -18,6 +19,21 @@ class TestPickLine(unittest.TestCase):
 
     def test_commit_without_subject(self):
         self.assertEqual(pick_line('abc1234'), 'pick abc1234 ')
+
+
+class TestBuildTodo(unittest.TestCase):
+    def test_sleeps_between_steps_but_not_after_the_last(self):
+        result = build_todo(['abc First', 'def Second'], ['new a', 'update a'])
+        self.assertEqual(result, (
+            "pick abc First\n"
+            "exec git p4son new a --sleep 5\n"
+            "pick def Second\n"
+            "exec git p4son update a\n"
+        ))
+
+    def test_single_commit_does_not_sleep(self):
+        self.assertEqual(build_todo(['abc First'], ['new a']),
+                         "pick abc First\nexec git p4son new a\n")
 
 
 @mock.patch('git_p4son.rebase_todo.subprocess.run',

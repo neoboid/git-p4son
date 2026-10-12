@@ -12,34 +12,26 @@ from .lib import (
 )
 from .perforce import p4_shelve_changelist
 from .log import log
-from .rebase_todo import MESSAGE_FILE, pick_line, run_todo_rebase
+from .rebase_todo import MESSAGE_FILE, build_todo, run_todo_rebase
 
 
 def _generate_todo(commit_lines: list[str], changelist: str,
                    args: argparse.Namespace) -> str:
     """Generate a rebase todo running update after each commit."""
-    lines = []
-    last_index = len(commit_lines) - 1
-    for i, commit_line in enumerate(commit_lines):
-        lines.append(pick_line(commit_line))
-
-        cmd = f'update {changelist}'
-        # The message only needs replacing once
-        if i == 0 and args.message is not None:
-            cmd += f' -F {shlex.quote(MESSAGE_FILE)}'
-        if args.no_commit_list:
-            cmd += ' --no-commit-list'
-        if args.no_edit:
-            cmd += ' --no-edit'
-        if args.shelve:
-            cmd += ' --shelve'
-
-        # Give Swarm time to process each shelf before the next
-        if i < last_index:
-            cmd += ' --sleep 5'
-        lines.append(f'exec git p4son {cmd}')
-
-    return '\n'.join(lines) + '\n'
+    flags = ''
+    if args.no_commit_list:
+        flags += ' --no-commit-list'
+    if args.no_edit:
+        flags += ' --no-edit'
+    if args.shelve:
+        flags += ' --shelve'
+    first_cmd = f'update {changelist}'
+    # The message only needs replacing once
+    if args.message is not None:
+        first_cmd += f' -F {shlex.quote(MESSAGE_FILE)}'
+    commands = ([first_cmd + flags]
+                + [f'update {changelist}{flags}'] * (len(commit_lines) - 1))
+    return build_todo(commit_lines, commands)
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:

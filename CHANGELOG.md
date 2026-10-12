@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `new --review` writes the `#review` keyword into the description as it creates the changelist, instead of
+  fetching and rewriting the description afterwards. `--dry-run` shows the keyword in the description
 - `review` refuses to start with uncommitted changes, like `update --per-commit`. Before, git only stopped the
   rebase once it had started
 - `review` and `update --per-commit` save the message to `.git-p4son/reviews/message` and pass that to the rebase

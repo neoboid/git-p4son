@@ -12,7 +12,7 @@ from .lib import (
 )
 from .perforce import p4_shelve_changelist
 from .log import log
-from .rebase_todo import pick_line, run_todo_rebase
+from .rebase_todo import MESSAGE_FILE, pick_line, run_todo_rebase
 
 
 def _generate_todo(commit_lines: list[str], changelist: str,
@@ -26,10 +26,7 @@ def _generate_todo(commit_lines: list[str], changelist: str,
         cmd = f'update {changelist}'
         # The message only needs replacing once
         if i == 0 and args.message is not None:
-            if args.file:
-                cmd += f' -F {shlex.quote(args.file)}'
-            else:
-                cmd += f' -m {shlex.quote(args.message)}'
+            cmd += f' -F {shlex.quote(MESSAGE_FILE)}'
         if args.no_commit_list:
             cmd += ' --no-commit-list'
         if args.no_edit:
@@ -49,12 +46,6 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     """Update the changelist once per commit since the base branch."""
     workspace_dir = args.workspace_dir
 
-    # The rebase todo is line-based, so a multi-line message must come from a file.
-    if not args.file and args.message and '\n' in args.message:
-        log.error('Message must be a single line with --per-commit '
-                  '(use -F for a multi-line message)')
-        return 1
-
     # The rebase needs a clean workspace even with --no-edit
     if not check_git_workspace_clean(workspace_dir):
         return 1
@@ -73,10 +64,13 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     if args.dry_run:
         log.info('Generated rebase todo:')
         log.info(todo_content)
+        if args.message is not None:
+            log.info(f'Message for {MESSAGE_FILE}:')
+            log.info(args.message)
         return 0
 
     return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
-                           edit_todo=False)
+                           edit_todo=False, message=args.message)
 
 
 def update_command(args: argparse.Namespace) -> int:

@@ -16,11 +16,10 @@ from tests.helpers import make_run_result
 class TestGenerateTodo(unittest.TestCase):
     def test_single_commit(self):
         commit_lines = ['abc1234 First commit']
-        result = _generate_todo(
-            commit_lines, 'my-feature', 'My feature', force=False)
+        result = _generate_todo(commit_lines, 'my-feature', force=False)
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -m 'My feature'\n"
+            "exec git p4son new my-feature --review -F .git-p4son/reviews/message\n"
         ))
 
     def test_multiple_commits(self):
@@ -29,11 +28,10 @@ class TestGenerateTodo(unittest.TestCase):
             'def5678 Second commit',
             'ghi9012 Third commit',
         ]
-        result = _generate_todo(
-            commit_lines, 'my-feature', 'My feature', force=False)
+        result = _generate_todo(commit_lines, 'my-feature', force=False)
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -m 'My feature' --sleep 5\n"
+            "exec git p4son new my-feature --review -F .git-p4son/reviews/message --sleep 5\n"
             "pick def5678 Second commit\n"
             "exec git p4son update my-feature --shelve --sleep 5\n"
             "pick ghi9012 Third commit\n"
@@ -42,45 +40,26 @@ class TestGenerateTodo(unittest.TestCase):
 
     def test_force_flag(self):
         commit_lines = ['abc1234 First commit']
-        result = _generate_todo(
-            commit_lines, 'my-feature', 'My feature', force=True)
+        result = _generate_todo(commit_lines, 'my-feature', force=True)
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -m 'My feature' --force\n"
-        ))
-
-    def test_message_with_quotes(self):
-        commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'feat',
-                                "It's a feature", force=False)
-        # shlex.quote wraps in quotes and escapes the apostrophe
-        self.assertIn('exec git p4son new feat --review -m', result)
-        self.assertIn("It", result)
-        self.assertIn("a feature", result)
-
-    def test_message_file(self):
-        commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'feat', 'Title\n\nBody',
-                                force=False, message_file='/tmp/my msg.txt')
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son new feat --review -F '/tmp/my msg.txt'\n"
+            "exec git p4son new my-feature --review -F .git-p4son/reviews/message --force\n"
         ))
 
     def test_no_commit_list(self):
         commit_lines = ['abc1234 First commit', 'def5678 Second commit']
-        result = _generate_todo(commit_lines, 'feat', 'msg', force=False,
+        result = _generate_todo(commit_lines, 'feat', force=False,
                                 no_commit_list=True)
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son new feat --review -m msg --no-commit-list --sleep 5\n"
+            "exec git p4son new feat --review -F .git-p4son/reviews/message --no-commit-list --sleep 5\n"
             "pick def5678 Second commit\n"
             "exec git p4son update feat --shelve --no-commit-list\n"
         ))
 
     def test_alias_with_special_chars(self):
         commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'my feature', 'msg', force=False)
+        result = _generate_todo(commit_lines, 'my feature', force=False)
         self.assertIn("'my feature'", result)
 
 
@@ -177,30 +156,15 @@ class TestReviewCommand(unittest.TestCase):
             'git-p4son _sequence-editor --no-edit',
         )
 
-    def test_multiline_message_rejected(self):
-        """A multi-line -m message is rejected, since the rebase todo is line-based."""
-        args = mock.Mock(
-            alias='my-feature',
-            message='Line one\nLine two',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
-        rc = review_command(args)
-        self.assertEqual(rc, 1)
-
     @mock.patch('git_p4son.review.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.review.get_commit_lines_since')
-    def test_multiline_message_from_file_accepted(self, mock_run, _editor):
+    def test_multiline_message_accepted(self, mock_run, _editor):
+        """The message goes through a file, so -m may span lines too."""
         mock_run.return_value = ['abc1234 First commit']
         args = mock.Mock(
             alias='my-feature',
             message='Line one\nLine two',
-            file='/workspace/msg.txt',
+            file=None,
             base_branch='main',
             force=False,
             dry_run=True,

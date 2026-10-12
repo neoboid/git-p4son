@@ -127,17 +127,10 @@ class TestGeneratePerCommitTodo(unittest.TestCase):
         result = _generate_todo(COMMITS, '100', _args(message="It's new"))
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son update 100 -m 'It'\"'\"'s new' --sleep 5\n"
+            "exec git p4son update 100 -F .git-p4son/reviews/message --sleep 5\n"
             "pick def5678 Second commit\n"
             "exec git p4son update 100\n"
         ))
-
-    def test_message_file_passed_by_name(self):
-        result = _generate_todo(
-            COMMITS[:1], '100',
-            _args(message='Title\n\nBody', file='/tmp/my msg.txt'))
-        self.assertIn("exec git p4son update 100 -F '/tmp/my msg.txt'\n",
-                      result)
 
     def test_flags_passed_to_every_step(self):
         result = _generate_todo(
@@ -198,11 +191,12 @@ class TestUpdatePerCommit(unittest.TestCase):
         self.assertIn('exec git p4son update 100',
                       mock_log.info.call_args_list[-1].args[0])
 
-    def test_multiline_message_rejected(self, _update, _commits,
-                                        mock_rebase):
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
+    def test_message_passed_to_the_rebase(self, _dirty, _update, _commits,
+                                          mock_rebase):
         rc = update_command(_args(per_commit=True, message='One\nTwo'))
-        self.assertEqual(rc, 1)
-        mock_rebase.assert_not_called()
+        self.assertEqual(rc, 0)
+        self.assertEqual(mock_rebase.call_args.kwargs['message'], 'One\nTwo')
 
 
 if __name__ == '__main__':

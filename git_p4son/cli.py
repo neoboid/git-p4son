@@ -629,7 +629,6 @@ def run_command(args: argparse.Namespace) -> int:
         log.success(f'branch -> {resolved}')
 
     if args.command in ('new', 'update', 'review') and args.file is not None:
-        # Absolute, so review's exec lines find it from the workspace root
         args.file = os.path.join(args.invocation_dir, args.file)
         log.heading('Reading message from file')
         try:

@@ -5,18 +5,14 @@ import shlex
 from .changelist_store import alias_exists, validate_alias_name
 from .git import get_commit_lines_since, resolve_editor
 from .log import log
-from .rebase_todo import pick_line, run_todo_rebase
+from .rebase_todo import MESSAGE_FILE, pick_line, run_todo_rebase
 
 
-def _generate_todo(commit_lines: list[str], alias: str, message: str,
-                   force: bool, message_file: str | None = None,
+def _generate_todo(commit_lines: list[str], alias: str, force: bool,
                    no_commit_list: bool = False) -> str:
     """Generate the rebase todo content with exec lines."""
-    if message_file:
-        message_arg = f'-F {shlex.quote(message_file)}'
-    else:
-        message_arg = f'-m {shlex.quote(message)}'
-    new_cmd = f'new {shlex.quote(alias)} --review {message_arg}'
+    new_cmd = (f'new {shlex.quote(alias)} --review '
+               f'-F {shlex.quote(MESSAGE_FILE)}')
     if force:
         new_cmd += ' --force'
     update_cmd = f'update {shlex.quote(alias)} --shelve'
@@ -38,12 +34,6 @@ def _generate_todo(commit_lines: list[str], alias: str, message: str,
 def review_command(args: argparse.Namespace) -> int:
     """Execute the review command."""
     workspace_dir = args.workspace_dir
-
-    # The rebase todo is line-based, so a multi-line message must come from a file.
-    if not args.file and '\n' in args.message:
-        log.error(
-            'Review message must be a single line (use -F for a multi-line message)')
-        return 1
 
     log.heading(f'Validating alias "{args.alias}"')
     error = validate_alias_name(args.alias)
@@ -80,13 +70,16 @@ def review_command(args: argparse.Namespace) -> int:
 
     log.heading('Generating rebase todo')
     todo_content = _generate_todo(
-        commit_lines, args.alias, args.message, args.force,
-        message_file=args.file, no_commit_list=args.no_commit_list)
+        commit_lines, args.alias, args.force,
+        no_commit_list=args.no_commit_list)
 
     if args.dry_run:
         log.info('Generated rebase todo:')
         log.info(todo_content)
+        log.info(f'Message for {MESSAGE_FILE}:')
+        log.info(args.message)
         return 0
 
     return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
-                           edit_todo=not args.no_edit_todo)
+                           edit_todo=not args.no_edit_todo,
+                           message=args.message)

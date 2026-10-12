@@ -9,6 +9,9 @@ from .config import ensure_config_dir
 from .git import resolve_editor
 from .log import log
 
+# Relative to the workspace root, where git runs the todo's exec lines.
+MESSAGE_FILE = f'{CONFIG_DIR}/reviews/message'
+
 
 def _reviews_dir(workspace_dir: str) -> str:
     """Return the path to the directory holding the generated todo."""
@@ -28,8 +31,11 @@ def pick_line(commit_line: str) -> str:
 
 
 def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
-                    edit_todo: bool) -> int:
-    """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo."""
+                    edit_todo: bool, message: str | None = None) -> int:
+    """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo.
+
+    A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
+    """
     reviews_dir = _reviews_dir(workspace_dir)
     ensure_config_dir(workspace_dir)
     os.makedirs(reviews_dir, exist_ok=True)
@@ -38,6 +44,12 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
         f.write(todo_content)
 
     log.success(f'Saved as {todo_file}')
+
+    if message is not None:
+        message_file = os.path.join(workspace_dir, MESSAGE_FILE)
+        with open(message_file, 'w', encoding='utf-8') as f:
+            f.write(message)
+        log.success(f'Saved the message as {message_file}')
 
     try:
         log.heading('Running interactive rebase')

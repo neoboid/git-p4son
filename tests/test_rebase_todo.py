@@ -1,11 +1,14 @@
 """Tests for git_p4son.rebase_todo module."""
 
 import os
+import tempfile
 import unittest
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
-from git_p4son.rebase_todo import pick_line, sequence_editor_command
+from git_p4son.rebase_todo import (
+    MESSAGE_FILE, pick_line, run_todo_rebase, sequence_editor_command,
+)
 
 
 class TestPickLine(unittest.TestCase):
@@ -15,6 +18,25 @@ class TestPickLine(unittest.TestCase):
 
     def test_commit_without_subject(self):
         self.assertEqual(pick_line('abc1234'), 'pick abc1234 ')
+
+
+@mock.patch('git_p4son.rebase_todo.subprocess.run',
+            return_value=mock.Mock(returncode=0))
+class TestRunTodoRebase(unittest.TestCase):
+    def test_message_saved_and_left_in_place(self, _run):
+        with tempfile.TemporaryDirectory() as ws:
+            rc = run_todo_rebase('pick abc First\n', 'main', ws,
+                                 edit_todo=False, message='Title\n\nBody')
+            self.assertEqual(rc, 0)
+            with open(os.path.join(ws, MESSAGE_FILE), encoding='utf-8') as f:
+                self.assertEqual(f.read(), 'Title\n\nBody')
+            self.assertFalse(os.path.exists(
+                os.path.join(ws, CONFIG_DIR, 'reviews', 'todo')))
+
+    def test_no_message_writes_no_file(self, _run):
+        with tempfile.TemporaryDirectory() as ws:
+            run_todo_rebase('pick abc First\n', 'main', ws, edit_todo=False)
+            self.assertFalse(os.path.exists(os.path.join(ws, MESSAGE_FILE)))
 
 
 class TestSequenceEditorCommand(unittest.TestCase):

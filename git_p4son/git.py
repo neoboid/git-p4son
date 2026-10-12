@@ -87,8 +87,8 @@ def get_head_subject(workspace_dir: str) -> str | None:
     try:
         result = run(['git', 'log', '-1', '--format=%s', 'HEAD'],
                      cwd=workspace_dir)
-        subject = result.stdout[0].strip() if result.stdout else None
-        return subject if subject else None
+        subject = result.stdout[0].strip() if result.stdout else ''
+        return subject or None
     except (RunError, OSError):
         return None
 
@@ -122,10 +122,10 @@ def get_staged_files(workspace_dir: str) -> list[str]:
 
 def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
     """Commit changes to git."""
-    args = ['commit', '-m', message]
+    command = ['git', 'commit', '-m', message]
     if allow_empty:
-        args.append('--allow-empty')
-    run_with_output(['git'] + args, cwd=workspace_dir)
+        command.append('--allow-empty')
+    run_with_output(command, cwd=workspace_dir)
 
 
 # --- diff ---
@@ -142,7 +142,7 @@ class LocalChanges:
 def find_common_ancestor(branch1: str, branch2: str, workspace_dir: str) -> str:
     """Find the common ancestor commit between two branches."""
     res = run(['git', 'merge-base', branch1, branch2], cwd=workspace_dir)
-    if not res.stdout or len(res.stdout) != 1:
+    if len(res.stdout) != 1:
         raise CommandError('git merge-base returned unexpected output')
     return res.stdout[0].strip()
 

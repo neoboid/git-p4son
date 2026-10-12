@@ -466,7 +466,7 @@ _RENAME_FAILED_PREFIX = 'rename: failed to rename '
 
 
 class P4SyncAbortError(CommandError):
-    """Raised to stop a p4 sync that can no longer succeed."""
+    """Raised to stop a p4 sync that can no longer succeed; the message is p4's output line."""
 
 
 class P4SyncOutputProcessor:
@@ -482,12 +482,7 @@ class P4SyncOutputProcessor:
             return
 
         if line.startswith(_RENAME_FAILED_PREFIX):
-            log.error(line)
-            raise P4SyncAbortError(
-                'Aborting sync: p4 could not replace a file, most likely '
-                'because another process has it open. The workspace is left '
-                'partially synced: close that process, then commit or '
-                'restore the synced files before syncing again.')
+            raise P4SyncAbortError(line)
 
         mode, filename = parse_p4_sync_line(line)
         if not mode or not filename:

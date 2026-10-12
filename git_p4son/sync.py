@@ -8,6 +8,7 @@ import stat
 import tempfile
 from dataclasses import dataclass, field
 
+from .common import CommandError
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_files_at_commits, get_head_commit, get_staged_files, get_tracked_files,
@@ -37,6 +38,7 @@ from .perforce import (
     p4_get_opened_files,
     p4_sync,
     p4_sync_preview,
+    P4SyncAbortError,
     P4SyncClobberError,
     P4Change,
     P4SyncPreviewFile,
@@ -392,6 +394,13 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
         log.warning(
             f'{len(e.refused)} expected clobber errors (git-ignored files)')
         return e.refused
+    except P4SyncAbortError as e:
+        log.error(str(e))
+        raise CommandError(
+            'Aborting sync: p4 could not replace a file, most likely because '
+            'another process has it open. The workspace is left partially '
+            'synced: close that process, then commit or restore the synced '
+            'files before syncing again.') from e
 
 
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:

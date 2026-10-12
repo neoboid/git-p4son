@@ -373,6 +373,16 @@ class TestSyncChangelist(unittest.TestCase):
                                    expected_clobber={'/ws/a.txt', '/ws/b.txt'})
         self.assertEqual(refused, ['/ws/a.txt', '/ws/b.txt'])
 
+    def test_failed_rename_aborts_with_advice(self, mock_p4_sync):
+        mock_p4_sync.side_effect = P4SyncAbortError(
+            'rename: failed to rename D:\\ws\\a.uasset')
+        with mock.patch('git_p4son.sync.log') as mock_log, \
+                self.assertRaises(CommandError) as ctx:
+            _sync_changelist(12345, 'test', '//myclient', '/ws')
+        mock_log.error.assert_called_once_with(
+            'rename: failed to rename D:\\ws\\a.uasset')
+        self.assertIn('partially synced', str(ctx.exception))
+
     def test_unexpected_clobber_raises(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
         with self.assertRaises(P4SyncClobberError):

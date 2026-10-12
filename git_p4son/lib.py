@@ -3,6 +3,7 @@
 import os
 import re
 from collections import Counter
+from typing import Callable
 
 from .git import (
     LocalChanges,
@@ -197,17 +198,9 @@ def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
             log.info(f'  {line}')
 
 
-def include_changes_in_changelist(changes: LocalChanges, changelist: str,
-                                  workspace_dir: str, dry_run: bool = False) -> None:
-    """Open local git changes for add/edit/delete in a Perforce changelist."""
-    wanted = ([(f, 'add') for f in changes.adds]
-              + [(f, 'edit') for f in changes.mods]
-              + [(f, 'delete') for f in changes.dels])
-    for from_filename, to_filename in changes.moves:
-        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
-
-    opened = opened_lookup(
-        get_opened_files([f for f, _ in wanted], workspace_dir))
+def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str, str] | None],
+                changelist: str) -> tuple[list[tuple[str, str]], list[str], list[str], list[str]]:
+    """Sort (file, action) pairs into (to_open, to_reopen, to_revert, to_restore) given their opened state."""
     to_open = []
     to_reopen = []
     to_revert = []
@@ -232,6 +225,22 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         to_open.append((filename, p4_action))
         if p4_action != 'delete':
             to_restore.append(filename)
+    return to_open, to_reopen, to_revert, to_restore
+
+
+def include_changes_in_changelist(changes: LocalChanges, changelist: str,
+                                  workspace_dir: str, dry_run: bool = False) -> None:
+    """Open local git changes for add/edit/delete in a Perforce changelist."""
+    wanted = ([(f, 'add') for f in changes.adds]
+              + [(f, 'edit') for f in changes.mods]
+              + [(f, 'delete') for f in changes.dels])
+    for from_filename, to_filename in changes.moves:
+        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
+
+    opened = opened_lookup(
+        get_opened_files([f for f, _ in wanted], workspace_dir))
+    to_open, to_reopen, to_revert, to_restore = _plan_opens(
+        wanted, opened, changelist)
 
     run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
                  workspace_dir, dry_run)

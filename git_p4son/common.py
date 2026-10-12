@@ -9,7 +9,6 @@ import subprocess
 import sys
 import threading
 import time
-from contextlib import AbstractContextManager, nullcontext
 from timeit import default_timer as timer
 from datetime import timedelta
 from typing import IO, Callable
@@ -138,16 +137,6 @@ def _command_line_for_log(command: list[str]) -> str:
     if len(paths) <= _MAX_LOGGED_PATHS:
         return join_command_line(command)
     return join_command_line(command[:separator + 1]) + f' <{len(paths)} paths>'
-
-
-def batched_command_log(prefix: list[str], path_count: int,
-                        batch_count: int) -> AbstractContextManager[None]:
-    """Log a command run over a path list in several batches as one line."""
-    if batch_count <= 1:
-        return nullcontext()
-    return log.command_batch(
-        join_command_line(prefix)
-        + f' <{path_count} paths in {batch_count} batches>')
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,

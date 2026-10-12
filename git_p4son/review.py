@@ -2,7 +2,7 @@
 
 import argparse
 import shlex
-from .changelist_store import check_alias_available, validate_alias_name
+from .changelist_store import check_alias_usable
 from .log import log
 from .rebase_todo import (
     MESSAGE_FILE, build_todo, find_commits, run_todo_rebase,
@@ -27,18 +27,10 @@ def review_command(args: argparse.Namespace) -> int:
     """Execute the review command."""
     workspace_dir = args.workspace_dir
 
-    log.heading(f'Validating alias "{args.alias}"')
-    error = validate_alias_name(args.alias)
-    if error:
-        log.error(error)
+    log.heading(f'Checking alias "{args.alias}"')
+    if not check_alias_usable(args.alias, workspace_dir, args.force):
         return 1
     log.success('Done')
-
-    if not args.force:
-        log.heading(f'Checking alias "{args.alias}" is available')
-        if not check_alias_available(args.alias, workspace_dir):
-            return 1
-        log.success('Done')
 
     commit_lines = find_commits(args.base_branch, workspace_dir)
     if commit_lines is None:

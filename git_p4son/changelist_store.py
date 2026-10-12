@@ -64,6 +64,15 @@ def check_alias_available(name: str, workspace_dir: str) -> bool:
     return True
 
 
+def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
+    """Report whether name is a valid alias that is free, or force is set; log the reason if not."""
+    error = validate_alias_name(name)
+    if error:
+        log.error(error)
+        return False
+    return force or check_alias_available(name, workspace_dir)
+
+
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """Save a changelist number under a named alias."""
     alias_path = _alias_path(name, workspace_dir)

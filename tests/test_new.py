@@ -42,7 +42,7 @@ class TestNewCommandDryRun(unittest.TestCase):
         rc = new_command(_args(alias='bad alias!', no_edit=True))
         self.assertEqual(rc, 1)
 
-    @mock.patch('git_p4son.new.check_alias_available', return_value=False)
+    @mock.patch('git_p4son.changelist_store.check_alias_available', return_value=False)
     @mock.patch('git_p4son.lib.get_enumerated_commit_lines_since',
                 return_value=[])
     def test_dry_run_reports_existing_alias(self, _lines, _exists):

@@ -1,11 +1,7 @@
 """New command: creates a Perforce changelist from the git change."""
 
 import argparse
-from .changelist_store import (
-    check_alias_available,
-    save_changelist_alias,
-    validate_alias_name,
-)
+from .changelist_store import check_alias_usable, save_changelist_alias
 from .lib import (
     check_git_workspace_clean,
     create_changelist,
@@ -23,14 +19,9 @@ def new_command(args: argparse.Namespace) -> int:
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
-    if args.alias:
-        error = validate_alias_name(args.alias)
-        if error:
-            log.error(error)
-            return 1
-        if not args.force and not check_alias_available(args.alias,
-                                                        workspace_dir):
-            return 1
+    if args.alias and not check_alias_usable(args.alias, workspace_dir,
+                                             args.force):
+        return 1
 
     log.heading('Creating changelist')
     changelist = create_changelist(

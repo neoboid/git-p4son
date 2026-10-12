@@ -7,6 +7,7 @@ import unittest
 from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
     check_alias_available,
+    check_alias_usable,
     delete_changelist_alias,
     load_changelist_alias,
     save_changelist_alias,
@@ -72,6 +73,22 @@ class TestCheckAliasAvailable(unittest.TestCase):
             self.assertTrue(
                 save_changelist_alias('feature', '456', ws, force=True))
             self.assertEqual(load_changelist_alias('feature', ws), '456')
+
+
+class TestCheckAliasUsable(unittest.TestCase):
+    def test_invalid_name_fails_even_with_force(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self.assertFalse(check_alias_usable('bad name!', ws, force=True))
+
+    def test_existing_alias_needs_force(self):
+        with tempfile.TemporaryDirectory() as ws:
+            save_changelist_alias('feature', '123', ws)
+            self.assertFalse(check_alias_usable('feature', ws, force=False))
+            self.assertTrue(check_alias_usable('feature', ws, force=True))
+
+    def test_new_alias_is_usable(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self.assertTrue(check_alias_usable('feature', ws, force=False))
 
 
 class TestValidateAliasName(unittest.TestCase):

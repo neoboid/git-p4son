@@ -258,31 +258,37 @@ def _opened_state(opened: dict[str, tuple[str, str]],
     return state
 
 
-def _open_in_changelist(filename: str, p4_action: str, changelist: str,
-                        workspace_dir: str, dry_run: bool) -> None:
-    """Run a p4 open action (add/edit/delete), warning instead of failing if it did not open."""
-    result = run(['p4', p4_action, '-c', changelist, filename],
-                 cwd=workspace_dir, dry_run=dry_run,
-                 fail_on_returncode=False)
-    if dry_run:
-        return
-    output = result.stdout + result.stderr
-    if not any('opened for' in line for line in output):
-        log.warning(f'p4 {p4_action} did not open {filename}:')
-        for line in output:
-            log.info(f'  {line}')
-
-
 def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
-                  workspace_dir: str, dry_run: bool) -> None:
-    """List filenames under summary, then run one p4 command over them all."""
+                  workspace_dir: str, dry_run: bool,
+                  fail_on_returncode: bool = True) -> list[str]:
+    """List filenames under summary, then run one p4 command over them all; returns p4's output lines."""
     if not filenames:
-        return
+        return []
     log.info(f'{summary}:')
     for filename in filenames:
         log.info(f'  {filename}')
-    run(['p4', '-x', '-', *p4_args], cwd=workspace_dir,
-        input='\n'.join(filenames), dry_run=dry_run)
+    result = run(['p4', '-x', '-', *p4_args], cwd=workspace_dir,
+                 input='\n'.join(filenames), dry_run=dry_run,
+                 fail_on_returncode=fail_on_returncode)
+    return result.stdout + result.stderr
+
+
+def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
+                   p4_output: list[str], workspace_dir: str) -> None:
+    """Warn about the files p4 did not open as asked; p4 still exits 0 for most of them."""
+    opened = get_opened_files([f for f, _ in to_open], workspace_dir)
+    unopened = [(f, action) for f, action in to_open
+                if _opened_state(opened, f) != (changelist, action)]
+    if not unopened:
+        return
+    log.warning(f'p4 did not open {len(unopened)} of {len(to_open)} files:')
+    for filename, action in unopened:
+        log.info(f'  {filename} (for {action})')
+    messages = [line for line in p4_output if 'opened for' not in line]
+    if messages:
+        log.info('p4 said:')
+        for line in messages:
+            log.info(f'  {line}')
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
@@ -322,14 +328,20 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
 
     _run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
                   workspace_dir, dry_run)
-    for filename, p4_action in to_open:
-        _open_in_changelist(filename, p4_action, changelist,
-                            workspace_dir, dry_run)
+    p4_output = []
+    for p4_action in ('add', 'edit', 'delete'):
+        p4_output += _run_p4_batch(
+            [p4_action, '-c', changelist],
+            [f for f, action in to_open if action == p4_action],
+            f'Opening for {p4_action}', workspace_dir, dry_run,
+            fail_on_returncode=False)
     _run_p4_batch(['reopen', '-c', changelist], to_reopen,
                   'Moving files from other changelists', workspace_dir, dry_run)
     if to_restore:
         run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
             cwd=workspace_dir, input='\0'.join(to_restore), dry_run=dry_run)
+    if to_open and not dry_run:
+        _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
 def get_opened_files_in_changelist(changelist: str,

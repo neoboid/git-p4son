@@ -9,6 +9,7 @@ from typing import IO, Callable
 from .common import (
     CommandError,
     RunError,
+    RunResult,
     normalize_workspace_path,
     run,
     run_with_output,
@@ -214,6 +215,32 @@ def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
 
 # --- file operations ---
 
+def _warn_p4_errors(res: RunResult, expected: tuple[str, ...],
+                    summary: str) -> None:
+    """Warn with the stderr lines of a failed p4 command that match none of the expected messages."""
+    errors = [line for line in res.stderr
+              if not any(message in line for message in expected)]
+    if res.returncode != 0 and errors:
+        log.warning(summary)
+        for line in errors:
+            log.info(f'  {line}')
+
+
+def _fstat_records(res: RunResult, workspace_dir: str,
+                   allow_outside: bool = False) -> list[tuple[str, dict[str, str]]]:
+    """Pair each fstat record with its workspace-relative path, skipping records without one."""
+    records = []
+    for record in parse_ztag_multi_output(res.stdout):
+        path = (record.get('path') or record.get('clientFile')
+                or record.get('depotFile'))
+        if not path:
+            continue
+        filename = normalize_workspace_path(path, workspace_dir, allow_outside)
+        if filename is not None:
+            records.append((filename, record))
+    return records
+
+
 def get_opened_files(filenames: list[str],
                      workspace_dir: str) -> dict[str, tuple[str, str]]:
     """Return (changelist, action) for each of the files that is opened, keyed by workspace-relative path."""
@@ -224,22 +251,10 @@ def get_opened_files(filenames: list[str],
               cwd=workspace_dir, input='\n'.join(filenames),
               fail_on_returncode=False)
     # Files that are not opened, or not in the depot yet, are reported per file.
-    errors = [line for line in res.stderr
-              if 'not opened' not in line and 'no such file' not in line]
-    if res.returncode != 0 and errors:
-        log.warning('p4 fstat failed to list opened files:')
-        for line in errors:
-            log.info(f'  {line}')
-    opened = {}
-    for record in parse_ztag_multi_output(res.stdout):
-        client_path = record.get('path') or record.get('clientFile')
-        if not client_path:
-            continue
-        filename = normalize_workspace_path(client_path, workspace_dir)
-        if filename is not None:
-            opened[filename] = (record.get('change', ''),
-                                record.get('action', ''))
-    return opened
+    _warn_p4_errors(res, ('not opened', 'no such file'),
+                    'p4 fstat failed to list opened files:')
+    return {filename: (record.get('change', ''), record.get('action', ''))
+            for filename, record in _fstat_records(res, workspace_dir)}
 
 
 def _opened_lookup(opened: dict[str, tuple[str, str]]
@@ -344,20 +359,10 @@ def get_opened_files_in_changelist(changelist: str,
     res = run(['p4', '-ztag', 'fstat', '-Ro', '-e', changelist, '-Op',
                '-T', 'path,clientFile,action', '...'],
               cwd=workspace_dir, fail_on_returncode=False)
-    errors = [line for line in res.stderr if 'not opened' not in line]
-    if res.returncode != 0 and errors:
-        log.warning('p4 fstat failed to list opened files:')
-        for line in errors:
-            log.info(f'  {line}')
-    files = []
-    for record in parse_ztag_multi_output(res.stdout):
-        client_path = record.get('path') or record.get('clientFile')
-        if not client_path:
-            continue
-        filename = normalize_workspace_path(client_path, workspace_dir)
-        if filename is not None:
-            files.append((filename, record.get('action', '')))
-    return files
+    _warn_p4_errors(res, ('not opened',),
+                    'p4 fstat failed to list opened files:')
+    return [(filename, record.get('action', ''))
+            for filename, record in _fstat_records(res, workspace_dir)]
 
 
 def p4_revert_unchanged(filenames: list[str], changelist: str,
@@ -391,16 +396,9 @@ def p4_get_opened_files(depot_root: str,
         ['p4', '-ztag', 'fstat', '-Ro', '-Op', '-T',
          'depotFile,path,clientFile,action', f'{depot_root}/...'],
         cwd=workspace_dir)
-    files = []
-    for record in parse_ztag_multi_output(res.stdout):
-        client_path = record.get('path') or record.get('clientFile')
-        if not client_path:
-            client_path = record['depotFile']
-        filename = normalize_workspace_path(
-            client_path, workspace_dir, allow_outside=True)
-        change = _p4_action_to_change(record['action'])
-        files.append((filename, change))
-    return files
+    return [(filename, _p4_action_to_change(record['action']))
+            for filename, record in _fstat_records(res, workspace_dir,
+                                                   allow_outside=True)]
 
 
 # --- shelving ---

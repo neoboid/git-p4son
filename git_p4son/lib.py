@@ -41,12 +41,14 @@ _REVIEW_KEYWORD_RE = re.compile(r'^#review(-\d+)?$')
 
 def _split_review_keywords(lines: list[str]) -> tuple[list[str], list[str]]:
     """Split standalone review keyword lines out; returns (other_lines, keyword_lines)."""
-    keywords = [line for line in lines
-                if _REVIEW_KEYWORD_RE.match(line.strip())]
+    others, keywords = [], []
+    for line in lines:
+        if _REVIEW_KEYWORD_RE.match(line.strip()):
+            keywords.append(line)
+        else:
+            others.append(line)
     if not keywords:
         return lines, []
-    others = [line for line in lines
-              if not _REVIEW_KEYWORD_RE.match(line.strip())]
     while others and not others[-1].strip():
         others.pop()
     return others, keywords

@@ -14,7 +14,6 @@ from .common import (
     run,
     run_with_output,
 )
-from .git import LocalChanges, restore_files
 from .log import log
 
 
@@ -273,8 +272,8 @@ def get_opened_files(filenames: list[str],
             for filename, record in _fstat_records(res, workspace_dir)}
 
 
-def _opened_lookup(opened: dict[str, tuple[str, str]]
-                   ) -> Callable[[str], tuple[str, str] | None]:
+def opened_lookup(opened: dict[str, tuple[str, str]]
+                  ) -> Callable[[str], tuple[str, str] | None]:
     """Look files up in get_opened_files' result, ignoring case where there is no exact match."""
     # p4 may spell a path in the client's case on case-insensitive file systems.
     folded = {path.casefold(): state for path, state in opened.items()}
@@ -282,9 +281,9 @@ def _opened_lookup(opened: dict[str, tuple[str, str]]
                              or folded.get(filename.casefold()))
 
 
-def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
-                  workspace_dir: str, dry_run: bool,
-                  fail_on_returncode: bool = True) -> list[str]:
+def run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
+                 workspace_dir: str, dry_run: bool,
+                 fail_on_returncode: bool = True) -> list[str]:
     """List filenames under summary, then run one p4 command over them all; returns p4's output lines."""
     if not filenames:
         return []
@@ -295,78 +294,6 @@ def _run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
                  input='\n'.join(filenames), dry_run=dry_run,
                  fail_on_returncode=fail_on_returncode)
     return result.stdout + result.stderr
-
-
-def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
-                   p4_output: list[str], workspace_dir: str) -> None:
-    """Warn about the files p4 did not open as asked; p4 still exits 0 for most of them."""
-    opened = _opened_lookup(
-        get_opened_files([f for f, _ in to_open], workspace_dir))
-    unopened = [(f, action) for f, action in to_open
-                if opened(f) != (changelist, action)]
-    if not unopened:
-        return
-    log.warning(f'p4 did not open {len(unopened)} of {len(to_open)} files:')
-    for filename, action in unopened:
-        log.info(f'  {filename} (for {action})')
-    messages = [line for line in p4_output if 'opened for' not in line]
-    if messages:
-        log.info('p4 said:')
-        for line in messages:
-            log.info(f'  {line}')
-
-
-def include_changes_in_changelist(changes: LocalChanges, changelist: str,
-                                  workspace_dir: str, dry_run: bool = False) -> None:
-    """Open local git changes for add/edit/delete in a Perforce changelist."""
-    wanted = ([(f, 'add') for f in changes.adds]
-              + [(f, 'edit') for f in changes.mods]
-              + [(f, 'delete') for f in changes.dels])
-    for from_filename, to_filename in changes.moves:
-        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
-
-    opened = _opened_lookup(
-        get_opened_files([f for f, _ in wanted], workspace_dir))
-    to_open = []
-    to_reopen = []
-    to_revert = []
-    to_restore = []
-    for filename, p4_action in wanted:
-        current = opened(filename)
-        if current is None:
-            to_open.append((filename, p4_action))
-            continue
-        current_cl, current_action = current
-        # add -> edit: new to the depot, so it stays an add.
-        if current_action == p4_action or (current_action == 'add'
-                                           and p4_action == 'edit'):
-            if current_cl != changelist:
-                to_reopen.append(filename)
-            continue
-        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
-        to_revert.append(filename)
-        # add -> delete: never in the depot, so just revert.
-        if current_action == 'add' and p4_action == 'delete':
-            continue
-        to_open.append((filename, p4_action))
-        if p4_action != 'delete':
-            to_restore.append(filename)
-
-    _run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
-                  workspace_dir, dry_run)
-    p4_output = []
-    for p4_action in ('add', 'edit', 'delete'):
-        p4_output += _run_p4_batch(
-            [p4_action, '-c', changelist],
-            [f for f, action in to_open if action == p4_action],
-            f'Opening for {p4_action}', workspace_dir, dry_run,
-            fail_on_returncode=False)
-    _run_p4_batch(['reopen', '-c', changelist], to_reopen,
-                  'Moving files from other changelists', workspace_dir, dry_run)
-    if to_restore:
-        restore_files(to_restore, workspace_dir, dry_run)
-    if to_open and not dry_run:
-        _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
 def get_opened_files_in_changelist(changelist: str,

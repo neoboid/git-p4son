@@ -17,12 +17,14 @@ from .log import log
 from .perforce import (
     extract_description_lines,
     get_changelist_spec,
+    get_opened_files,
     get_opened_files_in_changelist,
-    include_changes_in_changelist,
     p4_create_changelist,
     p4_revert,
     p4_revert_unchanged,
+    opened_lookup,
     replace_description_in_spec,
+    run_p4_batch,
     save_changelist_spec,
 )
 from .writable import is_writable_mode, make_writable
@@ -184,6 +186,78 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     save_changelist_spec(
         replace_description_in_spec(spec_text, new_description_lines),
         workspace_dir)
+
+
+def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
+                   p4_output: list[str], workspace_dir: str) -> None:
+    """Warn about the files p4 did not open as asked; p4 still exits 0 for most of them."""
+    opened = opened_lookup(
+        get_opened_files([f for f, _ in to_open], workspace_dir))
+    unopened = [(f, action) for f, action in to_open
+                if opened(f) != (changelist, action)]
+    if not unopened:
+        return
+    log.warning(f'p4 did not open {len(unopened)} of {len(to_open)} files:')
+    for filename, action in unopened:
+        log.info(f'  {filename} (for {action})')
+    messages = [line for line in p4_output if 'opened for' not in line]
+    if messages:
+        log.info('p4 said:')
+        for line in messages:
+            log.info(f'  {line}')
+
+
+def include_changes_in_changelist(changes: LocalChanges, changelist: str,
+                                  workspace_dir: str, dry_run: bool = False) -> None:
+    """Open local git changes for add/edit/delete in a Perforce changelist."""
+    wanted = ([(f, 'add') for f in changes.adds]
+              + [(f, 'edit') for f in changes.mods]
+              + [(f, 'delete') for f in changes.dels])
+    for from_filename, to_filename in changes.moves:
+        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
+
+    opened = opened_lookup(
+        get_opened_files([f for f, _ in wanted], workspace_dir))
+    to_open = []
+    to_reopen = []
+    to_revert = []
+    to_restore = []
+    for filename, p4_action in wanted:
+        current = opened(filename)
+        if current is None:
+            to_open.append((filename, p4_action))
+            continue
+        current_cl, current_action = current
+        # add -> edit: new to the depot, so it stays an add.
+        if current_action == p4_action or (current_action == 'add'
+                                           and p4_action == 'edit'):
+            if current_cl != changelist:
+                to_reopen.append(filename)
+            continue
+        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
+        to_revert.append(filename)
+        # add -> delete: never in the depot, so just revert.
+        if current_action == 'add' and p4_action == 'delete':
+            continue
+        to_open.append((filename, p4_action))
+        if p4_action != 'delete':
+            to_restore.append(filename)
+
+    run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
+                 workspace_dir, dry_run)
+    p4_output = []
+    for p4_action in ('add', 'edit', 'delete'):
+        p4_output += run_p4_batch(
+            [p4_action, '-c', changelist],
+            [f for f, action in to_open if action == p4_action],
+            f'Opening for {p4_action}', workspace_dir, dry_run,
+            fail_on_returncode=False)
+    run_p4_batch(['reopen', '-c', changelist], to_reopen,
+                 'Moving files from other changelists', workspace_dir, dry_run)
+    if to_restore:
+        restore_files(to_restore, workspace_dir, dry_run)
+    if to_open and not dry_run:
+        _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
 def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:

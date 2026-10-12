@@ -6,6 +6,8 @@
   of about two per file, and `new --review` adds `#review` as it creates the changelist
 - `sync`, `new` and `update` check which files git tracks with a single listing of the index instead of one git
   call per few hundred files. A large sync in writable mode no longer spends tens of seconds on it
+- `new` and `update` open files with a double quote, backslash or tab in their name in p4, and `sync` no longer
+  turns local changes to files with a quote or tab in their name into a whole-file conflict
 - `review` and `update --per-commit` accept a multi-line `-m` message, and `review` refuses to start with
   uncommitted changes
 - `sync` finds the last sync commit even when a later commit, such as a revert, mentions one, and `sync last-synced`

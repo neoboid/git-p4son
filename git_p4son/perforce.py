@@ -24,9 +24,7 @@ def parse_ztag_output(lines: list[str]) -> dict[str, str]:
     fields = {}
     for line in lines:
         if line.startswith('... '):
-            parts = line[4:].split(' ', 1)
-            key = parts[0]
-            value = parts[1] if len(parts) > 1 else ''
+            key, _, value = line[4:].partition(' ')
             fields[key] = value
     return fields
 
@@ -38,9 +36,7 @@ def parse_ztag_multi_output(lines: list[str]) -> list[dict[str, str]]:
     last_key: str | None = None
     for line in lines:
         if line.startswith('... '):
-            parts = line[4:].split(' ', 1)
-            key = parts[0]
-            value = parts[1] if len(parts) > 1 else ''
+            key, _, value = line[4:].partition(' ')
             current[key] = value
             last_key = key
         elif not line.strip():

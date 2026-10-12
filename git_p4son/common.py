@@ -114,10 +114,6 @@ class RunResult:
         self.elapsed: timedelta | None = elapsed
 
 
-# File lists after `--` longer than this are logged as a count, except in verbose mode.
-_MAX_LOGGED_PATHS = 3
-
-
 def join_command_line(command: list[str]) -> str:
     command_line = ''
     for c in command:
@@ -128,17 +124,6 @@ def join_command_line(command: list[str]) -> str:
     return command_line
 
 
-def _command_line_for_log(command: list[str]) -> str:
-    """The command line as printed, with a long path list summarized."""
-    if log.verbose_mode or '--' not in command:
-        return join_command_line(command)
-    separator = command.index('--')
-    paths = command[separator + 1:]
-    if len(paths) <= _MAX_LOGGED_PATHS:
-        return join_command_line(command)
-    return join_command_line(command[:separator + 1]) + f' <{len(paths)} paths>'
-
-
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         input: str | None = None,
         env: dict[str, str] | None = None,
@@ -147,7 +132,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         ) -> RunResult:
     """Run a command and return a RunResult, raising on failure unless fail_on_returncode is False."""
     use_spinner = input is None and not dry_run
-    log.command(_command_line_for_log(command),
+    log.command(join_command_line(command),
                 truncate_for_spinner=use_spinner)
 
     if dry_run:
@@ -228,7 +213,7 @@ def run_with_output(command: list[str], cwd: str = '.',
     """Run a command, passing each output line and its stream to on_output as it is written.
 
     An exception raised from on_output terminates the command and propagates."""
-    log.command(_command_line_for_log(command),
+    log.command(join_command_line(command),
                 truncate_for_spinner=True)
     log.start_spinner()
 

@@ -112,6 +112,7 @@ Examples:
         help='Sync local git repository with a Perforce workspace',
         description='Sync local git repository with a Perforce workspace'
     )
+    sync_parser.set_defaults(func=sync_command)
     sync_parser.add_argument(
         'changelist',
         nargs='*',
@@ -600,8 +601,9 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         log.success(args.message)
 
+    if hasattr(args, 'func'):
+        return args.func(args)
     commands = {
-        'sync': sync_command,
         'sync-split-users': sync_split_users_command,
         'new': new_command,
         'update': update_command,

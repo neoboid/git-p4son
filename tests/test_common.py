@@ -26,6 +26,10 @@ from git_p4son.git import (
 )
 
 
+def _ignore_output(line, stream):
+    pass
+
+
 class TestGetCurrentBranch(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_returns_branch_name(self, mock_run):
@@ -325,7 +329,8 @@ class TestRunWithOutput(unittest.TestCase):
         mock_process.__exit__ = mock.Mock(return_value=False)
         mock_popen_cls.return_value = mock_process
 
-        result = run_with_stream_output(['git', 'status'], cwd='/tmp')
+        result = run_with_stream_output(
+            ['git', 'status'], _ignore_output, cwd='/tmp')
         call = mock_popen_cls.call_args
         self.assertEqual(call.args, (['git', 'status'],))
         self.assertEqual(call.kwargs['cwd'], '/tmp')
@@ -430,7 +435,8 @@ class TestMissingExecutable(unittest.TestCase):
     def test_run_with_stream_output_stops_spinner_and_raises(self):
         with mock.patch('git_p4son.common.log') as mock_log:
             with self.assertRaises(FileNotFoundError):
-                run_with_stream_output(['definitely-not-a-real-binary-p4son'])
+                run_with_stream_output(
+                    ['definitely-not-a-real-binary-p4son'], _ignore_output)
         mock_log.stop_spinner.assert_called_once()
 
 
@@ -450,7 +456,8 @@ class TestSubprocessEncoding(unittest.TestCase):
         self.assertEqual(ctx.exception.stderr, ['the reason'])
 
     def test_run_with_stream_output_decodes_utf8(self):
-        result = run_with_stream_output([sys.executable, '-c', self._CODE])
+        result = run_with_stream_output(
+            [sys.executable, '-c', self._CODE], _ignore_output)
         self.assertEqual(result.stdout, ['bäck'])
 
 

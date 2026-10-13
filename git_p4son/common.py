@@ -189,8 +189,9 @@ def _terminate(process: subprocess.Popen) -> None:
         process.kill()
 
 
-def run_with_stream_output(command: list[str], cwd: str = '.',
-                           on_output: Callable[..., None] | None = None,
+def run_with_stream_output(command: list[str],
+                           on_output: Callable[[str, IO[str]], None],
+                           cwd: str = '.',
                            env: dict[str, str] | None = None,
                            keep_stdout: bool = True) -> RunResult:
     """Run a command, passing each output line and its stream to on_output as it is written.
@@ -245,8 +246,7 @@ def run_with_stream_output(command: list[str], cwd: str = '.',
                     continue
                 if collected[index] is not None:
                     collected[index].append(line)
-                if on_output:
-                    on_output(line=line, stream=streams[index])
+                on_output(line, streams[index])
 
             returncode = process.wait()
 

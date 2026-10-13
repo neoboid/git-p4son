@@ -111,7 +111,7 @@ Examples:
         description='Set up a new git repository inside a Perforce workspace. '
         'Checks preconditions (P4 workspace), initializes git, '
         'sets up .gitignore, and creates an initial commit.'
-    )
+    ).set_defaults(func=init_command, needs_workspace=False)
 
     sync_parser = subparsers.add_parser(
         'sync',
@@ -581,6 +581,9 @@ def run_command(args: argparse.Namespace) -> int:
                   f'Use "git-p4son {args.command} -h" for help.')
         return 1
 
+    if not getattr(args, 'needs_workspace', True):
+        return args.func(args)
+
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
     if not args.workspace_dir:
@@ -649,10 +652,6 @@ def main() -> int:
 
     try:
         log.verbose_mode = args.verbose
-
-        # init runs without a workspace
-        if args.command == 'init':
-            return init_command(args)
 
         exit_code = run_command(args)
 

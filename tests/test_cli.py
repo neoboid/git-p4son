@@ -433,5 +433,17 @@ class TestResolveBranchKeyword(unittest.TestCase):
         self.assertEqual(result, 0)
 
 
+class TestCommandsWithoutWorkspace(unittest.TestCase):
+    """init, completion and skill run outside a git workspace."""
+
+    @mock.patch('git_p4son.cli.get_workspace_dir')
+    @mock.patch('git_p4son.cli.init_command', return_value=0)
+    def test_init(self, mock_init, mock_ws):
+        args = create_parser().parse_args(['init'])
+        self.assertEqual(run_command(args), 0)
+        mock_init.assert_called_once_with(args)
+        mock_ws.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

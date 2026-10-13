@@ -34,6 +34,10 @@ class TestComputeCwdDepotRoot(unittest.TestCase):
         result = _compute_cwd_depot_root('/ws/a/b/c', '/ws')
         self.assertEqual(result, '//$(workspace)/a/b/c')
 
+    def test_outside_workspace(self):
+        result = _compute_cwd_depot_root('/elsewhere', '/ws')
+        self.assertIsNone(result)
+
 
 class TestSetupGitignore(unittest.TestCase):
     def test_existing_gitignore_left_as_is(self):

@@ -4,7 +4,7 @@ import argparse
 import os
 import shutil
 
-from .common import prompt_choice, prompt_menu
+from .common import normalize_workspace_path, prompt_choice, prompt_menu
 from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
@@ -28,12 +28,11 @@ from .writable import is_writable_mode, set_writable_mode
 
 
 def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
-    """Compute the $(workspace)-based depot root for cwd, or None if cwd is the workspace root."""
-    rel = os.path.relpath(cwd, p4_workspace_root)
-    if rel == '.':
+    """Compute the $(workspace)-based depot root for cwd, or None at or outside the workspace root."""
+    rel = normalize_workspace_path(cwd, p4_workspace_root)
+    if rel in (None, '.'):
         return None
-    rel_posix = rel.replace(os.sep, '/')
-    return f'//{WORKSPACE_PLACEHOLDER}/{rel_posix}'
+    return f'//{WORKSPACE_PLACEHOLDER}/{rel}'
 
 
 def _select_depot_root(client_name: str, cwd: str,

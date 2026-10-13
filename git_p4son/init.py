@@ -170,8 +170,7 @@ def _setup_gitignore(cwd: str) -> str:
         shutil.copy2(p4ignore_path, gitignore_path)
         return 'copied .p4ignore to new .gitignore'
 
-    with open(gitignore_path, 'w') as f:
-        pass
+    open(gitignore_path, 'w').close()
     return 'created empty .gitignore'
 
 
@@ -197,8 +196,7 @@ def init_command(args: argparse.Namespace) -> int:
     _configure_claude_skill()
 
     log.heading('Checking .gitignore')
-    result = _setup_gitignore(cwd)
-    log.success(result)
+    log.success(_setup_gitignore(cwd))
 
     log.heading('Checking git repo')
     if is_workspace_dir(cwd):

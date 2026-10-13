@@ -103,12 +103,12 @@ def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
     print('Writable mode keeps git-tracked files writable, so they can be')
     print('edited without p4 edit. Git-ignored files stay read-only.')
     enabled = _ask_yes_no('Keep git-tracked files writable?', current)
-    if enabled is None:
+    if enabled is None or enabled == current:
         log.success(f'{"on" if current else "off"} (unchanged)')
         return current, False
     set_writable_mode(cwd, enabled)
     log.success('on' if enabled else 'off')
-    return enabled, enabled != current
+    return enabled, True
 
 
 def _configure_split_users(cwd: str) -> None:

@@ -191,6 +191,12 @@ class TestConfigureWritableMode(unittest.TestCase):
             set_writable_mode(ws, True)
             self.assertEqual(_configure_writable_mode(ws), (True, False))
 
+    @mock.patch('git_p4son.init._ask_yes_no', return_value=False)
+    def test_unchanged_answer_leaves_config_untouched(self, _ask):
+        with tempfile.TemporaryDirectory() as ws:
+            self.assertEqual(_configure_writable_mode(ws), (False, False))
+            self.assertEqual(load_config(ws), {})
+
     @mock.patch('git_p4son.init._ask_yes_no', return_value=None)
     def test_eof_leaves_config_untouched(self, _ask):
         with tempfile.TemporaryDirectory() as ws:

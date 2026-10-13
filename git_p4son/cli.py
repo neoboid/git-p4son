@@ -24,6 +24,15 @@ from .skill import skill_command
 from .writable import writable_command
 
 
+DEFAULT_BASE_BRANCH = 'HEAD~1'
+
+
+def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
+    """Add -b/--base-branch, defaulting to DEFAULT_BASE_BRANCH."""
+    parser.add_argument('-b', '--base-branch', default=DEFAULT_BASE_BRANCH,
+                        help=f'{help}. Default is {DEFAULT_BASE_BRANCH}')
+
+
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
                       file_help: str) -> None:
     """Add the mutually exclusive -m/--message and -F/--file options."""
@@ -206,11 +215,8 @@ Examples:
         action='store_true',
         help='Leave the enumerated commit list out of the changelist description'
     )
-    new_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch for enumerating commits and finding changed files. Default is HEAD~1'
-    )
+    _add_base_branch(
+        new_parser, 'Base branch for enumerating commits and finding changed files')
     new_parser.add_argument(
         'alias',
         nargs='?',
@@ -276,11 +282,8 @@ Examples:
         'Replace the changelist description message above the commit list',
         'Replace the changelist description message above the commit list '
         'with the contents of the given file')
-    update_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch for enumerating commits and finding changed files. Default is HEAD~1'
-    )
+    _add_base_branch(
+        update_parser, 'Base branch for enumerating commits and finding changed files')
     update_parser.add_argument(
         '-n', '--dry-run',
         action='store_true',
@@ -319,11 +322,7 @@ Examples:
         help='List commit subjects since base branch',
         description='List commit subjects since base branch in chronological order (oldest first)'
     )
-    list_changes_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch to compare against. Default is HEAD~1'
-    )
+    _add_base_branch(list_changes_parser, 'Base branch to compare against')
 
     alias_parser = subparsers.add_parser(
         'alias',
@@ -420,11 +419,8 @@ Examples:
         review_parser,
         'Changelist description message (defaults to HEAD commit subject)',
         'Read the changelist description message from the given file')
-    review_parser.add_argument(
-        '-b', '--base-branch',
-        default='HEAD~1',
-        help='Base branch to rebase onto and find commits since. Default is HEAD~1'
-    )
+    _add_base_branch(
+        review_parser, 'Base branch to rebase onto and find commits since')
     review_parser.add_argument(
         '-f', '--force',
         action='store_true',

@@ -144,39 +144,39 @@ class TestGetWritableFiles(unittest.TestCase):
 
 
 class TestGitGetDirtyFiles(unittest.TestCase):
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_clean_workspace(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[])
+        mock_rwo.return_value = make_run_result(stdout=b'')
         self.assertEqual(get_dirty_files('/ws'), [])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_modified_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[' M file.txt\0'])
+        mock_rwo.return_value = make_run_result(stdout=b' M file.txt\0')
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('file.txt', 'modify')])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_added_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=['A  new.txt\0'])
+        mock_rwo.return_value = make_run_result(stdout=b'A  new.txt\0')
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('new.txt', 'add')])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_deleted_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[' D gone.txt\0'])
+        mock_rwo.return_value = make_run_result(stdout=b' D gone.txt\0')
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('gone.txt', 'delete')])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_untracked_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=['?? unknown.txt\0'])
+        mock_rwo.return_value = make_run_result(stdout=b'?? unknown.txt\0')
         result = get_dirty_files('/ws')
         self.assertEqual(result, [('unknown.txt', 'untracked')])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_multiple_files(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            ' M mod.txt\0A  add.txt\0?? new.txt\0'])
+        mock_rwo.return_value = make_run_result(
+            stdout=b' M mod.txt\0A  add.txt\0?? new.txt\0')
         result = get_dirty_files('/ws')
         self.assertEqual(result, [
             ('mod.txt', 'modify'),
@@ -184,15 +184,15 @@ class TestGitGetDirtyFiles(unittest.TestCase):
             ('new.txt', 'untracked'),
         ])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_rename_lists_the_new_path_once(self, mock_rwo):
         """A rename is "R  <new>\\0<old>\\0"; the old path is not a dirty file of its own."""
-        mock_rwo.return_value = make_run_result(stdout=[
-            'R  b "c".txt\0a.txt\0?? n\u00f6.txt\0'])
+        mock_rwo.return_value = make_run_result(
+            stdout=b'R  b "c".txt\0a.txt\0?? n\xc3\xb6.txt\0')
         self.assertEqual(get_dirty_files('/ws'), [
             ('b "c".txt', 'modify'), ('n\u00f6.txt', 'untracked')])
 
-    @mock.patch('git_p4son.git.run_with_output')
+    @mock.patch('git_p4son.git.run')
     def test_command_failure(self, mock_rwo):
         mock_rwo.side_effect = RunError('git status failed')
         with self.assertRaises(RunError):
@@ -668,8 +668,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 ('sync456', 'image.png'): 'oid_base'}
 
             def fake_get_file(rel, commit, _ws):
-                return b'\x00a\nb\n' if commit == 'head123' \
-                    else b'\x00c\nd\n'
+                return b'\0a\nb\n' if commit == 'head123' \
+                    else b'\0c\nd\n'
             mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
             result = prepare_writable_files([_upd(path)], ws, 'head123',
@@ -677,7 +677,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
 
             cf = result.changed[0]
             self.assertTrue(cf.is_binary)
-            self.assertEqual(self._read(cf.ours_path), b'\x00a\nb\n')
+            self.assertEqual(self._read(cf.ours_path), b'\0a\nb\n')
 
     @mock.patch('git_p4son.sync.find_base_commits', return_value={})
     @mock.patch('git_p4son.sync.get_files_at_commits',

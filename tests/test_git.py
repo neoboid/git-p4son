@@ -14,8 +14,10 @@ from git_p4son.git import (
     find_base_commits,
     format_sync_subject,
     get_blob_oids,
+    get_dirty_files,
     get_files_at_commits,
     get_head_commit,
+    get_local_changes,
     get_staged_files,
     get_tracked_files,
     git_last_sync,
@@ -56,6 +58,37 @@ class GitRepoTestCase(unittest.TestCase):
                        capture_output=True, check=True)
         subprocess.run(['git', 'commit', '-m', message],
                        cwd=self.tmpdir, capture_output=True, check=True)
+
+
+class TestControlCharactersInPaths(GitRepoTestCase):
+    """-z output is read as bytes: text mode would turn a carriage return in a path into a newline."""
+
+    NAMES = ['cr\rname.txt', 'trailing space.txt ']
+
+    def _commit_names(self, content, message):
+        for name in self.NAMES:
+            self._write_file(name, content)
+        self._commit(message)
+
+    def test_names_come_back_verbatim(self):
+        self._commit_names('base', 'git-p4son: p4 sync //ws/...@1')
+        base = get_head_commit(self.tmpdir)
+        self._commit_names('changed', 'local change')
+
+        self.assertEqual(sorted(list_tracked_files(self.tmpdir)),
+                         sorted(self.NAMES))
+        self.assertEqual(sorted(get_local_changes(base, self.tmpdir).mods),
+                         sorted(self.NAMES))
+        self.assertEqual(find_base_commits(self.NAMES, 'HEAD', self.tmpdir),
+                         dict.fromkeys(self.NAMES, base))
+
+        for name in self.NAMES:
+            self._write_file(name, 'dirty')
+        self.assertEqual(sorted(name for name, _ in get_dirty_files(self.tmpdir)),
+                         sorted(self.NAMES))
+        add_files(self.NAMES, self.tmpdir)
+        self.assertEqual(sorted(get_staged_files(self.tmpdir)),
+                         sorted(self.NAMES))
 
 
 class TestRepoSetup(GitRepoTestCase):
@@ -211,7 +244,7 @@ class TestGetFilesAtCommits(GitRepoTestCase):
 
     def test_binary_content_is_returned_verbatim(self):
         path = os.path.join(self.tmpdir, 'blob.bin')
-        data = bytes(range(256)) + b'\r\n\n\x00'
+        data = bytes(range(256)) + b'\r\n\n\0'
         with open(path, 'wb') as f:
             f.write(data)
         self._commit()
@@ -416,10 +449,8 @@ class TestFindBaseCommits(GitRepoTestCase):
     @mock.patch('git_p4son.git.run')
     def test_commit_without_file_entries_is_skipped(self, mock_run):
         """A header with no status after it, e.g. a merge, does not swallow the next commit's entries."""
-        mock_run.return_value = make_run_result(stdout=[
-            '\x01m1\x01Merge branch\0'
-            '\x01s1\x01git-p4son: p4 sync //ws/...@100',
-            'M\0a.cpp\0'])
+        mock_run.return_value = make_run_result(
+            stdout=b'\x01m1\x01Merge branch\0\x01s1\x01git-p4son: p4 sync //ws/...@100\nM\0a.cpp\0')
         result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
         self.assertEqual(result, {'a.cpp': 's1'})
 

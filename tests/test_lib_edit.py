@@ -99,9 +99,8 @@ class TestOpenedLookup(unittest.TestCase):
 class TestGetLocalGitChanges(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_parses_all_change_types(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0'
-            'R100\0old_name.txt\0new_name.txt\0'])
+        mock_run.return_value = make_run_result(
+            stdout=b'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0R100\0old_name.txt\0new_name.txt\0')
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['modified.txt'])
         self.assertEqual(changes.adds, ['added.txt'])
@@ -113,7 +112,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_typechange_treated_as_modify(self, mock_run):
         """T (e.g. symlink to regular file) is a content change."""
-        mock_run.return_value = make_run_result(stdout=['T\0link.txt\0'])
+        mock_run.return_value = make_run_result(stdout=b'T\0link.txt\0')
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.mods, ['link.txt'])
 
@@ -121,7 +120,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
     def test_copy_treated_as_add_of_destination(self, mock_run):
         """A copy is an add of the destination; the source is untouched."""
         mock_run.return_value = make_run_result(
-            stdout=['C100\0src.txt\0copy.txt\0'])
+            stdout=b'C100\0src.txt\0copy.txt\0')
         changes = get_local_changes('main', '/ws')
         self.assertEqual(changes.adds, ['copy.txt'])
         self.assertEqual(changes.mods, [])
@@ -135,7 +134,7 @@ class TestGetLocalGitChanges(unittest.TestCase):
 
     @mock.patch('git_p4son.git.run')
     def test_unknown_status(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=['X\0unknown.txt\0'])
+        mock_run.return_value = make_run_result(stdout=b'X\0unknown.txt\0')
         with self.assertRaises(CommandError):
             get_local_changes('main', '/ws')
 

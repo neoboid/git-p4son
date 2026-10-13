@@ -14,9 +14,11 @@ from .common import (
 )
 
 
-def _split_nul(stdout: list[str]) -> list[str]:
-    """Split -z output into paths, undoing run()'s newline split in case a path contains one."""
-    return [path for path in '\n'.join(stdout).split('\0') if path]
+# Read as bytes: text mode would turn a carriage return in a path into a newline.
+def _nul_fields(stdout: bytes) -> list[str]:
+    """Split raw -z output into its fields."""
+    return [field for field in stdout.decode('utf-8', 'replace').split('\0')
+            if field]
 
 
 def _git_path(filepath: str) -> str:
@@ -112,10 +114,10 @@ _PORCELAIN_KINDS = {'A': 'add', 'D': 'delete', '??': 'untracked'}
 def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
     """Return list of (filename, change_type) tuples for dirty files."""
     # -z: paths verbatim, not C-quoted, as "XY <path>\0", followed by the old path for renames and copies.
-    res = run_with_output(['git', 'status', '--porcelain', '-z'],
-                          cwd=workspace_dir)
+    res = run(['git', 'status', '--porcelain', '-z'], cwd=workspace_dir,
+              text=False)
     files = []
-    entries = iter(_split_nul(res.stdout))
+    entries = iter(_nul_fields(res.stdout))
     for entry in entries:
         status = entry[:2]
         files.append(
@@ -149,8 +151,8 @@ def get_staged_files(workspace_dir: str) -> list[str]:
     """Return the files staged for the next commit, as repo-relative slash paths."""
     # Compares the index with HEAD without scanning the worktree.
     result = run(['git', 'diff', '--cached', '--name-only', '-z'],
-                 cwd=workspace_dir)
-    return _split_nul(result.stdout)
+                 cwd=workspace_dir, text=False)
+    return _nul_fields(result.stdout)
 
 
 def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
@@ -177,10 +179,10 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
     # ...HEAD diffs from the merge base, so changes on base_branch since the fork are left out.
     # -z: paths verbatim, not C-quoted, as "<status>\0<path>\0", with a second path for renames and copies.
     res = run(['git', 'diff', '--name-status', '-z', f'{base_branch}...HEAD'],
-              cwd=workspace_dir)
+              cwd=workspace_dir, text=False)
 
     changes = LocalChanges()
-    tokens = iter(_split_nul(res.stdout))
+    tokens = iter(_nul_fields(res.stdout))
     for token in tokens:
         status = token.lower()
         # T is a typechange (e.g. symlink to regular file): its content changed.
@@ -234,8 +236,8 @@ def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
 def list_tracked_files(workspace_dir: str) -> list[str]:
     """Return every file tracked by git, as repo-relative slash paths."""
     # -z: non-ASCII paths verbatim, not C-quoted.
-    result = run(['git', 'ls-files', '-z'], cwd=workspace_dir)
-    return _split_nul(result.stdout)
+    result = run(['git', 'ls-files', '-z'], cwd=workspace_dir, text=False)
+    return _nul_fields(result.stdout)
 
 
 # --- file retrieval ---
@@ -346,7 +348,7 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     res = run(['git', 'log', '-z', '--no-renames', '--name-status',
                '--pretty=format:%x01%H%x01%s', '--stdin', before_commit],
               cwd=workspace_dir, input='--\n' + '\n'.join(by_git_path) + '\n',
-              fail_on_returncode=False)
+              text=False, fail_on_returncode=False)
     if res.returncode != 0:
         return result
 
@@ -354,7 +356,7 @@ def find_base_commits(filepaths: list[str], before_commit: str,
     fallback_add: dict[str, str] = {}
     current_sha = ''
     current_is_sync = False
-    tokens = iter(_split_nul(res.stdout))
+    tokens = iter(_nul_fields(res.stdout))
     for token in tokens:
         # -z: "<status>\0<path>\0" pairs, each commit's header joined by a newline to its first status.
         status = token

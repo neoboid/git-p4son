@@ -67,26 +67,22 @@ def _configure_depot_root(client_name: str, cwd: str,
     log.heading('Finding git-p4son depot root')
     depot_root = get_depot_root(cwd)
     if depot_root:
-        log.success(f'{expand_depot_root(depot_root, client_name)}/...')
-    else:
-        log.warning('no root configured')
-
-    if depot_root:
-        log.heading('Validating depot root')
         resolved = expand_depot_root(depot_root, client_name)
+        log.success(f'{resolved}/...')
+
+        log.heading('Validating depot root')
         if p4_depot_root_exists(resolved, cwd):
             log.success('all good')
             return True
-        else:
-            log.error(f'{resolved}/... is not valid')
-            depot_root = None
+        log.error(f'{resolved}/... is not valid')
+    else:
+        log.warning('no root configured')
 
+    log.heading('Configuring depot root')
+    depot_root = _select_depot_root(client_name, cwd, p4_workspace_root)
     if not depot_root:
-        log.heading('Configuring depot root')
-        depot_root = _select_depot_root(client_name, cwd, p4_workspace_root)
-        if not depot_root:
-            log.error('aborting')
-            return False
+        log.error('aborting')
+        return False
 
     log.success(f'{expand_depot_root(depot_root, client_name)}/...')
     save_config(cwd, {'depot': {'root': depot_root}})

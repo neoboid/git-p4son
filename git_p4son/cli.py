@@ -277,6 +277,7 @@ Examples:
         'unless -m or -F replaces it. By default also opens changed files '
         'for edit.'
     )
+    update_parser.set_defaults(func=update_command)
     _add_branch_keyword_arg(update_parser, 'changelist',
                             'Changelist number or named alias to update')
     _add_message_args(
@@ -606,7 +607,6 @@ def run_command(args: argparse.Namespace) -> int:
     if hasattr(args, 'func'):
         return args.func(args)
     commands = {
-        'update': update_command,
         'list-changes': list_changes_command,
         'alias': alias_command,
         'review': review_command,

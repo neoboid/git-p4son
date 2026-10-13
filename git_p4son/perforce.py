@@ -346,7 +346,7 @@ def _p4_action_to_change(action: str) -> str:
 def p4_get_opened_files(depot_root: str,
                         workspace_dir: str) -> list[tuple[str, str]]:
     """Return client paths and change types for files opened in Perforce."""
-    res = run_with_output(
+    res = run(
         [*_P4, '-ztag', 'fstat', '-Ro', '-Op', '-T',
          'depotFile,path,clientFile,action', f'{depot_root}/...'],
         cwd=workspace_dir)

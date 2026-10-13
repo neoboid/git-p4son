@@ -10,7 +10,6 @@ from .common import (
     RunError,
     normalize_workspace_path,
     run,
-    run_with_output,
 )
 
 
@@ -48,7 +47,7 @@ def get_workspace_dir() -> str | None:
 
 def init_repo(workspace_dir: str) -> None:
     """Create a git repository in workspace_dir."""
-    run_with_output(['git', 'init'], cwd=workspace_dir)
+    run(['git', 'init'], cwd=workspace_dir)
 
 
 def has_commits(workspace_dir: str) -> bool:
@@ -131,7 +130,7 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
 
 def add_all_files(workspace_dir: str) -> None:
     """Stage every change in the workspace, untracked files included."""
-    run_with_output(['git', 'add', '.'], cwd=workspace_dir)
+    run(['git', 'add', '.'], cwd=workspace_dir)
 
 
 def add_files(filepaths: list[str], workspace_dir: str) -> None:
@@ -160,7 +159,7 @@ def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
     command = ['git', 'commit', '-m', message]
     if allow_empty:
         command.append('--allow-empty')
-    run_with_output(command, cwd=workspace_dir)
+    run(command, cwd=workspace_dir)
 
 
 # --- diff ---
@@ -323,7 +322,7 @@ class LastSync:
 
 def git_last_sync(workspace_dir: str) -> LastSync | None:
     """Get the changelist number and commit SHA of the most recent sync commit."""
-    res = run_with_output(
+    res = run(
         ['git', 'log', '-1', '--pretty=%H %s',
          f'--grep=^{_SYNC_SUBJECT_PREFIX}'],
         cwd=workspace_dir)

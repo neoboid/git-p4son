@@ -200,14 +200,14 @@ class TestGitGetDirtyFiles(unittest.TestCase):
 
 
 class TestP4GetOpenedFiles(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_clean(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[])
+    @mock.patch('git_p4son.perforce.run')
+    def test_clean(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[])
         self.assertEqual(p4_get_opened_files('//depot', '/ws'), [])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_returns_workspace_relative_client_path(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_returns_workspace_relative_client_path(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/foo.txt',
             '... path /ws/foo.txt',
             '... action edit',
@@ -215,9 +215,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('foo.txt', 'modify')])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_add(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_add(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/new.txt',
             '... path /ws/new.txt',
             '... action add',
@@ -225,9 +225,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('new.txt', 'add')])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_delete(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_delete(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/old.txt',
             '... path /ws/old.txt',
             '... action delete',
@@ -235,9 +235,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('old.txt', 'delete')])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_move_add(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_move_add(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/new.txt',
             '... path /ws/new.txt',
             '... action move/add',
@@ -245,9 +245,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', '/ws')
         self.assertEqual(result, [('new.txt', 'add')])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_multiple_files(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_multiple_files(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/a.txt',
             '... path /ws/a.txt',
             '... action edit',
@@ -262,9 +262,9 @@ class TestP4GetOpenedFiles(unittest.TestCase):
             ('b.txt', 'add'),
         ])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_normalizes_slashes(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.perforce.run')
+    def test_normalizes_slashes(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             '... depotFile //depot/dir/foo.txt',
             r'... path C:\ws\dir\foo.txt',
             '... action add',
@@ -272,39 +272,39 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         result = p4_get_opened_files('//depot', r'C:\ws')
         self.assertEqual(result, [('dir/foo.txt', 'add')])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
-    def test_command_failure(self, mock_rwo):
-        mock_rwo.side_effect = RunError('p4 opened failed')
+    @mock.patch('git_p4son.perforce.run')
+    def test_command_failure(self, mock_run):
+        mock_run.side_effect = RunError('p4 opened failed')
         with self.assertRaises(RunError):
             p4_get_opened_files('//depot', '/ws')
 
 
 class TestGitAddAllFiles(unittest.TestCase):
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_success(self, mock_rwo):
-        mock_rwo.return_value = make_run_result()
+    @mock.patch('git_p4son.git.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = make_run_result()
         add_all_files('/ws')
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_failure(self, mock_rwo):
-        mock_rwo.side_effect = RunError('git add failed')
+    @mock.patch('git_p4son.git.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = RunError('git add failed')
         with self.assertRaises(RunError):
             add_all_files('/ws')
 
 
 class TestGitCommit(unittest.TestCase):
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_success(self, mock_rwo):
-        mock_rwo.return_value = make_run_result()
+    @mock.patch('git_p4son.git.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = make_run_result()
         commit('msg', '/ws')
-        cmd = mock_rwo.call_args[0][0]
+        cmd = mock_run.call_args[0][0]
         self.assertEqual(cmd, ['git', 'commit', '-m', 'msg'])
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_allow_empty(self, mock_rwo):
-        mock_rwo.return_value = make_run_result()
+    @mock.patch('git_p4son.git.run')
+    def test_allow_empty(self, mock_run):
+        mock_run.return_value = make_run_result()
         commit('msg', '/ws', allow_empty=True)
-        cmd = mock_rwo.call_args[0][0]
+        cmd = mock_run.call_args[0][0]
         self.assertIn('--allow-empty', cmd)
 
 

@@ -508,60 +508,60 @@ class TestFindBaseCommits(GitRepoTestCase):
 class TestGitLastSync(unittest.TestCase):
     HASH = 'abc123def456' * 3 + 'abcd'  # 40-char fake hash
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_extracts_changelist_and_commit(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.git.run')
+    def test_extracts_changelist_and_commit(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             f'{self.HASH} git-p4son: p4 sync //...@12345'
         ])
         result = git_last_sync('/ws')
         self.assertEqual(result.changelist, 12345)
         self.assertEqual(result.commit, self.HASH)
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_extracts_changelist_fail(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.git.run')
+    def test_extracts_changelist_fail(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             f'{self.HASH} other: p4 sync //...@12345'
         ])
         result = git_last_sync('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_no_match(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.git.run')
+    def test_no_match(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             f'{self.HASH} "some other commit message"'
         ])
         result = git_last_sync('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_empty_output(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[])
+    @mock.patch('git_p4son.git.run')
+    def test_empty_output(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[])
         result = git_last_sync('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_command_failure(self, mock_rwo):
-        mock_rwo.side_effect = RunError('git log failed')
+    @mock.patch('git_p4son.git.run')
+    def test_command_failure(self, mock_run):
+        mock_run.side_effect = RunError('git log failed')
         with self.assertRaises(RunError):
             git_last_sync('/ws')
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_new_format_with_depot_root(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
+    @mock.patch('git_p4son.git.run')
+    def test_new_format_with_depot_root(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
             f'{self.HASH} git-p4son: p4 sync //my-client/Engine/Source/...@12345'
         ])
         result = git_last_sync('/ws')
         self.assertEqual(result.changelist, 12345)
 
-    @mock.patch('git_p4son.git.run_with_output')
-    def test_uses_git_grep_to_search_history(self, mock_rwo):
+    @mock.patch('git_p4son.git.run')
+    def test_uses_git_grep_to_search_history(self, mock_run):
         """git log --grep finds sync commits even when HEAD is not one."""
-        mock_rwo.return_value = make_run_result(stdout=[
+        mock_run.return_value = make_run_result(stdout=[
             f'{self.HASH} git-p4son: p4 sync //...@99999'
         ])
         result = git_last_sync('/ws')
         self.assertEqual(result.changelist, 99999)
-        cmd = mock_rwo.call_args[0][0]
+        cmd = mock_run.call_args[0][0]
         self.assertIn('--grep=^git-p4son: p4 sync ', cmd)
 
 

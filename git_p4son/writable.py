@@ -105,27 +105,20 @@ def _apply_off(workspace_dir: str) -> int:
     return 0
 
 
-def apply_writable_mode(workspace_dir: str) -> int:
-    """Make tracked files match the configured writable mode."""
-    if is_writable_mode(workspace_dir):
-        return _apply_on(workspace_dir)
-    return _apply_off(workspace_dir)
-
-
 def writable_command(args: argparse.Namespace) -> int:
     """Execute the writable command."""
     workspace_dir = args.workspace_dir
 
-    if args.writable_action in ('enable', 'disable'):
+    if args.writable_action is None:
+        log.heading('Writable mode')
+        log.success('on' if is_writable_mode(workspace_dir) else 'off')
+        return 0
+
+    if args.writable_action == 'apply':
+        enabled = is_writable_mode(workspace_dir)
+    else:
         enabled = args.writable_action == 'enable'
         log.heading('Setting writable mode')
         set_writable_mode(workspace_dir, enabled)
         log.success('on' if enabled else 'off')
-        return apply_writable_mode(workspace_dir)
-
-    if args.writable_action == 'apply':
-        return apply_writable_mode(workspace_dir)
-
-    log.heading('Writable mode')
-    log.success('on' if is_writable_mode(workspace_dir) else 'off')
-    return 0
+    return _apply_on(workspace_dir) if enabled else _apply_off(workspace_dir)

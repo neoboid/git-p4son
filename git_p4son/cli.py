@@ -217,6 +217,7 @@ Examples:
         'enumerated git commits since the base branch. By default also opens '
         'changed files for edit in the changelist.'
     )
+    new_parser.set_defaults(func=new_command)
     _add_message_args(
         new_parser,
         'Changelist description message (defaults to HEAD commit subject)',
@@ -605,7 +606,6 @@ def run_command(args: argparse.Namespace) -> int:
     if hasattr(args, 'func'):
         return args.func(args)
     commands = {
-        'new': new_command,
         'update': update_command,
         'list-changes': list_changes_command,
         'alias': alias_command,

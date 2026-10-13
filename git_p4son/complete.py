@@ -2,7 +2,11 @@
 
 import argparse
 
-from .changelist_store import branch_to_alias, list_changelist_aliases
+from .changelist_store import (
+    RESERVED_KEYWORDS,
+    branch_to_alias,
+    list_changelist_aliases,
+)
 from .git import get_current_branch, get_workspace_dir
 from .log import log
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
@@ -96,25 +100,33 @@ def _complete_flag_value(flag, prefix):
 
 def _get_branch_candidates(prefix, workspace_dir):
     """Get 'branch' completion candidates based on prefix."""
-    if not workspace_dir:
-        return []
     keyword = 'branch'
-    if prefix == keyword:
-        branch = get_current_branch(workspace_dir)
-        if branch:
-            return [(branch_to_alias(branch), 'Current branch')]
+    if not workspace_dir or not keyword.startswith(prefix):
         return []
-    if keyword.startswith(prefix):
-        branch = get_current_branch(workspace_dir)
-        if branch:
-            return [(keyword, 'Use current branch name')]
-    return []
+    branch = get_current_branch(workspace_dir)
+    alias = branch_to_alias(branch) if branch else None
+    # cli.py refuses a branch that maps to a reserved keyword, so don't offer it.
+    if alias is None or alias in RESERVED_KEYWORDS:
+        return []
+    if prefix == keyword:
+        return [(alias, 'Current branch')]
+    return [(keyword, 'Use current branch name')]
 
 
 def _complete_positional(command, subcommand, positional_count,
-                         prefix, workspace_dir, command_parser):
+                         prefix, workspace_dir, command_parser,
+                         subcommand_parser):
     """Complete a positional argument."""
     aliases = _get_alias_names(workspace_dir)
+
+    # Arguments added with the branch keyword name themselves in branch_keyword_arg.
+    target = subcommand_parser or command_parser
+    dest = target.get_default('branch_keyword_arg')
+    positionals = [a for a in target._actions if not a.option_strings
+                   and not isinstance(a, argparse._SubParsersAction)]
+    if dest and positional_count < len(positionals) \
+            and positionals[positional_count].dest == dest:
+        return _get_branch_candidates(prefix, workspace_dir) + _filter(aliases, prefix)
 
     if command == 'sync':
         if positional_count == 0:
@@ -127,10 +139,6 @@ def _complete_positional(command, subcommand, positional_count,
         return _filter(
             [('head', 'Sync to the latest changelist')], prefix)
 
-    if command == 'update' and positional_count == 0:
-        branch_candidates = _get_branch_candidates(prefix, workspace_dir)
-        return branch_candidates + _filter(aliases, prefix)
-
     if (command in _COMMANDS_WITH_ACTIONS and subcommand is None
             and positional_count == 0):
         nested = _get_subparsers_action(command_parser)
@@ -142,19 +150,6 @@ def _complete_positional(command, subcommand, positional_count,
 
     if command == 'sync-split-users' and subcommand == 'delete':
         return _filter(_get_split_user_names(workspace_dir), prefix)
-
-    if command == 'alias':
-        if subcommand in ('show', 'delete') and positional_count == 0:
-            branch_candidates = _get_branch_candidates(prefix, workspace_dir)
-            return branch_candidates + _filter(aliases, prefix)
-
-        if subcommand == 'new' and positional_count == 1:
-            branch_candidates = _get_branch_candidates(prefix, workspace_dir)
-            return branch_candidates + _filter(aliases, prefix)
-
-    if command in ('new', 'review') and positional_count == 0:
-        branch_candidates = _get_branch_candidates(prefix, workspace_dir)
-        return branch_candidates + _filter(aliases, prefix)
 
     return []
 
@@ -227,7 +222,8 @@ def _complete(parser, words, workspace_dir=None):
         return _filter(_get_flags(current_parser), prefix)
 
     return _complete_positional(command, subcommand, positional_count,
-                                prefix, workspace_dir, command_parser)
+                                prefix, workspace_dir, command_parser,
+                                subcommand_parser)
 
 
 def run_complete(words):

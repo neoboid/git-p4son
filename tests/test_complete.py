@@ -364,6 +364,24 @@ class TestCompleteBranchAlias(unittest.TestCase):
         names = self._names(result)
         self.assertIn('branch', names)
 
+    def test_branch_mapping_to_a_reserved_keyword_is_not_offered(
+            self, _ws, _aliases, mock_branch):
+        """cli.py refuses such a branch, so completion doesn't suggest it."""
+        mock_branch.return_value = 'head'
+        for word in ('b', 'branch'):
+            names = self._names(_complete(self.parser, ['new', word],
+                                          workspace_dir='/ws'))
+            self.assertNotIn('branch', names)
+            self.assertNotIn('head', names)
+
+    def test_alias_new_offers_the_keyword_for_its_second_positional(
+            self, _ws, _aliases, _branch):
+        names = self._names(_complete(self.parser, ['alias', 'new', '123', 'b'],
+                                      workspace_dir='/ws'))
+        self.assertIn('branch', names)
+        self.assertEqual(_complete(self.parser, ['alias', 'new', 'b'],
+                                   workspace_dir='/ws'), [])
+
     def test_new_positional_br_prefix(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', 'br'], workspace_dir='/ws')
         names = self._names(result)

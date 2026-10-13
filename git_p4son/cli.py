@@ -24,6 +24,14 @@ from .skill import skill_command
 from .writable import writable_command
 
 
+def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
+                      file_help: str) -> None:
+    """Add the mutually exclusive -m/--message and -F/--file options."""
+    message = parser.add_mutually_exclusive_group()
+    message.add_argument('-m', '--message', help=message_help)
+    message.add_argument('-F', '--file', help=file_help)
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='git-p4son',
@@ -189,15 +197,10 @@ Examples:
         'enumerated git commits since the base branch. By default also opens '
         'changed files for edit in the changelist.'
     )
-    new_parser_message = new_parser.add_mutually_exclusive_group()
-    new_parser_message.add_argument(
-        '-m', '--message',
-        help='Changelist description message (defaults to HEAD commit subject)'
-    )
-    new_parser_message.add_argument(
-        '-F', '--file',
-        help='Read the changelist description message from the given file'
-    )
+    _add_message_args(
+        new_parser,
+        'Changelist description message (defaults to HEAD commit subject)',
+        'Read the changelist description message from the given file')
     new_parser.add_argument(
         '--no-commit-list',
         action='store_true',
@@ -268,16 +271,11 @@ Examples:
         help='Changelist number or named alias to update. '
              'Defaults to the current branch name'
     )
-    update_parser_message = update_parser.add_mutually_exclusive_group()
-    update_parser_message.add_argument(
-        '-m', '--message',
-        help='Replace the changelist description message above the commit list'
-    )
-    update_parser_message.add_argument(
-        '-F', '--file',
-        help='Replace the changelist description message above the commit list '
-             'with the contents of the given file'
-    )
+    _add_message_args(
+        update_parser,
+        'Replace the changelist description message above the commit list',
+        'Replace the changelist description message above the commit list '
+        'with the contents of the given file')
     update_parser.add_argument(
         '-b', '--base-branch',
         default='HEAD~1',
@@ -418,15 +416,10 @@ Examples:
         default='branch',
         help='Alias name for the new changelist. Defaults to the current branch name'
     )
-    review_parser_message = review_parser.add_mutually_exclusive_group()
-    review_parser_message.add_argument(
-        '-m', '--message',
-        help='Changelist description message (defaults to HEAD commit subject)'
-    )
-    review_parser_message.add_argument(
-        '-F', '--file',
-        help='Read the changelist description message from the given file'
-    )
+    _add_message_args(
+        review_parser,
+        'Changelist description message (defaults to HEAD commit subject)',
+        'Read the changelist description message from the given file')
     review_parser.add_argument(
         '-b', '--base-branch',
         default='HEAD~1',

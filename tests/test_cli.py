@@ -444,6 +444,14 @@ class TestCommandsWithoutWorkspace(unittest.TestCase):
         mock_init.assert_called_once_with(args)
         mock_ws.assert_not_called()
 
+    @mock.patch('git_p4son.cli.get_workspace_dir')
+    @mock.patch('git_p4son.cli.completion_command', return_value=0)
+    def test_completion(self, mock_completion, mock_ws):
+        args = create_parser().parse_args(['completion', 'zsh'])
+        self.assertEqual(run_command(args), 0)
+        mock_completion.assert_called_once_with(args)
+        mock_ws.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

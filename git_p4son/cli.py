@@ -481,6 +481,8 @@ Examples:
         description='Print the path to a shell completion script '
         'for bash, zsh, or powershell.'
     )
+    completion_parser.set_defaults(
+        func=completion_command, needs_workspace=False)
     completion_parser.add_argument(
         'shell',
         choices=['bash', 'zsh', 'powershell'],
@@ -643,9 +645,6 @@ def main() -> int:
     if not args.command:
         parser.print_help()
         return 1
-
-    if args.command == 'completion':
-        return completion_command(args)
 
     if args.command == 'skill':
         return skill_command(args)

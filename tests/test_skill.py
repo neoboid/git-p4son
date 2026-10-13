@@ -11,7 +11,6 @@ from git_p4son.cli import main
 from git_p4son.skill import (
     install_skill,
     is_skill_installed,
-    skill_command,
     skill_path,
 )
 
@@ -74,11 +73,6 @@ class TestSkillShow(unittest.TestCase):
             self.assertEqual(main(), 0)
         self.assertTrue(
             out.getvalue().startswith('# Working with git-p4son\n'))
-
-
-class TestSkillCommand(unittest.TestCase):
-    def test_no_action_fails(self):
-        self.assertEqual(skill_command(mock.Mock(skill_action=None)), 1)
 
 
 if __name__ == '__main__':

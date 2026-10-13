@@ -452,6 +452,23 @@ class TestCommandsWithoutWorkspace(unittest.TestCase):
         mock_completion.assert_called_once_with(args)
         mock_ws.assert_not_called()
 
+    @mock.patch('git_p4son.cli.get_workspace_dir')
+    @mock.patch('git_p4son.cli.skill_show_command', return_value=0)
+    def test_skill(self, mock_show, mock_ws):
+        args = create_parser().parse_args(['skill', 'show'])
+        self.assertEqual(run_command(args), 0)
+        mock_show.assert_called_once_with(args)
+        mock_ws.assert_not_called()
+
+    @mock.patch('git_p4son.cli.get_workspace_dir')
+    def test_skill_without_action_asks_for_one(self, mock_ws):
+        args = create_parser().parse_args(['skill'])
+        with mock.patch('git_p4son.cli.log') as mock_log:
+            self.assertEqual(run_command(args), 1)
+        mock_log.error.assert_called_once_with(
+            'No skill action specified. Use "git-p4son skill -h" for help.')
+        mock_ws.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

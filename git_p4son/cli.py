@@ -26,7 +26,7 @@ from .common import CommandError, RunError
 from .git import get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
 from .complete import run_complete
-from .skill import skill_command
+from .skill import skill_install_command, skill_show_command
 from .writable import writable_command
 
 
@@ -502,6 +502,7 @@ Examples:
         '"git p4son skill show", so it stays current when git-p4son is '
         'upgraded.'
     )
+    skill_parser.set_defaults(needs_workspace=False)
     skill_subparsers = skill_parser.add_subparsers(
         dest='skill_action',
         help='Available skill actions',
@@ -512,13 +513,13 @@ Examples:
         help='Install the skill for Claude Code',
         description='Write the skill to ~/.claude/skills/git-p4son/SKILL.md '
         '(or under $CLAUDE_CONFIG_DIR), replacing any existing one'
-    )
+    ).set_defaults(func=skill_install_command)
     skill_subparsers.add_parser(
         'show',
         help='Print the instructions the skill gives to AI agents',
         description='Print the instructions for AI agents that ship with '
         'this version of git-p4son'
-    )
+    ).set_defaults(func=skill_show_command)
 
     # Hidden, used by review. No help, since argparse lists help=SUPPRESS as "==SUPPRESS==".
     seq_editor_parser = subparsers.add_parser(
@@ -645,9 +646,6 @@ def main() -> int:
     if not args.command:
         parser.print_help()
         return 1
-
-    if args.command == 'skill':
-        return skill_command(args)
 
     try:
         log.verbose_mode = args.verbose

@@ -50,15 +50,3 @@ def skill_show_command(args: argparse.Namespace) -> int:
     """Execute the 'skill show' command."""
     print(_skill_text('git-p4son.md'), end='')
     return 0
-
-
-def skill_command(args: argparse.Namespace) -> int:
-    """Dispatch skill subcommands."""
-    if args.skill_action == 'install':
-        return skill_install_command(args)
-    elif args.skill_action == 'show':
-        return skill_show_command(args)
-    else:
-        log.error(
-            'No skill action specified. Use "git-p4son skill -h" for help.')
-        return 1

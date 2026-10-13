@@ -521,7 +521,8 @@ Examples:
         'show',
         help='Print the instructions the skill gives to AI agents',
         description='Print the instructions for AI agents that ship with '
-        'this version of git-p4son'
+        'this version of git-p4son, followed by the workspace\'s own '
+        'overrides in .git-p4son/skill-override.md, if it has any'
     ).set_defaults(func=skill_show_command)
 
     # Hidden, used by review. No help, since argparse lists help=SUPPRESS as "==SUPPRESS==".

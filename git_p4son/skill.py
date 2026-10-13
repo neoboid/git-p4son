@@ -4,9 +4,12 @@ import argparse
 import os
 from importlib.resources import files
 
+from . import CONFIG_DIR
+from .git import get_workspace_dir
 from .log import log
 
 SKILL_NAME = 'git-p4son'
+SKILL_OVERRIDE_FILE = 'skill-override.md'
 
 
 def _skill_text(name: str) -> str:
@@ -51,7 +54,26 @@ def skill_install_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def skill_override_text(workspace_dir: str | None) -> str | None:
+    """Return the workspace's own overrides of the instructions, if it has any."""
+    if not workspace_dir:
+        return None
+    path = os.path.join(workspace_dir, CONFIG_DIR, SKILL_OVERRIDE_FILE)
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except FileNotFoundError:
+        return None
+    return text if text.strip() else None
+
+
 def skill_show_command(args: argparse.Namespace) -> int:
     """Execute the 'skill show' command."""
     print(_skill_text('git-p4son.md'), end='')
+    override = skill_override_text(get_workspace_dir())
+    if override:
+        print(f'\n## Overrides for this workspace\n\n'
+              f'From `{CONFIG_DIR}/{SKILL_OVERRIDE_FILE}`. Where they '
+              f'contradict the instructions above, these win.\n\n'
+              f'{override.rstrip()}')
     return 0

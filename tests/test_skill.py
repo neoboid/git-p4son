@@ -67,12 +67,47 @@ class TestInstallSkill(unittest.TestCase):
 
 
 class TestSkillShow(unittest.TestCase):
-    def test_prints_instructions(self):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.workspace = tmp.name
+        os.makedirs(os.path.join(self.workspace, '.git-p4son'))
+
+    def _show(self, workspace_dir):
         with mock.patch('sys.argv', ['git-p4son', 'skill', 'show']), \
+                mock.patch('git_p4son.skill.get_workspace_dir',
+                           return_value=workspace_dir), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(main(), 0)
-        self.assertTrue(
-            out.getvalue().startswith('# Working with git-p4son\n'))
+        return out.getvalue()
+
+    def _write_override(self, text):
+        path = os.path.join(self.workspace, '.git-p4son', 'skill-override.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+    def test_prints_instructions(self):
+        out = self._show(self.workspace)
+        self.assertTrue(out.startswith('# Working with git-p4son\n'))
+        self.assertNotIn('Overrides for this workspace', out)
+
+    def test_appends_workspace_overrides(self):
+        self._write_override('### Local rule\n\nDo the local thing.\n')
+        out = self._show(self.workspace)
+        self.assertTrue(out.startswith('# Working with git-p4son\n'))
+        self.assertIn('## Overrides for this workspace', out)
+        self.assertTrue(out.endswith('Do the local thing.\n'))
+        self.assertLess(out.index('## Syncing'), out.index('### Local rule'))
+
+    def test_skips_blank_overrides(self):
+        self._write_override('\n  \n')
+        self.assertNotIn('Overrides for this workspace',
+                         self._show(self.workspace))
+
+    def test_works_outside_a_workspace(self):
+        out = self._show(None)
+        self.assertTrue(out.startswith('# Working with git-p4son\n'))
+        self.assertNotIn('Overrides for this workspace', out)
 
 
 if __name__ == '__main__':

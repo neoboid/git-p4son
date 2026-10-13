@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped
+  instructions, so workspace-specific guidance for agents survives reinstalling the skill
 - `new`, `update` and `review` make far fewer p4 calls: opening files for edit takes a fixed number of calls instead
   of about two per file, and `new --review` adds `#review` as it creates the changelist
 - `sync`, `new` and `update` check which files git tracks with a single listing of the index instead of one git

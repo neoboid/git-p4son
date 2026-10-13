@@ -762,6 +762,9 @@ git p4son skill install    # install the skill for your user
 git p4son skill show       # print the instructions the skill gives to AI agents
 ```
 
+`show` also prints the workspace's own [overrides](#workspace-overrides) from `.git-p4son/skill-override.md`, if it
+has any.
+
 ### The `branch` keyword
 
 Most commands that accept an alias or changelist argument default to the current branch name. You can also pass the
@@ -823,6 +826,13 @@ block `sync`, `new` and `update`.
 The installed file is only a short stub: it tells Claude when the skill applies and to run `git p4son skill show`,
 which prints the full instructions from the installed git-p4son. So the instructions always match your version of
 git-p4son, and upgrading with pip needs no reinstall. Run `git p4son skill show` yourself to read what Claude is told.
+
+### Workspace overrides
+
+To teach Claude something that only holds for one workspace, such as a team's submit conventions, write it in
+`.git-p4son/skill-override.md`. Run inside that workspace, `skill show` prints it after the shipped instructions,
+under a heading saying it takes precedence where the two disagree. Start your own headings at `###`, since they land
+under that `##` heading. The file lives in `.git-p4son/`, so git ignores it and reinstalling the skill leaves it alone.
 
 Claude picks the skill up on its own when you work in a git-p4son workspace. You can also invoke it directly with
 `/git-p4son`.

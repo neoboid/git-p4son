@@ -56,6 +56,18 @@ def prompt_choice(question: str, options: list[str],
     return _ask(f'{question} {rendered}: ', options, default)
 
 
+def prompt_menu(question: str, options: list[tuple[str, str]],
+                default: str | None = None) -> str | None:
+    """Like prompt_choice, but lists each (option, description) on its own line."""
+    names = [name for name, _ in options]
+    width = max(len(name) for name in names)
+    print(question)
+    for name, description in options:
+        print(f'  [{name[0]}]{name[1:]:<{width + 1}}{description}'.rstrip())
+    letters = '/'.join(_shorthand(name, default) for name in names)
+    return _ask(f'Choice [{letters}]: ', names, default)
+
+
 def _path_module_for(*paths: str):
     """Choose a path module that matches the given path strings."""
     if any('\\' in path or re.match(r'^[A-Za-z]:', path) for path in paths):

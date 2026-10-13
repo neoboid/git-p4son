@@ -10,7 +10,7 @@ from git_p4son.alias import (
     alias_delete_command,
     alias_show_command,
 )
-from git_p4son.common import prompt_choice
+from git_p4son.common import prompt_choice, prompt_menu
 
 
 class TestPromptChoice(unittest.TestCase):
@@ -38,6 +38,24 @@ class TestPromptChoice(unittest.TestCase):
     def test_options_need_distinct_first_letters(self):
         with self.assertRaises(ValueError):
             prompt_choice('Pick', ['apple', 'avocado'])
+
+
+class TestPromptMenu(unittest.TestCase):
+    def test_lists_options_with_aligned_descriptions(self):
+        buffer = io.StringIO()
+        with mock.patch('builtins.input', return_value='') as mock_input, \
+                contextlib.redirect_stdout(buffer):
+            result = prompt_menu('Pick one:', [('entire workspace', '//ws/...'),
+                                               ('current', '//ws/sub/...'),
+                                               ('quit', '')],
+                                 'entire workspace')
+        self.assertEqual(result, 'entire workspace')
+        self.assertEqual(buffer.getvalue(), (
+            'Pick one:\n'
+            '  [e]ntire workspace  //ws/...\n'
+            '  [c]urrent           //ws/sub/...\n'
+            '  [q]uit\n'))
+        mock_input.assert_called_once_with('Choice [E/c/q]: ')
 
 
 def _args(workspace_dir='/ws'):

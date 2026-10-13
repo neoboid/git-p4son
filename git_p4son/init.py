@@ -4,7 +4,7 @@ import argparse
 import os
 import shutil
 
-from .common import prompt_choice
+from .common import prompt_choice, prompt_menu
 from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
@@ -42,34 +42,20 @@ def _select_depot_root(client_name: str, cwd: str,
     entire_root = f'//{WORKSPACE_PLACEHOLDER}'
     cwd_root = _compute_cwd_depot_root(cwd, p4_workspace_root)
 
+    options = [('entire workspace',
+                f'{expand_depot_root(entire_root, client_name)}/...')]
+    if cwd_root:
+        options.append(('current directory',
+                        f'{expand_depot_root(cwd_root, client_name)}/...'))
+    options.append(('quit', ''))
+
     while True:
         print()
-        print('Select the depot path that git-p4son should sync:')
-        print(f'  1. Entire workspace: '
-              f'{expand_depot_root(entire_root, client_name)}/...')
-        if cwd_root:
-            print(f'  2. Current directory: '
-                  f'{expand_depot_root(cwd_root, client_name)}/...')
-            abort_num = '3'
-        else:
-            abort_num = '2'
-        print(f'  {abort_num}. Abort')
-        print()
-
-        try:
-            choice = input('Choice [1]: ').strip()
-        except EOFError:
-            print()
+        choice = prompt_menu('Select the depot path that git-p4son should sync:',
+                             options, 'entire workspace')
+        if choice is None or choice == 'quit':
             return None
-        if choice == '' or choice == '1':
-            depot_root = entire_root
-        elif choice == '2' and cwd_root:
-            depot_root = cwd_root
-        elif choice == abort_num:
-            return None
-        else:
-            print(f'Invalid choice: {choice}')
-            continue
+        depot_root = entire_root if choice == 'entire workspace' else cwd_root
 
         resolved = expand_depot_root(depot_root, client_name)
         if p4_depot_root_exists(resolved, cwd):

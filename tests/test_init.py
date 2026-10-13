@@ -71,7 +71,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         self.assertIsNone(result)
 
     @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
-    @mock.patch('builtins.input', return_value='1')
+    @mock.patch('builtins.input', return_value='')
     def test_entire_workspace_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
         result = _select_depot_root('my-ws', '/ws/sub', '/ws')
@@ -80,7 +80,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         mock_validate.assert_called_once_with('//my-ws', '/ws/sub')
 
     @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
-    @mock.patch('builtins.input', return_value='2')
+    @mock.patch('builtins.input', return_value='c')
     def test_current_directory_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
         result = _select_depot_root('my-ws', '/ws/Engine/Source', '/ws')

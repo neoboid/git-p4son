@@ -641,27 +641,18 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         log.success(args.message)
 
-    if args.command == 'sync':
-        return sync_command(args)
-    elif args.command == 'sync-split-users':
-        return sync_split_users_command(args)
-    elif args.command == 'new':
-        return new_command(args)
-    elif args.command == 'update':
-        return update_command(args)
-    elif args.command == 'list-changes':
-        return list_changes_command(args)
-    elif args.command == 'alias':
-        return alias_command(args)
-    elif args.command == 'review':
-        return review_command(args)
-    elif args.command == 'writable':
-        return writable_command(args)
-    elif args.command == '_sequence-editor':
-        return sequence_editor_command(args)
-    else:
-        log.error(f'Unknown command: {args.command}')
-        return 1
+    commands = {
+        'sync': sync_command,
+        'sync-split-users': sync_split_users_command,
+        'new': new_command,
+        'update': update_command,
+        'list-changes': list_changes_command,
+        'alias': alias_command,
+        'review': review_command,
+        'writable': writable_command,
+        '_sequence-editor': sequence_editor_command,
+    }
+    return commands[args.command](args)
 
 
 def main() -> int:

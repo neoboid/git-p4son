@@ -606,21 +606,13 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
     log.success(args.workspace_dir)
 
-    if args.command in ('new', 'review') and getattr(args, 'no_alias', False):
+    if args.command == 'new' and args.no_alias:
         args.alias = None
 
-    branch_attr = None
-    if args.command in ('new', 'review') and getattr(args, 'alias', None) == 'branch':
-        branch_attr = 'alias'
-    elif args.command == 'update' and args.changelist == 'branch':
-        branch_attr = 'changelist'
-    elif (args.command == 'alias'
-          and args.alias_action in ('show', 'new', 'delete')
-          and args.alias == 'branch'
-          and not getattr(args, 'all', False)):
-        branch_attr = 'alias'
-
-    if branch_attr:
+    # Every alias argument, and update's changelist, defaults to the branch keyword.
+    branch_attr = 'changelist' if args.command == 'update' else 'alias'
+    if (getattr(args, branch_attr, None) == 'branch'
+            and not getattr(args, 'all', False)):
         log.heading('Resolving alias from current git branch')
         resolved = _resolve_branch_keyword(args.workspace_dir)
         if resolved is None:

@@ -607,7 +607,7 @@ def run_command(args: argparse.Namespace) -> int:
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
-    if args.command in ('new', 'update', 'review') and args.file is not None:
+    if getattr(args, 'file', None) is not None:
         args.file = os.path.join(args.invocation_dir, args.file)
         log.heading('Reading message from file')
         try:

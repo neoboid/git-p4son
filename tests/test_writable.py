@@ -200,6 +200,17 @@ class TestWritableCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.writable.p4_get_opened_files')
     @mock.patch('git_p4son.writable.get_client_spec')
+    def test_apply_off_matches_opened_files_ignoring_case(self, mock_spec,
+                                                          mock_opened):
+        mock_spec.return_value = mock.Mock(allwrite=False)
+        mock_spec.return_value.name = 'ws'
+        mock_opened.return_value = [('SRC/Open.cpp', 'modify')]
+        self._set_all(stat.S_IRUSR | stat.S_IWUSR)
+        self.assertEqual(self._run('apply'), 0)
+        self.assertTrue(self._writable(self.opened))
+
+    @mock.patch('git_p4son.writable.p4_get_opened_files')
+    @mock.patch('git_p4son.writable.get_client_spec')
     def test_apply_off_leaves_allwrite_workspace_alone(self, mock_spec,
                                                        mock_opened):
         mock_spec.return_value = mock.Mock(allwrite=True)

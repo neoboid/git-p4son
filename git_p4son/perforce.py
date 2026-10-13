@@ -4,7 +4,7 @@ import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import IO, Callable
+from typing import IO, Callable, TypeVar
 
 from .common import (
     CommandError,
@@ -276,9 +276,11 @@ def get_opened_files(filenames: list[str],
             for filename, record in _fstat_records(res, workspace_dir)}
 
 
-def opened_lookup(opened: dict[str, tuple[str, str]]
-                  ) -> Callable[[str], tuple[str, str] | None]:
-    """Look files up in get_opened_files' result, ignoring case where there is no exact match."""
+_State = TypeVar('_State')
+
+
+def opened_lookup(opened: dict[str, _State]) -> Callable[[str], _State | None]:
+    """Look files up in a map of opened files, ignoring case where there is no exact match."""
     # p4 may spell a path in the client's case on case-insensitive file systems.
     folded = {path.casefold(): state for path, state in opened.items()}
     return lambda filename: (opened.get(filename)

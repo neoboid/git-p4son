@@ -5,11 +5,12 @@ import os
 import stat
 import time
 from datetime import timedelta
+from typing import Callable
 
 from .config import load_config, save_config
 from .git import list_tracked_files
 from .log import log
-from .perforce import get_client_spec, p4_get_opened_files
+from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
 
 
 def is_writable_mode(workspace_dir: str) -> bool:
@@ -58,10 +59,11 @@ def make_read_only(paths: list[str]) -> int:
     return _set_user_write(paths, False)
 
 
-def _tracked_paths(workspace_dir: str) -> list[str]:
-    """Every file tracked by git, as absolute paths."""
+def _tracked_paths(workspace_dir: str,
+                   skip: Callable[[str], object] = lambda rel: False) -> list[str]:
+    """Every file tracked by git that skip leaves in, as absolute paths."""
     return [os.path.join(workspace_dir, rel)
-            for rel in list_tracked_files(workspace_dir)]
+            for rel in list_tracked_files(workspace_dir) if not skip(rel)]
 
 
 def _timed(action, paths: list[str]) -> int:
@@ -97,14 +99,11 @@ def _apply_off(workspace_dir: str) -> int:
 
     # Opened files keep their write bit. The whole client is queried, not just the depot root.
     log.heading('Finding files opened in Perforce')
-    opened = {os.path.normcase(path) for path, _change in
-              p4_get_opened_files(f'//{spec.name}', workspace_dir)}
+    opened = dict(p4_get_opened_files(f'//{spec.name}', workspace_dir))
     log.success(f'{len(opened)} opened')
 
     log.heading('Making git-tracked files read-only')
-    paths = [os.path.join(workspace_dir, rel)
-             for rel in list_tracked_files(workspace_dir)
-             if os.path.normcase(rel) not in opened]
+    paths = _tracked_paths(workspace_dir, opened_lookup(opened))
     changed = _timed(make_read_only, paths)
     log.success(f'{changed} of {len(paths)} tracked files changed')
     return 0

@@ -250,13 +250,8 @@ def run_with_stream_output(command: list[str], cwd: str = '.',
 
             returncode = process.wait()
 
-        except KeyboardInterrupt:
-            log.stop_spinner()
-            log.error("CTRL-C pressed, terminate subprocess")
-            _terminate(process)
-            sys.exit(1)
-        except Exception:
-            # on_output raised: stop the subprocess rather than leave it running unobserved.
+        except BaseException:
+            # Ctrl-C or on_output raised: stop the subprocess rather than leave it running unobserved.
             log.stop_spinner()
             _terminate(process)
             raise

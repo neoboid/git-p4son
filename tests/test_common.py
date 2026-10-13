@@ -401,6 +401,24 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 30)
         mock_log.stop_spinner.assert_called_once()
 
+    def test_ctrl_c_terminates_process_and_reaches_the_caller(self):
+        """Ctrl-C stops the command and propagates, so cli.py reports it like any other."""
+        code = ('import sys, time\n'
+                'print("line", flush=True)\n'
+                'time.sleep(60)\n')
+
+        def callback(line, stream):
+            raise KeyboardInterrupt
+
+        start = time.monotonic()
+        with mock.patch('git_p4son.common.log') as mock_log:
+            with self.assertRaises(KeyboardInterrupt):
+                run_with_stream_output([sys.executable, '-c', code],
+                                       on_output=callback)
+        self.assertLess(time.monotonic() - start, 30)
+        mock_log.stop_spinner.assert_called_once()
+        mock_log.error.assert_not_called()
+
 
 class TestMissingExecutable(unittest.TestCase):
     def test_run_stops_spinner_and_raises(self):

@@ -163,9 +163,11 @@ class TestAskYesNo(unittest.TestCase):
     @mock.patch('builtins.input', return_value='')
     def test_question_and_default_are_shown_in_the_prompt(self, mock_input):
         _ask_yes_no('Keep it?', True)
-        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [Y/n]: ')
+        self.assertEqual(mock_input.call_args.args[0],
+                         'Keep it? [Y]es / [n]o: ')
         _ask_yes_no('Keep it?', False)
-        self.assertEqual(mock_input.call_args.args[0], 'Keep it? [y/N]: ')
+        self.assertEqual(mock_input.call_args.args[0],
+                         'Keep it? [y]es / [N]o: ')
 
     @mock.patch('builtins.input', side_effect=EOFError)
     def test_eof_returns_none(self, _input):

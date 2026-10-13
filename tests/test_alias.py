@@ -25,6 +25,20 @@ class TestPromptChoice(unittest.TestCase):
             self.assertEqual(
                 prompt_choice('Delete', ['all', 'quit']), 'quit')
 
+    def test_empty_answer_picks_the_default_shown_in_capitals(self):
+        with mock.patch('builtins.input', return_value='') as mock_input:
+            self.assertEqual(prompt_choice('Keep?', ['yes', 'no'], 'no'), 'no')
+        mock_input.assert_called_once_with('Keep? [y]es / [N]o: ')
+
+    def test_empty_answer_without_default_asks_again(self):
+        with mock.patch('builtins.input', side_effect=['', 'y']) as mock_input:
+            self.assertEqual(prompt_choice('Keep?', ['yes', 'no']), 'yes')
+        self.assertEqual(mock_input.call_count, 2)
+
+    def test_options_need_distinct_first_letters(self):
+        with self.assertRaises(ValueError):
+            prompt_choice('Pick', ['apple', 'avocado'])
+
 
 def _args(workspace_dir='/ws'):
     return mock.Mock(workspace_dir=workspace_dir)

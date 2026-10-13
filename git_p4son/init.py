@@ -4,6 +4,7 @@ import argparse
 import os
 import shutil
 
+from .common import prompt_choice
 from .config import save_config
 from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
 from .log import log
@@ -111,20 +112,8 @@ def _configure_depot_root(client_name: str, cwd: str,
 
 def _ask_yes_no(question: str, current: bool) -> bool | None:
     """Ask a yes/no question, where an empty answer keeps current; None on EOF."""
-    choices = '[Y/n]' if current else '[y/N]'
-    while True:
-        try:
-            answer = input(f'{question} {choices}: ').strip().lower()
-        except EOFError:
-            print()
-            return None
-        if answer == '':
-            return current
-        if answer in ('y', 'yes'):
-            return True
-        if answer in ('n', 'no'):
-            return False
-        print('Please enter y or n')
+    answer = prompt_choice(question, ['yes', 'no'], 'yes' if current else 'no')
+    return None if answer is None else answer == 'yes'
 
 
 def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:

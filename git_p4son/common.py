@@ -21,24 +21,39 @@ def _command_env(cwd: str, extra: dict[str, str] | None) -> dict[str, str]:
     return {**os.environ, 'PWD': os.path.abspath(cwd), **(extra or {})}
 
 
-def prompt_choice(prefix: str, options: list[str]) -> str | None:
-    """Prompt until the response matches an option or its first letter; None on EOF."""
+def _ask(prompt: str, options: list[str], default: str | None) -> str | None:
+    """Ask until the response is an option or its first letter; empty picks default; None on EOF."""
     shorthands = {option[0]: option for option in options}
-    rendered = ' / '.join(f'[{option[0]}]{option[1:]}' for option in options)
+    if len(shorthands) != len(options):
+        raise ValueError(f'options need distinct first letters: {options}')
     keys = list(shorthands)
     while True:
         try:
-            response = input(f'{prefix} {rendered}: ').strip().lower()
+            response = input(prompt).strip().lower()
         except EOFError:
             print()
             return None
 
+        if not response and default is not None:
+            return default
         if response in shorthands:
             return shorthands[response]
-        elif response in options:
+        if response in options:
             return response
-        else:
-            print('Please enter ' + ', '.join(keys[:-1]) + f' or {keys[-1]}')
+        print('Please enter ' + ', '.join(keys[:-1]) + f' or {keys[-1]}')
+
+
+def _shorthand(option: str, default: str | None) -> str:
+    """The option's letter, capitalized when it is the default."""
+    return option[0].upper() if option == default else option[0]
+
+
+def prompt_choice(question: str, options: list[str],
+                  default: str | None = None) -> str | None:
+    """Ask for one of options, listed inline, by name or first letter; empty picks default; None on EOF."""
+    rendered = ' / '.join(f'[{_shorthand(option, default)}]{option[1:]}'
+                          for option in options)
+    return _ask(f'{question} {rendered}: ', options, default)
 
 
 def _path_module_for(*paths: str):

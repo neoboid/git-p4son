@@ -170,7 +170,7 @@ class TestP4ClientSpec(unittest.TestCase):
 
 
 class TestP4SyncPreview(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_returns_local_file_paths(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - added as /ws/foo.txt',
@@ -184,7 +184,7 @@ class TestP4SyncPreview(unittest.TestCase):
             P4SyncPreviewFile(mode='del', filepath='/ws/old.txt'),
         ])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_empty_sync(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/...@100 - file(s) up-to-date.',
@@ -192,7 +192,7 @@ class TestP4SyncPreview(unittest.TestCase):
         result = p4_sync_preview(100, '//depot', '/ws')
         self.assertEqual(result, [])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_passes_sync_n_flag(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
         p4_sync_preview(100, '//depot', '/ws')
@@ -200,7 +200,7 @@ class TestP4SyncPreview(unittest.TestCase):
         self.assertEqual(
             cmd, ['p4', '-L', 'en', 'sync', '-n', '//depot/...@100'])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_skips_unparsable_lines(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - added as /ws/foo.txt',
@@ -367,7 +367,7 @@ class TestGetExistingP4Users(unittest.TestCase):
 
 
 class TestP4Sync(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run_with_output',
+    @mock.patch('git_p4son.perforce.run_with_stream_output',
                 return_value=mock.Mock(elapsed=None))
     def test_success(self, mock_rwo):
         p4_sync(12345, '//myclient', '/ws')
@@ -375,7 +375,7 @@ class TestP4Sync(unittest.TestCase):
                          ['p4', '-L', 'en', 'sync', '//myclient/...@12345'])
         self.assertFalse(mock_rwo.call_args.kwargs['keep_stdout'])
 
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_clobber_errors_raise_with_the_refused_files(self, mock_rwo):
         mock_rwo.side_effect = RunError(
             'p4 sync failed', returncode=1,
@@ -386,7 +386,7 @@ class TestP4Sync(unittest.TestCase):
         self.assertEqual(ctx.exception.refused, ['/ws/a.txt', '/ws/b.txt'])
         self.assertEqual(ctx.exception.returncode, 1)
 
-    @mock.patch('git_p4son.perforce.run_with_output')
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_other_errors_raise_as_they_are(self, mock_rwo):
         mock_rwo.side_effect = RunError(
             'p4 sync failed', returncode=1, stderr=['some other error'])

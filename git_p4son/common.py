@@ -100,7 +100,7 @@ class RunError(CommandError):
 
 @dataclass
 class RunResult:
-    """A finished command's exit code and output; elapsed is set by run_with_output."""
+    """A finished command's exit code and output; elapsed is set by run_with_stream_output."""
 
     returncode: int
     stdout: list[str] | bytes
@@ -189,10 +189,10 @@ def _terminate(process: subprocess.Popen) -> None:
         process.kill()
 
 
-def run_with_output(command: list[str], cwd: str = '.',
-                    on_output: Callable[..., None] | None = None,
-                    env: dict[str, str] | None = None,
-                    keep_stdout: bool = True) -> RunResult:
+def run_with_stream_output(command: list[str], cwd: str = '.',
+                           on_output: Callable[..., None] | None = None,
+                           env: dict[str, str] | None = None,
+                           keep_stdout: bool = True) -> RunResult:
     """Run a command, passing each output line and its stream to on_output as it is written.
 
     An exception raised from on_output terminates the command and propagates. Without keep_stdout,

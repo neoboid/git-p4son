@@ -88,8 +88,8 @@ processes (`ps` or `tasklist`), and the check `sync_preflight` runs first to ref
 directory, and `show` prints the full agent instructions shipped in `skill/git-p4son.md`. The stub only tells the agent
 to run `skill show`, so the instructions follow the installed version. `init` offers the install.
 
-**`common.py`** provides shared utilities: workspace detection (walks up directory tree for `.git`), subprocess execution
-with timing (`run()`), and real-time output streaming via threading (`run_with_output()`).
+**`common.py`** provides shared utilities: subprocess execution (`run()`), real-time output streaming via threading
+(`run_with_stream_output()`, used by `p4 sync`), workspace-relative path normalization, and interactive prompts.
 
 ## Python Version
 

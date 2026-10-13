@@ -12,7 +12,7 @@ from .common import (
     RunResult,
     normalize_workspace_path,
     run,
-    run_with_output,
+    run_with_stream_output,
 )
 from .log import log
 
@@ -468,8 +468,8 @@ def _run_p4_sync(args: list[str], workspace_dir: str,
                  processor: P4SyncOutputProcessor,
                  keep_stdout: bool = True) -> RunResult:
     """Run a p4 sync with processor watching its output, then log how long it took."""
-    result = run_with_output([*_P4, 'sync', *args], cwd=workspace_dir,
-                             on_output=processor, keep_stdout=keep_stdout)
+    result = run_with_stream_output([*_P4, 'sync', *args], cwd=workspace_dir,
+                                    on_output=processor, keep_stdout=keep_stdout)
     if result.elapsed:
         log.elapsed(result.elapsed)
     return result

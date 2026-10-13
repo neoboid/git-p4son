@@ -15,7 +15,7 @@ from git_p4son.common import (
     branch_to_alias,
     join_command_line,
     run,
-    run_with_output,
+    run_with_stream_output,
 )
 from git_p4son.git import (
     _get_rebase_branch,
@@ -325,7 +325,7 @@ class TestRunWithOutput(unittest.TestCase):
         mock_process.__exit__ = mock.Mock(return_value=False)
         mock_popen_cls.return_value = mock_process
 
-        result = run_with_output(['git', 'status'], cwd='/tmp')
+        result = run_with_stream_output(['git', 'status'], cwd='/tmp')
         call = mock_popen_cls.call_args
         self.assertEqual(call.args, (['git', 'status'],))
         self.assertEqual(call.kwargs['cwd'], '/tmp')
@@ -338,7 +338,7 @@ class TestRunWithOutput(unittest.TestCase):
     def test_without_keep_stdout_lines_reach_only_the_callback(self):
         seen = []
         with mock.patch('git_p4son.common.log'):
-            result = run_with_output(
+            result = run_with_stream_output(
                 [sys.executable, '-c', 'print("one"); print("two")'],
                 on_output=lambda line, stream: seen.append(line),
                 keep_stdout=False)
@@ -356,7 +356,7 @@ class TestRunWithOutput(unittest.TestCase):
         mock_popen_cls.return_value = mock_process
 
         callback = mock.Mock()
-        run_with_output(['echo', 'hello'], on_output=callback)
+        run_with_stream_output(['echo', 'hello'], on_output=callback)
         callback_lines = [call.kwargs.get('line', call.args[0] if call.args else None)
                           for call in callback.call_args_list]
         self.assertIn('hello', callback_lines)
@@ -373,8 +373,8 @@ class TestRunWithOutput(unittest.TestCase):
         def callback(line, stream):
             callback_lines.append(line)
 
-        result = run_with_output([sys.executable, '-c', code],
-                                 on_output=callback)
+        result = run_with_stream_output([sys.executable, '-c', code],
+                                        on_output=callback)
 
         self.assertEqual(result.returncode, 0)
         self.assertEqual(len(result.stdout), 5000)
@@ -395,8 +395,8 @@ class TestRunWithOutput(unittest.TestCase):
         start = time.monotonic()
         with mock.patch('git_p4son.common.log') as mock_log:
             with self.assertRaises(CommandError) as ctx:
-                run_with_output([sys.executable, '-c', code],
-                                on_output=callback)
+                run_with_stream_output([sys.executable, '-c', code],
+                                       on_output=callback)
         self.assertEqual(str(ctx.exception), 'abort on bad')
         self.assertLess(time.monotonic() - start, 30)
         mock_log.stop_spinner.assert_called_once()
@@ -409,10 +409,10 @@ class TestMissingExecutable(unittest.TestCase):
                 run(['definitely-not-a-real-binary-p4son'])
         mock_log.stop_spinner.assert_called_once()
 
-    def test_run_with_output_stops_spinner_and_raises(self):
+    def test_run_with_stream_output_stops_spinner_and_raises(self):
         with mock.patch('git_p4son.common.log') as mock_log:
             with self.assertRaises(FileNotFoundError):
-                run_with_output(['definitely-not-a-real-binary-p4son'])
+                run_with_stream_output(['definitely-not-a-real-binary-p4son'])
         mock_log.stop_spinner.assert_called_once()
 
 
@@ -431,8 +431,8 @@ class TestSubprocessEncoding(unittest.TestCase):
             run([sys.executable, '-c', code], text=False)
         self.assertEqual(ctx.exception.stderr, ['the reason'])
 
-    def test_run_with_output_decodes_utf8(self):
-        result = run_with_output([sys.executable, '-c', self._CODE])
+    def test_run_with_stream_output_decodes_utf8(self):
+        result = run_with_stream_output([sys.executable, '-c', self._CODE])
         self.assertEqual(result.stdout, ['bäck'])
 
 

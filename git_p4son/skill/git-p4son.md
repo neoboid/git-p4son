@@ -102,6 +102,10 @@ git rebase main
 ```
 
 - `sync 12345` syncs to a specific CL. Syncing backwards needs `--force`; only do that when the user asks.
+- Changelists submitted by the split users each get a sync commit of their own, so they stand apart on `main`
+  (`git p4son sync-split-users` lists them). When the user asks to split out someone else's changelists too, pass
+  `-u <p4 user>` for that sync, and preview the resulting sync sequence with `--dry-run`. Add them for good with
+  `sync-split-users add` only when the user asks for that.
 - If the workspace was synced by another tool, run `git p4son sync <that CL>` so git records the same state before
   you branch.
 - A sync can take a long time on a big workspace. Allow for it rather than giving up early.

@@ -34,28 +34,28 @@ def regular_file_mode(path: str) -> int | None:
     return stat.S_IMODE(st.st_mode)
 
 
-def make_writable(paths: list[str]) -> int:
-    """Add user write permission to each regular file lacking it; returns how many changed."""
+def _set_user_write(paths: list[str], writable: bool) -> int:
+    """Set or clear user write permission on each regular file; returns how many changed."""
     changed = 0
     for path in paths:
         mode = regular_file_mode(path)
-        if mode is None or mode & stat.S_IWUSR:
+        if mode is None:
             continue
-        os.chmod(path, mode | stat.S_IWUSR)
-        changed += 1
+        new_mode = mode | stat.S_IWUSR if writable else mode & ~stat.S_IWUSR
+        if new_mode != mode:
+            os.chmod(path, new_mode)
+            changed += 1
     return changed
+
+
+def make_writable(paths: list[str]) -> int:
+    """Add user write permission to each regular file lacking it; returns how many changed."""
+    return _set_user_write(paths, True)
 
 
 def make_read_only(paths: list[str]) -> int:
     """Remove user write permission from each regular file having it; returns how many changed."""
-    changed = 0
-    for path in paths:
-        mode = regular_file_mode(path)
-        if mode is None or not mode & stat.S_IWUSR:
-            continue
-        os.chmod(path, mode & ~stat.S_IWUSR)
-        changed += 1
-    return changed
+    return _set_user_write(paths, False)
 
 
 def _tracked_paths(workspace_dir: str) -> list[str]:

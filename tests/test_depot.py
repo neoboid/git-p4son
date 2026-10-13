@@ -2,9 +2,11 @@
 
 import tempfile
 import unittest
+from unittest import mock
 
 from git_p4son.config import save_config
 from git_p4son.depot import (
+    check_depot_root,
     expand_depot_root,
     get_depot_root,
     subdirectory_depot_root,
@@ -62,3 +64,18 @@ class TestSubdirectoryDepotRoot(unittest.TestCase):
     def test_outside_workspace(self):
         result = subdirectory_depot_root('/elsewhere', '/ws')
         self.assertIsNone(result)
+
+
+class TestCheckDepotRoot(unittest.TestCase):
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
+    def test_checks_the_expanded_root(self, mock_exists):
+        self.assertTrue(check_depot_root(
+            '//$(workspace)/Engine', 'my-ws', '/ws'))
+        mock_exists.assert_called_once_with('//my-ws/Engine', '/ws')
+
+    @mock.patch('git_p4son.depot.log')
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=False)
+    def test_logs_an_invalid_root(self, _exists, mock_log):
+        self.assertFalse(check_depot_root('//$(workspace)', 'my-ws', '/ws'))
+        mock_log.error.assert_called_once_with(
+            'Depot root //my-ws/... is not valid')

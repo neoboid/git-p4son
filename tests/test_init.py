@@ -55,7 +55,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         result = _select_depot_root('client', '/ws/sub', '/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('builtins.input', return_value='')
     def test_entire_workspace_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
@@ -64,7 +64,7 @@ class TestSelectDepotRoot(unittest.TestCase):
         self.assertEqual(result, '//$(workspace)')
         mock_validate.assert_called_once_with('//my-ws', '/ws/sub')
 
-    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('builtins.input', return_value='c')
     def test_current_directory_stores_template(self, _input, mock_validate):
         from git_p4son.init import _select_depot_root
@@ -75,7 +75,7 @@ class TestSelectDepotRoot(unittest.TestCase):
 
 
 class TestConfigureDepotRoot(unittest.TestCase):
-    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot')
     @mock.patch('git_p4son.init.save_config')
     def test_existing_valid_root_skips_save(self, mock_save, mock_get, mock_validate):
@@ -84,7 +84,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
         mock_save.assert_not_called()
 
     @mock.patch('git_p4son.init._select_depot_root', return_value='//depot/new')
-    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=False)
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=False)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot/old')
     @mock.patch('git_p4son.init.save_config')
     def test_existing_invalid_root_prompts_and_saves(self, mock_save, mock_get,
@@ -111,7 +111,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
         self.assertFalse(result)
         mock_save.assert_not_called()
 
-    @mock.patch('git_p4son.init.p4_depot_root_exists', return_value=True)
+    @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root',
                 return_value='//$(workspace)/Engine')
     @mock.patch('git_p4son.init.save_config')

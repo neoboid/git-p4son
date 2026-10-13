@@ -8,12 +8,13 @@ from .common import prompt_choice, prompt_menu
 from .config import save_config
 from .depot import (
     WORKSPACE_DEPOT_ROOT,
+    check_depot_root,
     expand_depot_root,
     get_depot_root,
     subdirectory_depot_root,
 )
 from .log import log
-from .perforce import get_client_spec, p4_depot_root_exists
+from .perforce import get_client_spec
 from .skill import claude_config_dir, install_skill, is_skill_installed
 from .git import (
     add_files,
@@ -39,10 +40,8 @@ def _select_depot_root(client_name: str, cwd: str,
     cwd_root = subdirectory_depot_root(cwd, p4_workspace_root)
     if cwd_root:
         roots['current directory'] = cwd_root
-    resolved_roots = {name: expand_depot_root(root, client_name)
-                      for name, root in roots.items()}
-    options = [(name, f'{resolved}/...')
-               for name, resolved in resolved_roots.items()] + [('quit', '')]
+    options = [(name, f'{expand_depot_root(root, client_name)}/...')
+               for name, root in roots.items()] + [('quit', '')]
 
     while True:
         print()
@@ -50,12 +49,8 @@ def _select_depot_root(client_name: str, cwd: str,
                              options, 'entire workspace')
         if choice is None or choice == 'quit':
             return None
-
-        resolved = resolved_roots[choice]
-        if p4_depot_root_exists(resolved, cwd):
+        if check_depot_root(roots[choice], client_name, cwd):
             return roots[choice]
-
-        log.error(f'Depot root {resolved}/... is not valid')
 
 
 def _configure_depot_root(client_name: str, cwd: str,
@@ -64,14 +59,12 @@ def _configure_depot_root(client_name: str, cwd: str,
     log.heading('Finding git-p4son depot root')
     depot_root = get_depot_root(cwd)
     if depot_root:
-        resolved = expand_depot_root(depot_root, client_name)
-        log.success(f'{resolved}/...')
+        log.success(f'{expand_depot_root(depot_root, client_name)}/...')
 
         log.heading('Validating depot root')
-        if p4_depot_root_exists(resolved, cwd):
+        if check_depot_root(depot_root, client_name, cwd):
             log.success('all good')
             return True
-        log.error(f'{resolved}/... is not valid')
     else:
         log.warning('no root configured')
 

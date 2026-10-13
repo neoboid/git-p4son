@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from .common import normalize_workspace_path
 from .config import load_config
 from .log import log
-from .perforce import P4ClientSpec, get_client_spec
+from .perforce import P4ClientSpec, get_client_spec, p4_depot_root_exists
 
 # Substituted with the client name on each use, so the config survives a workspace rename.
 WORKSPACE_PLACEHOLDER = '$(workspace)'
@@ -29,6 +29,15 @@ def subdirectory_depot_root(directory: str, workspace_root: str) -> str | None:
 def expand_depot_root(depot_root: str, workspace_name: str) -> str:
     """Substitute the live workspace name for the $(workspace) placeholder."""
     return depot_root.replace(WORKSPACE_PLACEHOLDER, workspace_name)
+
+
+def check_depot_root(depot_root: str, workspace_name: str, workspace_dir: str) -> bool:
+    """Report whether p4 accepts the expanded depot root, logging an error if not."""
+    resolved = expand_depot_root(depot_root, workspace_name)
+    if p4_depot_root_exists(resolved, workspace_dir):
+        return True
+    log.error(f'Depot root {resolved}/... is not valid')
+    return False
 
 
 @dataclass

@@ -25,7 +25,6 @@ from .writable import writable_command
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create the main argument parser."""
     parser = argparse.ArgumentParser(
         prog='git-p4son',
         description='Utility for keeping a Perforce workspace and local git repo in sync',
@@ -65,7 +64,6 @@ Examples:
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
-        default=False,
         help='Show verbose output (commands, elapsed times, raw subprocess output)'
     )
 
@@ -91,7 +89,6 @@ Examples:
     sync_parser.add_argument(
         'changelist',
         nargs='*',
-        default=[],
         metavar='CHANGELIST',
         help='Changelist number(s) to sync, "last-synced" to re-sync the last synced changelist, '
              'or "head" to sync to the latest changelist. Give several strictly increasing '
@@ -117,7 +114,6 @@ Examples:
     sync_parser.add_argument(
         '-u', '--split-user',
         action='append',
-        default=None,
         metavar='NAME',
         help='Also split out this Perforce user\'s changelists into commits '
              'of their own, on top of the configured split users. Repeat to '
@@ -196,12 +192,10 @@ Examples:
     new_parser_message = new_parser.add_mutually_exclusive_group()
     new_parser_message.add_argument(
         '-m', '--message',
-        default=None,
         help='Changelist description message (defaults to HEAD commit subject)'
     )
     new_parser_message.add_argument(
         '-F', '--file',
-        default=None,
         help='Read the changelist description message from the given file'
     )
     new_parser.add_argument(
@@ -277,12 +271,10 @@ Examples:
     update_parser_message = update_parser.add_mutually_exclusive_group()
     update_parser_message.add_argument(
         '-m', '--message',
-        default=None,
         help='Replace the changelist description message above the commit list'
     )
     update_parser_message.add_argument(
         '-F', '--file',
-        default=None,
         help='Replace the changelist description message above the commit list '
              'with the contents of the given file'
     )
@@ -429,12 +421,10 @@ Examples:
     review_parser_message = review_parser.add_mutually_exclusive_group()
     review_parser_message.add_argument(
         '-m', '--message',
-        default=None,
         help='Changelist description message (defaults to HEAD commit subject)'
     )
     review_parser_message.add_argument(
         '-F', '--file',
-        default=None,
         help='Read the changelist description message from the given file'
     )
     review_parser.add_argument(
@@ -579,7 +569,6 @@ _COMPLETION_FILES = {
 
 
 def completion_command(args: argparse.Namespace) -> int:
-    """Print path to a shell completion script."""
     filename = _COMPLETION_FILES[args.shell]
     completions_dir = files('git_p4son') / 'completions'
 
@@ -656,7 +645,6 @@ def run_command(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    """Main entry point for the CLI."""
     # Handle 'complete' before argparse to avoid flag/word conflicts
     if len(sys.argv) >= 2 and sys.argv[1] == 'complete':
         words = sys.argv[2:]
@@ -687,9 +675,8 @@ def main() -> int:
         exit_code = run_command(args)
 
         if exit_code == 0 and getattr(args, 'sleep', None) is not None:
-            seconds = args.sleep
-            log.heading(f'Sleeping for {seconds} seconds')
-            time.sleep(seconds)
+            log.heading(f'Sleeping for {args.sleep} seconds')
+            time.sleep(args.sleep)
             log.success('awake again')
 
         return exit_code
@@ -697,9 +684,8 @@ def main() -> int:
         log.error('\nOperation cancelled by user')
         return 1
     except RunError as e:
-        if e.stderr:
-            for line in e.stderr:
-                log.error(line)
+        for line in e.stderr:
+            log.error(line)
         log.error(f'Process failed with return code {e.returncode}')
         return e.returncode
     except CommandError as e:

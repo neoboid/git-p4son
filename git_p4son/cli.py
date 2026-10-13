@@ -160,6 +160,7 @@ Examples:
         'changelists sync gives a git commit each, holding nothing but that '
         'change. Without an action, lists them.'
     )
+    split_users_parser.set_defaults(func=sync_split_users_command)
     split_users_subparsers = split_users_parser.add_subparsers(
         dest='split_users_action',
         help='Available split user actions',
@@ -604,7 +605,6 @@ def run_command(args: argparse.Namespace) -> int:
     if hasattr(args, 'func'):
         return args.func(args)
     commands = {
-        'sync-split-users': sync_split_users_command,
         'new': new_command,
         'update': update_command,
         'list-changes': list_changes_command,

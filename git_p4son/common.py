@@ -21,11 +21,6 @@ def _command_env(cwd: str, extra: dict[str, str] | None) -> dict[str, str]:
     return {**os.environ, 'PWD': os.path.abspath(cwd), **(extra or {})}
 
 
-def branch_to_alias(branch_name: str) -> str:
-    """Sanitize a branch name for use as an alias filename."""
-    return branch_name.replace('/', '-')
-
-
 def prompt_choice(prefix: str, options: list[str]) -> str | None:
     """Prompt until the response matches an option or its first letter; None on EOF."""
     shorthands = {option[0]: option for option in options}

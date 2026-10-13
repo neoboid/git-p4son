@@ -12,7 +12,6 @@ from git_p4son.common import (
     CommandError,
     RunError,
     RunResult,
-    branch_to_alias,
     join_command_line,
     run,
     run_with_stream_output,
@@ -165,17 +164,6 @@ class TestGetCurrentBranchDuringRebase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as ws:
             self._repo_mid_rebase(ws, '--apply')
             self.assertEqual(get_current_branch(ws), 'feat/x')
-
-
-class TestBranchToAlias(unittest.TestCase):
-    def test_replaces_slashes(self):
-        self.assertEqual(branch_to_alias('feat/my-feature'), 'feat-my-feature')
-
-    def test_no_slash_passthrough(self):
-        self.assertEqual(branch_to_alias('my-branch'), 'my-branch')
-
-    def test_multiple_slashes(self):
-        self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
 
 
 class TestRunSetsPWD(unittest.TestCase):

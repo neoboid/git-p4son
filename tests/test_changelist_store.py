@@ -6,6 +6,7 @@ import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
+    branch_to_alias,
     check_alias_available,
     check_alias_usable,
     delete_changelist_alias,
@@ -57,6 +58,17 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
         self.assertFalse(
             delete_changelist_alias('../../precious.txt', self.ws))
         self.assertTrue(os.path.exists(outside))
+
+
+class TestBranchToAlias(unittest.TestCase):
+    def test_replaces_slashes(self):
+        self.assertEqual(branch_to_alias('feat/my-feature'), 'feat-my-feature')
+
+    def test_no_slash_passthrough(self):
+        self.assertEqual(branch_to_alias('my-branch'), 'my-branch')
+
+    def test_multiple_slashes(self):
+        self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
 
 
 class TestCheckAliasAvailable(unittest.TestCase):

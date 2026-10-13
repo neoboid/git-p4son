@@ -20,6 +20,11 @@ _WINDOWS_RESERVED_NAMES = frozenset(
     | {f'lpt{i}' for i in range(1, 10)})
 
 
+def branch_to_alias(branch_name: str) -> str:
+    """Sanitize a branch name for use as an alias filename."""
+    return branch_name.replace('/', '-')
+
+
 def validate_alias_name(name: str) -> str | None:
     """Return an error message if alias name is invalid, else None."""
     if not name:

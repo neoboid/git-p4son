@@ -15,8 +15,8 @@ from .alias import alias_command
 from .init import init_command
 from .rebase_todo import sequence_editor_command
 from .review import review_command
-from .changelist_store import RESERVED_KEYWORDS
-from .common import CommandError, RunError, branch_to_alias
+from .changelist_store import RESERVED_KEYWORDS, branch_to_alias
+from .common import CommandError, RunError
 from .git import get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
 from .complete import run_complete

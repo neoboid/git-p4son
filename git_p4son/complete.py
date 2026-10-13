@@ -2,8 +2,7 @@
 
 import argparse
 
-from .changelist_store import list_changelist_aliases
-from .common import branch_to_alias
+from .changelist_store import branch_to_alias, list_changelist_aliases
 from .git import get_current_branch, get_workspace_dir
 from .log import log
 from .sync_split_users import USER_PLACEHOLDER, get_split_users

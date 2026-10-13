@@ -438,6 +438,7 @@ Examples:
         'can be edited without a manual p4 edit. Git-ignored files are left '
         'to Perforce. Without an action, shows whether the mode is on.'
     )
+    writable_parser.set_defaults(func=writable_command)
     writable_subparsers = writable_parser.add_subparsers(
         dest='writable_action',
         help='Available writable actions',
@@ -610,7 +611,6 @@ def run_command(args: argparse.Namespace) -> int:
         return args.func(args)
     commands = {
         'alias': alias_command,
-        'writable': writable_command,
         '_sequence-editor': sequence_editor_command,
     }
     return commands[args.command](args)

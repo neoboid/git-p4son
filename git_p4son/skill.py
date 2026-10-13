@@ -20,6 +20,11 @@ def claude_config_dir() -> str:
             or os.path.join(os.path.expanduser('~'), '.claude'))
 
 
+def is_claude_code_installed() -> bool:
+    """Return whether Claude Code's config directory exists."""
+    return os.path.isdir(claude_config_dir())
+
+
 def skill_path() -> str:
     """Return the path the skill stub is installed to."""
     return os.path.join(claude_config_dir(), 'skills', SKILL_NAME, 'SKILL.md')

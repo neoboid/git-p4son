@@ -15,7 +15,7 @@ from .depot import (
 )
 from .log import log
 from .perforce import get_client_spec
-from .skill import claude_config_dir, install_skill, is_skill_installed
+from .skill import install_skill, is_claude_code_installed, is_skill_installed
 from .git import (
     add_files,
     commit,
@@ -122,7 +122,7 @@ def _configure_split_users(cwd: str) -> None:
 def _configure_claude_skill() -> None:
     """Offer to install or refresh the Claude Code skill, if Claude Code is present."""
     log.heading('Configuring Claude Code skill')
-    if not os.path.isdir(claude_config_dir()):
+    if not is_claude_code_installed():
         log.success('Claude Code not found, skipping')
         return
     if is_skill_installed():

@@ -561,9 +561,8 @@ def _resolve_branch_keyword(workspace_dir: str) -> str | None:
     """Resolve the current git branch to an alias name, or None (with an error printed)."""
     branch = get_current_branch(workspace_dir)
     if not branch:
-        log.error(
-            'Cannot resolve branch name on detached HEAD. '
-            'Use --no-alias or supply an explicit alias name.')
+        log.error('Cannot resolve the branch keyword on a detached HEAD. '
+                  'Name the alias or changelist explicitly.')
         return None
     alias = branch_to_alias(branch)
     if alias in RESERVED_KEYWORDS:

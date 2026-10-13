@@ -400,6 +400,7 @@ Examples:
         'a rebase todo with exec lines that run git p4son new/update '
         'for each commit since the base branch.'
     )
+    review_parser.set_defaults(func=review_command)
     _add_branch_keyword_arg(review_parser, 'alias',
                             'Alias name for the new changelist')
     _add_message_args(
@@ -609,7 +610,6 @@ def run_command(args: argparse.Namespace) -> int:
         return args.func(args)
     commands = {
         'alias': alias_command,
-        'review': review_command,
         'writable': writable_command,
         '_sequence-editor': sequence_editor_command,
     }

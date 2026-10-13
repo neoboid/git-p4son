@@ -33,6 +33,15 @@ def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
                         help=f'{help}. Default is {DEFAULT_BASE_BRANCH}')
 
 
+def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: str,
+                            group: argparse._MutuallyExclusiveGroup | None = None) -> None:
+    """Add an optional positional that defaults to the branch keyword, which run_command resolves."""
+    (group or parser).add_argument(
+        dest, nargs='?', default='branch',
+        help=f'{help}. Defaults to the current branch name')
+    parser.set_defaults(branch_keyword_arg=dest)
+
+
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
                       file_help: str) -> None:
     """Add the mutually exclusive -m/--message and -F/--file options."""
@@ -217,13 +226,8 @@ Examples:
     )
     _add_base_branch(
         new_parser, 'Base branch for enumerating commits and finding changed files')
-    new_parser.add_argument(
-        'alias',
-        nargs='?',
-        default='branch',
-        help='Alias name to save the new changelist number under. '
-             'Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(new_parser, 'alias',
+                            'Alias name to save the new changelist number under')
     new_parser.add_argument(
         '-f', '--force',
         action='store_true',
@@ -270,13 +274,8 @@ Examples:
         'unless -m or -F replaces it. By default also opens changed files '
         'for edit.'
     )
-    update_parser.add_argument(
-        'changelist',
-        nargs='?',
-        default='branch',
-        help='Changelist number or named alias to update. '
-             'Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(update_parser, 'changelist',
+                            'Changelist number or named alias to update')
     _add_message_args(
         update_parser,
         'Replace the changelist description message above the commit list',
@@ -347,12 +346,8 @@ Examples:
         description='Print only the changelist number saved under an alias, '
         'for use in scripts'
     )
-    alias_show_parser.add_argument(
-        'alias',
-        nargs='?',
-        default='branch',
-        help='Alias name to show. Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(alias_show_parser, 'alias',
+                            'Alias name to show')
 
     alias_new_parser = alias_subparsers.add_parser(
         'new',
@@ -364,13 +359,8 @@ Examples:
         'changelist',
         help='Changelist number to save'
     )
-    alias_new_parser.add_argument(
-        'alias',
-        nargs='?',
-        default='branch',
-        help='Alias name to save the changelist number under. '
-             'Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(alias_new_parser, 'alias',
+                            'Alias name to save the changelist number under')
     alias_new_parser.add_argument(
         '-f', '--force',
         action='store_true',
@@ -383,12 +373,8 @@ Examples:
         description='Delete a changelist alias from .git-p4son/changelists/'
     )
     alias_delete_target = alias_delete_parser.add_mutually_exclusive_group()
-    alias_delete_target.add_argument(
-        'alias',
-        nargs='?',
-        default='branch',
-        help='Alias name to delete. Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(alias_delete_parser, 'alias',
+                            'Alias name to delete', group=alias_delete_target)
     alias_delete_target.add_argument(
         '--all',
         action='store_true',
@@ -409,12 +395,8 @@ Examples:
         'a rebase todo with exec lines that run git p4son new/update '
         'for each commit since the base branch.'
     )
-    review_parser.add_argument(
-        'alias',
-        nargs='?',
-        default='branch',
-        help='Alias name for the new changelist. Defaults to the current branch name'
-    )
+    _add_branch_keyword_arg(review_parser, 'alias',
+                            'Alias name for the new changelist')
     _add_message_args(
         review_parser,
         'Changelist description message (defaults to HEAD commit subject)',
@@ -586,9 +568,8 @@ def run_command(args: argparse.Namespace) -> int:
     if args.command == 'new' and args.no_alias:
         args.alias = None
 
-    # Every alias argument, and update's changelist, defaults to the branch keyword.
-    branch_attr = 'changelist' if args.command == 'update' else 'alias'
-    if (getattr(args, branch_attr, None) == 'branch'
+    branch_attr = getattr(args, 'branch_keyword_arg', None)
+    if (branch_attr and getattr(args, branch_attr) == 'branch'
             and not getattr(args, 'all', False)):
         log.heading('Resolving alias from current git branch')
         resolved = _resolve_branch_keyword(args.workspace_dir)

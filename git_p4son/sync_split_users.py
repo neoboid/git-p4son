@@ -25,6 +25,20 @@ def set_split_users(workspace_dir: str, users: list[str]) -> None:
     save_config(workspace_dir, {'sync': {'split-users': users}})
 
 
+def is_self_split(workspace_dir: str) -> bool:
+    """Whether the split users include $(user)."""
+    return USER_PLACEHOLDER in get_split_users(workspace_dir)
+
+
+def set_self_split(workspace_dir: str, enabled: bool) -> None:
+    """Add $(user) after the other split users, or remove it."""
+    users = [user for user in get_split_users(workspace_dir)
+             if user != USER_PLACEHOLDER]
+    if enabled:
+        users.append(USER_PLACEHOLDER)
+    set_split_users(workspace_dir, users)
+
+
 def current_p4_user(workspace_dir: str) -> str | None:
     """The current Perforce user, or None when p4 cannot tell."""
     try:

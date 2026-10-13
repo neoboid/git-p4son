@@ -24,12 +24,7 @@ from .git import (
     is_workspace_dir,
     resolve_editor,
 )
-from .sync_split_users import (
-    USER_PLACEHOLDER,
-    current_p4_user,
-    get_split_users,
-    set_split_users,
-)
+from .sync_split_users import current_p4_user, is_self_split, set_self_split
 from .writable import is_writable_mode, set_writable_mode
 
 
@@ -108,8 +103,7 @@ def _configure_split_users(cwd: str) -> None:
     if not user:
         log.warning('Cannot determine the current Perforce user, skipping')
         return
-    users = get_split_users(cwd)
-    current = USER_PLACEHOLDER in users
+    current = is_self_split(cwd)
     print()
     print('Split users have each of their submitted changelists synced into')
     print('its own commit, so your own submits show up in git as separate')
@@ -119,11 +113,7 @@ def _configure_split_users(cwd: str) -> None:
     if enabled is None or enabled == current:
         log.success(f'{"on" if current else "off"} (unchanged)')
     else:
-        if enabled:
-            users.append(USER_PLACEHOLDER)
-        else:
-            users.remove(USER_PLACEHOLDER)
-        set_split_users(cwd, users)
+        set_self_split(cwd, enabled)
         log.success('on' if enabled else 'off')
     log.info('Split out other users with: '
              'git p4son sync-split-users add NAME')

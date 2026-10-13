@@ -9,6 +9,8 @@ from git_p4son.config import load_config, save_config
 from git_p4son.sync_split_users import (
     USER_PLACEHOLDER,
     get_split_users,
+    is_self_split,
+    set_self_split,
     set_split_users,
     sync_split_users_command,
 )
@@ -56,6 +58,23 @@ class TestSplitUsersConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             save_config(tmpdir, {'sync': {'split-users': ['alice', 1]}})
             self.assertEqual(get_split_users(tmpdir), ['alice'])
+
+
+class TestSelfSplit(unittest.TestCase):
+    def test_enabling_appends_the_placeholder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_split_users(tmpdir, ['bob'])
+            set_self_split(tmpdir, True)
+            self.assertEqual(get_split_users(tmpdir), [
+                             'bob', USER_PLACEHOLDER])
+            self.assertTrue(is_self_split(tmpdir))
+
+    def test_disabling_removes_only_the_placeholder(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_split_users(tmpdir, ['bob', USER_PLACEHOLDER, 'carol'])
+            set_self_split(tmpdir, False)
+            self.assertEqual(get_split_users(tmpdir), ['bob', 'carol'])
+            self.assertFalse(is_self_split(tmpdir))
 
 
 class TestSyncSplitUsersList(unittest.TestCase):

@@ -325,6 +325,7 @@ Examples:
         help='List commit subjects since base branch',
         description='List commit subjects since base branch in chronological order (oldest first)'
     )
+    list_changes_parser.set_defaults(func=list_changes_command)
     _add_base_branch(list_changes_parser, 'Base branch to compare against')
 
     alias_parser = subparsers.add_parser(
@@ -607,7 +608,6 @@ def run_command(args: argparse.Namespace) -> int:
     if hasattr(args, 'func'):
         return args.func(args)
     commands = {
-        'list-changes': list_changes_command,
         'alias': alias_command,
         'review': review_command,
         'writable': writable_command,

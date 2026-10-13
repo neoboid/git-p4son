@@ -299,6 +299,16 @@ class TestRunCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.cli.update_command', return_value=0)
+    def test_update_keeps_message_unset(self, mock_update, _branch, _head, _ws):
+        args = create_parser().parse_args(['update'])
+        result = run_command(args)
+        self.assertIsNone(args.message)
+        _head.assert_not_called()
+        self.assertEqual(result, 0)
+
+    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_message_read_from_file(self, mock_new, _branch, _head, _ws):
         with tempfile.TemporaryDirectory() as tmp:

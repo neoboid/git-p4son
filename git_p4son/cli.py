@@ -49,11 +49,12 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
 
 
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
-                      file_help: str) -> None:
-    """Add the mutually exclusive -m/--message and -F/--file options."""
+                      file_help: str, from_head: bool = False) -> None:
+    """Add -m/--message and -F/--file; with from_head, run_command defaults to the HEAD subject."""
     message = parser.add_mutually_exclusive_group()
     message.add_argument('-m', '--message', help=message_help)
     message.add_argument('-F', '--file', help=file_help)
+    parser.set_defaults(message_from_head=from_head)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -227,7 +228,8 @@ Examples:
     _add_message_args(
         new_parser,
         'Changelist description message (defaults to HEAD commit subject)',
-        'Read the changelist description message from the given file')
+        'Read the changelist description message from the given file',
+        from_head=True)
     new_parser.add_argument(
         '--no-commit-list',
         action='store_true',
@@ -416,7 +418,8 @@ Examples:
     _add_message_args(
         review_parser,
         'Changelist description message (defaults to HEAD commit subject)',
-        'Read the changelist description message from the given file')
+        'Read the changelist description message from the given file',
+        from_head=True)
     _add_base_branch(
         review_parser, 'Base branch to rebase onto and find commits since')
     review_parser.add_argument(
@@ -621,7 +624,7 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         log.success(args.file)
 
-    if args.command in ('new', 'review') and args.message is None:
+    if getattr(args, 'message_from_head', False) and args.message is None:
         log.heading('Resolving message from HEAD commit')
         args.message = get_head_subject(args.workspace_dir)
         if args.message is None:

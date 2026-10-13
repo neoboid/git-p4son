@@ -38,15 +38,14 @@ def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
 def _select_depot_root(client_name: str, cwd: str,
                        p4_workspace_root: str) -> str | None:
     """Interactively select a depot root template to store, or None to abort."""
-    entire_root = f'//{WORKSPACE_PLACEHOLDER}'
+    roots = {'entire workspace': f'//{WORKSPACE_PLACEHOLDER}'}
     cwd_root = _compute_cwd_depot_root(cwd, p4_workspace_root)
-
-    options = [('entire workspace',
-                f'{expand_depot_root(entire_root, client_name)}/...')]
     if cwd_root:
-        options.append(('current directory',
-                        f'{expand_depot_root(cwd_root, client_name)}/...'))
-    options.append(('quit', ''))
+        roots['current directory'] = cwd_root
+    resolved_roots = {name: expand_depot_root(root, client_name)
+                      for name, root in roots.items()}
+    options = [(name, f'{resolved}/...')
+               for name, resolved in resolved_roots.items()] + [('quit', '')]
 
     while True:
         print()
@@ -54,11 +53,10 @@ def _select_depot_root(client_name: str, cwd: str,
                              options, 'entire workspace')
         if choice is None or choice == 'quit':
             return None
-        depot_root = entire_root if choice == 'entire workspace' else cwd_root
 
-        resolved = expand_depot_root(depot_root, client_name)
+        resolved = resolved_roots[choice]
         if p4_depot_root_exists(resolved, cwd):
-            return depot_root
+            return roots[choice]
 
         log.error(f'Depot root {resolved}/... is not valid')
 

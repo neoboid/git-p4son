@@ -382,9 +382,17 @@ class TestResolveBranchKeyword(unittest.TestCase):
         self.assertEqual(out.getvalue(), '100\n')
         mock_load.assert_called_once_with('feat-bar', '/ws')
 
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
+    def test_alias_without_action_asks_for_one(self, _ws):
+        args = create_parser().parse_args(['alias'])
+        with mock.patch('git_p4son.cli.log') as mock_log:
+            self.assertEqual(run_command(args), 1)
+        mock_log.error.assert_called_once_with(
+            'No alias action specified. Use "git-p4son alias -h" for help.')
+
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
-    @mock.patch('git_p4son.cli.alias_command', return_value=0)
+    @mock.patch('git_p4son.cli.alias_delete_command', return_value=0)
     def test_alias_delete_all_skips_resolution(
             self, mock_alias, _ws, mock_branch):
         """--all names no alias, so it works on a detached HEAD."""

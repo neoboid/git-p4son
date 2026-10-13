@@ -11,7 +11,13 @@ from .sync_split_users import sync_split_users_command
 from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
-from .alias import alias_command
+from .alias import (
+    alias_clean_command,
+    alias_delete_command,
+    alias_list_command,
+    alias_new_command,
+    alias_show_command,
+)
 from .init import init_command
 from .rebase_todo import sequence_editor_command
 from .review import review_command
@@ -343,7 +349,7 @@ Examples:
         'list',
         help='List all aliases and their changelist numbers',
         description='List all changelist aliases stored in .git-p4son/changelists/'
-    )
+    ).set_defaults(func=alias_list_command)
 
     alias_show_parser = alias_subparsers.add_parser(
         'show',
@@ -351,6 +357,8 @@ Examples:
         description='Print only the changelist number saved under an alias, '
         'for use in scripts'
     )
+    # It prints only the changelist number on stdout, so scripts can capture it.
+    alias_show_parser.set_defaults(func=alias_show_command, quiet=True)
     _add_branch_keyword_arg(alias_show_parser, 'alias',
                             'Alias name to show')
 
@@ -360,6 +368,7 @@ Examples:
         description='Save a changelist number under a named alias in '
         '.git-p4son/changelists/<alias>'
     )
+    alias_new_parser.set_defaults(func=alias_new_command)
     alias_new_parser.add_argument(
         'changelist',
         help='Changelist number to save'
@@ -377,6 +386,7 @@ Examples:
         help='Delete a changelist alias',
         description='Delete a changelist alias from .git-p4son/changelists/'
     )
+    alias_delete_parser.set_defaults(func=alias_delete_command)
     alias_delete_target = alias_delete_parser.add_mutually_exclusive_group()
     _add_branch_keyword_arg(alias_delete_parser, 'alias',
                             'Alias name to delete', group=alias_delete_target)
@@ -391,7 +401,7 @@ Examples:
         help='Clean up changelist aliases',
         description='List all changelist aliases, then delete all of them '
         'or review each one interactively with yes/no/all/quit prompts'
-    )
+    ).set_defaults(func=alias_clean_command)
 
     review_parser = subparsers.add_parser(
         'review',
@@ -562,9 +572,14 @@ def completion_command(args: argparse.Namespace) -> int:
 def run_command(args: argparse.Namespace) -> int:
     args.invocation_dir = os.getcwd()
 
-    # alias show prints only the changelist number on stdout, so scripts can capture it.
-    if args.command == 'alias' and args.alias_action == 'show':
+    if getattr(args, 'quiet', False):
         log.quiet_mode = True
+
+    if not hasattr(args, 'func'):
+        # Only a command whose actions name the handlers, given no action, gets here.
+        log.error(f'No {args.command} action specified. '
+                  f'Use "git-p4son {args.command} -h" for help.')
+        return 1
 
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
@@ -608,12 +623,7 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
         log.success(args.message)
 
-    if hasattr(args, 'func'):
-        return args.func(args)
-    commands = {
-        'alias': alias_command,
-    }
-    return commands[args.command](args)
+    return args.func(args)
 
 
 def main() -> int:

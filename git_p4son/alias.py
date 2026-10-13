@@ -124,21 +124,3 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         _clean_interactive(aliases, workspace_dir)
 
     return 0
-
-
-def alias_command(args: argparse.Namespace) -> int:
-    """Dispatch alias subcommands."""
-    if args.alias_action == 'list':
-        return alias_list_command(args)
-    elif args.alias_action == 'show':
-        return alias_show_command(args)
-    elif args.alias_action == 'new':
-        return alias_new_command(args)
-    elif args.alias_action == 'delete':
-        return alias_delete_command(args)
-    elif args.alias_action == 'clean':
-        return alias_clean_command(args)
-    else:
-        log.error(
-            'No alias action specified. Use "git-p4son alias -h" for help.')
-        return 1

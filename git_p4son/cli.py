@@ -512,6 +512,7 @@ Examples:
     seq_editor_parser = subparsers.add_parser(
         '_sequence-editor',
     )
+    seq_editor_parser.set_defaults(func=sequence_editor_command)
     seq_editor_parser.add_argument(
         'filename',
         help='The rebase todo file to edit'
@@ -611,7 +612,6 @@ def run_command(args: argparse.Namespace) -> int:
         return args.func(args)
     commands = {
         'alias': alias_command,
-        '_sequence-editor': sequence_editor_command,
     }
     return commands[args.command](args)
 

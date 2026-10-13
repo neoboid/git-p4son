@@ -594,7 +594,7 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
     log.success(args.workspace_dir)
 
-    if args.command == 'new' and args.no_alias:
+    if getattr(args, 'no_alias', False):
         args.alias = None
 
     branch_attr = getattr(args, 'branch_keyword_arg', None)

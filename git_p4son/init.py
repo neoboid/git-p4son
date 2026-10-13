@@ -4,9 +4,14 @@ import argparse
 import os
 import shutil
 
-from .common import normalize_workspace_path, prompt_choice, prompt_menu
+from .common import prompt_choice, prompt_menu
 from .config import save_config
-from .depot import WORKSPACE_PLACEHOLDER, expand_depot_root, get_depot_root
+from .depot import (
+    WORKSPACE_DEPOT_ROOT,
+    expand_depot_root,
+    get_depot_root,
+    subdirectory_depot_root,
+)
 from .log import log
 from .perforce import get_client_spec, p4_depot_root_exists
 from .skill import claude_config_dir, install_skill, is_skill_installed
@@ -27,19 +32,11 @@ from .sync_split_users import (
 from .writable import is_writable_mode, set_writable_mode
 
 
-def _compute_cwd_depot_root(cwd: str, p4_workspace_root: str) -> str | None:
-    """Compute the $(workspace)-based depot root for cwd, or None at or outside the workspace root."""
-    rel = normalize_workspace_path(cwd, p4_workspace_root)
-    if rel in (None, '.'):
-        return None
-    return f'//{WORKSPACE_PLACEHOLDER}/{rel}'
-
-
 def _select_depot_root(client_name: str, cwd: str,
                        p4_workspace_root: str) -> str | None:
     """Interactively select a depot root template to store, or None to abort."""
-    roots = {'entire workspace': f'//{WORKSPACE_PLACEHOLDER}'}
-    cwd_root = _compute_cwd_depot_root(cwd, p4_workspace_root)
+    roots = {'entire workspace': WORKSPACE_DEPOT_ROOT}
+    cwd_root = subdirectory_depot_root(cwd, p4_workspace_root)
     if cwd_root:
         roots['current directory'] = cwd_root
     resolved_roots = {name: expand_depot_root(root, client_name)

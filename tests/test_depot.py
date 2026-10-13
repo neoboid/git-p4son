@@ -4,7 +4,11 @@ import tempfile
 import unittest
 
 from git_p4son.config import save_config
-from git_p4son.depot import expand_depot_root, get_depot_root
+from git_p4son.depot import (
+    expand_depot_root,
+    get_depot_root,
+    subdirectory_depot_root,
+)
 
 
 class TestGetDepotRoot(unittest.TestCase):
@@ -40,3 +44,21 @@ class TestExpandDepotRoot(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSubdirectoryDepotRoot(unittest.TestCase):
+    def test_subdirectory(self):
+        result = subdirectory_depot_root('/ws/Engine/Source', '/ws')
+        self.assertEqual(result, '//$(workspace)/Engine/Source')
+
+    def test_at_workspace_root(self):
+        result = subdirectory_depot_root('/ws', '/ws')
+        self.assertIsNone(result)
+
+    def test_nested_subdirectory(self):
+        result = subdirectory_depot_root('/ws/a/b/c', '/ws')
+        self.assertEqual(result, '//$(workspace)/a/b/c')
+
+    def test_outside_workspace(self):
+        result = subdirectory_depot_root('/elsewhere', '/ws')
+        self.assertIsNone(result)

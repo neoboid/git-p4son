@@ -2,18 +2,28 @@
 
 from dataclasses import dataclass
 
+from .common import normalize_workspace_path
 from .config import load_config
 from .log import log
 from .perforce import P4ClientSpec, get_client_spec
 
 # Substituted with the client name on each use, so the config survives a workspace rename.
 WORKSPACE_PLACEHOLDER = '$(workspace)'
+WORKSPACE_DEPOT_ROOT = f'//{WORKSPACE_PLACEHOLDER}'
 
 
 def get_depot_root(workspace_dir: str) -> str | None:
     """Get the depot root from config, or None if not configured."""
     config = load_config(workspace_dir)
     return config.get('depot', {}).get('root')
+
+
+def subdirectory_depot_root(directory: str, workspace_root: str) -> str | None:
+    """Return the $(workspace)-based depot root for directory, or None at or outside the workspace root."""
+    rel = normalize_workspace_path(directory, workspace_root)
+    if rel in (None, '.'):
+        return None
+    return f'{WORKSPACE_DEPOT_ROOT}/{rel}'
 
 
 def expand_depot_root(depot_root: str, workspace_name: str) -> str:

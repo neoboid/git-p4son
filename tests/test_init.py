@@ -8,7 +8,6 @@ from unittest import mock
 from git_p4son.config import load_config
 from git_p4son.init import (
     _ask_yes_no,
-    _compute_cwd_depot_root,
     _configure_claude_skill,
     _configure_depot_root,
     _configure_split_users,
@@ -19,24 +18,6 @@ from git_p4son.init import (
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-
-
-class TestComputeCwdDepotRoot(unittest.TestCase):
-    def test_subdirectory(self):
-        result = _compute_cwd_depot_root('/ws/Engine/Source', '/ws')
-        self.assertEqual(result, '//$(workspace)/Engine/Source')
-
-    def test_at_workspace_root(self):
-        result = _compute_cwd_depot_root('/ws', '/ws')
-        self.assertIsNone(result)
-
-    def test_nested_subdirectory(self):
-        result = _compute_cwd_depot_root('/ws/a/b/c', '/ws')
-        self.assertEqual(result, '//$(workspace)/a/b/c')
-
-    def test_outside_workspace(self):
-        result = _compute_cwd_depot_root('/elsewhere', '/ws')
-        self.assertIsNone(result)
 
 
 class TestSetupGitignore(unittest.TestCase):

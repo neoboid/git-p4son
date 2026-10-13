@@ -66,20 +66,17 @@ def _tracked_paths(workspace_dir: str,
             for rel in list_tracked_files(workspace_dir) if not skip(rel)]
 
 
-def _timed(action, paths: list[str]) -> int:
-    """Run action over paths, log the elapsed time, and return its count."""
+def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
     start = time.monotonic()
     changed = action(paths)
     log.elapsed(timedelta(seconds=time.monotonic() - start))
-    return changed
+    log.success(f'{changed} of {len(paths)} tracked files changed')
 
 
 def _apply_on(workspace_dir: str) -> int:
     """Make every tracked file writable."""
     log.heading('Making git-tracked files writable')
-    paths = _tracked_paths(workspace_dir)
-    changed = _timed(make_writable, paths)
-    log.success(f'{changed} of {len(paths)} tracked files changed')
+    _change_modes(make_writable, _tracked_paths(workspace_dir))
     return 0
 
 
@@ -103,9 +100,8 @@ def _apply_off(workspace_dir: str) -> int:
     log.success(f'{len(opened)} opened')
 
     log.heading('Making git-tracked files read-only')
-    paths = _tracked_paths(workspace_dir, opened_lookup(opened))
-    changed = _timed(make_read_only, paths)
-    log.success(f'{changed} of {len(paths)} tracked files changed')
+    _change_modes(make_read_only,
+                  _tracked_paths(workspace_dir, opened_lookup(opened)))
     return 0
 
 

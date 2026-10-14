@@ -236,6 +236,18 @@ class TestRunCommand(unittest.TestCase):
         mock_sync.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
+    @mock.patch('git_p4son.cli.log')
+    @mock.patch('git_p4son.cli.sync_command', return_value=0)
+    def test_dry_run_ends_with_one_final_line(self, _sync, mock_log, _ws):
+        run_command(create_parser().parse_args(['sync', '-n']))
+        mock_log.info.assert_called_once_with('Dry run, nothing changed')
+
+    @mock.patch('git_p4son.cli.log')
+    @mock.patch('git_p4son.cli.sync_command', return_value=0)
+    def test_real_run_has_no_dry_run_line(self, _sync, mock_log, _ws):
+        run_command(create_parser().parse_args(['sync']))
+        mock_log.info.assert_not_called()
+
     @mock.patch('git_p4son.cli.writable_command', return_value=0)
     def test_dispatches_writable(self, mock_writable, _ws):
         args = create_parser().parse_args(['writable', 'apply'])

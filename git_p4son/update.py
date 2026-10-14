@@ -50,7 +50,8 @@ def update_command(args: argparse.Namespace) -> int:
         update_changelist(
             changelist, args.base_branch, workspace_dir, dry_run=args.dry_run,
             message=args.message, commit_list=not args.no_commit_list)
-        log.success(f'Updated CL {changelist}')
+        log.success(f'Would update CL {changelist} with this description'
+                    if args.dry_run else f'Updated CL {changelist}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve,

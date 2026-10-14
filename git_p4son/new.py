@@ -22,13 +22,15 @@ def new_command(args: argparse.Namespace) -> int:
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
         commit_list=not args.no_commit_list, review=args.review)
 
-    if not args.dry_run:
+    alias_note = f' (alias={args.alias})' if args.alias else ''
+    if args.dry_run:
+        log.success(
+            f'Would create a changelist with this description{alias_note}')
+    else:
         if args.alias:
             save_changelist_alias(args.alias, changelist, workspace_dir,
                                   force=args.force)
-            log.success(f'Created CL {changelist} (alias={args.alias})')
-        else:
-            log.success(f'Created CL {changelist}')
+        log.success(f'Created CL {changelist}{alias_note}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve or args.review,

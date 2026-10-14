@@ -617,7 +617,10 @@ def run_command(args: argparse.Namespace) -> int:
             raise CommandError('No commits found to derive message from')
         log.success(args.message)
 
-    return args.func(args)
+    exit_code = args.func(args)
+    if exit_code == 0 and getattr(args, 'dry_run', False):
+        log.info('Dry run, nothing changed')
+    return exit_code
 
 
 def main() -> int:

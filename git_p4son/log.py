@@ -5,7 +5,7 @@ import sys
 import threading
 from datetime import timedelta
 
-HEADING_PREFIX = '#'
+_HEADING_PREFIX = '#'
 
 _GREEN = '\033[32m'
 _YELLOW = '\033[33m'
@@ -88,7 +88,7 @@ class Log:
         if self._heading_count > 0:
             print()
         self._heading_count += 1
-        line = f'{HEADING_PREFIX} {text}'
+        line = f'{_HEADING_PREFIX} {text}'
         print(_color(line, Color.HEADING, sys.stdout))
 
     def success(self, text: str) -> None:

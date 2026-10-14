@@ -44,7 +44,7 @@ from .perforce import (
 
 
 LAST_SYNCED_LABEL = 'last synced'
-SPLIT_LABEL = 'split'
+_SPLIT_LABEL = 'split'
 
 _MERGE_LABELS = ('Perforce', 'base', 'local')
 
@@ -552,7 +552,7 @@ def _split_targets(targets: list[tuple[int, str]], users: list[str],
         log.success('None found')
 
     labels = dict(targets)
-    return [(cl, labels.get(cl, SPLIT_LABEL))
+    return [(cl, labels.get(cl, _SPLIT_LABEL))
             for cl in build_sync_targets(changes, users, last_synced,
                                          list(labels))]
 

@@ -8,7 +8,7 @@ from . import CONFIG_DIR
 from .git import get_workspace_dir
 from .log import log
 
-SKILL_NAME = 'git-p4son'
+_SKILL_NAME = 'git-p4son'
 SKILL_OVERRIDE_FILE = 'skill-override.md'
 
 
@@ -30,7 +30,7 @@ def is_claude_code_installed() -> bool:
 
 def skill_path() -> str:
     """Return the path the skill stub is installed to."""
-    return os.path.join(claude_config_dir(), 'skills', SKILL_NAME, 'SKILL.md')
+    return os.path.join(claude_config_dir(), 'skills', _SKILL_NAME, 'SKILL.md')
 
 
 def is_skill_installed() -> bool:

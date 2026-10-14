@@ -233,7 +233,9 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         log.heading('Finding file types (text/binary)')
         head_types = p4_head_types(
             [m.filepath for m in metas], workspace_dir)
-        log.success('')
+        binary = {m.filepath for m in metas
+                  if is_binary_file_type(head_types.get(m.filepath) or '')}
+        log.success(f'{len(metas) - len(binary)} text, {len(binary)} binary')
 
         log.heading('Staging tracked changed files for post-sync merge')
         queries = []
@@ -244,13 +246,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         contents = get_files_at_commits(queries, workspace_dir)
         for m in metas:
             rel = rel_paths[m.filepath]
-            head_type = head_types.get(m.filepath)
-            is_binary = bool(head_type and is_binary_file_type(head_type))
             result.changed.append(_stage_changed_file(
                 m, rel, contents[(pre_sync_head_commit, rel)],
-                contents.get((m.base_commit, rel)), temp_root, is_binary,
-                uses_crlf))
-        log.success('')
+                contents.get((m.base_commit, rel)), temp_root,
+                m.filepath in binary, uses_crlf))
+        log.success(f'{plural(len(metas), "file")} staged')
 
     _log_prepare_summary(result, workspace_dir, clobber_mode, unchanged_count)
     return result
@@ -347,13 +347,18 @@ def report_not_synced(preps: list[WritableSyncFileSet],
     if clobber_mode is ClobberMode.CLOBBER:
         reported = [f for p in preps for f in p.ignored]
         heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
+        outcome = 'overwritten'
     elif clobber_mode is ClobberMode.ALLWRITE:
         reported = [f for p in preps for f in p.not_synced]
         heading = 'Files not synced (git-ignored and locally modified)'
+        outcome = 'not synced'
     else:
         reported = [f for p in preps for f in p.ignored]
         heading = 'Files not synced (git-ignored and writable)'
+        outcome = 'not synced'
     if reported:
         log.heading(heading)
-        for f in sorted(set(reported)):
+        files = sorted(set(reported))
+        for f in files:
             log.info(os.path.relpath(f, workspace_dir))
+        log.warning(f'{plural(len(files), "file")} {outcome}')

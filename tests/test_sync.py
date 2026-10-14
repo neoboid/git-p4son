@@ -794,7 +794,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_git_clean.assert_not_called()
         mock_p4clean.assert_not_called()
         mock_run_hooks.assert_not_called()
-        mock_log.heading.assert_any_call('Skipping post-sync hooks')
+        mock_log.success.assert_any_call('Already at CL 100, nothing to sync')
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync._sync_changelist')
@@ -1297,7 +1297,8 @@ class TestSyncDryRun(unittest.TestCase):
 
     def test_already_synced(self):
         self.assertEqual(self._run(['10000']), 0)
-        self.mock_log.info.assert_any_call('Already synced, nothing to do')
+        self.mock_log.success.assert_any_call(
+            'Already at CL 10000, nothing to sync')
         self._assert_nothing_run()
 
 

@@ -336,8 +336,8 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
         targets = _resolve_sync_targets(
             args.changelist, last_synced, depot_root, workspace_dir, args.force)
         if not targets:
-            log.info('Already synced, nothing to do')
-            log.heading('Skipping post-sync hooks')
+            log.heading('Checking sync targets')
+            log.success(f'Already at CL {last_synced}, nothing to sync')
             return None
 
     return _SyncPlan(

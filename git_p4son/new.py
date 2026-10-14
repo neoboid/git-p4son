@@ -14,9 +14,8 @@ def new_command(args: argparse.Namespace) -> int:
     if not args.no_edit and not check_git_workspace_clean(workspace_dir):
         return 1
 
-    if args.alias and not check_alias_usable(args.alias, workspace_dir,
-                                             args.force):
-        return 1
+    if args.alias:
+        check_alias_usable(args.alias, workspace_dir, args.force)
 
     log.heading('Creating changelist')
     changelist = create_changelist(
@@ -25,9 +24,8 @@ def new_command(args: argparse.Namespace) -> int:
 
     if not args.dry_run:
         if args.alias:
-            if not save_changelist_alias(args.alias, changelist,
-                                         workspace_dir, force=args.force):
-                return 1
+            save_changelist_alias(args.alias, changelist, workspace_dir,
+                                  force=args.force)
             log.success(f'Created CL {changelist} (alias={args.alias})')
         else:
             log.success(f'Created CL {changelist}')

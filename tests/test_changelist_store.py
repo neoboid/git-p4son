@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from git_p4son import CONFIG_DIR
+from git_p4son.common import CommandError
 from git_p4son.changelist_store import (
     branch_alias,
     branch_to_alias,
@@ -27,11 +28,11 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
         self._tempdir.cleanup()
 
     def test_save_load_delete_roundtrip(self):
-        self.assertTrue(save_changelist_alias(
-            'feature', '123', self.ws, force=False))
+        save_changelist_alias('feature', '123', self.ws, force=False)
         self.assertEqual(load_changelist_alias('feature', self.ws), '123')
-        self.assertTrue(delete_changelist_alias('feature', self.ws))
-        self.assertIsNone(load_changelist_alias('feature', self.ws))
+        delete_changelist_alias('feature', self.ws)
+        with self.assertRaisesRegex(CommandError, 'No changelist alias found'):
+            load_changelist_alias('feature', self.ws)
 
     def test_save_ensures_config_gitignore(self):
         save_changelist_alias('feature', '123', self.ws, force=False)
@@ -47,8 +48,8 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
             f.write('55555\n')
 
         # Relative to the store dir this resolves to the file above.
-        self.assertIsNone(
-            load_changelist_alias('../../secret.txt', self.ws))
+        with self.assertRaisesRegex(CommandError, 'Invalid alias name'):
+            load_changelist_alias('../../secret.txt', self.ws)
 
     def test_delete_rejects_path_traversal(self):
         save_changelist_alias('some-alias', '1', self.ws, force=False)
@@ -56,8 +57,8 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
         with open(outside, 'w') as f:
             f.write('do not delete\n')
 
-        self.assertFalse(
-            delete_changelist_alias('../../precious.txt', self.ws))
+        with self.assertRaisesRegex(CommandError, 'Invalid alias name'):
+            delete_changelist_alias('../../precious.txt', self.ws)
         self.assertTrue(os.path.exists(outside))
 
 
@@ -84,27 +85,28 @@ class TestSaveChangelistAlias(unittest.TestCase):
     def test_save_refuses_an_existing_alias_unless_forced(self):
         with tempfile.TemporaryDirectory() as ws:
             save_changelist_alias('feature', '123', ws, force=False)
-            self.assertFalse(save_changelist_alias(
-                'feature', '456', ws, force=False))
-            self.assertTrue(
-                save_changelist_alias('feature', '456', ws, force=True))
+            with self.assertRaisesRegex(CommandError, 'already exists'):
+                save_changelist_alias('feature', '456', ws, force=False)
+            save_changelist_alias('feature', '456', ws, force=True)
             self.assertEqual(load_changelist_alias('feature', ws), '456')
 
 
 class TestCheckAliasUsable(unittest.TestCase):
     def test_invalid_name_fails_even_with_force(self):
         with tempfile.TemporaryDirectory() as ws:
-            self.assertFalse(check_alias_usable('bad name!', ws, force=True))
+            with self.assertRaisesRegex(CommandError, 'Invalid alias name'):
+                check_alias_usable('bad name!', ws, force=True)
 
     def test_existing_alias_needs_force(self):
         with tempfile.TemporaryDirectory() as ws:
             save_changelist_alias('feature', '123', ws, force=False)
-            self.assertFalse(check_alias_usable('feature', ws, force=False))
-            self.assertTrue(check_alias_usable('feature', ws, force=True))
+            with self.assertRaisesRegex(CommandError, 'already exists'):
+                check_alias_usable('feature', ws, force=False)
+            check_alias_usable('feature', ws, force=True)
 
     def test_new_alias_is_usable(self):
         with tempfile.TemporaryDirectory() as ws:
-            self.assertTrue(check_alias_usable('feature', ws, force=False))
+            check_alias_usable('feature', ws, force=False)
 
 
 class TestValidateAliasName(unittest.TestCase):

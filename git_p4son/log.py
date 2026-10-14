@@ -37,14 +37,9 @@ def _is_tty(stream) -> bool:
     return hasattr(stream, 'isatty') and stream.isatty()
 
 
-def _use_color(stream) -> bool:
-    """Return True if the stream is a TTY and supports color."""
-    return _is_tty(stream)
-
-
 def _color(text: str, color: str, stream) -> str:
     """Wrap text in ANSI color codes if the stream supports color."""
-    if _use_color(stream):
+    if _is_tty(stream):
         return f'{color}{text}{_RESET}'
     return text
 
@@ -223,7 +218,7 @@ class Log:
 
     def _format_command_line(self, line: str) -> str:
         """Return a command line with a colored prompt when supported."""
-        if _use_color(sys.stdout) and line.startswith('> '):
+        if _is_tty(sys.stdout) and line.startswith('> '):
             return f'{Color.COMMAND}>{_RESET} {line[2:]}'
         return line
 

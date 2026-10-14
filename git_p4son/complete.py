@@ -9,13 +9,12 @@ from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset(
     {'complete', 'completion', '_sequence-editor'})
-# Commands whose first positional is a nested action (alias list, ...).
-_COMMANDS_WITH_ACTIONS = frozenset(
-    {'alias', 'skill', 'sync-split-users', 'writable'})
 
 
 def _get_subparsers_action(parser):
     """Extract the _SubParsersAction from a parser, if any."""
+    if parser._subparsers is None:
+        return None
     for action in parser._subparsers._actions:
         if isinstance(action, argparse._SubParsersAction):
             return action
@@ -110,7 +109,7 @@ def _get_branch_candidates(prefix, workspace_dir):
 
 def _complete_positional(command, subcommand, positional_count,
                          prefix, workspace_dir, command_parser,
-                         subcommand_parser):
+                         subcommand_parser, actions):
     """Complete a positional argument."""
     # Arguments added with the branch keyword name themselves in branch_keyword_arg.
     target = subcommand_parser or command_parser
@@ -133,14 +132,11 @@ def _complete_positional(command, subcommand, positional_count,
         return _filter(
             [('head', 'Sync to the latest changelist')], prefix)
 
-    if (command in _COMMANDS_WITH_ACTIONS and subcommand is None
-            and positional_count == 0):
-        nested = _get_subparsers_action(command_parser)
-        if nested and hasattr(nested, '_choices_actions'):
-            candidates = [(ca.dest, ca.help or '')
-                          for ca in nested._choices_actions]
-            return _filter(candidates, prefix)
-        return []
+    # Commands with nested actions (alias list, ...) take the action first.
+    if actions and subcommand is None and positional_count == 0:
+        candidates = [(ca.dest, ca.help or '')
+                      for ca in actions._choices_actions]
+        return _filter(candidates, prefix)
 
     if command == 'sync-split-users' and subcommand == 'delete':
         return _filter(_get_split_user_names(workspace_dir), prefix)
@@ -162,6 +158,7 @@ def _complete(parser, words, workspace_dir=None):
 
     command = None
     command_parser = None
+    actions = None
     subcommand = None
     subcommand_parser = None
     positional_count = 0
@@ -186,16 +183,15 @@ def _complete(parser, words, workspace_dir=None):
             if word in subparsers_action.choices:
                 command = word
                 command_parser = subparsers_action.choices[word]
+                actions = _get_subparsers_action(command_parser)
                 current_parser = command_parser
             continue
 
-        if command in _COMMANDS_WITH_ACTIONS and subcommand is None:
-            nested = _get_subparsers_action(command_parser)
-            if nested and word in nested.choices:
-                subcommand = word
-                subcommand_parser = nested.choices[word]
-                current_parser = subcommand_parser
-                continue
+        if actions and subcommand is None and word in actions.choices:
+            subcommand = word
+            subcommand_parser = actions.choices[word]
+            current_parser = subcommand_parser
+            continue
 
         positional_count += 1
 
@@ -207,7 +203,7 @@ def _complete(parser, words, workspace_dir=None):
             return _filter(_get_flags(parser), prefix)
         else:
             candidates = []
-            for ca in getattr(subparsers_action, '_choices_actions', []):
+            for ca in subparsers_action._choices_actions:
                 if ca.dest not in _HIDDEN_COMMANDS:
                     candidates.append((ca.dest, ca.help or ''))
             return _filter(candidates, prefix)
@@ -217,7 +213,7 @@ def _complete(parser, words, workspace_dir=None):
 
     return _complete_positional(command, subcommand, positional_count,
                                 prefix, workspace_dir, command_parser,
-                                subcommand_parser)
+                                subcommand_parser, actions)
 
 
 def run_complete(words):

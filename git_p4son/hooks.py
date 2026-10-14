@@ -1,7 +1,6 @@
 """User hook discovery and execution."""
 
 import os
-import sys
 from pathlib import Path
 
 from . import CONFIG_DIR
@@ -67,14 +66,6 @@ def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
     return [str(path)]
 
 
-def _print_output(result: RunResult) -> None:
-    """Print stdout and stderr from a completed hook."""
-    for line in result.stdout:
-        print(line)
-    for line in result.stderr:
-        print(line, file=sys.stderr)
-
-
 def run_hooks(hook_name: str, workspace_dir: str,
               invocation_dir: str) -> list[RunResult]:
     """Run all executable files for a named hook."""
@@ -103,7 +94,10 @@ def run_hooks(hook_name: str, workspace_dir: str,
 
         # Hooks are independent, so one failing does not stop the rest.
         result = run(command, cwd=cwd, env=env, fail_on_returncode=False)
-        _print_output(result)
+        for line in result.stdout:
+            log.output(line)
+        for line in result.stderr:
+            log.output(line, stderr=True)
         if result.returncode != 0:
             log.error(
                 f'Hook {display_path} failed '

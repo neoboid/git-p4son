@@ -144,6 +144,12 @@ class Log:
             return
         print(text)
 
+    def output(self, line: str, stderr: bool = False) -> None:
+        """Print a line of a child process's output as is."""
+        if self.quiet_mode:
+            return
+        print(line, file=sys.stderr if stderr else sys.stdout)
+
     def verbose(self, text: str) -> None:
         """Print verbose-only text (suppressed at normal verbosity)."""
         if self.verbose_mode and not self.quiet_mode:

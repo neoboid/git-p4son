@@ -37,6 +37,26 @@ class TestNonTtyOutput(unittest.TestCase):
         self.assertEqual(buffer.getvalue(), '> p4 change -i\n')
 
 
+class TestOutput(unittest.TestCase):
+    def test_writes_lines_as_is_to_the_given_stream(self):
+        log = Log()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            log.output('> not a command')
+            log.output('a warning', stderr=True)
+        self.assertEqual(out.getvalue(), '> not a command\n')
+        self.assertEqual(err.getvalue(), 'a warning\n')
+
+    def test_silent_in_quiet_mode(self):
+        log = Log()
+        log.quiet_mode = True
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            log.output('line')
+            log.output('line', stderr=True)
+        self.assertEqual((out.getvalue(), err.getvalue()), ('', ''))
+
+
 class TestCommandTruncation(unittest.TestCase):
     @mock.patch('git_p4son.log.shutil.get_terminal_size')
     def test_truncates_to_leave_room_for_spinner(self, mock_terminal_size):

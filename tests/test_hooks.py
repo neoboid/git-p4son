@@ -129,11 +129,11 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_not_called()
         mock_log.warning.assert_called_once()
 
-    @mock.patch('builtins.print')
+    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_prints_hook_stdout_after_command_finishes(
-            self, mock_run, _is_windows, mock_print):
+            self, mock_run, _is_windows, mock_log):
         mock_run.return_value = make_run_result(stdout=['hook output'])
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
@@ -144,7 +144,7 @@ class TestRunHooks(unittest.TestCase):
             run_hooks('post-sync', tmpdir, tmpdir)
 
         mock_run.assert_called_once()
-        mock_print.assert_any_call('hook output')
+        mock_log.output.assert_called_once_with('hook output')
 
     @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
@@ -170,10 +170,10 @@ class TestRunHooks(unittest.TestCase):
         self.assertEqual(len(results), 2)
         mock_log.error.assert_called_once()
 
-    @mock.patch('builtins.print')
+    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
-    def test_prints_hook_stderr(self, mock_run, _is_windows, mock_print):
+    def test_prints_hook_stderr(self, mock_run, _is_windows, mock_log):
         mock_run.return_value = make_run_result(stderr=['a warning'])
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks',
@@ -184,9 +184,7 @@ class TestRunHooks(unittest.TestCase):
 
             run_hooks('post-sync', tmpdir, tmpdir)
 
-        stderr_calls = [call for call in mock_print.call_args_list
-                        if call.args and call.args[0] == 'a warning']
-        self.assertEqual(len(stderr_calls), 1)
+        mock_log.output.assert_called_once_with('a warning', stderr=True)
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')

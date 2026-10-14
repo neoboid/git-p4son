@@ -4,13 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-git-p4son is a Python CLI tool that bridges Perforce (P4) and Git. It maintains a local git repository within a Perforce workspace, keeping a `main` branch in sync with the Perforce depot while supporting feature branches for local development.
+git-p4son is a Python CLI tool that bridges Perforce (P4) and Git. It maintains a local git repository within a
+Perforce workspace, keeping a `main` branch in sync with the Perforce depot while supporting feature branches for
+local development.
 
 ## Development Commands
 
 ```bash
-# Install in development mode
-pip install -e .
+# Install in development mode, with the test and format tools
+pip install -e . pytest autopep8
+
+# Point git at the repo's hooks: pre-commit checks autopep8, pre-push runs the tests
+scripts/setup-hooks.sh
 
 # Run the tool
 git p4son [command] [options]
@@ -34,67 +39,124 @@ project must stay PEP 8 compliant at all times.
 
 ## Architecture
 
-The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(args)` entry point:
+**`cli.py`** builds the argparse parser (`create_parser`), where each command registers its handler with
+`set_defaults(func=...)` (and `needs_workspace=False` for commands that run outside a repo). `run_command` does the
+shared setup before calling `args.func`: finding the workspace, resolving the `branch` keyword to an alias, reading
+`-F` message files, deriving a message from HEAD, and ending a dry run with "Dry run, nothing changed". `main` is the
+only place that prints a `CommandError`/`RunError` and turns it into an exit code. `cli.py` also holds
+`completion_command` and sends `complete` to `complete.py` before argparse runs.
 
-- **`sync.py`** — Syncs git repo with a Perforce changelist. Validates both git and p4 workspaces are clean, performs
-  `p4 sync`, then creates a git commit. Accepts one or more explicit CL numbers, `last-synced`, or `head`; omitting the
-  argument syncs to the latest changelist. Multiple strictly increasing CL numbers are synced in sequence with one
-  commit each (a trailing `head` may close out the sequence). Refuses to start while a configured blocking process
-  (see `processes.py`) is running, unless `--ignore-blocking-processes` is given. Changelist arguments are
-  numeric-only: `sync` does not resolve changelist aliases (those name pending CLs from `new`/`review`, which Perforce
-  renumbers on submit), only submitted CL numbers are meaningful. Uses threaded real-time output processing
-  (`P4SyncOutputProcessor`) to parse p4 sync progress. When moving forward from a previous sync, also syncs the
-  changelist before each of the split users' submits (`build_sync_targets`), so each of their changelists gets a
-  commit of its own; `-u` adds users for one run and `--no-split` ignores the configured ones.
+### Commands
+
+- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist. `_plan_sync` resolves the
+  arguments (one or more strictly increasing CL numbers, `last-synced`, or a trailing `head`; none means the latest)
+  into a `_SyncPlan`, or None when already synced. `sync_preflight` refuses to start while a blocking process runs
+  (unless `--ignore-blocking-processes`), while either workspace is dirty, or when a pre-sync hook fails. `_run_sync`
+  runs a catch-up pass to the last synced CL, syncs and commits each target, merges local changes back once at the
+  end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments are numeric-only: aliases name pending
+  CLs, which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each
+  split user's submit, so each of their changelists gets a commit of its own; `-u` adds users for one run and
+  `--no-split` ignores the configured ones.
+
+- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
+  `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command
+  (`list`, `add`, `delete`).
+
+- **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
+  (the branch name by default; `--no-alias` skips it), then opens the changes and reverts the files no longer part of
+  them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves; `--shelve` only shelves. Requires a
+  clean git workspace unless `--no-edit` is given.
+
+- **`update.py`** - Updates an existing changelist, named by number or alias: merges the commits into its
+  description (`update_changelist`), then calls `edit_and_shelve`. `--per-commit` instead updates once per commit
+  through `rebase_per_commit`. Requires a clean git workspace unless `--no-edit` is given.
+
+- **`review.py`** - The `review` command: one Swarm review built commit by commit through `rebase_per_commit`,
+  running `new <alias> --review` after the first commit and `update <alias> --shelve` after the others.
+
+- **`list_changes.py`** - The `list-changes` command: prints the numbered commit subjects since a base branch.
+
+- **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `delete`, `clean`), each an `alias_*_command` built on
+  `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.
+
+- **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
+  mode, split users and the Claude Code skill. It sets up `.gitignore` (from `.p4ignore` if present), creates the git
+  repo with a first commit, and checks for a git editor.
+
+- **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
+  (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
+  `restore_writable`, `is_user_writable`) set and clear the user write bit on git-tracked files and are also used by
+  `sync` and `lib`. Making files read-only skips files opened in Perforce, and allwrite workspaces entirely.
+
+- **`skill.py`** - The `skill` command: `install` writes a stub `SKILL.md` to the user's Claude Code skills directory,
+  and `show` prints the full agent instructions shipped in `skill/git-p4son.md`, followed by the workspace's own
+  overrides in `.git-p4son/skill-override.md` when run inside a workspace that has one. The stub only tells the agent
+  to run `skill show`, so the instructions follow the installed version. `init` offers the install.
+
+### Command support
 
 - **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the
   writable files p4 would touch into tracked and ignored ones and stages the locally modified ones, and
-  `merge_changed_files` merges those local changes back after the sync. Also reports the files p4 did not sync.
+  `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
+  writable files p4 refused or overwrote.
 
-- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
-  `$(user)` placeholder to the current Perforce user, and the `sync-split-users` command (`list`, `add`, `delete`).
+- **`rebase_todo.py`** - `rebase_per_commit` runs `git rebase -i` with a generated todo that adds an
+  `exec git p4son ...` line after each pick, for `review` and `update --per-commit`. The todo and any message are
+  saved under `.git-p4son/reviews/`, and `sequence_editor_command` is the hidden `_sequence-editor` command git calls
+  to swap in that todo.
 
-- **`new.py`** — Creates a new Perforce changelist, opens git-changed files for edit, reverts files that are no
-  longer part of the git change, and optionally creates a Swarm review (with `--review` flag) or shelves (with
-  `--shelve` flag). Requires a clean git workspace unless `--no-edit` is given. Alias defaults to the current branch
-  name; use `--no-alias` to skip alias creation.
+- **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
+  processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
 
-- **`update.py`** — Updates an existing changelist description, opens git-changed files for edit, reverts files that
-  are no longer part of the git change, and optionally re-shelves (with `--shelve` flag). Requires a clean git
-  workspace unless `--no-edit` is given.
+- **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order,
+  from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` set, without stopping at a failure. On Windows,
+  scripts run through extension associations, overridable with `[hooks.extension-associations]`. `sync` runs the
+  `pre-sync` and `post-sync` hooks.
 
-- **`list_changes.py`** — Lists git commit subjects since a base branch in chronological order. Used for generating changelist descriptions.
+- **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
+  aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
+  `completions/` call `git p4son complete`.
 
-**`lib.py`** combines git and Perforce operations: creating and updating changelists, checking the git workspace is
-clean, opening the git changes for edit, and reverting files no longer part of the git change
-(`revert_unchanged_files`).
+### Shared modules
 
-**`description.py`** models a changelist description (`Description`): the message, the enumerated commit list under
-`Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format` own the
-layout; `new` and `update` build descriptions through it.
+- **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
+  `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
+  `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. On a dry run of `new` the
+  changelist is `DRY_RUN_CHANGELIST`.
 
-**`changelist_store.py`** provides changelist alias utilities, storing named aliases for changelist numbers in
-`.git-p4son/changelists/<name>`.
+- **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
+  under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`
+  own the layout; `new` and `update` build descriptions through it.
 
-**`config.py`** manages per-repo configuration stored in `.git-p4son/config.toml`, such as the depot root (the
-Perforce path to sync, e.g. `//my-workspace` or `//my-workspace/Engine/Source`) and the split users.
+- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/changelists/<name>`: save, load, list and
+  delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
+  keyword.
 
-**`depot.py`** owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and resolving it
-against the client spec for the commands that run Perforce queries against it (`sync`).
+- **`depot.py`** - Owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and
+  `resolve_depot_root`, which returns it with the client spec (`ResolvedDepot`) for `sync`. `check_depot_root` and
+  `subdirectory_depot_root` back `init`'s choice.
 
-**`writable.py`** implements writable mode: reading and writing the `core.writable` setting, the `writable` command,
-and the helpers that set and clear the user write bit on git-tracked files, which `sync` also uses.
+- **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a
+  default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
+  depot root, `core.writable`, the split users, the blocking processes and the hook associations.
 
-**`processes.py`** implements blocking processes: reading the `[sync] blocking-processes` setting, listing running
-processes (`ps` or `tasklist`), and the check `sync_preflight` runs first to refuse a sync while one of them runs.
+- **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
+  deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
+  (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
+  `resolve_editor`. git's `-z` output is read as bytes.
 
-**`skill.py`** implements the `skill` command: `install` writes a stub `SKILL.md` to the user's Claude Code skills
-directory, and `show` prints the full agent instructions shipped in `skill/git-p4son.md`, followed by the workspace's
-own overrides in `.git-p4son/skill-override.md` when run inside a workspace that has one. The stub only tells the
-agent to run `skill show`, so the instructions follow the installed version. `init` offers the install.
+- **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
+  client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),
+  reverts, shelving, submitted changes and users, and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor`
+  parsing streamed progress and raising `P4SyncClobberError` or `P4SyncAbortError`.
 
-**`common.py`** provides shared utilities: subprocess execution (`run()`), real-time output streaming via threading
-(`run_with_stream_output()`, used by `p4 sync`), workspace-relative path normalization, and interactive prompts.
+- **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
+  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`),
+  `normalize_workspace_path`, and the interactive prompts `prompt_choice` and `prompt_menu`.
+
+- **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
+  file changes, command echo with a spinner, child process output, and quiet and verbose modes. `plural` formats
+  counts.
 
 ## Python Version
 
@@ -119,6 +181,7 @@ When bumping the minimum Python version, update all of these locations:
 
 ## Git Conventions
 
-- Version bump commits should use the format: `Release git-p4son vX.Y.Z`
+- Version bump commits should use the format: `Release git-p4son vX.Y.Z`. `scripts/bump-version.py`
+  (`patch|minor|major`, then `--finalize`) makes that commit, the tag and the GitHub release.
 - Never commit plan/analysis markdown files (e.g. `release-notes.md`, `default-message.md`) together with the
   implementation changes. These files are a communication tool between the user and Claude, not part of the codebase.

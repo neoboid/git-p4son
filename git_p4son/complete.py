@@ -86,7 +86,7 @@ def _filter(candidates, prefix):
             if name.startswith(prefix)]
 
 
-def _complete_flag_value(flag, prefix):
+def _complete_flag_value(flag):
     """Complete the value for a flag."""
     if flag in ('-b', '--base-branch'):
         return [('__branch__', '')]
@@ -162,20 +162,17 @@ def _complete(parser, words, workspace_dir=None):
     subcommand = None
     subcommand_parser = None
     positional_count = 0
-    expecting_flag_value = False
     expecting_flag_name = None
     current_parser = parser
 
     for word in preceding:
-        if expecting_flag_value:
-            expecting_flag_value = False
+        if expecting_flag_name is not None:
             expecting_flag_name = None
             continue
 
         if word.startswith('-'):
             action = _find_flag_action(current_parser, word)
             if action and _flag_takes_value(action):
-                expecting_flag_value = True
                 expecting_flag_name = word
             continue
 
@@ -195,8 +192,8 @@ def _complete(parser, words, workspace_dir=None):
 
         positional_count += 1
 
-    if expecting_flag_value:
-        return _complete_flag_value(expecting_flag_name, prefix)
+    if expecting_flag_name is not None:
+        return _complete_flag_value(expecting_flag_name)
 
     if command is None:
         if prefix.startswith('-'):

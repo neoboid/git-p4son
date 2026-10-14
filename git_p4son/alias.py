@@ -8,11 +8,11 @@ from .changelist_store import (
     delete_changelist_alias,
 )
 from .common import CommandError, prompt_choice
-from .log import log
+from .log import log, plural
 
 
 def _print_aliases(aliases: list[tuple[str, str]]) -> None:
-    log.info(f'Found {len(aliases)}')
+    log.info(f'Found {plural(len(aliases), "alias", "aliases")}')
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
 

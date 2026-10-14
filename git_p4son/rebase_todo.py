@@ -10,7 +10,7 @@ from .common import CommandError
 from .config import ensure_config_dir
 from .git import get_commit_lines_since, resolve_editor
 from .lib import check_git_workspace_clean
-from .log import log
+from .log import log, plural
 
 # Relative to the workspace root, where git runs the todo's exec lines.
 REVIEWS_DIR = f'{CONFIG_DIR}/reviews'
@@ -27,7 +27,7 @@ def _find_commits(base_branch: str, workspace_dir: str) -> list[str]:
     commit_lines = get_commit_lines_since(base_branch, workspace_dir)
     if not commit_lines:
         raise CommandError(f'No commits found since {base_branch}')
-    log.success(f'{len(commit_lines)} commits since {base_branch}')
+    log.success(f'{plural(len(commit_lines), "commit")} since {base_branch}')
     return commit_lines
 
 

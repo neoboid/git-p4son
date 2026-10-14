@@ -14,7 +14,7 @@ from .common import (
     run,
     run_with_stream_output,
 )
-from .log import log
+from .log import log, plural
 
 
 # The output parsing matches p4's English messages, so ask for those whatever P4LANGUAGE says.
@@ -491,7 +491,7 @@ def p4_sync_preview(changelist: int, depot_root: str,
         mode, filename = parse_p4_sync_line(line)
         if mode and filename:
             files.append(P4SyncPreviewFile(mode=mode, filepath=filename))
-    log.success(f'{len(files)} files would be synced')
+    log.success(f'{plural(len(files), "file")} would be synced')
     return files
 
 

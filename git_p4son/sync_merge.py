@@ -8,7 +8,7 @@ from .git import (
     find_base_commits, get_blob_oids, get_files_at_commits, get_tracked_files,
     merge_file,
 )
-from .log import log
+from .log import log, plural
 from .perforce import (
     ClobberMode,
     P4SyncPreviewFile,
@@ -88,13 +88,12 @@ def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
                        is_binary=is_binary, added_both=meta.added_both)
 
 
-def _log_file_group(log_fn, files: list[str], singular: str, plural: str,
+def _log_file_group(log_fn, files: list[str], singular: str, plural_noun: str,
                     text: str, workspace_dir: str | None = None) -> None:
     """Log how many files are in a group, then list them if workspace_dir is given."""
     if not files:
         return
-    label = singular if len(files) == 1 else plural
-    log_fn(f'{len(files)} {label} {text}')
+    log_fn(f'{plural(len(files), singular, plural_noun)} {text}')
     if workspace_dir is not None:
         for f in files:
             log.info(os.path.relpath(f, workspace_dir))
@@ -151,7 +150,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
             if entry.mode == 'add':
                 added_upstream.add(entry.filepath)
 
-    log.success(f'{len(writable)}/{len(preview_files)} are writable')
+    log.success(
+        f'{len(writable)} of {plural(len(preview_files), "file")} writable')
     if not writable:
         return result
 

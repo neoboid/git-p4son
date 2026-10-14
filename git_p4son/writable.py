@@ -10,7 +10,7 @@ from typing import Callable
 from .common import CommandError
 from .config import get_setting, save_config
 from .git import list_tracked_files
-from .log import log
+from .log import log, plural
 from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
 
 
@@ -82,7 +82,7 @@ def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
     start = time.monotonic()
     changed = action(paths)
     log.elapsed(timedelta(seconds=time.monotonic() - start))
-    log.success(f'{changed} of {len(paths)} tracked files changed')
+    log.success(f'{changed} of {plural(len(paths), "tracked file")} changed')
 
 
 def _apply_on(workspace_dir: str) -> None:
@@ -107,7 +107,7 @@ def _apply_off(workspace_dir: str) -> None:
     # Opened files keep their write bit. The whole client is queried, not just the depot root.
     log.heading('Finding files opened in Perforce')
     opened = dict(p4_get_opened_files(f'//{spec.name}', workspace_dir))
-    log.success(f'{len(opened)} opened')
+    log.success(f'{plural(len(opened), "file")} opened')
 
     log.heading('Making git-tracked files read-only')
     _change_modes(make_read_only,

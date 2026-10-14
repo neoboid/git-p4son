@@ -2,11 +2,7 @@
 
 import argparse
 
-from .changelist_store import (
-    RESERVED_KEYWORDS,
-    branch_to_alias,
-    list_changelist_aliases,
-)
+from .changelist_store import branch_alias, list_changelist_aliases
 from .git import get_current_branch, get_workspace_dir
 from .log import log
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
@@ -104,9 +100,8 @@ def _get_branch_candidates(prefix, workspace_dir):
     if not workspace_dir or not keyword.startswith(prefix):
         return []
     branch = get_current_branch(workspace_dir)
-    alias = branch_to_alias(branch) if branch else None
-    # cli.py refuses a branch that maps to a reserved keyword, so don't offer it.
-    if alias is None or alias in RESERVED_KEYWORDS:
+    alias = branch_alias(branch) if branch else None
+    if alias is None:
         return []
     if prefix == keyword:
         return [(alias, 'Current branch')]

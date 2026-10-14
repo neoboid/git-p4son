@@ -21,7 +21,7 @@ from .alias import (
 from .init import init_command
 from .rebase_todo import sequence_editor_command
 from .review import review_command
-from .changelist_store import RESERVED_KEYWORDS, branch_to_alias
+from .changelist_store import branch_alias, branch_to_alias
 from .common import CommandError, RunError
 from .git import get_current_branch, get_head_subject, get_workspace_dir
 from .log import log
@@ -550,9 +550,10 @@ def _resolve_branch_keyword(workspace_dir: str) -> str | None:
         log.error('Cannot resolve the branch keyword on a detached HEAD. '
                   'Name the alias or changelist explicitly.')
         return None
-    alias = branch_to_alias(branch)
-    if alias in RESERVED_KEYWORDS:
-        log.error(f'branch "{branch}" resolves to reserved keyword "{alias}"')
+    alias = branch_alias(branch)
+    if alias is None:
+        log.error(f'branch "{branch}" resolves to reserved keyword '
+                  f'"{branch_to_alias(branch)}"')
         return None
     return alias
 

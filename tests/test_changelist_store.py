@@ -6,6 +6,7 @@ import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
+    branch_alias,
     branch_to_alias,
     check_alias_available,
     check_alias_usable,
@@ -69,6 +70,14 @@ class TestBranchToAlias(unittest.TestCase):
 
     def test_multiple_slashes(self):
         self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
+
+
+class TestBranchAlias(unittest.TestCase):
+    def test_maps_the_branch(self):
+        self.assertEqual(branch_alias('feat/x'), 'feat-x')
+
+    def test_reserved_keyword_is_refused(self):
+        self.assertIsNone(branch_alias('head'))
 
 
 class TestCheckAliasAvailable(unittest.TestCase):

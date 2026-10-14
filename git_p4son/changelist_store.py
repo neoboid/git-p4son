@@ -25,6 +25,12 @@ def branch_to_alias(branch_name: str) -> str:
     return branch_name.replace('/', '-')
 
 
+def branch_alias(branch_name: str) -> str | None:
+    """The alias a branch name maps to, or None if that is a reserved keyword."""
+    alias = branch_to_alias(branch_name)
+    return None if alias in RESERVED_KEYWORDS else alias
+
+
 def validate_alias_name(name: str) -> str | None:
     """Return an error message if alias name is invalid, else None."""
     if not name:

@@ -20,7 +20,7 @@ from git_p4son.git import (
     get_local_changes,
     get_staged_files,
     get_tracked_files,
-    git_last_sync,
+    git_last_synced_changelist,
     has_commits,
     list_tracked_files,
     merge_file,
@@ -505,77 +505,65 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(find_base_commits([], 'HEAD', self.tmpdir), {})
 
 
-class TestGitLastSync(unittest.TestCase):
-    HASH = 'abc123def456' * 3 + 'abcd'  # 40-char fake hash
-
+class TestGitLastSyncedChangelist(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
-    def test_extracts_changelist_and_commit(self, mock_run):
+    def test_extracts_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            f'{self.HASH} git-p4son: p4 sync //...@12345'
+            'git-p4son: p4 sync //...@12345'
         ])
-        result = git_last_sync('/ws')
-        self.assertEqual(result.changelist, 12345)
-        self.assertEqual(result.commit, self.HASH)
+        self.assertEqual(git_last_synced_changelist('/ws'), 12345)
 
     @mock.patch('git_p4son.git.run')
     def test_extracts_changelist_fail(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            f'{self.HASH} other: p4 sync //...@12345'
+            'other: p4 sync //...@12345'
         ])
-        result = git_last_sync('/ws')
-        self.assertIsNone(result)
+        self.assertIsNone(git_last_synced_changelist('/ws'))
 
     @mock.patch('git_p4son.git.run')
     def test_no_match(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            f'{self.HASH} "some other commit message"'
+            '"some other commit message"'
         ])
-        result = git_last_sync('/ws')
-        self.assertIsNone(result)
+        self.assertIsNone(git_last_synced_changelist('/ws'))
 
     @mock.patch('git_p4son.git.run')
     def test_empty_output(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[])
-        result = git_last_sync('/ws')
-        self.assertIsNone(result)
+        self.assertIsNone(git_last_synced_changelist('/ws'))
 
     @mock.patch('git_p4son.git.run')
     def test_command_failure(self, mock_run):
         mock_run.side_effect = RunError('git log failed')
         with self.assertRaises(RunError):
-            git_last_sync('/ws')
+            git_last_synced_changelist('/ws')
 
     @mock.patch('git_p4son.git.run')
     def test_new_format_with_depot_root(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            f'{self.HASH} git-p4son: p4 sync //my-client/Engine/Source/...@12345'
+            'git-p4son: p4 sync //my-client/Engine/Source/...@12345'
         ])
-        result = git_last_sync('/ws')
-        self.assertEqual(result.changelist, 12345)
+        self.assertEqual(git_last_synced_changelist('/ws'), 12345)
 
     @mock.patch('git_p4son.git.run')
     def test_uses_git_grep_to_search_history(self, mock_run):
         """git log --grep finds sync commits even when HEAD is not one."""
         mock_run.return_value = make_run_result(stdout=[
-            f'{self.HASH} git-p4son: p4 sync //...@99999'
+            'git-p4son: p4 sync //...@99999'
         ])
-        result = git_last_sync('/ws')
-        self.assertEqual(result.changelist, 99999)
+        self.assertEqual(git_last_synced_changelist('/ws'), 99999)
         cmd = mock_run.call_args[0][0]
         self.assertIn('--grep=^git-p4son: p4 sync ', cmd)
 
 
-class TestGitLastSyncInRepo(GitRepoTestCase):
+class TestGitLastSyncedChangelistInRepo(GitRepoTestCase):
     def test_skips_commits_that_only_mention_a_sync_subject(self):
         self._write_file('a.cpp', 'X')
         self._commit('git-p4son: p4 sync //ws/...@100')
-        s_sync = get_head_commit(self.tmpdir)
         self._write_file('a.cpp', 'Y')
         self._commit('Revert "git-p4son: p4 sync //ws/...@200"')
 
-        result = git_last_sync(self.tmpdir)
-        self.assertEqual(result.changelist, 100)
-        self.assertEqual(result.commit, s_sync)
+        self.assertEqual(git_last_synced_changelist(self.tmpdir), 100)
 
 
 class TestSyncSubject(unittest.TestCase):

@@ -313,27 +313,15 @@ def parse_sync_subject(subject: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-@dataclass
-class LastSync:
-    """Info about the most recent p4son sync commit."""
-    changelist: int
-    commit: str
-
-
-def git_last_sync(workspace_dir: str) -> LastSync | None:
-    """Get the changelist number and commit SHA of the most recent sync commit."""
+def git_last_synced_changelist(workspace_dir: str) -> int | None:
+    """Get the changelist number of the most recent sync commit."""
     res = run(
-        ['git', 'log', '-1', '--pretty=%H %s',
+        ['git', 'log', '-1', '--pretty=%s',
          f'--grep=^{_SYNC_SUBJECT_PREFIX}'],
         cwd=workspace_dir)
     if not res.stdout:
         return None
-
-    commit_hash, _, subject = res.stdout[0].partition(' ')
-    changelist = parse_sync_subject(subject)
-    if changelist is None:
-        return None
-    return LastSync(changelist=changelist, commit=commit_hash)
+    return parse_sync_subject(res.stdout[0])
 
 
 def find_base_commits(filepaths: list[str], before_commit: str,

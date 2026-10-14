@@ -11,7 +11,7 @@ from .common import CommandError
 from .git import (
     add_all_files, commit, find_base_commits, get_blob_oids,
     get_files_at_commits, get_head_commit, get_staged_files, get_tracked_files,
-    format_sync_subject, git_last_sync, LastSync, merge_file,
+    format_sync_subject, git_last_synced_changelist, merge_file,
 )
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
@@ -515,16 +515,16 @@ def _collect_split_users(args: argparse.Namespace,
     return configured + extra
 
 
-def _should_split(split_users: list[str], last_sync: LastSync | None,
+def _should_split(split_users: list[str], last_synced: int | None,
                   targets: list[tuple[int, str]]) -> bool:
     """Whether to split out the split users' changelists before the targets."""
     if not split_users or not targets:
         return False
-    if not last_sync:
+    if not last_synced:
         log.info('Not splitting out changelists: '
                  'no previous sync to start from')
         return False
-    if targets[0][0] < last_sync.changelist:
+    if targets[0][0] < last_synced:
         log.info('Not splitting out changelists: '
                  'syncing to an older changelist')
         return False
@@ -567,7 +567,7 @@ def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:
 
 
 def _resolve_sync_targets(
-        raw: list[str], last_sync: LastSync | None, depot_root: str,
+        raw: list[str], last_synced: int | None, depot_root: str,
         workspace_dir: str, force: bool) -> list[tuple[int, str]] | None:
     """Resolve the ordered (changelist, label) targets a sync will visit.
 
@@ -597,20 +597,20 @@ def _resolve_sync_targets(
                       f'got {prev} then {curr}')
             return None
 
-    if last_sync and numbers[0] < last_sync.changelist:
+    if last_synced and numbers[0] < last_synced:
         if not force:
             log.error(
                 f'Cannot sync to CL {numbers[0]} '
-                f'(currently at CL {last_sync.changelist}) without --force.')
+                f'(currently at CL {last_synced}) without --force.')
             return None
         log.warning(
             f'Syncing to older CL {numbers[0]} '
-            f'(currently at CL {last_sync.changelist}) with --force')
+            f'(currently at CL {last_synced}) with --force')
 
-    if last_sync and last_sync.changelist in numbers:
-        log.info(f'Skipping CL {last_sync.changelist} (already synced)')
+    if last_synced in numbers:
+        log.info(f'Skipping CL {last_synced} (already synced)')
         targets = [(cl, lbl) for cl, lbl in targets
-                   if cl != last_sync.changelist]
+                   if cl != last_synced]
 
     return targets
 
@@ -645,9 +645,9 @@ def sync_command(args: argparse.Namespace) -> int:
     client_spec = resolved.client_spec
 
     log.heading(f'Finding {LAST_SYNCED_LABEL} changelist')
-    last_sync = git_last_sync(workspace_dir)
-    if last_sync:
-        log.success(f'CL {last_sync.changelist}')
+    last_synced = git_last_synced_changelist(workspace_dir)
+    if last_synced:
+        log.success(f'CL {last_synced}')
     else:
         log.warning('No previous sync found')
 
@@ -664,13 +664,13 @@ def sync_command(args: argparse.Namespace) -> int:
             log.error('The "last-synced" keyword cannot be combined with '
                       'other changelists')
             return 1
-        if not last_sync:
+        if not last_synced:
             log.error('No previous sync found, cannot use "last-synced"')
             return 1
         targets = []
     else:
         targets = _resolve_sync_targets(
-            args.changelist, last_sync, depot_root, workspace_dir, args.force)
+            args.changelist, last_synced, depot_root, workspace_dir, args.force)
         if targets is None:
             return 1
         if not targets:
@@ -678,7 +678,7 @@ def sync_command(args: argparse.Namespace) -> int:
             log.heading('Skipping post-sync hooks')
             return 0
 
-    split = _should_split(split_users, last_sync, targets)
+    split = _should_split(split_users, last_synced, targets)
 
     uses_crlf = bool(client_spec and client_spec.uses_crlf)
     clobber_mode = (client_spec.clobber_mode if client_spec
@@ -696,13 +696,13 @@ def sync_command(args: argparse.Namespace) -> int:
         if users is None:
             return 1
         log.success(', '.join(users))
-        targets = _split_targets(targets, users, last_sync.changelist,
+        targets = _split_targets(targets, users, last_synced,
                                  depot_root, workspace_dir)
 
     if split or args.dry_run:
         log.heading('Sync sequence')
         if resync_last_synced:
-            log.success(f'{last_sync.changelist} ({LAST_SYNCED_LABEL})')
+            log.success(f'{last_synced} ({LAST_SYNCED_LABEL})')
         else:
             log.success(' '.join(str(cl) for cl, _ in targets))
     if args.dry_run:
@@ -721,8 +721,8 @@ def sync_command(args: argparse.Namespace) -> int:
 
         preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
-        if last_sync:
-            preps.append(sync_pass(last_sync.changelist, LAST_SYNCED_LABEL))
+        if last_synced:
+            preps.append(sync_pass(last_synced, LAST_SYNCED_LABEL))
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for changelist, changelist_label in targets:

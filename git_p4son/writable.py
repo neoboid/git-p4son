@@ -7,6 +7,7 @@ import time
 from datetime import timedelta
 from typing import Callable
 
+from .common import CommandError
 from .config import get_setting, save_config
 from .git import list_tracked_files
 from .log import log
@@ -84,26 +85,24 @@ def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
     log.success(f'{changed} of {len(paths)} tracked files changed')
 
 
-def _apply_on(workspace_dir: str) -> int:
+def _apply_on(workspace_dir: str) -> None:
     """Make every tracked file writable."""
     log.heading('Making git-tracked files writable')
     _change_modes(make_writable, _tracked_paths(workspace_dir))
-    return 0
 
 
-def _apply_off(workspace_dir: str) -> int:
+def _apply_off(workspace_dir: str) -> None:
     """Make tracked files read-only, except those opened in Perforce."""
     log.heading('Checking Perforce workspace')
     spec = get_client_spec(workspace_dir)
     if not spec:
-        log.error('Not inside a Perforce workspace')
-        return 1
+        raise CommandError('Not inside a Perforce workspace')
     log.success(spec.name)
     if spec.allwrite:
         # p4 keeps allwrite files writable, so making them read-only would fight it.
         log.warning('The workspace has the allwrite option, '
                     'leaving tracked files writable')
-        return 0
+        return
 
     # Opened files keep their write bit. The whole client is queried, not just the depot root.
     log.heading('Finding files opened in Perforce')
@@ -113,7 +112,6 @@ def _apply_off(workspace_dir: str) -> int:
     log.heading('Making git-tracked files read-only')
     _change_modes(make_read_only,
                   _tracked_paths(workspace_dir, opened_lookup(opened)))
-    return 0
 
 
 def writable_command(args: argparse.Namespace) -> int:
@@ -132,4 +130,8 @@ def writable_command(args: argparse.Namespace) -> int:
         log.heading('Setting writable mode')
         set_writable_mode(workspace_dir, enabled)
         log.success('on' if enabled else 'off')
-    return _apply_on(workspace_dir) if enabled else _apply_off(workspace_dir)
+    if enabled:
+        _apply_on(workspace_dir)
+    else:
+        _apply_off(workspace_dir)
+    return 0

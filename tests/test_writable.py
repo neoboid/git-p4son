@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son.common import CommandError
 from git_p4son.config import ConfigError, load_config, save_config
 from git_p4son.writable import (
     is_user_writable,
@@ -272,7 +273,9 @@ class TestWritableCommand(unittest.TestCase):
     @mock.patch('git_p4son.writable.get_client_spec', return_value=None)
     def test_apply_off_needs_a_perforce_workspace(self, _spec):
         self._set_all(stat.S_IRUSR | stat.S_IWUSR)
-        self.assertEqual(self._run('apply'), 1)
+        with self.assertRaisesRegex(CommandError,
+                                    'Not inside a Perforce workspace'):
+            self._run('apply')
         self.assertTrue(self._writable(self.tracked))
 
 

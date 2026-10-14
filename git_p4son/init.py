@@ -4,7 +4,7 @@ import argparse
 import os
 import shutil
 
-from .common import prompt_choice, prompt_menu
+from .common import CommandError, prompt_choice, prompt_menu
 from .config import save_config
 from .depot import (
     WORKSPACE_DEPOT_ROOT,
@@ -49,8 +49,8 @@ def _select_depot_root(client_name: str, cwd: str,
 
 
 def _configure_depot_root(client_name: str, cwd: str,
-                          p4_workspace_root: str) -> bool:
-    """Configure depot root: validate existing or prompt for new."""
+                          p4_workspace_root: str) -> None:
+    """Configure depot root: validate existing or prompt for new; raise CommandError if none is chosen."""
     log.heading('Finding git-p4son depot root')
     depot_root = get_depot_root(cwd)
     if depot_root:
@@ -59,19 +59,17 @@ def _configure_depot_root(client_name: str, cwd: str,
         log.heading('Validating depot root')
         if check_depot_root(depot_root, client_name, cwd):
             log.success('all good')
-            return True
+            return
     else:
         log.warning('no root configured')
 
     log.heading('Configuring depot root')
     depot_root = _select_depot_root(client_name, cwd, p4_workspace_root)
     if not depot_root:
-        log.error('aborting')
-        return False
+        raise CommandError('No depot root selected, aborting')
 
     log.success(f'{expand_depot_root(depot_root, client_name)}/...')
     save_config(cwd, {'depot': {'root': depot_root}})
-    return True
 
 
 def _ask_yes_no(question: str, current: bool) -> bool | None:
@@ -161,13 +159,11 @@ def init_command(args: argparse.Namespace) -> int:
     log.heading('Checking Perforce workspace')
     spec = get_client_spec(cwd)
     if not spec:
-        log.error('Not inside a Perforce workspace. '
-                  'Is Perforce installed and configured?')
-        return 1
+        raise CommandError('Not inside a Perforce workspace. '
+                           'Is Perforce installed and configured?')
     log.success(spec.name)
 
-    if not _configure_depot_root(spec.name, cwd, spec.root):
-        return 1
+    _configure_depot_root(spec.name, cwd, spec.root)
 
     writable, writable_changed = _configure_writable_mode(cwd)
 

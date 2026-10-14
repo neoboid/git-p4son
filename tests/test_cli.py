@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
+from git_p4son.common import CommandError
 from git_p4son.git import get_head_subject
 from git_p4son.log import log
 
@@ -283,8 +284,8 @@ class TestRunCommand(unittest.TestCase):
     def test_new_no_commits_returns_error(self, _branch, _head, _ws):
         parser = create_parser()
         args = parser.parse_args(['new'])
-        result = run_command(args)
-        self.assertEqual(result, 1)
+        with self.assertRaisesRegex(CommandError, 'No commits found'):
+            run_command(args)
 
     @mock.patch('git_p4son.cli.get_head_subject', return_value='Review change')
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
@@ -327,9 +328,10 @@ class TestRunCommand(unittest.TestCase):
     def test_missing_message_file_returns_error(self, mock_new, _branch, _ws):
         with tempfile.TemporaryDirectory() as tmp:
             args = create_parser().parse_args(['new', '-F', 'missing.txt'])
-            with mock.patch('os.getcwd', return_value=tmp):
-                result = run_command(args)
-        self.assertEqual(result, 1)
+            with mock.patch('os.getcwd', return_value=tmp), \
+                    self.assertRaisesRegex(CommandError,
+                                           'Failed to read message file'):
+                run_command(args)
         mock_new.assert_not_called()
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
@@ -339,9 +341,9 @@ class TestRunCommand(unittest.TestCase):
             with open(os.path.join(tmp, 'msg.txt'), 'w') as f:
                 f.write('\n  \n')
             args = create_parser().parse_args(['new', '-F', 'msg.txt'])
-            with mock.patch('os.getcwd', return_value=tmp):
-                result = run_command(args)
-        self.assertEqual(result, 1)
+            with mock.patch('os.getcwd', return_value=tmp), \
+                    self.assertRaisesRegex(CommandError, 'is empty'):
+                run_command(args)
         mock_new.assert_not_called()
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
@@ -395,10 +397,10 @@ class TestResolveBranchKeyword(unittest.TestCase):
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     def test_alias_without_action_asks_for_one(self, _ws):
         args = create_parser().parse_args(['alias'])
-        with mock.patch('git_p4son.cli.log') as mock_log:
-            self.assertEqual(run_command(args), 1)
-        mock_log.error.assert_called_once_with(
-            'No alias action specified. Use "git-p4son alias -h" for help.')
+        with self.assertRaisesRegex(
+                CommandError,
+                '^No alias action specified. Use "git-p4son alias -h" for help.$'):
+            run_command(args)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
@@ -412,9 +414,9 @@ class TestResolveBranchKeyword(unittest.TestCase):
         mock_alias.assert_called_once_with(args)
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
-    def test_detached_head_returns_none(self, _branch):
-        result = _resolve_branch_keyword('/ws')
-        self.assertIsNone(result)
+    def test_detached_head_raises(self, _branch):
+        with self.assertRaisesRegex(CommandError, 'detached HEAD'):
+            _resolve_branch_keyword('/ws')
 
     @mock.patch('git_p4son.cli.get_current_branch', return_value='main')
     def test_main_branch_resolves_to_main(self, _branch):
@@ -473,10 +475,10 @@ class TestCommandsWithoutWorkspace(unittest.TestCase):
     @mock.patch('git_p4son.cli.get_workspace_dir')
     def test_skill_without_action_asks_for_one(self, mock_ws):
         args = create_parser().parse_args(['skill'])
-        with mock.patch('git_p4son.cli.log') as mock_log:
-            self.assertEqual(run_command(args), 1)
-        mock_log.error.assert_called_once_with(
-            'No skill action specified. Use "git-p4son skill -h" for help.')
+        with self.assertRaisesRegex(
+                CommandError,
+                '^No skill action specified. Use "git-p4son skill -h" for help.$'):
+            run_command(args)
         mock_ws.assert_not_called()
 
 

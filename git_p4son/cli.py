@@ -533,18 +533,16 @@ Examples:
     return parser
 
 
-def _resolve_branch_keyword(workspace_dir: str) -> str | None:
-    """Resolve the current git branch to an alias name, or None (with an error printed)."""
+def _resolve_branch_keyword(workspace_dir: str) -> str:
+    """Resolve the current git branch to an alias name; raise CommandError if it has none."""
     branch = get_current_branch(workspace_dir)
     if not branch:
-        log.error('Cannot resolve the branch keyword on a detached HEAD. '
-                  'Name the alias or changelist explicitly.')
-        return None
+        raise CommandError('Cannot resolve the branch keyword on a detached '
+                           'HEAD. Name the alias or changelist explicitly.')
     alias = branch_alias(branch)
     if alias is None:
-        log.error(f'branch "{branch}" resolves to reserved keyword '
-                  f'"{branch_to_alias(branch)}"')
-        return None
+        raise CommandError(f'branch "{branch}" resolves to reserved keyword '
+                           f'"{branch_to_alias(branch)}"')
     return alias
 
 
@@ -575,9 +573,8 @@ def run_command(args: argparse.Namespace) -> int:
 
     if not hasattr(args, 'func'):
         # Only a command whose actions name the handlers, given no action, gets here.
-        log.error(f'No {args.command} action specified. '
-                  f'Use "git-p4son {args.command} -h" for help.')
-        return 1
+        raise CommandError(f'No {args.command} action specified. '
+                           f'Use "git-p4son {args.command} -h" for help.')
 
     if not getattr(args, 'needs_workspace', True):
         return args.func(args)
@@ -585,8 +582,8 @@ def run_command(args: argparse.Namespace) -> int:
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
     if not args.workspace_dir:
-        log.error('No .git directory found in current or parent directories')
-        return 1
+        raise CommandError(
+            'No .git directory found in current or parent directories')
     log.success(args.workspace_dir)
 
     if getattr(args, 'no_alias', False):
@@ -597,8 +594,6 @@ def run_command(args: argparse.Namespace) -> int:
             and not getattr(args, 'all', False)):
         log.heading('Resolving alias from current git branch')
         resolved = _resolve_branch_keyword(args.workspace_dir)
-        if resolved is None:
-            return 1
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
@@ -609,19 +604,16 @@ def run_command(args: argparse.Namespace) -> int:
             with open(args.file, encoding='utf-8') as f:
                 args.message = f.read().strip()
         except OSError as e:
-            log.error(f'Failed to read message file: {e}')
-            return 1
+            raise CommandError(f'Failed to read message file: {e}') from e
         if not args.message:
-            log.error(f'Message file {args.file} is empty')
-            return 1
+            raise CommandError(f'Message file {args.file} is empty')
         log.success(args.file)
 
     if getattr(args, 'message_from_head', False) and args.message is None:
         log.heading('Resolving message from HEAD commit')
         args.message = get_head_subject(args.workspace_dir)
         if args.message is None:
-            log.error('No commits found to derive message from')
-            return 1
+            raise CommandError('No commits found to derive message from')
         log.success(args.message)
 
     return args.func(args)

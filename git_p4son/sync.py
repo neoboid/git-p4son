@@ -82,7 +82,8 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
     if tracked_opened_files:
         for filename, change in tracked_opened_files:
             log.file_change(filename, change)
-        raise CommandError('Workspace has p4-opened files tracked by git')
+        raise CommandError('Workspace has p4-opened files tracked by git. '
+                           'Submit, or shelve and revert them in Perforce first.')
     if opened_files:
         log.warning(
             f'Ignoring {plural(len(opened_files), "p4-opened file")} '
@@ -95,7 +96,8 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> None:
     """Run all pre-sync hooks; raise CommandError if any of them failed."""
     results = run_hooks('pre-sync', workspace_dir, invocation_dir)
     if any(result.returncode != 0 for result in results):
-        raise CommandError('Aborting sync because a pre-sync hook failed')
+        raise CommandError('Aborting sync because a pre-sync hook failed. '
+                           'See its output above.')
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,

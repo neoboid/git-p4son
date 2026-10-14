@@ -583,7 +583,8 @@ def run_command(args: argparse.Namespace) -> int:
     args.workspace_dir = get_workspace_dir()
     if not args.workspace_dir:
         raise CommandError(
-            'No .git directory found in current or parent directories')
+            'No .git directory found in the current or parent directories. '
+            'Run "git p4son init" first.')
     log.success(args.workspace_dir)
 
     if getattr(args, 'no_alias', False):

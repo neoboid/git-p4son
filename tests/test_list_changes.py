@@ -6,8 +6,6 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.list_changes import (
     get_commit_subjects_since,
-    get_enumerated_change_description_since,
-    get_enumerated_commit_lines_since,
     list_changes_command,
 )
 from tests.helpers import make_run_result
@@ -47,55 +45,25 @@ class TestGetCommitSubjectsSince(unittest.TestCase):
         self.assertEqual(subjects, ['abc1234'])
 
 
-class TestGetEnumeratedCommitLinesSince(unittest.TestCase):
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_returns_enumerated_lines(self, mock_subjects):
-        mock_subjects.return_value = ['Add feature', 'Fix bug', 'Update docs']
-        lines = get_enumerated_commit_lines_since('main', '/ws')
-        self.assertEqual(
-            lines, ['1. Add feature', '2. Fix bug', '3. Update docs'])
-
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_no_commits_returns_empty_list(self, mock_subjects):
-        mock_subjects.return_value = []
-        lines = get_enumerated_commit_lines_since('main', '/ws')
-        self.assertEqual(lines, [])
-
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_failure(self, mock_subjects):
-        mock_subjects.side_effect = RunError('git log failed')
-        with self.assertRaises(RunError):
-            get_enumerated_commit_lines_since('main', '/ws')
-
-
-class TestGetEnumeratedChangeDescriptionSince(unittest.TestCase):
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_enumerated_output(self, mock_subjects):
-        mock_subjects.return_value = ['Add feature', 'Fix bug', 'Update docs']
-        desc = get_enumerated_change_description_since('main', '/ws')
-        self.assertEqual(desc, '1. Add feature\n2. Fix bug\n3. Update docs')
-
-    @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_no_commits_returns_none(self, mock_subjects):
-        mock_subjects.return_value = []
-        desc = get_enumerated_change_description_since('main', '/ws')
-        self.assertIsNone(desc)
-
-
 class TestListChangesCommand(unittest.TestCase):
+    @mock.patch('git_p4son.list_changes.log')
     @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_success(self, mock_subjects):
-        mock_subjects.return_value = ['Fix something']
-        args = mock.Mock(base_branch='HEAD~1', workspace_dir='/ws')
-        rc = list_changes_command(args)
-        self.assertEqual(rc, 0)
+    def test_prints_enumerated_subjects(self, mock_subjects, mock_log):
+        mock_subjects.return_value = ['Add feature', 'Fix bug', 'Update docs']
+        args = mock.Mock(base_branch='main', workspace_dir='/ws')
+        self.assertEqual(list_changes_command(args), 0)
+        mock_subjects.assert_called_once_with('main', '/ws')
+        mock_log.info.assert_called_once_with(
+            '1. Add feature\n2. Fix bug\n3. Update docs')
 
+    @mock.patch('git_p4son.list_changes.log')
     @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
-    def test_no_changes(self, mock_subjects):
+    def test_no_changes(self, mock_subjects, mock_log):
         mock_subjects.return_value = []
         args = mock.Mock(base_branch='HEAD~1', workspace_dir='/ws')
-        rc = list_changes_command(args)
-        self.assertEqual(rc, 0)
+        self.assertEqual(list_changes_command(args), 0)
+        mock_log.info.assert_not_called()
+        mock_log.success.assert_called_once_with('No changes found')
 
 
 if __name__ == '__main__':

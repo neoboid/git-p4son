@@ -462,7 +462,7 @@ def _sync_pass(changelist: int, label: str, depot_root: str,
     return prep
 
 
-def _restore_writable(synced: list[str], workspace_dir: str) -> None:
+def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
     """In writable mode, make the git-tracked files this sync wrote writable."""
     if not synced or not is_writable_mode(workspace_dir):
         return
@@ -756,7 +756,8 @@ def sync_command(args: argparse.Namespace) -> int:
 
         _report_not_synced(preps, clobber_mode, workspace_dir)
 
-        _restore_writable([f for p in preps for f in p.synced], workspace_dir)
+        _make_synced_files_writable(
+            [f for p in preps for f in p.synced], workspace_dir)
 
         run_hooks('post-sync', workspace_dir, invocation_dir)
         return 0

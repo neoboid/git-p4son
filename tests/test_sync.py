@@ -30,7 +30,7 @@ from git_p4son.sync import (
     ChangedFile,
     WritableSyncFileSet,
     _collect_split_users,
-    _restore_writable,
+    _make_synced_files_writable,
     _should_split,
     _sync_changelist,
     build_sync_targets,
@@ -63,20 +63,20 @@ def _files_at_commits(content):
 
 @mock.patch('git_p4son.sync.make_writable', return_value=0)
 @mock.patch('git_p4son.sync.get_tracked_files')
-class TestRestoreWritable(unittest.TestCase):
+class TestMakeSyncedFilesWritable(unittest.TestCase):
     """Writable mode's post-sync step: tracked synced files go writable."""
 
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=False)
     def test_does_nothing_when_mode_is_off(self, _mode, mock_tracked,
                                            mock_make):
-        _restore_writable(['/ws/a.cpp'], '/ws')
+        _make_synced_files_writable(['/ws/a.cpp'], '/ws')
         mock_tracked.assert_not_called()
         mock_make.assert_not_called()
 
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
     def test_does_nothing_when_nothing_was_synced(self, _mode, mock_tracked,
                                                   mock_make):
-        _restore_writable([], '/ws')
+        _make_synced_files_writable([], '/ws')
         mock_tracked.assert_not_called()
         mock_make.assert_not_called()
 
@@ -85,7 +85,7 @@ class TestRestoreWritable(unittest.TestCase):
                                                   mock_make):
         """Only tracked files are made writable, each looked up once."""
         mock_tracked.return_value = {'/ws/a.cpp', '/ws/b.h'}
-        _restore_writable(
+        _make_synced_files_writable(
             ['/ws/b.h', '/ws/a.cpp', '/ws/Content/x.uasset', '/ws/a.cpp'],
             '/ws')
         mock_tracked.assert_called_once_with(
@@ -1093,7 +1093,7 @@ class TestSyncCommand(unittest.TestCase):
         self.assertIn('edited.log', infos)
         self.assertNotIn('pristine.log', infos)
 
-    @mock.patch('git_p4son.sync._restore_writable')
+    @mock.patch('git_p4son.sync._make_synced_files_writable')
     @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
     @mock.patch('git_p4son.sync._merge_changed_files')
     @mock.patch('git_p4son.sync.commit')
@@ -1295,7 +1295,7 @@ class TestSyncCommand(unittest.TestCase):
         mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
         mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
 
-    @mock.patch('git_p4son.sync._restore_writable')
+    @mock.patch('git_p4son.sync._make_synced_files_writable')
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
     @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
     @mock.patch('git_p4son.sync.prepare_writable_files')
@@ -1801,7 +1801,7 @@ class TestSyncSplitting(unittest.TestCase):
                 ('git_p4son.sync.add_all_files', None),
                 ('git_p4son.sync.commit', None),
                 ('git_p4son.sync._merge_changed_files', None),
-                ('git_p4son.sync._restore_writable', None),
+                ('git_p4son.sync._make_synced_files_writable', None),
                 ('git_p4son.sync.run_hooks', [])):
             patcher = mock.patch(target, return_value=value)
             self.patches[target.rsplit('.', 1)[1]] = patcher.start()

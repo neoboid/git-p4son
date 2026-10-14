@@ -4,23 +4,15 @@ import csv
 import os
 
 from .common import RunError, run
-from .config import load_config
+from .config import ConfigError, get_setting
 from .log import log
 
 IGNORE_FLAG = '--ignore-blocking-processes'
 
 
 def get_blocking_processes(workspace_dir: str) -> list[str]:
-    """Return the configured blocking process names; raise ValueError if malformed."""
-    sync = load_config(workspace_dir).get('sync', {})
-    if not isinstance(sync, dict):
-        raise ValueError('sync in config.toml is not a table')
-    names = sync.get('blocking-processes', [])
-    if (not isinstance(names, list)
-            or not all(isinstance(name, str) for name in names)):
-        raise ValueError(
-            'sync.blocking-processes in config.toml must be a list of strings')
-    return names
+    """Return the configured blocking process names; raise ConfigError if malformed."""
+    return get_setting(workspace_dir, 'sync', 'blocking-processes', list[str], [])
 
 
 def normalize_process_name(name: str) -> str:
@@ -54,7 +46,7 @@ def check_no_blocking_processes(workspace_dir: str, ignore: bool) -> bool:
 
     try:
         names = get_blocking_processes(workspace_dir)
-    except ValueError as error:
+    except (ConfigError, ValueError) as error:
         log.error(f'Could not read the blocking processes: {error}')
         return False
     if not names:

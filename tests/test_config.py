@@ -7,8 +7,10 @@ import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.config import (
+    ConfigError,
     config_path,
     ensure_config_dir,
+    get_setting,
     load_config,
     save_config,
 )
@@ -134,6 +136,42 @@ class TestSaveConfig(unittest.TestCase):
             save_config(tmpdir, {'depot': {'root': '//second'}})
             self.assertEqual(
                 load_config(tmpdir), {'depot': {'root': '//second'}})
+
+
+class TestGetSetting(unittest.TestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.ws = self._tempdir.name
+
+    def _write(self, text):
+        os.makedirs(os.path.join(self.ws, CONFIG_DIR), exist_ok=True)
+        with open(config_path(self.ws), 'w', encoding='utf-8') as f:
+            f.write(text)
+
+    def test_default_when_unset(self):
+        self.assertEqual(get_setting(self.ws, 'sync', 'x', str, 'd'), 'd')
+        self._write('[sync]\n')
+        self.assertEqual(get_setting(self.ws, 'sync', 'x', str, 'd'), 'd')
+
+    def test_returns_a_value_of_the_expected_type(self):
+        self._write('[core]\nwritable = true\n[sync]\nusers = ["a", "b"]\n')
+        self.assertIs(get_setting(self.ws, 'core',
+                      'writable', bool, False), True)
+        self.assertEqual(get_setting(self.ws, 'sync', 'users', list[str], []),
+                         ['a', 'b'])
+
+    def test_wrong_type_raises(self):
+        self._write('[core]\nwritable = "true"\n[sync]\nusers = ["a", 1]\n')
+        with self.assertRaisesRegex(ConfigError, 'core.writable .* true or false'):
+            get_setting(self.ws, 'core', 'writable', bool, False)
+        with self.assertRaisesRegex(ConfigError, 'sync.users .* a list of strings'):
+            get_setting(self.ws, 'sync', 'users', list[str], [])
+
+    def test_section_not_a_table_raises(self):
+        self._write('sync = "x"\n')
+        with self.assertRaisesRegex(ConfigError, 'sync in config.toml is not a table'):
+            get_setting(self.ws, 'sync', 'users', list[str], [])
 
 
 if __name__ == '__main__':

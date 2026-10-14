@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import RunError
+from git_p4son.config import ConfigError
 from git_p4son.processes import (
     check_no_blocking_processes, get_blocking_processes,
     get_running_processes, normalize_process_name,
@@ -49,17 +50,17 @@ class TestGetBlockingProcesses(_WorkspaceTestCase):
 
     def test_not_a_list(self):
         self.write_config('[sync]\nblocking-processes = "UnrealEditor"\n')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigError):
             get_blocking_processes(self.workspace)
 
     def test_non_string_entry(self):
         self.write_config('[sync]\nblocking-processes = ["a", 1]\n')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigError):
             get_blocking_processes(self.workspace)
 
     def test_sync_not_a_table(self):
         self.write_config('sync = 1\n')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigError):
             get_blocking_processes(self.workspace)
 
 

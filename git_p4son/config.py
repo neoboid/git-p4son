@@ -5,6 +5,7 @@ import re
 import tomllib
 
 from . import CONFIG_DIR
+from .common import CommandError
 
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
@@ -37,6 +38,41 @@ def load_config(workspace_dir: str) -> dict:
         return {}
     with open(path, 'rb') as f:
         return tomllib.load(f)
+
+
+class ConfigError(CommandError):
+    """A config.toml value has the wrong type."""
+
+
+_TYPE_DESCRIPTIONS = {
+    str: 'a string',
+    bool: 'true or false',
+    dict: 'a table',
+    list[str]: 'a list of strings',
+}
+
+
+def _has_type(value, expected) -> bool:
+    if expected == list[str]:
+        return isinstance(value, list) and all(isinstance(item, str) for item in value)
+    return isinstance(value, expected)
+
+
+def get_setting(workspace_dir: str, section: str, key: str, expected, default):
+    """Return config[section][key], or default when unset; expected is a type or list[str].
+
+    Raises ConfigError when the section or the value has the wrong type.
+    """
+    table = load_config(workspace_dir).get(section, {})
+    if not isinstance(table, dict):
+        raise ConfigError(f'{section} in config.toml is not a table')
+    if key not in table:
+        return default
+    value = table[key]
+    if not _has_type(value, expected):
+        raise ConfigError(f'{section}.{key} in config.toml must be '
+                          f'{_TYPE_DESCRIPTIONS[expected]}')
+    return value
 
 
 def save_config(workspace_dir: str, config: dict) -> None:

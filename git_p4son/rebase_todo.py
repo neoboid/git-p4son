@@ -128,7 +128,6 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
     with open(todo_file, 'r') as f:
         todo_content = f.read()
 
-    # Overwrite the rebase todo file with our version plus git's comments
     with open(args.filename, 'w') as f:
         f.write(todo_content)
         if comment_lines:

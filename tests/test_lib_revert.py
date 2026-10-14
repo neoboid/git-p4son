@@ -119,6 +119,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
             'make_writable': mock.patch('git_p4son.writable.make_writable'),
+            'log': mock.patch('git_p4son.lib.log'),
         }
         self.mocks = {name: p.start() for name, p in patches.items()}
         self.addCleanup(mock.patch.stopall)
@@ -151,12 +152,12 @@ class TestRevertUnchangedFiles(unittest.TestCase):
     def test_tracked_deletes_present_on_disk_are_reverted_and_restored(self):
         self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
                     ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
-        count = revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws)
         self.mocks['revert'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
         self.mocks['restore'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
-        self.assertEqual(count, 2)
+        self.mocks['log'].success.assert_called_once_with('2 reverted')
 
     def test_real_delete_is_left_alone(self):
         """Opened for delete and gone from git and disk: a real delete."""
@@ -199,7 +200,8 @@ class TestRevertUnchangedFiles(unittest.TestCase):
                     ['a.txt', 'b.txt', 'c.txt'], ['a.txt', 'b.txt', 'c.txt'])
         self.mocks['revert_unchanged'].return_value = [
             '//depot/a.txt#1 - was edit, reverted']
-        self.assertEqual(revert_unchanged_files('100', self.ws), 2)
+        revert_unchanged_files('100', self.ws)
+        self.mocks['log'].success.assert_called_once_with('2 reverted')
 
     def test_dry_run_reverts_and_restores_nothing(self):
         self._setup([('a.txt', 'edit'), ('c.txt', 'delete')],
@@ -210,9 +212,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self.mocks['revert'].assert_called_once_with(['c.txt'], self.ws, True)
 
     def test_dry_run_placeholder_changelist_queries_nothing(self):
-        count = revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws,
-                                       dry_run=True)
-        self.assertEqual(count, 0)
+        revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws, dry_run=True)
         self.mocks['opened'].assert_not_called()
         self.mocks['revert_unchanged'].assert_not_called()
 

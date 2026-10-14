@@ -182,20 +182,18 @@ def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
     open_changes_for_edit(changelist, base_branch, workspace_dir, dry_run)
     log.success('Done')
 
-    log.heading('Reverting unchanged files')
-    count = revert_unchanged_files(changelist, workspace_dir, dry_run)
-    log.success(f'{count} would be reverted' if dry_run
-                else f'{count} reverted')
+    revert_unchanged_files(changelist, workspace_dir, dry_run)
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,
-                           dry_run: bool = False) -> int:
+                           dry_run: bool = False) -> None:
     """Revert files in a changelist that are no longer part of the git change.
 
-    Requires a clean git workspace. Returns the number of files reverted."""
+    Requires a clean git workspace."""
+    log.heading('Reverting unchanged files')
     if changelist == DRY_RUN_CHANGELIST:
         log.info(f'Would revert unchanged files in changelist {changelist}')
-        return 0
+        return
 
     opened = get_opened_files_in_changelist(changelist, workspace_dir)
     tracked = get_tracked_files([path for path, _ in opened], workspace_dir)
@@ -223,9 +221,13 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
         p4_revert(stale_deletes, workspace_dir, dry_run)
         restore_files(stale_deletes, workspace_dir, dry_run)
 
-    if not dry_run and is_writable_mode(workspace_dir):
-        # p4 revert leaves files read-only; the still opened ones are writable already.
-        restore_writable(revert_if_unchanged + stale_deletes, tracked,
-                         workspace_dir)
+    count = len(reverted) + len(stale_deletes)
+    log.success(f'{count} would be reverted' if dry_run
+                else f'{count} reverted')
 
-    return len(reverted) + len(stale_deletes)
+    if not dry_run and is_writable_mode(workspace_dir):
+        log.heading('Making reverted tracked files writable (writable mode)')
+        # p4 revert leaves files read-only; the still opened ones are writable already.
+        changed = restore_writable(revert_if_unchanged + stale_deletes,
+                                   tracked, workspace_dir)
+        log.success(f'{changed} tracked files made writable')

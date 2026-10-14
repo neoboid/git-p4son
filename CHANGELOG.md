@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Output reads the same across commands: each step ends with what it did ("Opened 3 files", "Shelved CL 123")
+  instead of "Done", every dry run ends with "Dry run, nothing changed", counts read "1 file" and "3 files", and
+  errors such as a dirty workspace or an unknown alias say what to do next
 - Errors are reported in one line: `sync -u` and `sync-split-users add` and `delete` name all unknown users at once
   ("No such Perforce users: nobody, typo"), and a failed `review` rebase or a file p4 could not replace no longer
   prints two error lines. When p4 cannot tell your user for `$(user)`, its own message is shown

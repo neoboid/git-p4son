@@ -495,8 +495,9 @@ class TestCollectSplitUsers(unittest.TestCase):
                           no_split=no_split)
         with mock.patch('git_p4son.sync.get_split_users',
                         return_value=configured), \
-                mock.patch('git_p4son.sync_split_users.check_p4_users',
-                           return_value=known):
+                mock.patch('git_p4son.sync_split_users.get_existing_p4_users',
+                           return_value=list((known or {}).values())), \
+                mock.patch('git_p4son.sync_split_users.log'):
             return _collect_split_users(args, '/ws')
 
     def test_configured_users(self):
@@ -513,8 +514,9 @@ class TestCollectSplitUsers(unittest.TestCase):
                           known={'bob': 'bob'}),
             ['bob'])
 
-    def test_unknown_extra_user_returns_none(self):
-        self.assertIsNone(self._collect(['alice'], split_user=['nobody']))
+    def test_unknown_extra_user_raises(self):
+        with self.assertRaisesRegex(CommandError, 'No such Perforce user'):
+            self._collect(['alice'], split_user=['nobody'])
 
 
 class TestShouldSplit(unittest.TestCase):
@@ -1376,9 +1378,8 @@ class TestSyncSplitting(unittest.TestCase):
 
     def test_unresolvable_placeholder_fails_without_syncing(self):
         self.patches['get_p4_user'].return_value = None
-        self.assertEqual(self._run(configured=['$(user)']), 1)
-        self.assertIn('--no-split',
-                      self.mock_users_log.error.call_args.args[0])
+        with self.assertRaisesRegex(CommandError, '--no-split'):
+            self._run(configured=['$(user)'])
         self.patches['_sync_pass'].assert_not_called()
 
     def test_explicit_sequence_is_merged_with_split_points(self):
@@ -1409,9 +1410,9 @@ class TestSyncSplitting(unittest.TestCase):
             ['other'], '/ws')
 
     def test_unknown_split_user_fails_before_any_work(self):
-        self.assertEqual(self._run(split_user=['nobody']), 1)
-        self.mock_users_log.error.assert_called_once_with(
-            'No such Perforce user: nobody')
+        with self.assertRaisesRegex(CommandError,
+                                    '^No such Perforce user: nobody$'):
+            self._run(split_user=['nobody'])
         self.patches['get_latest_changelist'].assert_not_called()
         self.patches['sync_preflight'].assert_not_called()
         self.patches['_sync_pass'].assert_not_called()

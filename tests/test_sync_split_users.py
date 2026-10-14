@@ -4,11 +4,12 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import RunError
+from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError, load_config, save_config
 from git_p4son.sync_split_users import (
     USER_PLACEHOLDER,
     get_split_users,
+    resolve_split_users,
     is_self_split,
     set_self_split,
     set_split_users,
@@ -77,6 +78,27 @@ class TestSelfSplit(unittest.TestCase):
             set_self_split(tmpdir, False)
             self.assertEqual(get_split_users(tmpdir), ['bob', 'carol'])
             self.assertFalse(is_self_split(tmpdir))
+
+
+@mock.patch('git_p4son.sync_split_users.log')
+@mock.patch('git_p4son.sync_split_users.get_p4_user')
+class TestResolveSplitUsers(unittest.TestCase):
+    def test_placeholder_becomes_the_current_user(self, mock_user, _log):
+        mock_user.return_value = 'carol'
+        self.assertEqual(resolve_split_users(['bob', USER_PLACEHOLDER], '/ws'),
+                         ['bob', 'carol'])
+
+    def test_p4_failure_is_shown_before_the_error(self, mock_user, mock_log):
+        mock_user.side_effect = RunError(
+            'p4 info failed', stderr=['Connect to server failed'])
+        with self.assertRaisesRegex(CommandError, '--no-split'):
+            resolve_split_users([USER_PLACEHOLDER], '/ws')
+        mock_log.info.assert_called_once_with('Connect to server failed')
+
+    def test_unknown_user_is_an_error(self, mock_user, _log):
+        mock_user.return_value = None
+        with self.assertRaisesRegex(CommandError, 'Cannot determine'):
+            resolve_split_users([USER_PLACEHOLDER], '/ws')
 
 
 class TestSyncSplitUsersList(unittest.TestCase):
@@ -183,10 +205,15 @@ class TestSyncSplitUsersAdd(unittest.TestCase):
 
     def test_unknown_user_adds_nothing(self):
         set_split_users(self.ws, ['bob'])
-        self.assertEqual(self._run('Alice', 'nobody'), 1)
+        with self.assertRaisesRegex(CommandError,
+                                    '^No such Perforce user: nobody$'):
+            self._run('Alice', 'nobody')
         self.assertEqual(get_split_users(self.ws), ['bob'])
-        self.mock_log.error.assert_called_once_with(
-            'No such Perforce user: nobody')
+
+    def test_several_unknown_users_in_one_error(self):
+        with self.assertRaisesRegex(CommandError,
+                                    '^No such Perforce users: nobody, typo$'):
+            self._run('nobody', 'Alice', 'typo')
 
     def test_me_adds_the_placeholder_without_checking(self):
         self.assertEqual(self._run(me=True), 0)
@@ -205,8 +232,8 @@ class TestSyncSplitUsersAdd(unittest.TestCase):
         self.mock_existing.assert_called_once_with(['bob'], self.ws)
 
     def test_nothing_given_is_an_error(self):
-        self.assertEqual(self._run(), 1)
-        self.mock_log.error.assert_called_once()
+        with self.assertRaisesRegex(CommandError, 'Give one or more'):
+            self._run()
         self.assertEqual(get_split_users(self.ws), [])
 
     def test_nothing_written_when_all_already_present(self):
@@ -259,33 +286,39 @@ class TestSyncSplitUsersDelete(unittest.TestCase):
         self.assertEqual(get_split_users(self.ws), [])
 
     def test_unknown_name_removes_nothing(self):
-        self.assertEqual(self._run('bob', 'dave'), 1)
+        with self.assertRaisesRegex(CommandError, '^Not a split user: dave$'):
+            self._run('bob', 'dave')
         self.assertEqual(get_split_users(self.ws),
                          [USER_PLACEHOLDER, 'Alice', 'bob'])
-        self.mock_log.error.assert_called_once_with('dave is not a split user')
+
+    def test_several_unknown_names_in_one_error(self):
+        with self.assertRaisesRegex(CommandError,
+                                    '^Not split users: dave, erin$'):
+            self._run('dave', 'erin')
 
     def test_hints_at_me_when_naming_yourself(self):
         """The list holds $(user), not the name it resolves to."""
-        self.assertEqual(self._run('carol'), 1)
-        self.mock_log.error.assert_called_once_with(
-            'carol is not a split user')
+        with self.assertRaisesRegex(CommandError, 'Not a split user: carol'):
+            self._run('carol')
         self.mock_log.info.assert_called_once_with(
             '$(user) stands for Carol, remove it with --me')
 
     def test_no_hint_without_the_placeholder(self):
         set_split_users(self.ws, ['Alice'])
-        self.assertEqual(self._run('carol'), 1)
+        with self.assertRaises(CommandError):
+            self._run('carol')
         self.mock_log.info.assert_not_called()
         self.mock_user.assert_not_called()
 
     def test_no_hint_when_p4_fails(self):
         self.mock_user.side_effect = RunError('p4 info failed')
-        self.assertEqual(self._run('carol'), 1)
+        with self.assertRaises(CommandError):
+            self._run('carol')
         self.mock_log.info.assert_not_called()
 
     def test_nothing_given_is_an_error(self):
-        self.assertEqual(self._run(), 1)
-        self.mock_log.error.assert_called_once()
+        with self.assertRaisesRegex(CommandError, 'Give one or more'):
+            self._run()
         self.assertEqual(get_split_users(self.ws),
                          [USER_PLACEHOLDER, 'Alice', 'bob'])
 

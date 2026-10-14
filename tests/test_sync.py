@@ -366,15 +366,17 @@ class TestSyncChangelist(unittest.TestCase):
                 self.assertRaises(CommandError) as ctx:
             _sync_changelist(12345, 'test', '//myclient',
                              '/ws', expected_clobber=set())
-        mock_log.error.assert_called_once_with(
+        mock_log.info.assert_called_once_with(
             'rename: failed to rename D:\\ws\\a.uasset')
         self.assertIn('partially synced', str(ctx.exception))
 
     def test_unexpected_clobber_raises(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
-        with self.assertRaises(P4SyncClobberError):
+        with mock.patch('git_p4son.sync.log') as mock_log, \
+                self.assertRaisesRegex(CommandError, 'Unexpected clobber'):
             _sync_changelist(12345, 'test', '//myclient', '/ws',
                              expected_clobber=set())
+        mock_log.info.assert_called_once_with('/ws/a.txt')
 
 
 class TestBuildSyncTargets(unittest.TestCase):
@@ -653,8 +655,8 @@ class TestSyncCommand(unittest.TestCase):
     @mock.patch('git_p4son.depot.get_depot_root', return_value=None)
     def test_no_depot_root_aborts(self, _depot):
         args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'No depot root configured'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
@@ -696,8 +698,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_workspace_placeholder_without_client_spec_aborts(
             self, _depot, _spec, _p4clean):
         args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'Cannot resolve'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.git_last_synced_changelist', return_value=None)
     @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
@@ -716,8 +718,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_dirty_p4_workspace_aborts(self, _depot, _p4clean, _git_clean,
                                        _tracked, _last_synced):
         args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
@@ -751,8 +753,8 @@ class TestSyncCommand(unittest.TestCase):
                                            _p4clean, mock_last_synced, _head):
         mock_last_synced.return_value = 200
         args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'without --force'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.commit')
     @mock.patch('git_p4son.sync.add_all_files')
@@ -909,8 +911,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_run_hooks.return_value = [make_run_result(returncode=1)]
         args = _sync_args(changelist=['200'], force=False,
                           workspace_dir='/ws', invocation_dir='/invoked')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'pre-sync hook failed'):
+            sync_command(args)
         mock_p4sync.assert_not_called()
         mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
 
@@ -1124,8 +1126,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['50', '156'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'without --force'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_synced_changelist')
@@ -1137,8 +1139,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['156', '123'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_synced_changelist')
@@ -1150,8 +1152,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['123', '123'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_synced_changelist')
@@ -1163,8 +1165,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['last-synced', '123'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'cannot be combined'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
     @mock.patch('git_p4son.sync.git_last_synced_changelist')
@@ -1176,8 +1178,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['head', '123'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'must come last'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.get_latest_changelist', return_value=200)
     @mock.patch('git_p4son.sync.merge_changed_files')
@@ -1222,8 +1224,8 @@ class TestSyncCommand(unittest.TestCase):
         mock_last_synced.return_value = 100
         args = _sync_args(changelist=['123', '156', 'head'], force=False,
                           workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
+            sync_command(args)
 
 
 class TestSyncDryRun(unittest.TestCase):
@@ -1289,8 +1291,8 @@ class TestSyncDryRun(unittest.TestCase):
 
     def test_invalid_arguments_still_fail(self):
         """A dry run validates the targets exactly as a real sync does."""
-        self.assertEqual(self._run(['9000']), 1)
-        self.mock_log.error.assert_called_once()
+        with self.assertRaisesRegex(CommandError, 'without --force'):
+            self._run(['9000'])
         self._assert_nothing_run()
 
     def test_already_synced(self):
@@ -1464,8 +1466,9 @@ class TestSyncSplitting(unittest.TestCase):
         self.patches['sync_preflight'].assert_not_called()
 
     def test_preflight_runs_before_the_split_queries(self):
-        self.patches['sync_preflight'].return_value = False
-        self.assertEqual(self._run(configured=['me']), 1)
+        self.patches['sync_preflight'].side_effect = CommandError('failed')
+        with self.assertRaises(CommandError):
+            self._run(configured=['me'])
         self._assert_not_split()
         self.patches['get_p4_user'].assert_not_called()
 
@@ -1484,11 +1487,12 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_get_opened_files')
     @mock.patch('git_p4son.lib.get_dirty_files')
     @mock.patch('git_p4son.sync.check_no_blocking_processes',
-                return_value=False)
+                side_effect=CommandError('blocked'))
     def test_blocking_process_stops_before_everything_else(
             self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
-        self.assertFalse(sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
+        with self.assertRaisesRegex(CommandError, 'blocked'):
+            sync_preflight(
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
         mock_blocking.assert_called_once_with('/ws', False)
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
@@ -1497,12 +1501,11 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.sync.check_no_blocking_processes',
-                return_value=True)
+    @mock.patch('git_p4son.sync.check_no_blocking_processes')
     def test_ignore_blocking_processes_is_passed_on(
             self, mock_blocking, _dirty, _opened, _hooks):
-        self.assertTrue(sync_preflight('//ws', '/ws', '/invoked',
-                                       ignore_blocking_processes=True))
+        sync_preflight('//ws', '/ws', '/invoked',
+                       ignore_blocking_processes=True)
         mock_blocking.assert_called_once_with('/ws', True)
 
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
@@ -1510,8 +1513,8 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_clean_workspaces_run_the_hooks(
             self, _dirty, _opened, mock_run_hooks):
-        self.assertTrue(sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
+        sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
         mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
 
     @mock.patch('git_p4son.sync.run_hooks')
@@ -1533,8 +1536,9 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_dirty_p4_stops_before_hooks(
             self, _dirty, _opened, _tracked, mock_run_hooks):
-        self.assertFalse(sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
+        with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):
+            sync_preflight(
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
         mock_run_hooks.assert_not_called()
 
     @mock.patch('git_p4son.sync.run_hooks',
@@ -1542,8 +1546,9 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
-        self.assertFalse(sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
+        with self.assertRaisesRegex(CommandError, 'pre-sync hook failed'):
+            sync_preflight(
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
 
 
 if __name__ == '__main__':

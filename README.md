@@ -222,6 +222,39 @@ sync git-p4son lists the ones Perforce skipped because they were modified locall
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
 
+## Configuration
+
+git-p4son keeps its per-repository settings in `.git-p4son/config.toml`. `init`, `writable` and `sync-split-users`
+write most of them; the rest you edit by hand.
+
+- `[depot] root` (string, set by `init`): the depot path `sync` syncs, e.g. `//$(workspace)` or
+  `//$(workspace)/Engine`. See [Init Command](#init-command)
+- `[core] writable` (`true` or `false`, default `false`): [writable mode](#writable-command), which keeps
+  git-tracked files writable
+- `[sync] split-users` (list of strings, default empty): the users whose changelists `sync` gives a commit each;
+  `$(user)` stands for you. See [Split users](#split-users)
+- `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
+  [Blocking processes](#blocking-processes)
+- `[hooks.extension-associations]` (table, Windows only): the command that runs a hook script, by file extension.
+  See [Hooks](#hooks)
+
+For example:
+
+```toml
+[depot]
+root = "//$(workspace)"
+
+[core]
+writable = true
+
+[sync]
+split-users = ["$(user)", "alice"]
+blocking-processes = ["UnrealEditor"]
+```
+
+A value of the wrong type, such as `writable = "true"` or `split-users = "alice"`, or a file that is not valid TOML,
+stops the command with an error naming the setting, so a typo is never silently ignored.
+
 ## Usage
 
 git-p4son provides eleven commands: `init`, `sync`, `sync-split-users`, `new`, `update`, `review`,
@@ -337,7 +370,7 @@ blocking-processes = ["UnrealEditor", "UnrealLightmass"]
 
 Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers `UnrealEditor.exe` on
 Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace checks and the pre-sync hooks. A
-malformed setting, or a process list that cannot be read, aborts the sync rather than silently
+[malformed setting](#configuration), or a process list that cannot be read, aborts the sync rather than silently
 skipping the check.
 
 Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.

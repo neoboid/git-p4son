@@ -139,7 +139,7 @@ def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
-                                  workspace_dir: str, dry_run: bool = False) -> None:
+                                  workspace_dir: str, dry_run: bool) -> None:
     """Open local git changes for add/edit/delete in a Perforce changelist."""
     wanted = ([(f, 'add') for f in changes.adds]
               + [(f, 'edit') for f in changes.mods]
@@ -169,7 +169,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
-def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool = False) -> None:
+def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool) -> None:
     """Get local git changes and open them for edit in a Perforce changelist."""
     changes = get_local_changes(base_branch, workspace_dir)
     include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
@@ -186,7 +186,7 @@ def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,
-                           dry_run: bool = False) -> None:
+                           dry_run: bool) -> None:
     """Revert files in a changelist that are no longer part of the git change.
 
     Requires a clean git workspace."""

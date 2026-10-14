@@ -139,7 +139,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
 
     def test_tracked_edit_is_revert_candidate(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), ['a.txt'])
         self.mocks['revert_unchanged'].assert_called_once_with(
             ['a.txt'], '100', self.ws, False)
@@ -147,14 +147,14 @@ class TestRevertUnchangedFiles(unittest.TestCase):
     def test_untracked_edit_is_never_reverted(self):
         """A p4-only file checked out by hand stays opened, even when unchanged."""
         self._setup([('Asset.uasset', 'edit')], [], ['Asset.uasset'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
         self.mocks['revert'].assert_not_called()
 
     def test_tracked_deletes_present_on_disk_are_reverted_and_restored(self):
         self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
                     ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.mocks['revert'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
         self.mocks['restore'].assert_called_once_with(
@@ -164,27 +164,27 @@ class TestRevertUnchangedFiles(unittest.TestCase):
     def test_real_delete_is_left_alone(self):
         """Opened for delete and gone from git and disk: a real delete."""
         self._setup([('gone.txt', 'delete')], [], [])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.mocks['revert'].assert_not_called()
         self.assertEqual(self._unchanged_candidates(), [])
 
     def test_missing_add_is_revert_candidate_tracked_or_not(self):
         self._setup([('was_added.txt', 'add'), ('tracked_add.txt', 'add')],
                     ['tracked_add.txt'], [])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(),
                          ['was_added.txt', 'tracked_add.txt'])
 
     def test_untracked_add_present_on_disk_is_left_alone(self):
         self._setup([('New.uasset', 'add')], [], ['New.uasset'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
         self.mocks['revert'].assert_not_called()
 
     def test_tracked_add_present_on_disk_is_left_alone(self):
         """A real new file stays opened; there is no depot version to compare with."""
         self._setup([('new.txt', 'add')], ['new.txt'], ['new.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
 
     def test_other_actions_are_left_alone(self):
@@ -192,7 +192,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
                      ('i.txt', 'integrate'), ('b.txt', 'branch')],
                     ['m.txt', 'i.txt', 'b.txt'],
                     ['m.txt', 'i.txt', 'b.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
         self.mocks['revert'].assert_not_called()
 
@@ -202,7 +202,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
                     ['a.txt', 'b.txt', 'c.txt'], ['a.txt', 'b.txt', 'c.txt'])
         self.mocks['revert_unchanged'].return_value = [
             '//depot/a.txt#1 - was edit, reverted']
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.mocks['log'].success.assert_called_once_with('2 reverted')
 
     def test_dry_run_reverts_and_restores_nothing(self):
@@ -223,7 +223,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self._setup([('a.txt', 'edit'), ('c.txt', 'delete'),
                      ('gone.txt', 'add')],
                     ['a.txt', 'c.txt'], ['a.txt', 'c.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.mocks['make_writable'].assert_called_once_with([
             os.path.join(self.ws, 'a.txt'),
             os.path.join(self.ws, 'c.txt'),
@@ -231,7 +231,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
 
     def test_writable_mode_off_leaves_permissions(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
-        revert_unchanged_files('100', self.ws)
+        revert_unchanged_files('100', self.ws, dry_run=False)
         self.mocks['make_writable'].assert_not_called()
 
 

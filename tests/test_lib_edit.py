@@ -234,7 +234,7 @@ class TestOpenWarnings(unittest.TestCase):
                                returncode=1, stdout=output)), \
                 mock.patch('git_p4son.perforce.log'), \
                 mock.patch('git_p4son.lib.log') as mock_log:
-            include_changes_in_changelist(changes, '100', '/ws')
+            include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         return mock_opened, mock_log
 
     def test_warns_about_files_left_unopened(self):
@@ -291,7 +291,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.adds = ['new_file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new_file.txt')])
 
@@ -302,7 +302,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.adds = ['new_file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'new_file.txt')])
 
@@ -313,7 +313,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.adds = ['new_file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         mock_run.assert_not_called()
 
     # --- modified files ---
@@ -324,7 +324,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'mod.txt')])
 
@@ -335,7 +335,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'mod.txt')])
 
@@ -346,7 +346,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['mod.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         mock_run.assert_not_called()
 
     # --- deleted files ---
@@ -357,7 +357,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['old.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
 
@@ -368,7 +368,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['old.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'old.txt')])
 
@@ -379,7 +379,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['old.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         mock_run.assert_not_called()
 
     # --- moved files ---
@@ -390,7 +390,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.moves = [('old.txt', 'new.txt')]
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new.txt'),
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
@@ -402,7 +402,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.moves = [('old.txt', 'new.txt')]
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'old.txt\nnew.txt')])
 
@@ -429,7 +429,7 @@ class TestOneOpenedQuery(unittest.TestCase):
         changes.mods = ['mod.txt']
         changes.dels = ['gone.txt']
         changes.moves = [('old.txt', 'renamed.txt')]
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(
             mock_opened.call_args_list[0].args,
             (['new.txt', 'mod.txt', 'gone.txt', 'old.txt', 'renamed.txt'], '/ws'))
@@ -456,7 +456,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
@@ -468,7 +468,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
@@ -481,7 +481,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
@@ -495,7 +495,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
@@ -510,7 +510,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         mock_run.assert_not_called()
 
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -520,7 +520,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.mods = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'file.txt')])
 
@@ -532,7 +532,7 @@ class TestActionMismatch(unittest.TestCase):
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.dels = ['file.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
                          (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt')])
 
@@ -549,7 +549,7 @@ class TestBatchedActions(unittest.TestCase):
             self, _opened, mock_run, mock_log, _warn, mock_restore):
         changes = LocalChanges()
         changes.mods = ['a.txt', 'b.txt', 'c.txt', 'd.txt']
-        include_changes_in_changelist(changes, '100', '/ws')
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'a.txt\nb.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
@@ -577,14 +577,14 @@ class TestOpenChangesForEdit(unittest.TestCase):
     def test_success(self, mock_get_changes, mock_include):
         mock_changes = mock.Mock()
         mock_get_changes.return_value = mock_changes
-        open_changes_for_edit('100', 'HEAD~1', '/ws')
+        open_changes_for_edit('100', 'HEAD~1', '/ws', dry_run=False)
         mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
 
     @mock.patch('git_p4son.lib.get_local_changes')
     def test_get_changes_failure(self, mock_get_changes):
         mock_get_changes.side_effect = RunError('get changes failed')
         with self.assertRaises(RunError):
-            open_changes_for_edit('100', 'HEAD~1', '/ws')
+            open_changes_for_edit('100', 'HEAD~1', '/ws', dry_run=False)
 
 
 if __name__ == '__main__':

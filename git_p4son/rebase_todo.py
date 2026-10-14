@@ -20,7 +20,7 @@ TODO_FILE = f'{REVIEWS_DIR}/todo'
 SWARM_SHELF_DELAY = 5
 
 
-def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
+def _find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     """Return the commit lines since base_branch, or None (logged) if there are none."""
     log.heading('Finding commits')
     commit_lines = get_commit_lines_since(base_branch, workspace_dir)
@@ -31,8 +31,8 @@ def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     return commit_lines
 
 
-def build_todo(commit_lines: list[str], first_cmd: str, cmd: str,
-               with_message: bool = False, sleep: int | None = None) -> str:
+def _build_todo(commit_lines: list[str], first_cmd: str, cmd: str,
+                with_message: bool = False, sleep: int | None = None) -> str:
     """Build a rebase todo running git p4son first_cmd after the first commit and cmd after the others."""
     # Later steps keep the description the first one set.
     if with_message:
@@ -55,17 +55,17 @@ def rebase_per_commit(first_cmd: str, cmd: str, base_branch: str,
 
     A message reaches first_cmd through MESSAGE_FILE, as -F.
     """
-    commit_lines = find_commits(base_branch, workspace_dir)
+    commit_lines = _find_commits(base_branch, workspace_dir)
     if commit_lines is None:
         return 1
 
     log.heading('Generating rebase todo')
-    todo_content = build_todo(commit_lines, first_cmd, cmd,
-                              message is not None, sleep)
+    todo_content = _build_todo(commit_lines, first_cmd, cmd,
+                               message is not None, sleep)
 
-    return run_todo_rebase(todo_content, base_branch, workspace_dir,
-                           edit_todo=edit_todo, message=message,
-                           dry_run=dry_run)
+    return _run_todo_rebase(todo_content, base_branch, workspace_dir,
+                            edit_todo=edit_todo, message=message,
+                            dry_run=dry_run)
 
 
 def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
@@ -77,9 +77,9 @@ def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
     return editor
 
 
-def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
-                    edit_todo: bool, message: str | None = None,
-                    dry_run: bool = False) -> int:
+def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
+                     edit_todo: bool, message: str | None = None,
+                     dry_run: bool = False) -> int:
     """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo.
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.

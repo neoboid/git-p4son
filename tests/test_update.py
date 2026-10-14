@@ -124,7 +124,7 @@ class TestStepCommand(unittest.TestCase):
             'update 100 --no-commit-list --no-edit --shelve')
 
 
-@mock.patch('git_p4son.rebase_todo.run_todo_rebase', return_value=0)
+@mock.patch('git_p4son.rebase_todo._run_todo_rebase', return_value=0)
 @mock.patch('git_p4son.rebase_todo.get_commit_lines_since', return_value=COMMITS)
 @mock.patch('git_p4son.update.update_changelist')
 class TestUpdatePerCommit(unittest.TestCase):

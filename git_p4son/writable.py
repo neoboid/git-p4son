@@ -96,7 +96,8 @@ def _apply_off(workspace_dir: str) -> None:
     log.heading('Checking Perforce workspace')
     spec = get_client_spec(workspace_dir)
     if not spec:
-        raise CommandError('Not inside a Perforce workspace')
+        raise CommandError('Not inside a Perforce workspace. '
+                           'Is Perforce installed and configured?')
     log.success(spec.name)
     if spec.allwrite:
         # p4 keeps allwrite files writable, so making them read-only would fight it.

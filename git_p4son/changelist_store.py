@@ -92,7 +92,8 @@ def load_changelist_alias(name: str, workspace_dir: str) -> str:
     """Load a changelist number from a named alias; raise CommandError if there is none."""
     alias_path = _alias_path(name, workspace_dir)
     if not os.path.exists(alias_path):
-        raise CommandError(f'No changelist alias found: {name}')
+        raise CommandError(f'No changelist alias found: {name}. '
+                           'See "git p4son alias list".')
 
     with open(alias_path, 'r') as f:
         content = f.read().strip()
@@ -124,5 +125,6 @@ def delete_changelist_alias(name: str, workspace_dir: str) -> None:
     """Delete a changelist alias file; raise CommandError if there is none."""
     alias_path = _alias_path(name, workspace_dir)
     if not os.path.exists(alias_path):
-        raise CommandError(f'No changelist alias found: {name}')
+        raise CommandError(f'No changelist alias found: {name}. '
+                           'See "git p4son alias list".')
     os.remove(alias_path)

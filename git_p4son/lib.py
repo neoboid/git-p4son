@@ -41,7 +41,8 @@ def check_git_workspace_clean(workspace_dir: str) -> None:
     if dirty_files:
         for filename, change in dirty_files:
             log.file_change(filename, change)
-        raise CommandError('Workspace is not clean')
+        raise CommandError('Workspace is not clean. '
+                           'Commit or stash the changes above first.')
     log.success('Clean')
 
 

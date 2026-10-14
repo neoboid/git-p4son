@@ -11,7 +11,10 @@ from git_p4son.git import (
     LocalChanges,
     get_local_changes,
 )
-from git_p4son.lib import include_changes_in_changelist, open_changes_for_edit
+from git_p4son.lib import (
+    include_changes_in_changelist,
+    open_changes_and_revert_unchanged,
+)
 from git_p4son.perforce import get_opened_files, opened_lookup
 from tests.helpers import make_run_result
 
@@ -571,20 +574,25 @@ class TestBatchedActions(unittest.TestCase):
                             for c in mock_run.call_args_list))
 
 
-class TestOpenChangesForEdit(unittest.TestCase):
+@mock.patch('git_p4son.lib.revert_unchanged_files')
+class TestOpenChangesAndRevertUnchanged(unittest.TestCase):
     @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.lib.get_local_changes')
-    def test_success(self, mock_get_changes, mock_include):
+    def test_opens_the_local_changes_then_reverts(self, mock_get_changes,
+                                                  mock_include, mock_revert):
         mock_changes = mock.Mock()
         mock_get_changes.return_value = mock_changes
-        open_changes_for_edit('100', 'HEAD~1', '/ws', dry_run=False)
+        open_changes_and_revert_unchanged('100', 'HEAD~1', '/ws', False)
+        mock_get_changes.assert_called_once_with('HEAD~1', '/ws')
         mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
+        mock_revert.assert_called_once_with('100', '/ws', False)
 
     @mock.patch('git_p4son.lib.get_local_changes')
-    def test_get_changes_failure(self, mock_get_changes):
+    def test_get_changes_failure(self, mock_get_changes, mock_revert):
         mock_get_changes.side_effect = RunError('get changes failed')
         with self.assertRaises(RunError):
-            open_changes_for_edit('100', 'HEAD~1', '/ws', dry_run=False)
+            open_changes_and_revert_unchanged('100', 'HEAD~1', '/ws', False)
+        mock_revert.assert_not_called()
 
 
 if __name__ == '__main__':

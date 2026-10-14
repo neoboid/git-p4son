@@ -169,17 +169,12 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
-def open_changes_for_edit(changelist: str, base_branch: str, workspace_dir: str, dry_run: bool) -> None:
-    """Get local git changes and open them for edit in a Perforce changelist."""
-    changes = get_local_changes(base_branch, workspace_dir)
-    include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
-
-
 def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
                                       workspace_dir: str, dry_run: bool) -> None:
     """Open the git changes in the changelist, then revert the files no longer part of them."""
     log.heading('Opening files for edit')
-    open_changes_for_edit(changelist, base_branch, workspace_dir, dry_run)
+    changes = get_local_changes(base_branch, workspace_dir)
+    include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
     log.success('Done')
 
     revert_unchanged_files(changelist, workspace_dir, dry_run)

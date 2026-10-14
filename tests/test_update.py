@@ -16,7 +16,8 @@ def _args(**overrides):
 
 
 class TestUpdateCommandCleanWorkspace(unittest.TestCase):
-    @mock.patch('git_p4son.lib.open_changes_for_edit')
+    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
+    @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.update.update_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files',
                 return_value=[('mod.txt', 'modify')])
@@ -36,7 +37,8 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
         mock_update.assert_not_called()
 
     @mock.patch('git_p4son.lib.revert_unchanged_files')
-    @mock.patch('git_p4son.lib.open_changes_for_edit')
+    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
+    @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.update.update_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_clean_workspace_proceeds(self, _dirty, mock_update, mock_open,
@@ -57,7 +59,8 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
 
 class TestUpdateCommandMessage(unittest.TestCase):
     @mock.patch('git_p4son.lib.revert_unchanged_files')
-    @mock.patch('git_p4son.lib.open_changes_for_edit')
+    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
+    @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.update.update_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_passes_message_on(self, _dirty, mock_update, _open, _revert):
@@ -88,7 +91,8 @@ class TestUpdateCommandRevertStep(unittest.TestCase):
         order = mock.Mock()
         with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
                 mock.patch('git_p4son.update.update_changelist'), \
-                mock.patch('git_p4son.lib.open_changes_for_edit',
+                mock.patch('git_p4son.lib.get_local_changes'), \
+                mock.patch('git_p4son.lib.include_changes_in_changelist',
                            order.open), \
                 mock.patch('git_p4son.lib.revert_unchanged_files',
                            order.revert), \

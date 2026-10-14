@@ -89,7 +89,8 @@ class TestNewCommandRevertStep(unittest.TestCase):
         with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
                 mock.patch('git_p4son.new.create_changelist',
                            order.create), \
-                mock.patch('git_p4son.lib.open_changes_for_edit',
+                mock.patch('git_p4son.lib.get_local_changes'), \
+                mock.patch('git_p4son.lib.include_changes_in_changelist',
                            order.open), \
                 mock.patch('git_p4son.lib.revert_unchanged_files',
                            order.revert), \

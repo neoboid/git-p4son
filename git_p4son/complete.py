@@ -112,8 +112,6 @@ def _complete_positional(command, subcommand, positional_count,
                          prefix, workspace_dir, command_parser,
                          subcommand_parser):
     """Complete a positional argument."""
-    aliases = _get_alias_names(workspace_dir)
-
     # Arguments added with the branch keyword name themselves in branch_keyword_arg.
     target = subcommand_parser or command_parser
     dest = target.get_default('branch_keyword_arg')
@@ -121,7 +119,8 @@ def _complete_positional(command, subcommand, positional_count,
                    and not isinstance(a, argparse._SubParsersAction)]
     if dest and positional_count < len(positionals) \
             and positionals[positional_count].dest == dest:
-        return _get_branch_candidates(prefix, workspace_dir) + _filter(aliases, prefix)
+        return (_get_branch_candidates(prefix, workspace_dir)
+                + _filter(_get_alias_names(workspace_dir), prefix))
 
     if command == 'sync':
         if positional_count == 0:

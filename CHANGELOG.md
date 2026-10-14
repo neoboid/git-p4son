@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A malformed value in `.git-p4son/config.toml` now stops the command with a message naming the setting.
+  Before, a `sync.split-users` or `core.writable` of the wrong type was silently ignored, turning splitting or
+  writable mode off
 - `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped
   instructions, so workspace-specific guidance for agents survives reinstalling the skill
 - `new`, `update` and `review` make far fewer p4 calls: opening files for edit takes a fixed number of calls instead

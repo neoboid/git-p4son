@@ -15,7 +15,7 @@ from git_p4son.rebase_todo import (
 class TestBuildTodo(unittest.TestCase):
     def test_first_command_then_the_other(self):
         result = _build_todo(['abc First', 'def Second', 'ghi Third'],
-                             'new a', 'update a')
+                             'new a', 'update a', with_message=False, sleep=None)
         self.assertEqual(result, (
             "pick abc First\n"
             "exec git p4son new a\n"
@@ -27,7 +27,7 @@ class TestBuildTodo(unittest.TestCase):
 
     def test_message_file_on_first_step_only(self):
         result = _build_todo(['abc First', 'def Second'], 'update 100',
-                             'update 100', with_message=True)
+                             'update 100', with_message=True, sleep=None)
         self.assertEqual(result, (
             "pick abc First\n"
             "exec git p4son update 100 -F .git-p4son/reviews/message\n"
@@ -46,7 +46,7 @@ class TestBuildTodo(unittest.TestCase):
         ))
 
     def test_single_commit_does_not_sleep(self):
-        self.assertEqual(_build_todo(['abc First'], 'new a', 'update a', sleep=5),
+        self.assertEqual(_build_todo(['abc First'], 'new a', 'update a', sleep=5, with_message=False),
                          "pick abc First\nexec git p4son new a\n")
 
 
@@ -89,7 +89,7 @@ class TestRunTodoRebase(unittest.TestCase):
         self.mock_clean.return_value = False
         with tempfile.TemporaryDirectory() as ws:
             rc = _run_todo_rebase('pick abc First\n', 'main', ws,
-                                  edit_todo=False, message='Title')
+                                  edit_todo=False, message='Title', dry_run=False)
             self.assertEqual(rc, 1)
             self.assertEqual(os.listdir(ws), [])
         mock_run.assert_not_called()
@@ -97,7 +97,7 @@ class TestRunTodoRebase(unittest.TestCase):
     def test_message_saved_and_left_in_place(self, _run):
         with tempfile.TemporaryDirectory() as ws:
             rc = _run_todo_rebase('pick abc First\n', 'main', ws,
-                                  edit_todo=False, message='Title\n\nBody')
+                                  edit_todo=False, message='Title\n\nBody', dry_run=False)
             self.assertEqual(rc, 0)
             with open(os.path.join(ws, MESSAGE_FILE), encoding='utf-8') as f:
                 self.assertEqual(f.read(), 'Title\n\nBody')
@@ -119,7 +119,8 @@ class TestRunTodoRebase(unittest.TestCase):
 
     def test_no_message_writes_no_file(self, _run):
         with tempfile.TemporaryDirectory() as ws:
-            _run_todo_rebase('pick abc First\n', 'main', ws, edit_todo=False)
+            _run_todo_rebase('pick abc First\n', 'main', ws,
+                             edit_todo=False, message=None, dry_run=False)
             self.assertFalse(os.path.exists(os.path.join(ws, MESSAGE_FILE)))
 
 

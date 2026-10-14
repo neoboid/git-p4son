@@ -164,8 +164,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            workspace_dir: str,
                            pre_sync_head_commit: str,
                            temp_root: str,
-                           uses_crlf: bool = False,
-                           clobber_mode: ClobberMode = ClobberMode.NOCLOBBER
+                           uses_crlf: bool,
+                           clobber_mode: ClobberMode
                            ) -> WritableSyncFileSet:
     """Classify the preview's writable files and stage the modified ones for post-sync merge."""
     result = WritableSyncFileSet()
@@ -371,7 +371,7 @@ def _merge_changed_files(changed_files: list[ChangedFile],
 
 def _sync_changelist(changelist: int, label: str, depot_root: str,
                      workspace_dir: str,
-                     expected_clobber: set[str] | None = None) -> list[str]:
+                     expected_clobber: set[str]) -> list[str]:
     """Sync to changelist, returning the expected_clobber files p4 refused.
 
     Any other refused file raises.
@@ -381,8 +381,7 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
         p4_sync(changelist, depot_root, workspace_dir)
         return []
     except P4SyncClobberError as e:
-        expected = expected_clobber or set()
-        unexpected = [f for f in e.refused if f not in expected]
+        unexpected = [f for f in e.refused if f not in expected_clobber]
         if unexpected:
             log.error('Unexpected clobber errors:')
             for f in unexpected:
@@ -430,7 +429,7 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   ignore_blocking_processes: bool = False) -> bool:
+                   ignore_blocking_processes: bool) -> bool:
     """Gate a sync on blocking processes, clean workspaces and pre-sync hooks."""
     if not check_no_blocking_processes(workspace_dir,
                                        ignore_blocking_processes):

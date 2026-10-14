@@ -1,5 +1,6 @@
 """Tests for git_p4son.sync module."""
 
+import functools
 import os
 import stat
 import sys
@@ -90,6 +91,11 @@ class TestMakeSyncedFilesWritable(unittest.TestCase):
         mock_tracked.assert_called_once_with(
             ['/ws/Content/x.uasset', '/ws/a.cpp', '/ws/b.h'], '/ws')
         mock_make.assert_called_once_with(['/ws/a.cpp', '/ws/b.h'])
+
+
+# prepare_writable_files with the noclobber, LF-only workspace most tests use.
+_prepare = functools.partial(prepare_writable_files, uses_crlf=False,
+                             clobber_mode=ClobberMode.NOCLOBBER)
 
 
 def _upd(path):
@@ -363,7 +369,7 @@ class TestSyncChangelist(unittest.TestCase):
 
     def test_clean_sync_refuses_nothing(self, mock_p4_sync):
         self.assertEqual(
-            _sync_changelist(12345, 'test', '//myclient', '/ws'), [])
+            _sync_changelist(12345, 'test', '//myclient', '/ws', expected_clobber=set()), [])
         mock_p4_sync.assert_called_once_with(12345, '//myclient', '/ws')
 
     def test_expected_clobber_tolerated(self, mock_p4_sync):
@@ -377,7 +383,8 @@ class TestSyncChangelist(unittest.TestCase):
             'rename: failed to rename D:\\ws\\a.uasset')
         with mock.patch('git_p4son.sync.log') as mock_log, \
                 self.assertRaises(CommandError) as ctx:
-            _sync_changelist(12345, 'test', '//myclient', '/ws')
+            _sync_changelist(12345, 'test', '//myclient',
+                             '/ws', expected_clobber=set())
         mock_log.error.assert_called_once_with(
             'rename: failed to rename D:\\ws\\a.uasset')
         self.assertIn('partially synced', str(ctx.exception))
@@ -435,8 +442,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                     else b'sync content'
             mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             cf = result.changed[0]
@@ -467,8 +474,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_fstat.return_value = {
                 path: 'text'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual(result.changed, [])
             mode = os.stat(path).st_mode
@@ -490,8 +497,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {path: 'text'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
 
             self.assertEqual(result.changed, [])
             mode = os.stat(path).st_mode
@@ -514,8 +521,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             mode = os.stat(path).st_mode
@@ -538,8 +545,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
                                       ('sync456', 'a.txt'): 'oid_base'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, clobber_mode=ClobberMode.CLOBBER)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, clobber_mode=ClobberMode.CLOBBER)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             mode = os.stat(path).st_mode
@@ -560,8 +567,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_fstat.return_value = {
                 path: 'text'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             cf = result.changed[0]
@@ -583,8 +590,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mock_fstat.return_value = {
                 path: 'binary'}
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual([cf.filepath for cf in result.changed], [path])
             self.assertTrue(result.changed[0].is_binary)
@@ -611,8 +618,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 return b'a\nb\n' if commit == 'head123' else b'c\nd\n'
             mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, uses_crlf=True)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, uses_crlf=True)
 
             cf = result.changed[0]
             self.assertEqual(self._read(cf.ours_path), b'a\r\nb\r\n')
@@ -640,8 +647,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 return b'a\r\nb\r\n' if commit == 'head123' else b'c\nd\n'
             mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, uses_crlf=True)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, uses_crlf=True)
 
             cf = result.changed[0]
             self.assertEqual(self._read(cf.ours_path), b'a\r\nb\r\n')
@@ -671,8 +678,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                     else b'\0c\nd\n'
             mock_get_file.side_effect = _files_at_commits(fake_get_file)
 
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root, uses_crlf=True)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root, uses_crlf=True)
 
             cf = result.changed[0]
             self.assertTrue(cf.is_binary)
@@ -691,7 +698,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {path: 'text'}
 
-            result = prepare_writable_files(
+            result = _prepare(
                 [P4SyncPreviewFile(mode='add', filepath=path)],
                 ws, 'head123', self.temp_root)
 
@@ -709,8 +716,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
     def test_readonly_files_skipped(self):
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt', writable=False)
-            result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(path)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual(result.changed, [])
             self.assertEqual(result.ignored, [])
@@ -729,8 +736,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             except (OSError, NotImplementedError):
                 self.skipTest('symlinks not supported here')
 
-            result = prepare_writable_files([_upd(link)], ws, 'head123',
-                                            self.temp_root)
+            result = _prepare([_upd(link)], ws, 'head123',
+                              self.temp_root)
 
             self.assertEqual(result.changed, [])
             self.assertEqual(result.ignored, [])
@@ -745,8 +752,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                             return_value=set()), \
                     mock.patch('git_p4son.sync.p4_head_types',
                                return_value={}):
-                result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                                self.temp_root)
+                result = _prepare([_upd(path)], ws, 'head123',
+                                  self.temp_root)
 
             self.assertEqual(result.changed, [])
             self.assertEqual(result.ignored, [path])
@@ -766,8 +773,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
                         return_value={
                             path: 'binary+w'}), \
                     mock.patch('git_p4son.sync.log') as mock_log:
-                result = prepare_writable_files([_upd(path)], ws, 'head123',
-                                                self.temp_root)
+                result = _prepare([_upd(path)], ws, 'head123',
+                                  self.temp_root)
 
             self.assertEqual(result.ignored, [])
             self.assertEqual(result.always_writable, [path])
@@ -790,7 +797,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                         return_value={
                             always: 'binary+w',
                             ignored: 'text'}):
-                result = prepare_writable_files(
+                result = _prepare(
                     [_upd(always), _upd(ignored)], ws, 'head123',
                     self.temp_root)
 
@@ -809,7 +816,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
                            return_value={'a.txt': 'head123'}), \
                 mock.patch('git_p4son.sync.get_blob_oids', return_value={}), \
                 mock.patch('git_p4son.sync.log') as mock_log:
-            result = prepare_writable_files(
+            result = _prepare(
                 [_upd(tracked), _upd(ignored)], ws, 'head123',
                 self.temp_root, clobber_mode=mode)
         self.assertEqual(result.ignored, [ignored])
@@ -843,13 +850,13 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertNotIn('build.log', infos)
 
     def test_nonexistent_files_skipped(self):
-        result = prepare_writable_files(
+        result = _prepare(
             [_upd('/ws/noexist.txt')], '/ws', 'head123', self.temp_root)
         self.assertEqual(result.changed, [])
         self.assertEqual(result.ignored, [])
 
     def test_empty_input(self):
-        result = prepare_writable_files([], '/ws', 'head123', self.temp_root)
+        result = _prepare([], '/ws', 'head123', self.temp_root)
         self.assertEqual(result.changed, [])
         self.assertEqual(result.ignored, [])
 
@@ -1963,7 +1970,8 @@ class TestSyncPreflight(unittest.TestCase):
                 return_value=False)
     def test_blocking_process_stops_before_everything_else(
             self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
-        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        self.assertFalse(sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
         mock_blocking.assert_called_once_with('/ws', False)
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
@@ -1985,7 +1993,8 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_clean_workspaces_run_the_hooks(
             self, _dirty, _opened, mock_run_hooks):
-        self.assertTrue(sync_preflight('//ws', '/ws', '/invoked'))
+        self.assertTrue(sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
         mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
 
     @mock.patch('git_p4son.sync.run_hooks')
@@ -1994,7 +2003,8 @@ class TestSyncPreflight(unittest.TestCase):
                 return_value=[('a.txt', 'modify')])
     def test_dirty_git_stops_before_p4_and_hooks(
             self, _dirty, mock_opened, mock_run_hooks):
-        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        self.assertFalse(sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
         mock_opened.assert_not_called()
         mock_run_hooks.assert_not_called()
 
@@ -2005,7 +2015,8 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_dirty_p4_stops_before_hooks(
             self, _dirty, _opened, _tracked, mock_run_hooks):
-        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        self.assertFalse(sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
         mock_run_hooks.assert_not_called()
 
     @mock.patch('git_p4son.sync.run_hooks',
@@ -2013,7 +2024,8 @@ class TestSyncPreflight(unittest.TestCase):
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
-        self.assertFalse(sync_preflight('//ws', '/ws', '/invoked'))
+        self.assertFalse(sync_preflight(
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
 
 
 class TestMergeChangedFiles(unittest.TestCase):

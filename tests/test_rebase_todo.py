@@ -14,7 +14,8 @@ from git_p4son.rebase_todo import (
 
 class TestBuildTodo(unittest.TestCase):
     def test_sleeps_between_steps_but_not_after_the_last(self):
-        result = build_todo(['abc First', 'def Second'], ['new a', 'update a'])
+        result = build_todo(['abc First', 'def Second'], ['new a', 'update a'],
+                            sleep=5)
         self.assertEqual(result, (
             "pick abc First\n"
             "exec git p4son new a --sleep 5\n"
@@ -23,8 +24,14 @@ class TestBuildTodo(unittest.TestCase):
         ))
 
     def test_single_commit_does_not_sleep(self):
-        self.assertEqual(build_todo(['abc First'], ['new a']),
+        self.assertEqual(build_todo(['abc First'], ['new a'], sleep=5),
                          "pick abc First\nexec git p4son new a\n")
+
+    def test_no_sleep_given(self):
+        self.assertEqual(
+            build_todo(['abc First', 'def Second'], ['new a', 'update a']),
+            "pick abc First\nexec git p4son new a\n"
+            "pick def Second\nexec git p4son update a\n")
 
 
 @mock.patch('git_p4son.rebase_todo.subprocess.run',

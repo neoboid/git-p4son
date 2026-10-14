@@ -5,7 +5,7 @@ import shlex
 from .changelist_store import check_alias_usable
 from .log import log
 from .rebase_todo import (
-    MESSAGE_FILE, build_todo, find_commits, run_todo_rebase,
+    MESSAGE_FILE, SWARM_SHELF_DELAY, build_todo, find_commits, run_todo_rebase,
 )
 
 
@@ -20,7 +20,7 @@ def _generate_todo(commit_lines: list[str], alias: str, force: bool,
     commands = [new_cmd] + [update_cmd] * (len(commit_lines) - 1)
     if no_commit_list:
         commands = [cmd + ' --no-commit-list' for cmd in commands]
-    return build_todo(commit_lines, commands)
+    return build_todo(commit_lines, commands, SWARM_SHELF_DELAY)
 
 
 def review_command(args: argparse.Namespace) -> int:

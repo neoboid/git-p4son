@@ -16,6 +16,9 @@ REVIEWS_DIR = f'{CONFIG_DIR}/reviews'
 MESSAGE_FILE = f'{REVIEWS_DIR}/message'
 TODO_FILE = f'{REVIEWS_DIR}/todo'
 
+# Seconds to give Swarm to process a shelf before the next step shelves again.
+SWARM_SHELF_DELAY = 5
+
 
 def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     """Return the commit lines since base_branch, or None (logged) if there are none."""
@@ -28,13 +31,13 @@ def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     return commit_lines
 
 
-def build_todo(commit_lines: list[str], commands: list[str]) -> str:
-    """Build a rebase todo that runs git p4son with each command after its commit."""
+def build_todo(commit_lines: list[str], commands: list[str],
+               sleep: int | None = None) -> str:
+    """Build a rebase todo that runs git p4son with each command after its commit, sleeping between steps."""
     lines = []
     for i, (commit_line, cmd) in enumerate(zip(commit_lines, commands)):
-        # Give Swarm time to process each shelf before the next
-        if i < len(commit_lines) - 1:
-            cmd += ' --sleep 5'
+        if sleep is not None and i < len(commit_lines) - 1:
+            cmd += f' --sleep {sleep}'
         lines.append(f'pick {commit_line}')
         lines.append(f'exec git p4son {cmd}')
     return '\n'.join(lines) + '\n'

@@ -11,7 +11,7 @@ from .lib import (
 from .perforce import p4_shelve_changelist
 from .log import log
 from .rebase_todo import (
-    MESSAGE_FILE, build_todo, find_commits, run_todo_rebase,
+    MESSAGE_FILE, SWARM_SHELF_DELAY, build_todo, find_commits, run_todo_rebase,
 )
 
 
@@ -27,7 +27,7 @@ def _generate_todo(commit_lines: list[str], changelist: str,
     first_cmd = (f'{cmd} -F {shlex.quote(MESSAGE_FILE)}'
                  if args.message is not None else cmd)
     commands = [first_cmd + flags] + [cmd + flags] * (len(commit_lines) - 1)
-    return build_todo(commit_lines, commands)
+    return build_todo(commit_lines, commands, SWARM_SHELF_DELAY)
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:

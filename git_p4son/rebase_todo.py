@@ -24,13 +24,6 @@ def _todo_path(workspace_dir: str) -> str:
     return os.path.join(_reviews_dir(workspace_dir), 'todo')
 
 
-def pick_line(commit_line: str) -> str:
-    """Turn a '<hash> <subject>' commit line into a rebase pick line."""
-    parts = commit_line.split(' ', 1)
-    subject = parts[1] if len(parts) > 1 else ''
-    return f'pick {parts[0]} {subject}'
-
-
 def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     """Return the commit lines since base_branch, or None (logged) if there are none."""
     log.heading('Finding commits')
@@ -49,7 +42,7 @@ def build_todo(commit_lines: list[str], commands: list[str]) -> str:
         # Give Swarm time to process each shelf before the next
         if i < len(commit_lines) - 1:
             cmd += ' --sleep 5'
-        lines.append(pick_line(commit_line))
+        lines.append(f'pick {commit_line}')
         lines.append(f'exec git p4son {cmd}')
     return '\n'.join(lines) + '\n'
 

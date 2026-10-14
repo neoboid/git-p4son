@@ -7,18 +7,9 @@ from unittest import mock
 
 from git_p4son import CONFIG_DIR
 from git_p4son.rebase_todo import (
-    MESSAGE_FILE, build_todo, pick_line, run_todo_rebase,
+    MESSAGE_FILE, build_todo, run_todo_rebase,
     sequence_editor_command,
 )
-
-
-class TestPickLine(unittest.TestCase):
-    def test_pick_line(self):
-        self.assertEqual(pick_line('abc1234 First commit'),
-                         'pick abc1234 First commit')
-
-    def test_commit_without_subject(self):
-        self.assertEqual(pick_line('abc1234'), 'pick abc1234 ')
 
 
 class TestBuildTodo(unittest.TestCase):

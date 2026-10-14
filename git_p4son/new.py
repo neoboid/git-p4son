@@ -11,8 +11,8 @@ def new_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     # Opening and reverting files relies on every tracked file matching HEAD.
-    if not args.no_edit and not check_git_workspace_clean(workspace_dir):
-        return 1
+    if not args.no_edit:
+        check_git_workspace_clean(workspace_dir)
 
     if args.alias:
         check_alias_usable(args.alias, workspace_dir, args.force)

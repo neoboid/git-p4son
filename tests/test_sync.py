@@ -702,8 +702,8 @@ class TestSyncCommand(unittest.TestCase):
     def test_dirty_git_workspace_aborts(self, _depot, _last_synced):
         self.mock_workspace_dirty.return_value = [('file.txt', 'modify')]
         args = _sync_args(changelist=['100'], force=False, workspace_dir='/ws')
-        rc = sync_command(args)
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            sync_command(args)
 
     @mock.patch('git_p4son.sync.git_last_synced_changelist', return_value=None)
     @mock.patch('git_p4son.sync.get_tracked_files', return_value={'foo.txt'})
@@ -1519,8 +1519,9 @@ class TestSyncPreflight(unittest.TestCase):
                 return_value=[('a.txt', 'modify')])
     def test_dirty_git_stops_before_p4_and_hooks(
             self, _dirty, mock_opened, mock_run_hooks):
-        self.assertFalse(sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False))
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            sync_preflight(
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
         mock_opened.assert_not_called()
         mock_run_hooks.assert_not_called()
 

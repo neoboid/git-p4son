@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
+from git_p4son.common import CommandError
 from git_p4son.rebase_todo import (
     MESSAGE_FILE, _build_todo, rebase_per_commit, _run_todo_rebase,
     sequence_editor_command,
@@ -86,11 +87,11 @@ class TestRunTodoRebase(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_refuses_dirty_workspace(self, mock_run):
-        self.mock_clean.return_value = False
+        self.mock_clean.side_effect = CommandError('Workspace is not clean')
         with tempfile.TemporaryDirectory() as ws:
-            rc = _run_todo_rebase('pick abc First\n', 'main', ws,
-                                  edit_todo=False, message='Title', dry_run=False)
-            self.assertEqual(rc, 1)
+            with self.assertRaisesRegex(CommandError, 'not clean'):
+                _run_todo_rebase('pick abc First\n', 'main', ws,
+                                 edit_todo=False, message='Title', dry_run=False)
             self.assertEqual(os.listdir(ws), [])
         mock_run.assert_not_called()
 

@@ -41,8 +41,8 @@ def update_command(args: argparse.Namespace) -> int:
         return _update_per_commit(changelist, args)
 
     # Opening and reverting files relies on every tracked file matching HEAD.
-    if not args.no_edit and not check_git_workspace_clean(workspace_dir):
-        return 1
+    if not args.no_edit:
+        check_git_workspace_clean(workspace_dir)
 
     if args.message is not None or not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')

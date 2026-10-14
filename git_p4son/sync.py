@@ -55,15 +55,15 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
     except P4SyncClobberError as e:
         unexpected = [f for f in e.refused if f not in expected_clobber]
         if unexpected:
-            log.error('Unexpected clobber errors:')
             for f in unexpected:
                 log.info(f)
-            raise
+            raise CommandError('Unexpected clobber errors for the files above',
+                               returncode=e.returncode) from e
         log.warning(
             f'{len(e.refused)} expected clobber errors (git-ignored files)')
         return e.refused
     except P4SyncAbortError as e:
-        log.error(str(e))
+        log.info(str(e))
         raise CommandError(
             'Aborting sync: p4 could not replace a file, most likely because '
             'another process has it open. The workspace is left partially '
@@ -71,8 +71,8 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
             'files before syncing again.') from e
 
 
-def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
-    """Report whether the p4 workspace has no git-tracked files opened."""
+def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
+    """Raise CommandError, after listing them, if git-tracked files are opened in Perforce."""
     log.heading('Checking p4 workspace')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
     tracked = get_tracked_files([f for f, _ in opened_files], workspace_dir)
@@ -81,35 +81,28 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> bool:
     if tracked_opened_files:
         for filename, change in tracked_opened_files:
             log.file_change(filename, change)
-        log.error('Workspace has p4-opened files tracked by git')
-        return False
+        raise CommandError('Workspace has p4-opened files tracked by git')
     if opened_files:
         log.warning(
             f'Ignoring {len(opened_files)} p4-opened files not tracked by git')
     else:
         log.success('Clean')
-    return True
 
 
-def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> bool:
-    """Run all pre-sync hooks; return False if any of them failed."""
+def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> None:
+    """Run all pre-sync hooks; raise CommandError if any of them failed."""
     results = run_hooks('pre-sync', workspace_dir, invocation_dir)
     if any(result.returncode != 0 for result in results):
-        log.error('Aborting sync because a pre-sync hook failed')
-        return False
-    return True
+        raise CommandError('Aborting sync because a pre-sync hook failed')
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   ignore_blocking_processes: bool) -> bool:
-    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks."""
-    if not check_no_blocking_processes(workspace_dir,
-                                       ignore_blocking_processes):
-        return False
+                   ignore_blocking_processes: bool) -> None:
+    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails."""
+    check_no_blocking_processes(workspace_dir, ignore_blocking_processes)
     check_git_workspace_clean(workspace_dir)
-    if not _check_p4_workspace_clean(depot_root, workspace_dir):
-        return False
-    return _run_pre_sync_hooks(workspace_dir, invocation_dir)
+    _check_p4_workspace_clean(depot_root, workspace_dir)
+    _run_pre_sync_hooks(workspace_dir, invocation_dir)
 
 
 @dataclass(frozen=True)
@@ -246,16 +239,15 @@ def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:
 
 def _resolve_sync_targets(
         raw: list[str], last_synced: int | None, depot_root: str,
-        workspace_dir: str, force: bool) -> list[tuple[int, str]] | None:
+        workspace_dir: str, force: bool) -> list[tuple[int, str]]:
     """Resolve the ordered (changelist, label) targets a sync will visit.
 
-    Returns None for invalid arguments, and [] when already at the only target.
+    Returns [] when already at the only target; raises CommandError for invalid arguments.
     """
     lowered = [c.lower() for c in raw]
 
     if 'head' in lowered and lowered.index('head') != len(lowered) - 1:
-        log.error('The "head" keyword must come last')
-        return None
+        raise CommandError('The "head" keyword must come last')
 
     targets = []
     for c in raw or ['head']:
@@ -265,22 +257,19 @@ def _resolve_sync_targets(
             try:
                 targets.append((int(c), 'specified'))
             except ValueError:
-                log.error(f'Invalid changelist number: {c}')
-                return None
+                raise CommandError(f'Invalid changelist number: {c}') from None
 
     numbers = [cl for cl, _ in targets]
     for prev, curr in zip(numbers, numbers[1:]):
         if curr <= prev:
-            log.error('Changelists must be strictly increasing, '
-                      f'got {prev} then {curr}')
-            return None
+            raise CommandError('Changelists must be strictly increasing, '
+                               f'got {prev} then {curr}')
 
     if last_synced and numbers[0] < last_synced:
         if not force:
-            log.error(
+            raise CommandError(
                 f'Cannot sync to CL {numbers[0]} '
                 f'(currently at CL {last_synced}) without --force.')
-            return None
         log.warning(
             f'Syncing to older CL {numbers[0]} '
             f'(currently at CL {last_synced}) with --force')
@@ -307,16 +296,14 @@ class _SyncPlan:
     clobber_mode: ClobberMode
 
 
-def _plan_sync(args: argparse.Namespace) -> _SyncPlan | int:
-    """Resolve what to sync from the arguments and the workspace.
+def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
+    """Resolve what to sync from the arguments and the workspace, or None when already synced.
 
-    Returns the exit code instead when there is nothing to sync or an argument is invalid.
+    Raises CommandError for an invalid argument.
     """
     workspace_dir = args.workspace_dir
 
     resolved = resolve_depot_root(workspace_dir)
-    if resolved is None:
-        return 1
     depot_root = resolved.depot_root
     client_spec = resolved.client_spec
 
@@ -335,22 +322,19 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | int:
     resync_last_synced = 'last-synced' in lowered
     if resync_last_synced:
         if lowered != ['last-synced']:
-            log.error('The "last-synced" keyword cannot be combined with '
-                      'other changelists')
-            return 1
+            raise CommandError('The "last-synced" keyword cannot be combined '
+                               'with other changelists')
         if not last_synced:
-            log.error('No previous sync found, cannot use "last-synced"')
-            return 1
+            raise CommandError(
+                'No previous sync found, cannot use "last-synced"')
         targets = []
     else:
         targets = _resolve_sync_targets(
             args.changelist, last_synced, depot_root, workspace_dir, args.force)
-        if targets is None:
-            return 1
         if not targets:
             log.info('Already synced, nothing to do.')
             log.heading('Skipping post-sync hooks')
-            return 0
+            return None
 
     return _SyncPlan(
         depot_root=depot_root, last_synced=last_synced, targets=targets,
@@ -406,14 +390,13 @@ def sync_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     plan = _plan_sync(args)
-    if not isinstance(plan, _SyncPlan):
-        return plan
+    if plan is None:
+        return 0
 
     # A dry run skips the checks and hooks, which run before the costly split queries.
-    if not args.dry_run and not sync_preflight(
-            plan.depot_root, workspace_dir, args.invocation_dir,
-            args.ignore_blocking_processes):
-        return 1
+    if not args.dry_run:
+        sync_preflight(plan.depot_root, workspace_dir, args.invocation_dir,
+                       args.ignore_blocking_processes)
 
     if plan.split:
         log.heading('Finding split users')

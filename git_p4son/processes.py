@@ -3,8 +3,8 @@
 import csv
 import os
 
-from .common import RunError, run
-from .config import ConfigError, get_setting
+from .common import CommandError, RunError, run
+from .config import get_setting
 from .log import log
 
 IGNORE_FLAG = '--ignore-blocking-processes'
@@ -37,36 +37,32 @@ def get_running_processes() -> set[str]:
             for line in result.stdout if line.strip()}
 
 
-def check_no_blocking_processes(workspace_dir: str, ignore: bool) -> bool:
-    """Report whether the sync may go ahead; unreadable config or process list fails the check."""
+def check_no_blocking_processes(workspace_dir: str, ignore: bool) -> None:
+    """Raise CommandError if a blocking process runs, or the config or the process list cannot be read."""
     if ignore:
         log.heading('Checking for blocking processes')
         log.warning(f'Skipped ({IGNORE_FLAG})')
-        return True
+        return
 
-    try:
-        names = get_blocking_processes(workspace_dir)
-    except ConfigError as error:
-        log.error(f'Could not read the blocking processes: {error}')
-        return False
+    names = get_blocking_processes(workspace_dir)
     if not names:
-        return True
+        return
 
     log.heading('Checking for blocking processes')
     try:
         running = get_running_processes()
     except (OSError, RunError) as error:
-        log.error(f'Could not list running processes: {error}')
-        return False
+        raise CommandError(
+            f'Could not list running processes: {error}') from error
 
     blocking = sorted(name for name in names
                       if normalize_process_name(name) in running)
     if not blocking:
         log.success('None running')
-        return True
+        return
 
     for name in blocking:
         log.info(name)
-    log.error('Refusing to sync while these blocking processes are running. '
-              f'Close them and sync again, or pass {IGNORE_FLAG}')
-    return False
+    raise CommandError(
+        'Refusing to sync while these blocking processes are running. '
+        f'Close them and sync again, or pass {IGNORE_FLAG}')

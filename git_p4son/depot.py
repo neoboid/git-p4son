@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .common import normalize_workspace_path
+from .common import CommandError, normalize_workspace_path
 from .config import get_setting
 from .log import log
 from .perforce import P4ClientSpec, get_client_spec, p4_depot_root_exists
@@ -46,19 +46,18 @@ class ResolvedDepot:
     client_spec: P4ClientSpec | None
 
 
-def resolve_depot_root(workspace_dir: str) -> ResolvedDepot | None:
-    """Resolve the configured depot root, or None (with an error logged)."""
+def resolve_depot_root(workspace_dir: str) -> ResolvedDepot:
+    """Resolve the configured depot root; raise CommandError if there is none or it cannot be expanded."""
     log.heading('Finding depot root')
     depot_root = get_depot_root(workspace_dir)
     if not depot_root:
-        log.error('No depot root configured. Run "git p4son init" first.')
-        return None
+        raise CommandError(
+            'No depot root configured. Run "git p4son init" first.')
 
     client_spec = get_client_spec(workspace_dir)
     if WORKSPACE_PLACEHOLDER in depot_root and not client_spec:
-        log.error('Cannot resolve $(workspace) in depot root: not inside a '
-                  'Perforce workspace')
-        return None
+        raise CommandError('Cannot resolve $(workspace) in depot root: not '
+                           'inside a Perforce workspace')
     if client_spec:
         depot_root = expand_depot_root(depot_root, client_spec.name)
     log.success(depot_root)

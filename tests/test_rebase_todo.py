@@ -54,6 +54,11 @@ class TestBuildTodo(unittest.TestCase):
 @mock.patch('git_p4son.rebase_todo._run_todo_rebase', return_value=0)
 @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
 class TestRebasePerCommit(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean')
+        self.mock_clean = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _rebase(self, message=None):
         return rebase_per_commit('new a', 'update a', 'main', '/ws',
                                  message=message, sleep=None,
@@ -77,25 +82,18 @@ class TestRebasePerCommit(unittest.TestCase):
             self._rebase()
         mock_rebase.assert_not_called()
 
+    def test_refuses_dirty_workspace_before_finding_commits(
+            self, mock_commits, mock_rebase):
+        self.mock_clean.side_effect = CommandError('Workspace is not clean')
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            self._rebase()
+        mock_commits.assert_not_called()
+        mock_rebase.assert_not_called()
+
 
 @mock.patch('git_p4son.rebase_todo.subprocess.run',
             return_value=mock.Mock(returncode=0))
 class TestRunTodoRebase(unittest.TestCase):
-    def setUp(self):
-        patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean',
-                             return_value=True)
-        self.mock_clean = patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def test_refuses_dirty_workspace(self, mock_run):
-        self.mock_clean.side_effect = CommandError('Workspace is not clean')
-        with tempfile.TemporaryDirectory() as ws:
-            with self.assertRaisesRegex(CommandError, 'not clean'):
-                _run_todo_rebase('pick abc First\n', 'main', ws,
-                                 edit_todo=False, message='Title', dry_run=False)
-            self.assertEqual(os.listdir(ws), [])
-        mock_run.assert_not_called()
-
     def test_message_saved_and_left_in_place(self, _run):
         with tempfile.TemporaryDirectory() as ws:
             _run_todo_rebase('pick abc First\n', 'main', ws,

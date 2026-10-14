@@ -187,6 +187,7 @@ def init_command(args: argparse.Namespace) -> int:
         log.heading('Creating initial commit')
         add_files(['.gitignore'], cwd)
         commit('Initialize git-p4son repository', cwd)
+        log.success('Committed .gitignore')
 
         log.heading('Next steps')
         log.info('* Review and edit .gitignore')

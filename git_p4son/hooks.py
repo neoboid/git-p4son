@@ -6,7 +6,7 @@ from pathlib import Path
 from . import CONFIG_DIR
 from .common import RunResult, run
 from .config import get_setting
-from .log import log
+from .log import log, plural
 
 DEFAULT_WINDOWS_ASSOCIATIONS: dict[str, list[str]] = {
     '.ps1': [
@@ -104,4 +104,9 @@ def run_hooks(hook_name: str, workspace_dir: str,
                 f'with return code {result.returncode}')
         results.append(result)
 
+    failed = sum(1 for result in results if result.returncode != 0)
+    if failed:
+        log.warning(f'{failed} of {plural(len(results), "hook")} failed')
+    else:
+        log.success(f'{plural(len(results), "hook")} ran')
     return results

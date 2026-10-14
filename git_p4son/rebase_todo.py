@@ -55,6 +55,11 @@ def rebase_per_commit(first_cmd: str, cmd: str, base_branch: str,
 
     A message reaches first_cmd through MESSAGE_FILE, as -F.
     """
+    check_git_workspace_clean(workspace_dir)
+    if edit_todo:
+        log.heading('Checking git editor')
+        log.success(_require_editor(workspace_dir))
+
     commit_lines = _find_commits(base_branch, workspace_dir)
 
     log.heading('Generating rebase todo')
@@ -80,12 +85,6 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
     """
-    check_git_workspace_clean(workspace_dir)
-
-    if edit_todo:
-        log.heading('Checking git editor')
-        log.success(_require_editor(workspace_dir))
-
     if dry_run:
         log.info('Generated rebase todo:')
         log.info(todo_content)

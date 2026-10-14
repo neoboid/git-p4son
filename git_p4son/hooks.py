@@ -24,34 +24,27 @@ def _hook_dir(workspace_dir: str, hook_name: str) -> Path:
     return Path(workspace_dir) / CONFIG_DIR / 'hooks' / hook_name
 
 
-def _configured_windows_associations(workspace_dir: str) -> dict[str, list[str]]:
-    """Return Windows extension associations from config."""
+def _windows_associations(workspace_dir: str) -> dict[str, list[str]]:
+    """Return default Windows associations overridden by config."""
     config = load_config(workspace_dir)
-    associations = config.get('hooks', {}).get('extension-associations', {})
-    result: dict[str, list[str]] = {}
+    configured = config.get('hooks', {}).get('extension-associations', {})
+    associations = DEFAULT_WINDOWS_ASSOCIATIONS.copy()
 
-    for extension, command in associations.items():
+    for extension, command in configured.items():
         normalized_extension = extension.lower()
         if not normalized_extension.startswith('.'):
             normalized_extension = f'.{normalized_extension}'
 
         if isinstance(command, str):
-            result[normalized_extension] = [command]
+            associations[normalized_extension] = [command]
         elif isinstance(command, list) and all(
                 isinstance(part, str) for part in command):
-            result[normalized_extension] = command
+            associations[normalized_extension] = command
         else:
             log.warning(
                 'Ignoring invalid hook extension association for '
                 f'{extension}')
 
-    return result
-
-
-def _windows_associations(workspace_dir: str) -> dict[str, list[str]]:
-    """Return default Windows associations overridden by config."""
-    associations = DEFAULT_WINDOWS_ASSOCIATIONS.copy()
-    associations.update(_configured_windows_associations(workspace_dir))
     return associations
 
 

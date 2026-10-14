@@ -30,8 +30,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     new_cmd, update_cmd = _step_commands(args.alias, args.force,
                                          args.no_commit_list)
-    return rebase_per_commit(new_cmd, update_cmd, args.base_branch,
-                             workspace_dir, message=args.message,
-                             sleep=SWARM_SHELF_DELAY,
-                             edit_todo=not args.no_edit_todo,
-                             dry_run=args.dry_run)
+    rebase_per_commit(new_cmd, update_cmd, args.base_branch, workspace_dir,
+                      message=args.message, sleep=SWARM_SHELF_DELAY,
+                      edit_todo=not args.no_edit_todo, dry_run=args.dry_run)
+    return 0

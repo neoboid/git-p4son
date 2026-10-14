@@ -16,14 +16,14 @@ def _step_command(changelist: str, args: argparse.Namespace) -> str:
     return f'update {changelist}{flags}'
 
 
-def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
+def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
     """Update the changelist once per commit since the base branch."""
     # Steps name the changelist by number: HEAD is detached during the rebase.
     cmd = _step_command(changelist, args)
-    return rebase_per_commit(cmd, cmd, args.base_branch, args.workspace_dir,
-                             message=args.message,
-                             sleep=SWARM_SHELF_DELAY if args.shelve else None,
-                             edit_todo=False, dry_run=args.dry_run)
+    rebase_per_commit(cmd, cmd, args.base_branch, args.workspace_dir,
+                      message=args.message,
+                      sleep=SWARM_SHELF_DELAY if args.shelve else None,
+                      edit_todo=False, dry_run=args.dry_run)
 
 
 def update_command(args: argparse.Namespace) -> int:
@@ -38,7 +38,8 @@ def update_command(args: argparse.Namespace) -> int:
         log.success(f'{args.changelist} -> CL {changelist}')
 
     if args.per_commit:
-        return _update_per_commit(changelist, args)
+        _update_per_commit(changelist, args)
+        return 0
 
     # Opening and reverting files relies on every tracked file matching HEAD.
     if not args.no_edit:

@@ -1,6 +1,6 @@
 # Working with git-p4son
 
-This git repository is also a Perforce workspace. git-p4son keeps the `main` branch in step with the Perforce depot.
+This git repository is also a Perforce workspace. git-p4son keeps the `main` branch in sync with the Perforce depot.
 Work happens on git feature branches, which git-p4son turns into Perforce changelists (CLs) and Swarm reviews.
 
 Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-h` for help: git swallows `--help`.

@@ -181,16 +181,14 @@ def build_sync_targets(changes: list[P4Change], users: list[str],
 
 
 def _collect_split_users(args: argparse.Namespace,
-                         workspace_dir: str) -> list[str] | None:
+                         workspace_dir: str) -> list[str]:
     """Return the configured split users (unless --no-split) followed by the -u ones.
 
-    Returns None if a -u user is unknown.
+    Raises CommandError if a -u user is unknown.
     """
     extra = args.split_user or []
     if extra:
         extra = canonical_split_users(extra, workspace_dir)
-        if extra is None:
-            return None
     configured = [] if args.no_split else get_split_users(workspace_dir)
     return configured + extra
 
@@ -330,8 +328,6 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | int:
         log.warning('No previous sync found')
 
     split_users = _collect_split_users(args, workspace_dir)
-    if split_users is None:
-        return 1
 
     lowered = [c.lower() for c in args.changelist]
 
@@ -422,8 +418,6 @@ def sync_command(args: argparse.Namespace) -> int:
     if plan.split:
         log.heading('Finding split users')
         users = resolve_split_users(plan.split_users, workspace_dir)
-        if users is None:
-            return 1
         log.success(', '.join(users))
         plan.targets = _split_targets(plan.targets, users, plan.last_synced,
                                       plan.depot_root, workspace_dir)

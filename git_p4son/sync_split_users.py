@@ -54,20 +54,23 @@ def _unique(names: list[str]) -> list[str]:
     return unique
 
 
-def resolve_split_users(users: list[str],
-                        workspace_dir: str) -> list[str] | None:
+def resolve_split_users(users: list[str], workspace_dir: str) -> list[str]:
     """Substitute the current Perforce user for $(user) and drop repeats.
 
-    Returns None (with an error logged) when $(user) cannot be resolved."""
+    Raises CommandError, after p4's own message if any, when $(user) cannot be resolved."""
     current = None
     if USER_PLACEHOLDER in users:
-        current = current_p4_user(workspace_dir)
+        try:
+            current = get_p4_user(workspace_dir)
+        except (CommandError, OSError) as error:
+            for line in getattr(error, 'stderr', None) or [str(error)]:
+                log.info(line)
         if not current:
-            log.error(f'Cannot determine the current Perforce user for '
-                      f'{USER_PLACEHOLDER} in the split users. Check the p4 '
-                      'connection, or pass --no-split to sync without '
-                      'the configured split users.')
-            return None
+            raise CommandError(
+                f'Cannot determine the current Perforce user for '
+                f'{USER_PLACEHOLDER} in the split users. Check the p4 '
+                'connection, or pass --no-split to sync without the '
+                'configured split users.')
     return _unique([current if user == USER_PLACEHOLDER else user
                     for user in users])
 
@@ -92,50 +95,44 @@ def _list(workspace_dir: str) -> int:
 
 
 def _requested(names: list[str], me: bool) -> list[str]:
-    """The names given on the command line, --me as $(user) first, without repeats."""
-    return _unique(([USER_PLACEHOLDER] if me else []) + names)
+    """The names given on the command line, --me as $(user) first, without repeats.
+
+    Raises CommandError if there are none."""
+    requested = _unique(([USER_PLACEHOLDER] if me else []) + names)
+    if not requested:
+        raise CommandError('Give one or more user names, or --me for yourself')
+    return requested
 
 
-def check_p4_users(names: list[str],
-                   workspace_dir: str) -> dict[str, str] | None:
-    """Map names to their server spelling, or None (with errors logged) if any is unknown."""
+def check_p4_users(names: list[str], workspace_dir: str) -> dict[str, str]:
+    """Map names to their server spelling; raise CommandError if any is unknown."""
     log.heading('Checking Perforce users')
     existing = {user.lower(): user
                 for user in get_existing_p4_users(names, workspace_dir)}
     unknown = [name for name in names if name.lower() not in existing]
+    if len(unknown) == 1:
+        raise CommandError(f'No such Perforce user: {unknown[0]}')
     if unknown:
-        for name in unknown:
-            log.error(f'No such Perforce user: {name}')
-        return None
+        raise CommandError(f'No such Perforce users: {", ".join(unknown)}')
     canonical = {name: existing[name.lower()] for name in names}
     log.success(', '.join(canonical.values()))
     return canonical
 
 
-def canonical_split_users(names: list[str],
-                          workspace_dir: str) -> list[str] | None:
-    """Return names as the server spells them, or None (with errors logged) if any is unknown."""
+def canonical_split_users(names: list[str], workspace_dir: str) -> list[str]:
+    """Return names as the server spells them; raise CommandError if any is unknown."""
     # $(user) is resolved on use, so it is not checked.
     real = [name for name in names if name != USER_PLACEHOLDER]
     if not real:
         return names
     checked = check_p4_users(real, workspace_dir)
-    if checked is None:
-        return None
     return [checked.get(name, name) for name in names]
 
 
 def _add(workspace_dir: str, names: list[str], me: bool) -> int:
     """Add users to the split users, all or none of them."""
-    requested = _requested(names, me)
-    if not requested:
-        log.error('Give one or more user names, or --me for yourself')
-        return 1
-
     # Check every name before writing.
-    requested = canonical_split_users(requested, workspace_dir)
-    if requested is None:
-        return 1
+    requested = canonical_split_users(_requested(names, me), workspace_dir)
 
     log.heading('Adding split users')
     users = get_split_users(workspace_dir)
@@ -157,10 +154,6 @@ def _add(workspace_dir: str, names: list[str], me: bool) -> int:
 def _delete(workspace_dir: str, names: list[str], me: bool) -> int:
     """Remove users from the split users, all or none of them."""
     requested = _requested(names, me)
-    if not requested:
-        log.error('Give one or more user names, or --me for yourself')
-        return 1
-
     users = get_split_users(workspace_dir)
     present = {user.lower() for user in users}
     missing = [name for name in requested if name.lower() not in present]
@@ -168,12 +161,12 @@ def _delete(workspace_dir: str, names: list[str], me: bool) -> int:
         # An easy slip, since list shows your name next to $(user).
         current = (current_p4_user(workspace_dir)
                    if USER_PLACEHOLDER in users else None)
-        for name in missing:
-            log.error(f'{name} is not a split user')
-            if current and name.lower() == current.lower():
-                log.info(f'{USER_PLACEHOLDER} stands for {current}, '
-                         'remove it with --me')
-        return 1
+        if current and current.lower() in {name.lower() for name in missing}:
+            log.info(f'{USER_PLACEHOLDER} stands for {current}, '
+                     'remove it with --me')
+        if len(missing) == 1:
+            raise CommandError(f'Not a split user: {missing[0]}')
+        raise CommandError(f'Not split users: {", ".join(missing)}')
 
     log.heading('Removing split users')
     removed = {name.lower() for name in requested}

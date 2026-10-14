@@ -214,7 +214,6 @@ def _terminate(process: subprocess.Popen) -> None:
 def run_with_stream_output(command: list[str],
                            on_output: Callable[[str, IO[str]], None],
                            cwd: str = '.',
-                           env: dict[str, str] | None = None,
                            keep_stdout: bool = True) -> RunResult:
     """Run a command, passing each output line and its stream to on_output as it is written.
 
@@ -231,13 +230,11 @@ def run_with_stream_output(command: list[str],
     collected = (stdout_lines if keep_stdout else None, stderr_lines)
     streams = (sys.stdout, sys.stderr)
 
-    command_env = _command_env(cwd, env)
-
     # UTF-8 as in run(); a decode error would silently kill the reader threads.
     try:
         process = subprocess.Popen(command,
                                    cwd=cwd,
-                                   env=command_env,
+                                   env=_command_env(cwd, None),
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
                                    text=True,

@@ -116,6 +116,19 @@ def check_p4_users(names: list[str],
     return canonical
 
 
+def canonical_split_users(names: list[str],
+                          workspace_dir: str) -> list[str] | None:
+    """Return names as the server spells them, or None (with errors logged) if any is unknown."""
+    # $(user) is resolved on use, so it is not checked.
+    real = [name for name in names if name != USER_PLACEHOLDER]
+    if not real:
+        return names
+    checked = check_p4_users(real, workspace_dir)
+    if checked is None:
+        return None
+    return [checked.get(name, name) for name in names]
+
+
 def _add(workspace_dir: str, names: list[str], me: bool) -> int:
     """Add users to the split users, all or none of them."""
     requested = _requested(names, me)
@@ -123,21 +136,16 @@ def _add(workspace_dir: str, names: list[str], me: bool) -> int:
         log.error('Give one or more user names, or --me for yourself')
         return 1
 
-    # Check every name before writing; $(user) is resolved on use, so it is skipped.
-    real = [name for name in requested if name != USER_PLACEHOLDER]
-    canonical: dict[str, str] = {}
-    if real:
-        checked = check_p4_users(real, workspace_dir)
-        if checked is None:
-            return 1
-        canonical = checked
+    # Check every name before writing.
+    requested = canonical_split_users(requested, workspace_dir)
+    if requested is None:
+        return 1
 
     log.heading('Adding split users')
     users = get_split_users(workspace_dir)
     present = {user.lower() for user in users}
     added = 0
     for name in requested:
-        name = canonical.get(name, name)
         if name.lower() in present:
             log.info(f'{name} is already a split user')
             continue

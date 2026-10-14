@@ -22,8 +22,7 @@ from .writable import (
     is_user_writable, is_writable_mode, make_read_only, make_writable, restore_writable,
 )
 from .sync_split_users import (
-    USER_PLACEHOLDER,
-    check_p4_users,
+    canonical_split_users,
     get_split_users,
     resolve_split_users,
 )
@@ -501,18 +500,6 @@ def build_sync_targets(changes: list[P4Change], users: list[str],
     return sorted(set(split).union(required))
 
 
-def _check_split_user_args(names: list[str],
-                           workspace_dir: str) -> list[str] | None:
-    """Return the -u users as the server spells them, or None if any is unknown."""
-    real = [name for name in names if name != USER_PLACEHOLDER]
-    if not real:
-        return names
-    checked = check_p4_users(real, workspace_dir)
-    if checked is None:
-        return None
-    return [checked.get(name, name) for name in names]
-
-
 def _collect_split_users(args: argparse.Namespace,
                          workspace_dir: str) -> list[str] | None:
     """Return the configured split users (unless --no-split) followed by the -u ones.
@@ -521,7 +508,7 @@ def _collect_split_users(args: argparse.Namespace,
     """
     extra = args.split_user or []
     if extra:
-        extra = _check_split_user_args(extra, workspace_dir)
+        extra = canonical_split_users(extra, workspace_dir)
         if extra is None:
             return None
     configured = [] if args.no_split else get_split_users(workspace_dir)

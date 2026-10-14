@@ -973,7 +973,7 @@ class TestCollectSplitUsers(unittest.TestCase):
                           no_split=no_split)
         with mock.patch('git_p4son.sync.get_split_users',
                         return_value=configured), \
-                mock.patch('git_p4son.sync.check_p4_users',
+                mock.patch('git_p4son.sync_split_users.check_p4_users',
                            return_value=known):
             return _collect_split_users(args, '/ws')
 

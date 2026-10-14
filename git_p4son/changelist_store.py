@@ -71,30 +71,23 @@ def check_alias_available(name: str, workspace_dir: str) -> bool:
 
 def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
     """Report whether name is a valid alias that is free, or force is set; log the reason if not."""
-    error = validate_alias_name(name)
-    if error:
-        log.error(error)
+    if _alias_path(name, workspace_dir) is None:
         return False
     return force or check_alias_available(name, workspace_dir)
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
     """Save a changelist number under a named alias."""
-    alias_path = _alias_path(name, workspace_dir)
-    if alias_path is None:
+    if not check_alias_usable(name, workspace_dir, force):
         return False
 
     changelists_dir = _changelists_dir(workspace_dir)
-
-    if not force and not check_alias_available(name, workspace_dir):
-        return False
-
     ensure_config_dir(workspace_dir)
     if not os.path.isdir(changelists_dir):
         log.info(f'Creating {changelists_dir}')
         os.makedirs(changelists_dir, exist_ok=True)
 
-    with open(alias_path, 'w') as f:
+    with open(os.path.join(changelists_dir, name), 'w') as f:
         f.write(changelist + '\n')
 
     return True

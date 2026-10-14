@@ -111,8 +111,9 @@ class TestRunTodoRebase(unittest.TestCase):
             self.assertEqual(os.listdir(ws), [])
         mock_run.assert_not_called()
         printed = [c.args[0] for c in mock_log.info.call_args_list]
-        self.assertIn('pick abc First\n', printed)
+        self.assertIn('pick abc First', printed)
         self.assertIn('Title', printed)
+        mock_log.success.assert_called_once_with('Would rebase with this todo')
 
     def test_failed_rebase_passes_on_git_return_code(self, mock_run):
         mock_run.return_value = mock.Mock(returncode=3)

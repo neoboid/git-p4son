@@ -1476,7 +1476,6 @@ class TestSyncSplitting(unittest.TestCase):
     def test_dry_run_prints_the_split_sequence(self):
         self.assertEqual(self._run(configured=['me'], dry_run=True), 0)
         self.mock_log.success.assert_any_call('101 102 104 105 106')
-        self.mock_log.info.assert_any_call('Dry run, nothing synced')
         self.patches['sync_preflight'].assert_not_called()
         self.patches['_sync_pass'].assert_not_called()
 

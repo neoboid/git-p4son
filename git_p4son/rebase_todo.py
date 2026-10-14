@@ -86,11 +86,11 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
     """
     if dry_run:
-        log.info('Generated rebase todo:')
-        log.info(todo_content)
+        log.info(todo_content.rstrip('\n'))
         if message is not None:
             log.info(f'Message for {MESSAGE_FILE}:')
             log.info(message)
+        log.success('Would rebase with this todo')
         return
 
     ensure_config_dir(workspace_dir)

@@ -416,7 +416,6 @@ def sync_command(args: argparse.Namespace) -> int:
         else:
             log.success(' '.join(str(cl) for cl, _ in plan.targets))
     if args.dry_run:
-        log.info('Dry run, nothing synced')
         return 0
 
     _run_sync(plan, workspace_dir, args.invocation_dir)

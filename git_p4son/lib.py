@@ -61,7 +61,6 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     description_lines = description.format()
 
     if dry_run:
-        log.info("Would create new changelist with description:")
         log.info('\n'.join(description_lines))
         return DRY_RUN_CHANGELIST
 
@@ -81,7 +80,6 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
     new_description_lines = description.format()
 
     if dry_run:
-        log.info(f"Would update changelist {changelist_nr} with description:")
         log.info('\n'.join(new_description_lines))
         return
 
@@ -172,6 +170,12 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
     return len(to_open) + len(to_reopen)
 
 
+def _changelist_name(changelist: str) -> str:
+    """How output names changelist, which on a dry run of new does not exist yet."""
+    return ('the new changelist' if changelist == DRY_RUN_CHANGELIST
+            else f'CL {changelist}')
+
+
 def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
                     edit: bool, shelve: bool, dry_run: bool) -> None:
     """Open the git changes and revert the files no longer part of them if edit, then shelve if shelve."""
@@ -180,14 +184,16 @@ def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
         changes = get_local_changes(base_branch, workspace_dir)
         opened = include_changes_in_changelist(
             changes, changelist, workspace_dir, dry_run)
-        log.success(f'Opened {plural(opened, "file")}')
+        log.success(f'Would open {plural(opened, "file")}' if dry_run
+                    else f'Opened {plural(opened, "file")}')
 
         revert_unchanged_files(changelist, workspace_dir, dry_run)
 
     if shelve:
-        log.heading(f'Shelving CL {changelist}')
+        name = _changelist_name(changelist)
+        log.heading(f'Shelving {name}')
         p4_shelve_changelist(changelist, workspace_dir, dry_run=dry_run)
-        log.success(f'Shelved CL {changelist}')
+        log.success(f'Would shelve {name}' if dry_run else f'Shelved {name}')
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,
@@ -197,7 +203,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     Requires a clean git workspace."""
     log.heading('Reverting unchanged files')
     if changelist == DRY_RUN_CHANGELIST:
-        log.info(f'Would revert unchanged files in changelist {changelist}')
+        log.success('Would revert the unchanged files in the new changelist')
         return
 
     opened = get_opened_files_in_changelist(changelist, workspace_dir)

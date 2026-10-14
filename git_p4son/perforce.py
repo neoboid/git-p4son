@@ -215,9 +215,11 @@ def get_submitted_changes(depot_root: str, start: int, end: int,
 
 
 def get_p4_user(workspace_dir: str) -> str | None:
-    """Get the Perforce user name of the current connection."""
+    """Get the Perforce user name of the current connection, or None if the server does not know it."""
     res = run([*_P4, '-ztag', 'info'], cwd=workspace_dir)
-    return parse_ztag_output(res.stdout).get('userName') or None
+    user = parse_ztag_output(res.stdout).get('userName')
+    # The server reports a user it has no spec for as *unknown*.
+    return None if user in (None, '', '*unknown*') else user
 
 
 def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:

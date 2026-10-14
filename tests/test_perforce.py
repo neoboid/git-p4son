@@ -334,6 +334,12 @@ class TestGetP4User(unittest.TestCase):
         mock_run.return_value = make_run_result(stdout=['... clientName x'])
         self.assertIsNone(get_p4_user('/ws'))
 
+    @mock.patch('git_p4son.perforce.run')
+    def test_user_unknown_to_the_server(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['... userName *unknown*'])
+        self.assertIsNone(get_p4_user('/ws'))
+
 
 class TestGetExistingP4Users(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')

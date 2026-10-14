@@ -7,31 +7,73 @@ from unittest import mock
 
 from git_p4son import CONFIG_DIR
 from git_p4son.rebase_todo import (
-    MESSAGE_FILE, build_todo, run_todo_rebase,
+    MESSAGE_FILE, build_todo, rebase_per_commit, run_todo_rebase,
     sequence_editor_command,
 )
 
 
 class TestBuildTodo(unittest.TestCase):
-    def test_sleeps_between_steps_but_not_after_the_last(self):
-        result = build_todo(['abc First', 'def Second'], ['new a', 'update a'],
-                            sleep=5)
+    def test_first_command_then_the_other(self):
+        result = build_todo(['abc First', 'def Second', 'ghi Third'],
+                            'new a', 'update a')
         self.assertEqual(result, (
             "pick abc First\n"
-            "exec git p4son new a --sleep 5\n"
+            "exec git p4son new a\n"
+            "pick def Second\n"
+            "exec git p4son update a\n"
+            "pick ghi Third\n"
+            "exec git p4son update a\n"
+        ))
+
+    def test_message_file_on_first_step_only(self):
+        result = build_todo(['abc First', 'def Second'], 'update 100',
+                            'update 100', with_message=True)
+        self.assertEqual(result, (
+            "pick abc First\n"
+            "exec git p4son update 100 -F .git-p4son/reviews/message\n"
+            "pick def Second\n"
+            "exec git p4son update 100\n"
+        ))
+
+    def test_sleeps_between_steps_but_not_after_the_last(self):
+        result = build_todo(['abc First', 'def Second'], 'new a', 'update a',
+                            with_message=True, sleep=5)
+        self.assertEqual(result, (
+            "pick abc First\n"
+            "exec git p4son new a -F .git-p4son/reviews/message --sleep 5\n"
             "pick def Second\n"
             "exec git p4son update a\n"
         ))
 
     def test_single_commit_does_not_sleep(self):
-        self.assertEqual(build_todo(['abc First'], ['new a'], sleep=5),
+        self.assertEqual(build_todo(['abc First'], 'new a', 'update a', sleep=5),
                          "pick abc First\nexec git p4son new a\n")
 
-    def test_no_sleep_given(self):
+
+@mock.patch('git_p4son.rebase_todo.run_todo_rebase', return_value=0)
+@mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
+class TestRebasePerCommit(unittest.TestCase):
+    def _rebase(self, message=None):
+        return rebase_per_commit('new a', 'update a', 'main', '/ws',
+                                 message=message, sleep=None,
+                                 edit_todo=False, dry_run=False)
+
+    def test_passes_the_todo_and_message_to_the_rebase(self, mock_commits,
+                                                       mock_rebase):
+        mock_commits.return_value = ['abc First']
+        self.assertEqual(self._rebase(message='Title'), 0)
+        mock_commits.assert_called_once_with('main', '/ws')
+        todo, base, ws = mock_rebase.call_args.args
         self.assertEqual(
-            build_todo(['abc First', 'def Second'], ['new a', 'update a']),
-            "pick abc First\nexec git p4son new a\n"
-            "pick def Second\nexec git p4son update a\n")
+            todo, 'pick abc First\n'
+            'exec git p4son new a -F .git-p4son/reviews/message\n')
+        self.assertEqual((base, ws), ('main', '/ws'))
+        self.assertEqual(mock_rebase.call_args.kwargs['message'], 'Title')
+
+    def test_no_commits(self, mock_commits, mock_rebase):
+        mock_commits.return_value = []
+        self.assertEqual(self._rebase(), 1)
+        mock_rebase.assert_not_called()
 
 
 @mock.patch('git_p4son.rebase_todo.subprocess.run',

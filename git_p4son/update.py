@@ -1,7 +1,6 @@
 """Update command: updates an existing changelist from the git change."""
 
 import argparse
-import shlex
 from .changelist_store import load_changelist_alias
 from .lib import (
     check_git_workspace_clean,
@@ -10,42 +9,26 @@ from .lib import (
 )
 from .perforce import p4_shelve_changelist
 from .log import log
-from .rebase_todo import (
-    MESSAGE_FILE, SWARM_SHELF_DELAY, build_todo, find_commits, run_todo_rebase,
-)
+from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
 
 
-def _generate_todo(commit_lines: list[str], changelist: str,
-                   args: argparse.Namespace) -> str:
-    """Generate a rebase todo running update after each commit."""
+def _step_command(changelist: str, args: argparse.Namespace) -> str:
+    """The update command each commit runs."""
     flags = ''.join(f' {flag}' for flag, on in (
         ('--no-commit-list', args.no_commit_list),
         ('--no-edit', args.no_edit),
         ('--shelve', args.shelve)) if on)
-    cmd = f'update {changelist}'
-    # The message only needs replacing once
-    first_cmd = (f'{cmd} -F {shlex.quote(MESSAGE_FILE)}'
-                 if args.message is not None else cmd)
-    commands = [first_cmd + flags] + [cmd + flags] * (len(commit_lines) - 1)
-    return build_todo(commit_lines, commands,
-                      SWARM_SHELF_DELAY if args.shelve else None)
+    return f'update {changelist}{flags}'
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:
     """Update the changelist once per commit since the base branch."""
-    workspace_dir = args.workspace_dir
-
-    commit_lines = find_commits(args.base_branch, workspace_dir)
-    if commit_lines is None:
-        return 1
-
     # Steps name the changelist by number: HEAD is detached during the rebase.
-    log.heading('Generating rebase todo')
-    todo_content = _generate_todo(commit_lines, changelist, args)
-
-    return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
-                           edit_todo=False, message=args.message,
-                           dry_run=args.dry_run)
+    cmd = _step_command(changelist, args)
+    return rebase_per_commit(cmd, cmd, args.base_branch, args.workspace_dir,
+                             message=args.message,
+                             sleep=SWARM_SHELF_DELAY if args.shelve else None,
+                             edit_todo=False, dry_run=args.dry_run)
 
 
 def update_command(args: argparse.Namespace) -> int:

@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-from git_p4son.update import _generate_todo, update_command
+from git_p4son.update import _step_command, update_command
 
 
 def _args(**overrides):
@@ -113,34 +113,18 @@ class TestUpdateCommandRevertStep(unittest.TestCase):
 COMMITS = ['abc1234 First commit', 'def5678 Second commit']
 
 
-class TestGeneratePerCommitTodo(unittest.TestCase):
-    def test_one_update_per_commit(self):
-        result = _generate_todo(COMMITS, '100', _args(shelve=True))
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son update 100 --shelve --sleep 5\n"
-            "pick def5678 Second commit\n"
-            "exec git p4son update 100 --shelve\n"
-        ))
+class TestStepCommand(unittest.TestCase):
+    def test_plain_update(self):
+        self.assertEqual(_step_command('100', _args()), 'update 100')
 
-    def test_message_on_first_step_only(self):
-        result = _generate_todo(COMMITS, '100', _args(message="It's new"))
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son update 100 -F .git-p4son/reviews/message\n"
-            "pick def5678 Second commit\n"
-            "exec git p4son update 100\n"
-        ))
-
-    def test_flags_passed_to_every_step(self):
-        result = _generate_todo(
-            COMMITS, '100',
-            _args(no_commit_list=True, no_edit=True, shelve=True))
-        self.assertEqual(result.count(
-            'update 100 --no-commit-list --no-edit --shelve'), 2)
+    def test_flags(self):
+        self.assertEqual(
+            _step_command('100', _args(no_commit_list=True, no_edit=True,
+                                       shelve=True)),
+            'update 100 --no-commit-list --no-edit --shelve')
 
 
-@mock.patch('git_p4son.update.run_todo_rebase', return_value=0)
+@mock.patch('git_p4son.rebase_todo.run_todo_rebase', return_value=0)
 @mock.patch('git_p4son.rebase_todo.get_commit_lines_since', return_value=COMMITS)
 @mock.patch('git_p4son.update.update_changelist')
 class TestUpdatePerCommit(unittest.TestCase):
@@ -163,6 +147,13 @@ class TestUpdatePerCommit(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn('exec git p4son update 200',
                       mock_rebase.call_args.args[0])
+
+    def test_sleeps_between_steps_only_when_shelving(self, _update, _commits,
+                                                     mock_rebase):
+        update_command(_args(per_commit=True, shelve=True))
+        self.assertIn('--sleep 5', mock_rebase.call_args.args[0])
+        update_command(_args(per_commit=True))
+        self.assertNotIn('--sleep', mock_rebase.call_args.args[0])
 
     def test_no_commits(self, _update, mock_commits, mock_rebase):
         mock_commits.return_value = []

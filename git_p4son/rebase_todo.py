@@ -31,9 +31,13 @@ def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
     return commit_lines
 
 
-def build_todo(commit_lines: list[str], commands: list[str],
-               sleep: int | None = None) -> str:
-    """Build a rebase todo that runs git p4son with each command after its commit, sleeping between steps."""
+def build_todo(commit_lines: list[str], first_cmd: str, cmd: str,
+               with_message: bool = False, sleep: int | None = None) -> str:
+    """Build a rebase todo running git p4son first_cmd after the first commit and cmd after the others."""
+    # Later steps keep the description the first one set.
+    if with_message:
+        first_cmd += f' -F {shlex.quote(MESSAGE_FILE)}'
+    commands = [first_cmd] + [cmd] * (len(commit_lines) - 1)
     lines = []
     for i, (commit_line, cmd) in enumerate(zip(commit_lines, commands)):
         if sleep is not None and i < len(commit_lines) - 1:
@@ -41,6 +45,27 @@ def build_todo(commit_lines: list[str], commands: list[str],
         lines.append(f'pick {commit_line}')
         lines.append(f'exec git p4son {cmd}')
     return '\n'.join(lines) + '\n'
+
+
+def rebase_per_commit(first_cmd: str, cmd: str, base_branch: str,
+                      workspace_dir: str, *, message: str | None,
+                      sleep: int | None, edit_todo: bool,
+                      dry_run: bool) -> int:
+    """Rebase onto base_branch, running git p4son first_cmd after the first commit and cmd after the others.
+
+    A message reaches first_cmd through MESSAGE_FILE, as -F.
+    """
+    commit_lines = find_commits(base_branch, workspace_dir)
+    if commit_lines is None:
+        return 1
+
+    log.heading('Generating rebase todo')
+    todo_content = build_todo(commit_lines, first_cmd, cmd,
+                              message is not None, sleep)
+
+    return run_todo_rebase(todo_content, base_branch, workspace_dir,
+                           edit_todo=edit_todo, message=message,
+                           dry_run=dry_run)
 
 
 def _resolve_editor_or_fail(workspace_dir: str) -> str | None:

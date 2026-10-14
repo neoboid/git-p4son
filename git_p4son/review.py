@@ -4,23 +4,20 @@ import argparse
 import shlex
 from .changelist_store import check_alias_usable
 from .log import log
-from .rebase_todo import (
-    MESSAGE_FILE, SWARM_SHELF_DELAY, build_todo, find_commits, run_todo_rebase,
-)
+from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
 
 
-def _generate_todo(commit_lines: list[str], alias: str, force: bool,
-                   no_commit_list: bool = False) -> str:
-    """Generate the rebase todo content with exec lines."""
-    new_cmd = (f'new {shlex.quote(alias)} --review '
-               f'-F {shlex.quote(MESSAGE_FILE)}')
+def _step_commands(alias: str, force: bool,
+                   no_commit_list: bool) -> tuple[str, str]:
+    """The new command for the first commit and the update command for the others."""
+    new_cmd = f'new {shlex.quote(alias)} --review'
     if force:
         new_cmd += ' --force'
     update_cmd = f'update {shlex.quote(alias)} --shelve'
-    commands = [new_cmd] + [update_cmd] * (len(commit_lines) - 1)
     if no_commit_list:
-        commands = [cmd + ' --no-commit-list' for cmd in commands]
-    return build_todo(commit_lines, commands, SWARM_SHELF_DELAY)
+        new_cmd += ' --no-commit-list'
+        update_cmd += ' --no-commit-list'
+    return new_cmd, update_cmd
 
 
 def review_command(args: argparse.Namespace) -> int:
@@ -32,15 +29,10 @@ def review_command(args: argparse.Namespace) -> int:
         return 1
     log.success('Done')
 
-    commit_lines = find_commits(args.base_branch, workspace_dir)
-    if commit_lines is None:
-        return 1
-
-    log.heading('Generating rebase todo')
-    todo_content = _generate_todo(
-        commit_lines, args.alias, args.force,
-        no_commit_list=args.no_commit_list)
-
-    return run_todo_rebase(todo_content, args.base_branch, workspace_dir,
-                           edit_todo=not args.no_edit_todo,
-                           message=args.message, dry_run=args.dry_run)
+    new_cmd, update_cmd = _step_commands(args.alias, args.force,
+                                         args.no_commit_list)
+    return rebase_per_commit(new_cmd, update_cmd, args.base_branch,
+                             workspace_dir, message=args.message,
+                             sleep=SWARM_SHELF_DELAY,
+                             edit_todo=not args.no_edit_todo,
+                             dry_run=args.dry_run)

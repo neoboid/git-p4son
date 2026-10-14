@@ -6,61 +6,29 @@ from unittest import mock
 
 from git_p4son.common import CommandError, RunError
 from git_p4son.git import get_commit_lines_since
-from git_p4son.review import (
-    _generate_todo,
-    review_command,
-)
+from git_p4son.review import _step_commands, review_command
 from tests.helpers import make_run_result
 
 
-class TestGenerateTodo(unittest.TestCase):
-    def test_single_commit(self):
-        commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'my-feature', force=False)
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -F .git-p4son/reviews/message\n"
-        ))
-
-    def test_multiple_commits(self):
-        commit_lines = [
-            'abc1234 First commit',
-            'def5678 Second commit',
-            'ghi9012 Third commit',
-        ]
-        result = _generate_todo(commit_lines, 'my-feature', force=False)
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -F .git-p4son/reviews/message --sleep 5\n"
-            "pick def5678 Second commit\n"
-            "exec git p4son update my-feature --shelve --sleep 5\n"
-            "pick ghi9012 Third commit\n"
-            "exec git p4son update my-feature --shelve\n"
-        ))
+class TestStepCommands(unittest.TestCase):
+    def test_new_then_update(self):
+        self.assertEqual(_step_commands('my-feature', False, False),
+                         ('new my-feature --review',
+                          'update my-feature --shelve'))
 
     def test_force_flag(self):
-        commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'my-feature', force=True)
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son new my-feature --review -F .git-p4son/reviews/message --force\n"
-        ))
+        self.assertEqual(_step_commands('my-feature', True, False)[0],
+                         'new my-feature --review --force')
 
     def test_no_commit_list(self):
-        commit_lines = ['abc1234 First commit', 'def5678 Second commit']
-        result = _generate_todo(commit_lines, 'feat', force=False,
-                                no_commit_list=True)
-        self.assertEqual(result, (
-            "pick abc1234 First commit\n"
-            "exec git p4son new feat --review -F .git-p4son/reviews/message --no-commit-list --sleep 5\n"
-            "pick def5678 Second commit\n"
-            "exec git p4son update feat --shelve --no-commit-list\n"
-        ))
+        self.assertEqual(_step_commands('feat', False, True),
+                         ('new feat --review --no-commit-list',
+                          'update feat --shelve --no-commit-list'))
 
     def test_alias_with_special_chars(self):
-        commit_lines = ['abc1234 First commit']
-        result = _generate_todo(commit_lines, 'my feature', force=False)
-        self.assertIn("'my feature'", result)
+        new_cmd, update_cmd = _step_commands('my feature', False, False)
+        self.assertIn("'my feature'", new_cmd)
+        self.assertIn("'my feature'", update_cmd)
 
 
 class TestGetCommitLines(unittest.TestCase):

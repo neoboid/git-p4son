@@ -151,7 +151,7 @@ Examples:
     sync_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Allow syncing to changelists older than the current one.'
+        help='Allow syncing to changelists older than the current one'
     )
     _add_dry_run(
         sync_parser, 'Print the resolved sync sequence without syncing')
@@ -541,7 +541,7 @@ def _resolve_branch_keyword(workspace_dir: str) -> str:
                            'HEAD. Name the alias or changelist explicitly.')
     alias = branch_alias(branch)
     if alias is None:
-        raise CommandError(f'branch "{branch}" resolves to reserved keyword '
+        raise CommandError(f'Branch "{branch}" resolves to reserved keyword '
                            f'"{branch_to_alias(branch)}"')
     return alias
 

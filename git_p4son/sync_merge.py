@@ -336,9 +336,9 @@ def merge_changed_files(changed_files: list[ChangedFile],
         return
     log.info('')
     if merged_conflicts or added_both_conflicts:
-        log.info('Manually review changes, resolve conflicts and commit when ready.')
+        log.info('Manually review changes, resolve conflicts and commit when ready')
     else:
-        log.info('Manually review changes and commit when ready.')
+        log.info('Manually review changes and commit when ready')
 
 
 def report_not_synced(preps: list[WritableSyncFileSet],

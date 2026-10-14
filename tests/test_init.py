@@ -26,7 +26,7 @@ class TestSetupGitignore(unittest.TestCase):
         with mock.patch('os.path.exists') as mock_exists:
             mock_exists.side_effect = lambda p: p.endswith('.gitignore')
             result = _setup_gitignore('/ws')
-            self.assertEqual(result, '.gitignore already exist')
+            self.assertEqual(result, '.gitignore already exists')
 
     def test_copies_p4ignore(self):
         def exists_side_effect(path):
@@ -35,7 +35,7 @@ class TestSetupGitignore(unittest.TestCase):
         with mock.patch('os.path.exists', side_effect=exists_side_effect), \
                 mock.patch('shutil.copy2') as mock_copy:
             result = _setup_gitignore('/ws')
-            self.assertEqual(result, 'copied .p4ignore to new .gitignore')
+            self.assertEqual(result, 'Copied .p4ignore to a new .gitignore')
             mock_copy.assert_called_once_with(
                 os.path.join('/ws', '.p4ignore'),
                 os.path.join('/ws', '.gitignore'))
@@ -44,7 +44,7 @@ class TestSetupGitignore(unittest.TestCase):
         with mock.patch('os.path.exists', return_value=False), \
                 mock.patch('builtins.open', mock.mock_open()) as mock_file:
             result = _setup_gitignore('/ws')
-            self.assertEqual(result, 'created empty .gitignore')
+            self.assertEqual(result, 'Created an empty .gitignore')
             mock_file.assert_called_once_with(
                 os.path.join('/ws', '.gitignore'), 'w')
 
@@ -342,7 +342,7 @@ class TestInitCommand(unittest.TestCase):
         self.assertFalse(any('writable' in step for step in steps))
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.init._setup_gitignore', return_value='created empty .gitignore')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='Created an empty .gitignore')
     @mock.patch('git_p4son.init.has_commits', return_value=False)
     @mock.patch('git_p4son.init.add_files')
     @mock.patch('git_p4son.git.run')
@@ -367,7 +367,7 @@ class TestInitCommand(unittest.TestCase):
             init_command(self._make_args())
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exists')
     @mock.patch('git_p4son.init.has_commits', return_value=True)
     @mock.patch('git_p4son.git.run')
     @mock.patch('git_p4son.init._configure_depot_root')
@@ -383,7 +383,7 @@ class TestInitCommand(unittest.TestCase):
         mock_run.assert_not_called()
 
     @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
-    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exist')
+    @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exists')
     @mock.patch('git_p4son.init.has_commits', return_value=False)
     @mock.patch('git_p4son.init.add_files')
     @mock.patch('git_p4son.git.run')

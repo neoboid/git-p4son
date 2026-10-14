@@ -413,7 +413,7 @@ class P4SyncOutputProcessor:
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if _UP_TO_DATE_RE.search(line):
-            log.info('all files up to date')
+            log.info('All files up to date')
             return
 
         if line.startswith(_RENAME_FAILED_PREFIX):

@@ -46,7 +46,7 @@ def check_no_blocking_processes(workspace_dir: str, ignore: bool) -> bool:
 
     try:
         names = get_blocking_processes(workspace_dir)
-    except (ConfigError, ValueError) as error:
+    except ConfigError as error:
         log.error(f'Could not read the blocking processes: {error}')
         return False
     if not names:

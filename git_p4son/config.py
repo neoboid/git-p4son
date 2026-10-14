@@ -31,17 +31,20 @@ def config_path(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, CONFIG_DIR, 'config.toml')
 
 
+class ConfigError(CommandError):
+    """config.toml is not valid TOML, or a value in it has the wrong type."""
+
+
 def load_config(workspace_dir: str) -> dict:
-    """Read and parse the config file. Returns empty dict if missing."""
+    """Read and parse the config file. Returns empty dict if missing; raise ConfigError if invalid."""
     path = config_path(workspace_dir)
     if not os.path.exists(path):
         return {}
     with open(path, 'rb') as f:
-        return tomllib.load(f)
-
-
-class ConfigError(CommandError):
-    """A config.toml value has the wrong type."""
+        try:
+            return tomllib.load(f)
+        except tomllib.TOMLDecodeError as error:
+            raise ConfigError(f'{path} is not valid TOML: {error}') from error
 
 
 _TYPE_DESCRIPTIONS = {

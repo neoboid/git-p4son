@@ -138,6 +138,16 @@ class TestSaveConfig(unittest.TestCase):
                 load_config(tmpdir), {'depot': {'root': '//second'}})
 
 
+class TestLoadConfigInvalid(unittest.TestCase):
+    def test_invalid_toml_raises_config_error(self):
+        with tempfile.TemporaryDirectory() as ws:
+            os.makedirs(os.path.join(ws, CONFIG_DIR))
+            with open(config_path(ws), 'w', encoding='utf-8') as f:
+                f.write('[sync\n')
+            with self.assertRaisesRegex(ConfigError, 'is not valid TOML'):
+                load_config(ws)
+
+
 class TestGetSetting(unittest.TestCase):
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()

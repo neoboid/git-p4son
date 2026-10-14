@@ -11,17 +11,9 @@ from .lib import check_git_workspace_clean
 from .log import log
 
 # Relative to the workspace root, where git runs the todo's exec lines.
-MESSAGE_FILE = f'{CONFIG_DIR}/reviews/message'
-
-
-def _reviews_dir(workspace_dir: str) -> str:
-    """Return the path to the directory holding the generated todo."""
-    return os.path.join(workspace_dir, CONFIG_DIR, 'reviews')
-
-
-def _todo_path(workspace_dir: str) -> str:
-    """Return the path to the generated todo file."""
-    return os.path.join(_reviews_dir(workspace_dir), 'todo')
+REVIEWS_DIR = f'{CONFIG_DIR}/reviews'
+MESSAGE_FILE = f'{REVIEWS_DIR}/message'
+TODO_FILE = f'{REVIEWS_DIR}/todo'
 
 
 def find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
@@ -81,10 +73,9 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
             log.info(message)
         return 0
 
-    reviews_dir = _reviews_dir(workspace_dir)
     ensure_config_dir(workspace_dir)
-    os.makedirs(reviews_dir, exist_ok=True)
-    todo_file = _todo_path(workspace_dir)
+    os.makedirs(os.path.join(workspace_dir, REVIEWS_DIR), exist_ok=True)
+    todo_file = os.path.join(workspace_dir, TODO_FILE)
     with open(todo_file, 'w') as f:
         f.write(todo_content)
 
@@ -123,7 +114,7 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 def sequence_editor_command(args: argparse.Namespace) -> int:
     """Replace git's rebase todo with ours, then open the user's editor unless --no-edit."""
     workspace_dir = args.workspace_dir
-    todo_file = _todo_path(workspace_dir)
+    todo_file = os.path.join(workspace_dir, TODO_FILE)
 
     if not os.path.exists(todo_file):
         log.error(f'No review todo file found at {todo_file}')

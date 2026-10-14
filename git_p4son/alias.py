@@ -11,19 +11,19 @@ from .common import prompt_choice
 from .log import log
 
 
-def alias_list_command(args: argparse.Namespace) -> int:
-    """Execute the 'alias list' command."""
-    workspace_dir = args.workspace_dir
-
-    aliases = list_changelist_aliases(workspace_dir)
-    if not aliases:
-        log.info('No aliases defined')
-        return 0
+def _print_aliases(aliases: list[tuple[str, str]]) -> None:
     log.info(f'Found {len(aliases)}')
-
     for name, changelist in aliases:
         log.info(f'{name} -> {changelist}')
 
+
+def alias_list_command(args: argparse.Namespace) -> int:
+    """Execute the 'alias list' command."""
+    aliases = list_changelist_aliases(args.workspace_dir)
+    if not aliases:
+        log.info('No aliases defined')
+        return 0
+    _print_aliases(aliases)
     return 0
 
 
@@ -109,9 +109,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         log.success('No changelist aliases to clean')
         return 0
 
-    log.info(f'Found {len(aliases)}')
-    for name, changelist in aliases:
-        log.info(f'{name} -> {changelist}')
+    _print_aliases(aliases)
 
     mode = prompt_choice('Delete?', ['all', 'interactive', 'quit'])
     if mode is None or mode == 'quit':

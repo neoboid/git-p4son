@@ -296,10 +296,26 @@ def _resolve_sync_targets(
     return targets
 
 
-def sync_command(args: argparse.Namespace) -> int:
-    """Execute the sync command."""
+@dataclass
+class _SyncPlan:
+    """A resolved sync: the targets to visit after the catch-up pass to last_synced."""
+    depot_root: str
+    last_synced: int | None
+    targets: list[tuple[int, str]]
+    # Re-sync only last_synced; targets is empty.
+    resync_last_synced: bool
+    split_users: list[str]
+    split: bool
+    uses_crlf: bool
+    clobber_mode: ClobberMode
+
+
+def _plan_sync(args: argparse.Namespace) -> _SyncPlan | int:
+    """Resolve what to sync from the arguments and the workspace.
+
+    Returns the exit code instead when there is nothing to sync or an argument is invalid.
+    """
     workspace_dir = args.workspace_dir
-    invocation_dir = args.invocation_dir
 
     resolved = resolve_depot_root(workspace_dir)
     if resolved is None:
@@ -341,59 +357,40 @@ def sync_command(args: argparse.Namespace) -> int:
             log.heading('Skipping post-sync hooks')
             return 0
 
-    split = _should_split(split_users, last_synced, targets)
+    return _SyncPlan(
+        depot_root=depot_root, last_synced=last_synced, targets=targets,
+        resync_last_synced=resync_last_synced, split_users=split_users,
+        split=_should_split(split_users, last_synced, targets),
+        uses_crlf=bool(client_spec and client_spec.uses_crlf),
+        clobber_mode=(client_spec.clobber_mode if client_spec
+                      else ClobberMode.NOCLOBBER))
 
-    uses_crlf = bool(client_spec and client_spec.uses_crlf)
-    clobber_mode = (client_spec.clobber_mode if client_spec
-                    else ClobberMode.NOCLOBBER)
 
-    # A dry run skips the checks and hooks, which run before the costly split queries.
-    if not args.dry_run and not sync_preflight(
-            depot_root, workspace_dir, invocation_dir,
-            args.ignore_blocking_processes):
-        return 1
-
-    if split:
-        log.heading('Finding split users')
-        users = resolve_split_users(split_users, workspace_dir)
-        if users is None:
-            return 1
-        log.success(', '.join(users))
-        targets = _split_targets(targets, users, last_synced,
-                                 depot_root, workspace_dir)
-
-    if split or args.dry_run:
-        log.heading('Sync sequence')
-        if resync_last_synced:
-            log.success(f'{last_synced} ({LAST_SYNCED_LABEL})')
-        else:
-            log.success(' '.join(str(cl) for cl, _ in targets))
-    if args.dry_run:
-        log.info('Dry run, nothing synced.')
-        return 0
-
+def _run_sync(plan: _SyncPlan, workspace_dir: str,
+              invocation_dir: str) -> None:
+    """Sync and commit each target, then merge local changes back and run the post-sync hooks."""
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
 
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
-        ctx = _SyncContext(workspace_dir, depot_root, pre_sync_head_commit,
-                           temp_root, uses_crlf, clobber_mode)
+        ctx = _SyncContext(workspace_dir, plan.depot_root, pre_sync_head_commit,
+                           temp_root, plan.uses_crlf, plan.clobber_mode)
 
         preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
-        if last_synced:
-            preps.append(_sync_pass(last_synced, LAST_SYNCED_LABEL, ctx))
+        if plan.last_synced:
+            preps.append(_sync_pass(plan.last_synced, LAST_SYNCED_LABEL, ctx))
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
-        for changelist, changelist_label in targets:
+        for changelist, changelist_label in plan.targets:
             preps.append(_sync_pass(changelist, changelist_label, ctx))
 
             log.heading(f'Committing git changes for CL {changelist}')
             add_all_files(workspace_dir)
             staged = get_staged_files(workspace_dir)
-            commit(format_sync_subject(depot_root, changelist), workspace_dir,
-                   allow_empty=True)
+            commit(format_sync_subject(plan.depot_root, changelist),
+                   workspace_dir, allow_empty=True)
             log.success(f'Committed {len(staged)} files')
 
         # Dedup files that showed up in several sync passes.
@@ -401,10 +398,46 @@ def sync_command(args: argparse.Namespace) -> int:
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        report_not_synced(preps, clobber_mode, workspace_dir)
+        report_not_synced(preps, plan.clobber_mode, workspace_dir)
 
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
 
         run_hooks('post-sync', workspace_dir, invocation_dir)
+
+
+def sync_command(args: argparse.Namespace) -> int:
+    """Execute the sync command."""
+    workspace_dir = args.workspace_dir
+
+    plan = _plan_sync(args)
+    if not isinstance(plan, _SyncPlan):
+        return plan
+
+    # A dry run skips the checks and hooks, which run before the costly split queries.
+    if not args.dry_run and not sync_preflight(
+            plan.depot_root, workspace_dir, args.invocation_dir,
+            args.ignore_blocking_processes):
+        return 1
+
+    if plan.split:
+        log.heading('Finding split users')
+        users = resolve_split_users(plan.split_users, workspace_dir)
+        if users is None:
+            return 1
+        log.success(', '.join(users))
+        plan.targets = _split_targets(plan.targets, users, plan.last_synced,
+                                      plan.depot_root, workspace_dir)
+
+    if plan.split or args.dry_run:
+        log.heading('Sync sequence')
+        if plan.resync_last_synced:
+            log.success(f'{plan.last_synced} ({LAST_SYNCED_LABEL})')
+        else:
+            log.success(' '.join(str(cl) for cl, _ in plan.targets))
+    if args.dry_run:
+        log.info('Dry run, nothing synced.')
         return 0
+
+    _run_sync(plan, workspace_dir, args.invocation_dir)
+    return 0

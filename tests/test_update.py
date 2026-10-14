@@ -3,6 +3,7 @@
 import unittest
 from unittest import mock
 
+from git_p4son.common import CommandError
 from git_p4son.update import _step_command, update_command
 
 
@@ -23,8 +24,8 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
                 return_value=[('mod.txt', 'modify')])
     def test_refuses_dirty_workspace_before_touching_changelist(
             self, _dirty, mock_update, mock_open):
-        rc = update_command(_args())
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            update_command(_args())
         mock_update.assert_not_called()
         mock_open.assert_not_called()
 
@@ -32,8 +33,8 @@ class TestUpdateCommandCleanWorkspace(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_dirty_files',
                 return_value=[('mod.txt', 'modify')])
     def test_refuses_dirty_workspace_on_dry_run(self, _dirty, mock_update):
-        rc = update_command(_args(dry_run=True))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            update_command(_args(dry_run=True))
         mock_update.assert_not_called()
 
     @mock.patch('git_p4son.lib.revert_unchanged_files')

@@ -106,8 +106,7 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
     if not check_no_blocking_processes(workspace_dir,
                                        ignore_blocking_processes):
         return False
-    if not check_git_workspace_clean(workspace_dir):
-        return False
+    check_git_workspace_clean(workspace_dir)
     if not _check_p4_workspace_clean(depot_root, workspace_dir):
         return False
     return _run_pre_sync_hooks(workspace_dir, invocation_dir)

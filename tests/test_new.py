@@ -60,24 +60,24 @@ class TestNewCommandCleanWorkspace(unittest.TestCase):
                 return_value=[('mod.txt', 'modify')])
     def test_refuses_dirty_workspace_before_creating(self, _dirty,
                                                      mock_create):
-        rc = new_command(_args(dry_run=False))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            new_command(_args(dry_run=False))
         mock_create.assert_not_called()
 
     @mock.patch('git_p4son.new.create_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files',
                 return_value=[('stray.txt', 'untracked')])
     def test_untracked_file_counts_as_dirty(self, _dirty, mock_create):
-        rc = new_command(_args(dry_run=False))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            new_command(_args(dry_run=False))
         mock_create.assert_not_called()
 
     @mock.patch('git_p4son.new.create_changelist')
     @mock.patch('git_p4son.lib.get_dirty_files',
                 return_value=[('mod.txt', 'modify')])
     def test_refuses_dirty_workspace_on_dry_run(self, _dirty, mock_create):
-        rc = new_command(_args(dry_run=True))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'not clean'):
+            new_command(_args(dry_run=True))
         mock_create.assert_not_called()
 
     @mock.patch('git_p4son.new.create_changelist', return_value='100')

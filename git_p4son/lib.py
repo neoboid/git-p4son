@@ -3,6 +3,7 @@
 import os
 from typing import Callable
 
+from .common import CommandError
 from .description import Description
 from .git import (
     LocalChanges,
@@ -33,17 +34,15 @@ from .writable import is_writable_mode, restore_writable
 DRY_RUN_CHANGELIST = '<changelist>'
 
 
-def check_git_workspace_clean(workspace_dir: str) -> bool:
-    """Report whether the git workspace has no uncommitted changes."""
+def check_git_workspace_clean(workspace_dir: str) -> None:
+    """Raise CommandError, after listing them, if the git workspace has uncommitted changes."""
     log.heading('Checking git workspace')
     dirty_files = get_dirty_files(workspace_dir)
     if dirty_files:
         for filename, change in dirty_files:
             log.file_change(filename, change)
-        log.error('Workspace is not clean')
-        return False
+        raise CommandError('Workspace is not clean')
     log.success('clean')
-    return True
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool,

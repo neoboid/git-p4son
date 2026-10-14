@@ -84,8 +84,7 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
     """
-    if not check_git_workspace_clean(workspace_dir):
-        return 1
+    check_git_workspace_clean(workspace_dir)
 
     if edit_todo:
         log.heading('Checking editor')

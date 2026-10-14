@@ -45,7 +45,7 @@ def check_git_workspace_clean(workspace_dir: str) -> bool:
     return True
 
 
-def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
+def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool,
                       commit_list: bool = True, review: bool = False) -> str:
     """Create a changelist from message and, unless commit_list is False, the git commits.
 
@@ -67,8 +67,8 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
     return p4_create_changelist(description_lines, workspace_dir)
 
 
-def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool = False,
-                      message: str | None = None, commit_list: bool = True) -> None:
+def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool,
+                      message: str | None, commit_list: bool) -> None:
     """Update a changelist description, merging commits since base_branch into its commit list."""
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
     description = Description.parse(extract_description_lines(spec_text))

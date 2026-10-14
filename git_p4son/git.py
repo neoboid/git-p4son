@@ -140,7 +140,7 @@ def add_files(filepaths: list[str], workspace_dir: str) -> None:
 
 
 def restore_files(filepaths: list[str], workspace_dir: str,
-                  dry_run: bool = False) -> None:
+                  dry_run: bool) -> None:
     """Restore the given files in the workspace from the index."""
     run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
         cwd=workspace_dir, input='\0'.join(filepaths), dry_run=dry_run)

@@ -106,7 +106,8 @@ class TestCreateChangelist(unittest.TestCase):
         mock_get_lines.return_value = ['Add feature', 'Fix bug']
         mock_run.return_value = make_run_result(
             stdout=['Change 99999 created.'])
-        cl_num = create_changelist('My message', 'HEAD~1', '/ws')
+        cl_num = create_changelist(
+            'My message', 'HEAD~1', '/ws', dry_run=False)
         self.assertEqual(cl_num, '99999')
         call_kwargs = mock_run.call_args
         spec_input = call_kwargs.kwargs.get('input')
@@ -119,7 +120,8 @@ class TestCreateChangelist(unittest.TestCase):
         mock_get_lines.return_value = []
         mock_run.return_value = make_run_result(
             stdout=['Change 100 created.'])
-        cl_num = create_changelist('Solo message', 'HEAD~1', '/ws')
+        cl_num = create_changelist(
+            'Solo message', 'HEAD~1', '/ws', dry_run=False)
         self.assertEqual(cl_num, '100')
 
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
@@ -134,7 +136,7 @@ class TestCreateChangelist(unittest.TestCase):
         mock_get_lines.return_value = ['Commit']
         mock_run.side_effect = RunError('p4 change failed')
         with self.assertRaises(RunError):
-            create_changelist('Msg', 'HEAD~1', '/ws')
+            create_changelist('Msg', 'HEAD~1', '/ws', dry_run=False)
 
 
 @mock.patch('git_p4son.perforce.run',
@@ -143,7 +145,7 @@ class TestCreateChangelist(unittest.TestCase):
             return_value=['Add feature'])
 class TestCreateChangelistWithReview(unittest.TestCase):
     def test_review_keyword_ends_the_description(self, _lines, mock_run):
-        create_changelist('Title', 'HEAD~1', '/ws', review=True)
+        create_changelist('Title', 'HEAD~1', '/ws', review=True, dry_run=False)
         self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
             '\t1. Add feature\n\t\n\t#review\n'))
         self.assertEqual(mock_run.call_count, 1)
@@ -151,25 +153,25 @@ class TestCreateChangelistWithReview(unittest.TestCase):
     def test_message_with_review_keyword_gets_no_second_one(
             self, _lines, mock_run):
         create_changelist('Title\n\n#review-678', 'HEAD~1', '/ws',
-                          review=True)
+                          review=True, dry_run=False)
         self.assertEqual(
             mock_run.call_args.kwargs['input'].count('#review'), 1)
 
     def test_keyword_in_message_moves_to_the_end(self, _lines, mock_run):
         create_changelist('Title\n\n#review-678', 'HEAD~1', '/ws',
-                          review=True)
+                          review=True, dry_run=False)
         self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
             '\t1. Add feature\n\t\n\t#review-678\n'))
 
     def test_a_mention_of_review_is_not_a_keyword(self, _lines, mock_run):
         """Only #review on a line of its own counts; #reviewer is not it."""
         create_changelist('Ask #reviewer about #review rules', 'HEAD~1', '/ws',
-                          review=True)
+                          review=True, dry_run=False)
         self.assertTrue(mock_run.call_args.kwargs['input'].endswith(
             '\t\n\t#review\n'))
 
     def test_without_review_there_is_no_keyword(self, _lines, mock_run):
-        create_changelist('Title', 'HEAD~1', '/ws')
+        create_changelist('Title', 'HEAD~1', '/ws', dry_run=False)
         self.assertNotIn('#review', mock_run.call_args.kwargs['input'])
 
 
@@ -180,7 +182,7 @@ class TestCreateChangelistWithoutCommitList(unittest.TestCase):
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 created.'])
         cl_num = create_changelist('Title\n\nBody', 'HEAD~1', '/ws',
-                                   commit_list=False)
+                                   commit_list=False, dry_run=False)
 
         self.assertEqual(cl_num, '12345')
         mock_get_lines.assert_not_called()
@@ -218,7 +220,8 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = ['New commit A', 'New commit B']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
-        update_changelist('12345', 'HEAD~1', '/ws')
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          dry_run=False, message=None, commit_list=True)
 
         spec_input = self._spec_input(mock_run)
         self.assertIn('1. Add validation', spec_input)
@@ -237,7 +240,8 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = ['Fix redirect', 'New commit A']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
-        update_changelist('12345', 'HEAD~1', '/ws')
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          dry_run=False, message=None, commit_list=True)
 
         spec_input = self._spec_input(mock_run)
         self.assertIn('1. Add validation', spec_input)
@@ -255,7 +259,8 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = ['Add validation', 'Fix redirect']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
-        update_changelist('12345', 'main', '/ws')
+        update_changelist('12345', 'main', '/ws', dry_run=False,
+                          message=None, commit_list=True)
 
         spec_input = self._spec_input(mock_run)
         self.assertIn('1. Add validation', spec_input)
@@ -269,7 +274,8 @@ class TestUpdateChangelist(unittest.TestCase):
     def test_dry_run(self, mock_get_spec, mock_subjects):
         mock_get_spec.return_value = SAMPLE_SPEC
         mock_subjects.return_value = ['New commit']
-        update_changelist('12345', 'HEAD~1', '/ws', dry_run=True)
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          dry_run=True, message=None, commit_list=True)
 
     @mock.patch('git_p4son.perforce.run')
     @mock.patch('git_p4son.lib.get_commit_subjects_since')
@@ -280,7 +286,8 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = ['First commit']
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
-        update_changelist('12345', 'HEAD~1', '/ws')
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          dry_run=False, message=None, commit_list=True)
         self.assertIn('1. First commit', self._spec_input(mock_run))
 
     @mock.patch('git_p4son.perforce.run')
@@ -293,7 +300,7 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
         update_changelist('12345', 'HEAD~1', '/ws',
-                          message='New title\n\nNew body')
+                          message='New title\n\nNew body', dry_run=False, commit_list=True)
 
         spec_input = self._spec_input(mock_run)
         self.assertNotIn('Fix the login bug', spec_input)
@@ -312,7 +319,8 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_subjects.return_value = []
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
-        update_changelist('12345', 'HEAD~1', '/ws', message='New title')
+        update_changelist('12345', 'HEAD~1', '/ws',
+                          message='New title', dry_run=False, commit_list=True)
 
         spec_input = self._spec_input(mock_run)
         self.assertIn('\tNew title\n', spec_input)
@@ -328,7 +336,7 @@ class TestUpdateChangelist(unittest.TestCase):
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
         update_changelist('12345', 'HEAD~1', '/ws', message='New title',
-                          commit_list=False)
+                          commit_list=False, dry_run=False)
 
         mock_subjects.assert_not_called()
         self.assertIn(
@@ -349,6 +357,8 @@ class TestUpdateChangelistReviewKeyword(unittest.TestCase):
         mock_subjects.return_value = subjects
         mock_run.return_value = make_run_result(
             stdout=['Change 12345 updated.'])
+        kwargs = {'dry_run': False, 'message': None,
+                  'commit_list': True, **kwargs}
         update_changelist('12345', 'HEAD~1', '/ws', **kwargs)
         spec_input = mock_run.call_args.kwargs['input']
         start = spec_input.index('Description:\n') + len('Description:\n')

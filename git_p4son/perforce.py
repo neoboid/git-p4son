@@ -317,14 +317,14 @@ def get_opened_files_in_changelist(changelist: str,
 
 
 def p4_revert(filenames: list[str], workspace_dir: str,
-              dry_run: bool = False) -> None:
+              dry_run: bool) -> None:
     """Revert the given files, writing their depot version to disk."""
     run([*_P4, '-x', '-', 'revert'], cwd=workspace_dir,
         input='\n'.join(filenames), dry_run=dry_run)
 
 
 def p4_revert_unchanged(filenames: list[str], changelist: str,
-                        workspace_dir: str, dry_run: bool = False) -> list[str]:
+                        workspace_dir: str, dry_run: bool) -> list[str]:
     """Revert files that are unchanged, or missing and opened for add; returns p4's lines."""
     if not filenames:
         return []
@@ -361,7 +361,7 @@ def p4_get_opened_files(depot_root: str,
 
 # --- shelving ---
 
-def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool = False) -> None:
+def p4_shelve_changelist(changelist: str, workspace_dir: str, dry_run: bool) -> None:
     """Shelve a changelist's open files, replacing the shelf and leaving unchanged files out."""
     run([*_P4, 'shelve', '-r', '-a', 'leaveunchanged', '-Af',
          '-c', changelist],

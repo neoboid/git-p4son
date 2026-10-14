@@ -28,20 +28,21 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
         self._tempdir.cleanup()
 
     def test_save_load_delete_roundtrip(self):
-        self.assertTrue(save_changelist_alias('feature', '123', self.ws))
+        self.assertTrue(save_changelist_alias(
+            'feature', '123', self.ws, force=False))
         self.assertEqual(load_changelist_alias('feature', self.ws), '123')
         self.assertTrue(delete_changelist_alias('feature', self.ws))
         self.assertIsNone(load_changelist_alias('feature', self.ws))
 
     def test_save_ensures_config_gitignore(self):
-        save_changelist_alias('feature', '123', self.ws)
+        save_changelist_alias('feature', '123', self.ws, force=False)
         gitignore = os.path.join(self.ws, CONFIG_DIR, '.gitignore')
         with open(gitignore, encoding='utf-8') as f:
             self.assertEqual(f.read(), '*\n')
 
     def test_load_rejects_path_traversal(self):
         # The store directory must exist for the relative path to resolve.
-        save_changelist_alias('some-alias', '1', self.ws)
+        save_changelist_alias('some-alias', '1', self.ws, force=False)
         outside = os.path.join(self.ws, 'secret.txt')
         with open(outside, 'w') as f:
             f.write('55555\n')
@@ -51,7 +52,7 @@ class TestAliasStoreValidatesNames(unittest.TestCase):
             load_changelist_alias('../../secret.txt', self.ws))
 
     def test_delete_rejects_path_traversal(self):
-        save_changelist_alias('some-alias', '1', self.ws)
+        save_changelist_alias('some-alias', '1', self.ws, force=False)
         outside = os.path.join(self.ws, 'precious.txt')
         with open(outside, 'w') as f:
             f.write('do not delete\n')
@@ -84,13 +85,14 @@ class TestCheckAliasAvailable(unittest.TestCase):
     def test_available_until_saved(self):
         with tempfile.TemporaryDirectory() as ws:
             self.assertTrue(check_alias_available('feature', ws))
-            save_changelist_alias('feature', '123', ws)
+            save_changelist_alias('feature', '123', ws, force=False)
             self.assertFalse(check_alias_available('feature', ws))
 
     def test_save_refuses_an_existing_alias_unless_forced(self):
         with tempfile.TemporaryDirectory() as ws:
-            save_changelist_alias('feature', '123', ws)
-            self.assertFalse(save_changelist_alias('feature', '456', ws))
+            save_changelist_alias('feature', '123', ws, force=False)
+            self.assertFalse(save_changelist_alias(
+                'feature', '456', ws, force=False))
             self.assertTrue(
                 save_changelist_alias('feature', '456', ws, force=True))
             self.assertEqual(load_changelist_alias('feature', ws), '456')
@@ -103,7 +105,7 @@ class TestCheckAliasUsable(unittest.TestCase):
 
     def test_existing_alias_needs_force(self):
         with tempfile.TemporaryDirectory() as ws:
-            save_changelist_alias('feature', '123', ws)
+            save_changelist_alias('feature', '123', ws, force=False)
             self.assertFalse(check_alias_usable('feature', ws, force=False))
             self.assertTrue(check_alias_usable('feature', ws, force=True))
 

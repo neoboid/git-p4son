@@ -112,7 +112,7 @@ class TestRestoreFiles(GitRepoTestCase):
         self._commit()
         self._write_file('a.txt', 'depot')
         self._write_file('b c.txt', 'depot')
-        restore_files(['a.txt', 'b c.txt'], self.tmpdir)
+        restore_files(['a.txt', 'b c.txt'], self.tmpdir, dry_run=False)
         for name in ('a.txt', 'b c.txt'):
             with open(os.path.join(self.tmpdir, name)) as f:
                 self.assertEqual(f.read(), 'git')

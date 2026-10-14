@@ -82,7 +82,7 @@ def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
     return force or check_alias_available(name, workspace_dir)
 
 
-def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool = False) -> bool:
+def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> bool:
     """Save a changelist number under a named alias."""
     if not check_alias_usable(name, workspace_dir, force):
         return False

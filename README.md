@@ -443,7 +443,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 
 ```sh
 git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
-              [--no-alias] [--no-commit-list] [--shelve] [--review] [--sleep SECONDS]
+              [--no-alias] [--no-commit-list] [--shelve] [--review]
 ```
 
 **Arguments:**
@@ -463,7 +463,6 @@ git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--
 - `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
 - `--review`: Add `#review` keyword and shelve to create a Swarm review
-- `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
 ```sh
@@ -497,7 +496,7 @@ clean git workspace, also with `--no-edit`. If a step fails, the rebase stops; f
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
-                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit] [--sleep SECONDS]
+                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit]
 ```
 
 **Arguments:**
@@ -519,7 +518,6 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   each shelf.
   `--dry-run` prints the generated rebase todo. A message from `-m` or `-F` is saved to
   `.git-p4son/reviews/message` for the first step
-- `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
 
 **Examples:**
 ```sh

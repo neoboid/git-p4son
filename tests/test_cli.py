@@ -226,6 +226,18 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 0)
 
 
+class TestHiddenSleep(unittest.TestCase):
+    def test_sleep_is_parsed_but_not_listed_in_help(self):
+        for command in ('new', 'update'):
+            with self.subTest(command=command):
+                args = create_parser().parse_args([command, '--sleep', '5'])
+                self.assertEqual(args.sleep, 5)
+                with contextlib.redirect_stdout(io.StringIO()) as out, \
+                        self.assertRaises(SystemExit):
+                    create_parser().parse_args([command, '-h'])
+                self.assertNotIn('--sleep', out.getvalue())
+
+
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.sync_command', return_value=0)

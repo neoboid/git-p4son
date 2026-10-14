@@ -9,6 +9,7 @@ from unittest import mock
 
 from git_p4son.config import load_config, save_config
 from git_p4son.writable import (
+    is_user_writable,
     is_writable_mode,
     make_read_only,
     make_writable,
@@ -102,6 +103,23 @@ class TestWriteBitHelpers(unittest.TestCase):
         missing = os.path.join(self.dir, 'missing.txt')
         self.assertEqual(make_writable([missing, subdir]), 0)
         self.assertEqual(make_read_only([missing, subdir]), 0)
+
+    def test_is_user_writable(self):
+        ro = self._file('ro.txt', stat.S_IRUSR)
+        rw = self._file('rw.txt', stat.S_IRUSR | stat.S_IWUSR)
+        self.assertFalse(is_user_writable(ro))
+        self.assertTrue(is_user_writable(rw))
+        self.assertFalse(is_user_writable(self.dir))
+        self.assertFalse(is_user_writable(os.path.join(self.dir, 'missing')))
+
+    def test_symlink_is_never_user_writable(self):
+        target = self._file('target.txt', stat.S_IRUSR | stat.S_IWUSR)
+        link = os.path.join(self.dir, 'link.txt')
+        try:
+            os.symlink(target, link)
+        except (OSError, NotImplementedError):
+            self.skipTest('symlinks not supported here')
+        self.assertFalse(is_user_writable(link))
 
     def test_symlink_target_is_never_changed(self):
         """A symlink target is never changed."""

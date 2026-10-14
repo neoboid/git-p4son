@@ -4,7 +4,6 @@ import argparse
 import functools
 import os
 import shutil
-import stat
 import tempfile
 from dataclasses import dataclass, field
 
@@ -20,7 +19,7 @@ from .depot import resolve_depot_root
 from .log import log
 from .processes import check_no_blocking_processes
 from .writable import (
-    is_writable_mode, make_read_only, make_writable, regular_file_mode, restore_writable,
+    is_user_writable, is_writable_mode, make_read_only, make_writable, restore_writable,
 )
 from .sync_split_users import (
     USER_PLACEHOLDER,
@@ -176,8 +175,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     writable = []
     added_upstream = set()
     for entry in preview_files:
-        mode = regular_file_mode(entry.filepath)
-        if mode is not None and mode & stat.S_IWUSR:
+        if is_user_writable(entry.filepath):
             writable.append(entry.filepath)
             if entry.mode == 'add':
                 added_upstream.add(entry.filepath)

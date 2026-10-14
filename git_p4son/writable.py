@@ -24,7 +24,7 @@ def set_writable_mode(workspace_dir: str, enabled: bool) -> None:
     save_config(workspace_dir, {'core': {'writable': enabled}})
 
 
-def regular_file_mode(path: str) -> int | None:
+def _regular_file_mode(path: str) -> int | None:
     """Permission bits of path if it is a regular file (symlinks not followed), else None."""
     try:
         st = os.lstat(path)
@@ -35,11 +35,17 @@ def regular_file_mode(path: str) -> int | None:
     return stat.S_IMODE(st.st_mode)
 
 
+def is_user_writable(path: str) -> bool:
+    """Whether path is a regular file (symlinks not followed) with user write permission."""
+    mode = _regular_file_mode(path)
+    return mode is not None and bool(mode & stat.S_IWUSR)
+
+
 def _set_user_write(paths: list[str], writable: bool) -> int:
     """Set or clear user write permission on each regular file; returns how many changed."""
     changed = 0
     for path in paths:
-        mode = regular_file_mode(path)
+        mode = _regular_file_mode(path)
         if mode is None:
             continue
         new_mode = mode | stat.S_IWUSR if writable else mode & ~stat.S_IWUSR

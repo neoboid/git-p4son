@@ -2,33 +2,35 @@
 
 ## Unreleased
 
-- Output reads the same across commands: each step ends with what it did ("Opened 3 files", "Shelved CL 123")
-  instead of "Done", every dry run ends with "Dry run, nothing changed", counts read "1 file" and "3 files", and
-  errors such as a dirty workspace or an unknown alias say what to do next
-- Errors are reported in one line: `sync -u` and `sync-split-users add` and `delete` name all unknown users at once
-  ("No such Perforce users: nobody, typo"), and a failed `review` rebase or a file p4 could not replace no longer
-  prints two error lines. When p4 cannot tell your user for `$(user)`, its own message is shown
-- `sync`, `init` and `sync-split-users` no longer take `*unknown*` for your Perforce user when the server has no
-  user named by `P4USER`. `sync` with `$(user)` in the split users stops and says it cannot determine the user
+- `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped
+  instructions, so workspace-specific guidance for agents survives reinstalling the skill
 - A malformed value in `.git-p4son/config.toml` now stops the command with a message naming the setting.
   Before, a `sync.split-users` or `core.writable` of the wrong type was silently ignored, turning splitting or
   writable mode off
-- `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped
-  instructions, so workspace-specific guidance for agents survives reinstalling the skill
+- `update --per-commit` only pauses between steps with `--shelve`, when Swarm has a shelf to process
+- `review` and `update --per-commit` accept a multi-line `-m` message, and `review` refuses to start with
+  uncommitted changes
 - `new`, `update` and `review` make far fewer p4 calls: opening files for edit takes a fixed number of calls instead
   of about two per file, and `new --review` adds `#review` as it creates the changelist
 - `sync`, `new` and `update` check which files git tracks with a single listing of the index instead of one git
   call per few hundred files. A large sync in writable mode no longer spends tens of seconds on it
-- `new` and `update` open files with a double quote, backslash or tab in their name in p4, and `sync` no longer
-  turns local changes to files with a quote or tab in their name into a whole-file conflict
-- `review` and `update --per-commit` accept a multi-line `-m` message, and `review` refuses to start with
-  uncommitted changes
+- Output reads the same across commands: each step ends with what it did ("Opened 3 files", "Shelved CL 123")
+  instead of "Done", every dry run ends with "Dry run, nothing changed", counts read "1 file" and "3 files", and
+  errors say what to do next. Errors take one line: unknown users are named together ("No such Perforce users:
+  nobody, typo"), and a failed `review` rebase or a file p4 could not replace no longer prints two error lines
+- git-p4son asks p4 for English messages, so it works when `P4LANGUAGE` is set to another language
 - `sync` finds the last sync commit even when a later commit, such as a revert, mentions one, and `sync last-synced`
   merges local changes back like any other sync
 - `sync` no longer warns about the clobber workspace option. A leftover `.git-p4son/state.toml` can be deleted
-- git-p4son asks p4 for English messages, so it works when `P4LANGUAGE` is set to another language
+- `new` and `update` open files with a double quote, backslash or tab in their name in p4, and `sync` no longer
+  turns local changes to files with a quote or tab in their name into a whole-file conflict
 - `new --review` adds `#review` unless the message has one on a line of its own; a mention of `#reviewer` no
   longer counts
+- When the server has no user named by `P4USER`, `sync`, `init` and `sync-split-users` no longer take `*unknown*` for
+  your Perforce user, and `sync` with `$(user)` in the split users stops and says so, showing p4's own message when
+  p4 itself fails
+- `init` run from outside the workspace root no longer offers a `../..` depot root, and `writable disable` keeps
+  files opened in Perforce writable on case-insensitive volumes when p4 spells their path in another case
 
 ## 0.5.1
 

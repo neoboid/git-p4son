@@ -159,7 +159,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             ['a.txt', 'b.txt'], self.ws, False)
         self.mocks['restore'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
-        self.mocks['log'].success.assert_called_once_with('2 reverted')
+        self.mocks['log'].success.assert_called_once_with('2 files reverted')
 
     def test_real_delete_is_left_alone(self):
         """Opened for delete and gone from git and disk: a real delete."""
@@ -203,7 +203,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         self.mocks['revert_unchanged'].return_value = [
             '//depot/a.txt#1 - was edit, reverted']
         revert_unchanged_files('100', self.ws, dry_run=False)
-        self.mocks['log'].success.assert_called_once_with('2 reverted')
+        self.mocks['log'].success.assert_called_once_with('2 files reverted')
 
     def test_dry_run_reverts_and_restores_nothing(self):
         self._setup([('a.txt', 'edit'), ('c.txt', 'delete')],

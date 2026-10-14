@@ -12,7 +12,7 @@ from .git import (
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
-from .log import log
+from .log import log, plural
 from .processes import check_no_blocking_processes
 from .sync_merge import (
     WritableSyncFileSet, merge_changed_files, prepare_writable_files,
@@ -60,7 +60,8 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
             raise CommandError('Unexpected clobber errors for the files above',
                                returncode=e.returncode) from e
         log.warning(
-            f'{len(e.refused)} expected clobber errors (git-ignored files)')
+            f'{plural(len(e.refused), "expected clobber error")} '
+            '(git-ignored files)')
         return e.refused
     except P4SyncAbortError as e:
         log.info(str(e))
@@ -84,7 +85,8 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
         raise CommandError('Workspace has p4-opened files tracked by git')
     if opened_files:
         log.warning(
-            f'Ignoring {len(opened_files)} p4-opened files not tracked by git')
+            f'Ignoring {plural(len(opened_files), "p4-opened file")} '
+            'not tracked by git')
     else:
         log.success('Clean')
 
@@ -140,7 +142,8 @@ def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
     synced = sorted(set(synced))
     tracked = get_tracked_files(synced, workspace_dir)
     changed = restore_writable(synced, tracked, workspace_dir)
-    log.success(f'{changed} of {len(tracked)} tracked files made writable')
+    log.success(
+        f'{changed} of {plural(len(tracked), "tracked file")} made writable')
 
 
 def _split_user_changes(changes: list[P4Change], users: list[str],
@@ -211,15 +214,14 @@ def _split_targets(targets: list[tuple[int, str]], users: list[str],
                 f'in CL {last_synced}..{upper}')
     changes = get_submitted_changes(depot_root, last_synced, upper,
                                     workspace_dir)
-    log.success(f'{len(changes)} changelists')
+    log.success(plural(len(changes), 'changelist'))
 
     matched = _split_user_changes(changes, users, last_synced)
     log.heading('Finding changelists to split into their own commits')
     if matched:
         for change in matched:
             log.info(f'CL {change.change} ({change.user})')
-        label = 'changelist' if len(matched) == 1 else 'changelists'
-        log.success(f'{len(matched)} {label} to split out')
+        log.success(f'{plural(len(matched), "changelist")} to split out')
     else:
         log.success('None found')
 
@@ -370,7 +372,7 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str,
             staged = get_staged_files(workspace_dir)
             commit(format_sync_subject(plan.depot_root, changelist),
                    workspace_dir, allow_empty=True)
-            log.success(f'Committed {len(staged)} files')
+            log.success(f'Committed {plural(len(staged), "file")}')
 
         # Dedup files that showed up in several sync passes.
         by_path = {cf.filepath: cf for p in preps for cf in p.changed}

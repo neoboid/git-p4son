@@ -67,6 +67,13 @@ _SPINNER_CHARS = '|/-\\'
 _SPINNER_INTERVAL = 0.1  # seconds between frames
 
 
+def plural(count: int, noun: str, plural_noun: str | None = None) -> str:
+    """Return count with noun, pluralized unless count is one, e.g. "1 file" or "3 files"."""
+    if count == 1:
+        return f'{count} {noun}'
+    return f'{count} {plural_noun or noun + "s"}'
+
+
 class Log:
     """Structured output handler for git-p4son."""
 

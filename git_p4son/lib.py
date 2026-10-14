@@ -13,7 +13,7 @@ from .git import (
     get_tracked_files,
     restore_files,
 )
-from .log import log
+from .log import log, plural
 from .perforce import (
     extract_description_lines,
     get_changelist_spec,
@@ -98,7 +98,8 @@ def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
                 if opened(f) != (changelist, action)]
     if not unopened:
         return
-    log.warning(f'p4 did not open {len(unopened)} of {len(to_open)} files:')
+    log.warning(
+        f'p4 did not open {len(unopened)} of {plural(len(to_open), "file")}:')
     for filename, action in unopened:
         log.info(f'  {filename} (for {action})')
     messages = [line for line in p4_output if 'opened for' not in line]
@@ -224,12 +225,12 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
         restore_files(stale_deletes, workspace_dir, dry_run)
 
     count = len(reverted) + len(stale_deletes)
-    log.success(f'{count} would be reverted' if dry_run
-                else f'{count} reverted')
+    log.success(f'{plural(count, "file")} would be reverted' if dry_run
+                else f'{plural(count, "file")} reverted')
 
     if not dry_run and is_writable_mode(workspace_dir):
         log.heading('Making reverted tracked files writable (writable mode)')
         # p4 revert leaves files read-only; the still opened ones are writable already.
         changed = restore_writable(revert_if_unchanged + stale_deletes,
                                    tracked, workspace_dir)
-        log.success(f'{changed} tracked files made writable')
+        log.success(f'{plural(changed, "tracked file")} made writable')

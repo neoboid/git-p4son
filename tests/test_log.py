@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest import mock
 
-from git_p4son.log import Log, _truncate_to_terminal_width
+from git_p4son.log import Log, _truncate_to_terminal_width, plural
 
 
 class TestNonTtyOutput(unittest.TestCase):
@@ -35,6 +35,18 @@ class TestNonTtyOutput(unittest.TestCase):
             log.command('p4 change -i')
             log.end_command()
         self.assertEqual(buffer.getvalue(), '> p4 change -i\n')
+
+
+class TestPlural(unittest.TestCase):
+    def test_one_is_singular(self):
+        self.assertEqual(plural(1, 'file'), '1 file')
+
+    def test_other_counts_add_an_s(self):
+        self.assertEqual(plural(0, 'file'), '0 files')
+        self.assertEqual(plural(3, 'file'), '3 files')
+
+    def test_irregular_plural(self):
+        self.assertEqual(plural(2, 'alias', 'aliases'), '2 aliases')
 
 
 class TestOutput(unittest.TestCase):

@@ -7,7 +7,7 @@ from .changelist_store import (
     list_changelist_aliases,
     delete_changelist_alias,
 )
-from .common import prompt_choice
+from .common import CommandError, prompt_choice
 from .log import log
 
 
@@ -29,10 +29,7 @@ def alias_list_command(args: argparse.Namespace) -> int:
 
 def alias_show_command(args: argparse.Namespace) -> int:
     """Execute the 'alias show' command."""
-    changelist = load_changelist_alias(args.alias, args.workspace_dir)
-    if changelist is None:
-        return 1
-    print(changelist)
+    print(load_changelist_alias(args.alias, args.workspace_dir))
     return 0
 
 
@@ -41,13 +38,10 @@ def alias_new_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     if not args.changelist.isdigit():
-        log.error(f'Invalid changelist number: {args.changelist}')
-        return 1
+        raise CommandError(f'Invalid changelist number: {args.changelist}')
 
-    if not save_changelist_alias(args.alias, args.changelist,
-                                 workspace_dir, force=args.force):
-        return 1
-
+    save_changelist_alias(args.alias, args.changelist, workspace_dir,
+                          force=args.force)
     log.success(f'{args.alias} -> {args.changelist}')
     return 0
 
@@ -64,17 +58,25 @@ def alias_delete_command(args: argparse.Namespace) -> int:
         _clean_all(aliases, workspace_dir)
         return 0
 
-    if not delete_changelist_alias(args.alias, workspace_dir):
-        return 1
-
+    delete_changelist_alias(args.alias, workspace_dir)
     log.success(f'Deleted alias "{args.alias}"')
     return 0
+
+
+def _delete_listed(name: str, workspace_dir: str) -> bool:
+    """Delete an alias found in the store; a failure is reported and the clean goes on."""
+    try:
+        delete_changelist_alias(name, workspace_dir)
+    except CommandError as error:
+        log.error(str(error))
+        return False
+    return True
 
 
 def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
     """Delete every alias without further prompting."""
     for name, _changelist in aliases:
-        if delete_changelist_alias(name, workspace_dir):
+        if _delete_listed(name, workspace_dir):
             log.success(f'Deleted "{name}"')
 
 
@@ -96,7 +98,7 @@ def _clean_interactive(aliases: list[tuple[str, str]],
             log.info('Skipped')
             continue
 
-        if delete_changelist_alias(name, workspace_dir):
+        if _delete_listed(name, workspace_dir):
             log.success('Deleted')
 
 

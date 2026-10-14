@@ -203,9 +203,9 @@ class TestReviewCommand(unittest.TestCase):
             no_commit_list=False,
             workspace_dir='/workspace',
         )
-        with mock.patch('os.path.exists', return_value=True):
-            rc = review_command(args)
-        self.assertEqual(rc, 1)
+        with mock.patch('os.path.exists', return_value=True), \
+                self.assertRaisesRegex(CommandError, 'already exists'):
+            review_command(args)
 
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')

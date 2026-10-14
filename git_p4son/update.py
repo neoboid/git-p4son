@@ -35,8 +35,6 @@ def update_command(args: argparse.Namespace) -> int:
     else:
         log.heading('Resolving alias')
         changelist = load_changelist_alias(args.changelist, workspace_dir)
-        if changelist is None:
-            return 1
         log.success(f'{args.changelist} -> CL {changelist}')
 
     if args.per_commit:

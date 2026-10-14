@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import tempfile
 import unittest
 from unittest import mock
 
@@ -10,7 +11,7 @@ from git_p4son.alias import (
     alias_delete_command,
     alias_show_command,
 )
-from git_p4son.common import prompt_choice, prompt_menu
+from git_p4son.common import CommandError, prompt_choice, prompt_menu
 
 
 class TestPromptChoice(unittest.TestCase):
@@ -75,12 +76,11 @@ class TestAliasShowCommand(unittest.TestCase):
         self.assertEqual(out.getvalue(), '100\n')
         mock_load.assert_called_once_with('feature-a', '/ws')
 
-    @mock.patch('git_p4son.alias.load_changelist_alias', return_value=None)
-    def test_missing_alias_fails(self, _load):
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            rc = alias_show_command(
-                mock.Mock(workspace_dir='/ws', alias='nope'))
-        self.assertEqual(rc, 1)
+    def test_missing_alias_fails(self):
+        with tempfile.TemporaryDirectory() as ws, \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            with self.assertRaisesRegex(CommandError, 'No changelist alias found'):
+                alias_show_command(mock.Mock(workspace_dir=ws, alias='nope'))
         self.assertEqual(out.getvalue(), '')
 
 
@@ -104,6 +104,16 @@ class TestAliasDeleteCommand(unittest.TestCase):
         self.assertEqual(
             [c.args[0] for c in mock_delete.call_args_list],
             ['feature-a', 'feature-b', 'feature-c'])
+
+    @mock.patch('git_p4son.alias.log')
+    def test_all_goes_on_past_a_failed_delete(self, mock_log, _list,
+                                              mock_delete):
+        mock_delete.side_effect = [None, CommandError('boom'), None]
+        rc = alias_delete_command(
+            mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+        self.assertEqual(rc, 0)
+        self.assertEqual(mock_delete.call_count, 3)
+        mock_log.error.assert_called_once_with('boom')
 
     def test_all_without_aliases(self, mock_list, mock_delete):
         mock_list.return_value = []

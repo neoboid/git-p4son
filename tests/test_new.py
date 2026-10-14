@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.changelist_store import save_changelist_alias
+from git_p4son.common import CommandError
 from git_p4son.git import LocalChanges
 from git_p4son.new import new_command
 
@@ -40,17 +41,17 @@ class TestNewCommandDryRun(unittest.TestCase):
     @mock.patch('git_p4son.lib.get_commit_subjects_since',
                 return_value=[])
     def test_dry_run_reports_invalid_alias(self, _lines):
-        rc = new_command(_args(alias='bad alias!', no_edit=True))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'Invalid alias name'):
+            new_command(_args(alias='bad alias!', no_edit=True))
 
     @mock.patch('git_p4son.lib.get_commit_subjects_since',
                 return_value=[])
     def test_dry_run_reports_existing_alias(self, _lines):
         with tempfile.TemporaryDirectory() as ws:
             save_changelist_alias('taken', '1', ws, force=False)
-            rc = new_command(_args(alias='taken', no_edit=True,
-                                   workspace_dir=ws))
-        self.assertEqual(rc, 1)
+            with self.assertRaisesRegex(CommandError, 'already exists'):
+                new_command(_args(alias='taken', no_edit=True,
+                                  workspace_dir=ws))
 
 
 class TestNewCommandCleanWorkspace(unittest.TestCase):

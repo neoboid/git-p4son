@@ -25,8 +25,7 @@ def review_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     log.heading(f'Checking alias "{args.alias}"')
-    if not check_alias_usable(args.alias, workspace_dir, args.force):
-        return 1
+    check_alias_usable(args.alias, workspace_dir, args.force)
     log.success('Done')
 
     new_cmd, update_cmd = _step_commands(args.alias, args.force,

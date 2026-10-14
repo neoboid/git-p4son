@@ -4,6 +4,7 @@ import os
 import re
 
 from . import CONFIG_DIR
+from .common import CommandError
 from .config import ensure_config_dir
 from .log import log
 
@@ -57,31 +58,25 @@ def _changelists_dir(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, CONFIG_DIR, 'changelists')
 
 
-def _alias_path(name: str, workspace_dir: str) -> str | None:
-    """Validate name and return its store path, or None if invalid (e.g. one escaping the store)."""
+def _alias_path(name: str, workspace_dir: str) -> str:
+    """Validate name and return its store path; raise CommandError if invalid (e.g. one escaping the store)."""
     error = validate_alias_name(name)
     if error:
-        log.error(error)
-        return None
+        raise CommandError(error)
     return os.path.join(_changelists_dir(workspace_dir), name)
 
 
-def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
-    """Report whether name is a valid alias that is free, or force is set; log the reason if not."""
+def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
+    """Raise CommandError unless name is a valid alias that is free, or force is set."""
     alias_path = _alias_path(name, workspace_dir)
-    if alias_path is None:
-        return False
     if not force and os.path.exists(alias_path):
-        log.error(
+        raise CommandError(
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
-        return False
-    return True
 
 
-def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> bool:
-    """Save a changelist number under a named alias."""
-    if not check_alias_usable(name, workspace_dir, force):
-        return False
+def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> None:
+    """Save a changelist number under a named alias; raise CommandError if the alias is not usable."""
+    check_alias_usable(name, workspace_dir, force)
 
     changelists_dir = _changelists_dir(workspace_dir)
     ensure_config_dir(workspace_dir)
@@ -92,26 +87,17 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
     with open(os.path.join(changelists_dir, name), 'w') as f:
         f.write(changelist + '\n')
 
-    return True
 
-
-def load_changelist_alias(name: str, workspace_dir: str) -> str | None:
-    """Load a changelist number from a named alias, or None if not found."""
+def load_changelist_alias(name: str, workspace_dir: str) -> str:
+    """Load a changelist number from a named alias; raise CommandError if there is none."""
     alias_path = _alias_path(name, workspace_dir)
-    if alias_path is None:
-        return None
-
     if not os.path.exists(alias_path):
-        log.error(f'No changelist alias found: {name}')
-        return None
+        raise CommandError(f'No changelist alias found: {name}')
 
     with open(alias_path, 'r') as f:
         content = f.read().strip()
-
     if not content:
-        log.error(f'Changelist alias "{name}" is empty')
-        return None
-
+        raise CommandError(f'Changelist alias "{name}" is empty')
     return content
 
 
@@ -134,15 +120,9 @@ def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
     return sorted(aliases, key=lambda x: x[0])
 
 
-def delete_changelist_alias(name: str, workspace_dir: str) -> bool:
-    """Delete a changelist alias file."""
+def delete_changelist_alias(name: str, workspace_dir: str) -> None:
+    """Delete a changelist alias file; raise CommandError if there is none."""
     alias_path = _alias_path(name, workspace_dir)
-    if alias_path is None:
-        return False
-
     if not os.path.exists(alias_path):
-        log.error(f'No changelist alias found: {name}')
-        return False
-
+        raise CommandError(f'No changelist alias found: {name}')
     os.remove(alias_path)
-    return True

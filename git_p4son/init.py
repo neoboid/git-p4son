@@ -40,7 +40,7 @@ def _select_depot_root(client_name: str, cwd: str,
                for name, root in roots.items()] + [('quit', '')]
 
     while True:
-        print()
+        log.info('')
         choice = prompt_menu('Select the depot path that git-p4son should sync:',
                              options, 'entire workspace')
         if choice is None or choice == 'quit':
@@ -83,9 +83,9 @@ def _configure_writable_mode(cwd: str) -> tuple[bool, bool]:
     """Ask for the writable mode setting and save it; returns (enabled, changed)."""
     log.heading('Configuring writable mode')
     current = is_writable_mode(cwd)
-    print()
-    print('Writable mode keeps git-tracked files writable, so they can be')
-    print('edited without p4 edit. Git-ignored files stay read-only.')
+    log.info('')
+    log.info('Writable mode keeps git-tracked files writable, so they can be')
+    log.info('edited without p4 edit. Git-ignored files stay read-only.')
     enabled = _ask_yes_no('Keep git-tracked files writable?', current)
     if enabled is None or enabled == current:
         log.success(f'{"on" if current else "off"} (unchanged)')
@@ -103,10 +103,10 @@ def _configure_split_users(cwd: str) -> None:
         log.warning('Cannot determine the current Perforce user, skipping')
         return
     current = is_self_split(cwd)
-    print()
-    print('Split users have each of their submitted changelists synced into')
-    print('its own commit, so your own submits show up in git as separate')
-    print('commits.')
+    log.info('')
+    log.info('Split users have each of their submitted changelists synced into')
+    log.info('its own commit, so your own submits show up in git as separate')
+    log.info('commits.')
     enabled = _ask_yes_no(
         f'Sync your own changelists ({user}) individually?', current)
     if enabled is None or enabled == current:
@@ -128,9 +128,9 @@ def _configure_claude_skill() -> None:
         install_skill()
         log.success('Installed (refreshed)')
         return
-    print()
-    print('The Claude Code skill teaches AI agents how to use git-p4son.')
-    print('It is installed for your user, not in the workspace.')
+    log.info('')
+    log.info('The Claude Code skill teaches AI agents how to use git-p4son.')
+    log.info('It is installed for your user, not in the workspace.')
     if _ask_yes_no('Install the Claude Code skill?', False):
         log.success(f'Installed to {install_skill()}')
     else:

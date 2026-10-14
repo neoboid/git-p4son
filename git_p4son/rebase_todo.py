@@ -6,6 +6,7 @@ import os
 import shlex
 import subprocess
 from . import CONFIG_DIR
+from .common import CommandError
 from .config import ensure_config_dir
 from .git import get_commit_lines_since, resolve_editor
 from .lib import check_git_workspace_clean
@@ -20,13 +21,12 @@ TODO_FILE = f'{REVIEWS_DIR}/todo'
 SWARM_SHELF_DELAY = 5
 
 
-def _find_commits(base_branch: str, workspace_dir: str) -> list[str] | None:
-    """Return the commit lines since base_branch, or None (logged) if there are none."""
+def _find_commits(base_branch: str, workspace_dir: str) -> list[str]:
+    """Return the commit lines since base_branch; raise CommandError if there are none."""
     log.heading('Finding commits')
     commit_lines = get_commit_lines_since(base_branch, workspace_dir)
     if not commit_lines:
-        log.error(f'No commits found since {base_branch}')
-        return None
+        raise CommandError(f'No commits found since {base_branch}')
     log.success(f'{len(commit_lines)} commits since {base_branch}')
     return commit_lines
 
@@ -50,36 +50,33 @@ def _build_todo(commit_lines: list[str], first_cmd: str, cmd: str,
 def rebase_per_commit(first_cmd: str, cmd: str, base_branch: str,
                       workspace_dir: str, *, message: str | None,
                       sleep: int | None, edit_todo: bool,
-                      dry_run: bool) -> int:
+                      dry_run: bool) -> None:
     """Rebase onto base_branch, running git p4son first_cmd after the first commit and cmd after the others.
 
     A message reaches first_cmd through MESSAGE_FILE, as -F.
     """
     commit_lines = _find_commits(base_branch, workspace_dir)
-    if commit_lines is None:
-        return 1
 
     log.heading('Generating rebase todo')
     todo_content = _build_todo(commit_lines, first_cmd, cmd,
                                message is not None, sleep)
 
-    return _run_todo_rebase(todo_content, base_branch, workspace_dir,
-                            edit_todo=edit_todo, message=message,
-                            dry_run=dry_run)
+    _run_todo_rebase(todo_content, base_branch, workspace_dir,
+                     edit_todo=edit_todo, message=message, dry_run=dry_run)
 
 
-def _resolve_editor_or_fail(workspace_dir: str) -> str | None:
-    """Return the git editor, logging an error if none is configured."""
+def _require_editor(workspace_dir: str) -> str:
+    """Return the git editor; raise CommandError if none is configured."""
     editor = resolve_editor(workspace_dir)
     if not editor:
-        log.error(
+        raise CommandError(
             'No git editor configured. Set one with: git config core.editor <editor>')
     return editor
 
 
 def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
                      edit_todo: bool, message: str | None,
-                     dry_run: bool) -> int:
+                     dry_run: bool) -> None:
     """Rebase onto base_branch with the generated todo, opening it in the editor if edit_todo.
 
     A message is saved to MESSAGE_FILE for the todo's exec lines, and left there afterwards.
@@ -88,10 +85,7 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
 
     if edit_todo:
         log.heading('Checking editor')
-        editor = _resolve_editor_or_fail(workspace_dir)
-        if not editor:
-            return 1
-        log.success(editor)
+        log.success(_require_editor(workspace_dir))
 
     if dry_run:
         log.info('Generated rebase todo:')
@@ -99,7 +93,7 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
         if message is not None:
             log.info(f'Message for {MESSAGE_FILE}:')
             log.info(message)
-        return 0
+        return
 
     ensure_config_dir(workspace_dir)
     os.makedirs(os.path.join(workspace_dir, REVIEWS_DIR), exist_ok=True)
@@ -127,13 +121,10 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
             env=env,
         )
         if result.returncode != 0:
-            log.error('Rebase did not complete successfully.')
-            log.error(
-                'You can fix any issues and run: git rebase --continue')
-            return result.returncode
-
+            raise CommandError('Rebase did not complete. Fix the issues and '
+                               'run: git rebase --continue',
+                               returncode=result.returncode)
         log.success('Done')
-        return 0
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.remove(todo_file)
@@ -145,8 +136,7 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
     todo_file = os.path.join(workspace_dir, TODO_FILE)
 
     if not os.path.exists(todo_file):
-        log.error(f'No review todo file found at {todo_file}')
-        return 1
+        raise CommandError(f'No review todo file found at {todo_file}')
 
     with open(args.filename, 'r') as f:
         original_lines = f.readlines()
@@ -164,11 +154,7 @@ def sequence_editor_command(args: argparse.Namespace) -> int:
     if args.no_edit:
         return 0
 
-    editor = _resolve_editor_or_fail(workspace_dir)
-    if not editor:
-        return 1
-
     # The editor command may carry arguments, e.g. "code --wait"
-    editor_cmd = shlex.split(editor) + [args.filename]
+    editor_cmd = shlex.split(_require_editor(workspace_dir)) + [args.filename]
     editor_result = subprocess.run(editor_cmd, cwd=workspace_dir)
     return editor_result.returncode

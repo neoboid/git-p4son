@@ -62,7 +62,7 @@ class TestRebasePerCommit(unittest.TestCase):
     def test_passes_the_todo_and_message_to_the_rebase(self, mock_commits,
                                                        mock_rebase):
         mock_commits.return_value = ['abc First']
-        self.assertEqual(self._rebase(message='Title'), 0)
+        self._rebase(message='Title')
         mock_commits.assert_called_once_with('main', '/ws')
         todo, base, ws = mock_rebase.call_args.args
         self.assertEqual(
@@ -73,7 +73,8 @@ class TestRebasePerCommit(unittest.TestCase):
 
     def test_no_commits(self, mock_commits, mock_rebase):
         mock_commits.return_value = []
-        self.assertEqual(self._rebase(), 1)
+        with self.assertRaisesRegex(CommandError, 'No commits found'):
+            self._rebase()
         mock_rebase.assert_not_called()
 
 
@@ -97,9 +98,8 @@ class TestRunTodoRebase(unittest.TestCase):
 
     def test_message_saved_and_left_in_place(self, _run):
         with tempfile.TemporaryDirectory() as ws:
-            rc = _run_todo_rebase('pick abc First\n', 'main', ws,
-                                  edit_todo=False, message='Title\n\nBody', dry_run=False)
-            self.assertEqual(rc, 0)
+            _run_todo_rebase('pick abc First\n', 'main', ws,
+                             edit_todo=False, message='Title\n\nBody', dry_run=False)
             with open(os.path.join(ws, MESSAGE_FILE), encoding='utf-8') as f:
                 self.assertEqual(f.read(), 'Title\n\nBody')
             self.assertFalse(os.path.exists(
@@ -108,15 +108,22 @@ class TestRunTodoRebase(unittest.TestCase):
     def test_dry_run_prints_and_writes_nothing(self, mock_run):
         with tempfile.TemporaryDirectory() as ws, \
                 mock.patch('git_p4son.rebase_todo.log') as mock_log:
-            rc = _run_todo_rebase('pick abc First\n', 'main', ws,
-                                  edit_todo=False, message='Title',
-                                  dry_run=True)
-            self.assertEqual(rc, 0)
+            _run_todo_rebase('pick abc First\n', 'main', ws,
+                             edit_todo=False, message='Title', dry_run=True)
             self.assertEqual(os.listdir(ws), [])
         mock_run.assert_not_called()
         printed = [c.args[0] for c in mock_log.info.call_args_list]
         self.assertIn('pick abc First\n', printed)
         self.assertIn('Title', printed)
+
+    def test_failed_rebase_passes_on_git_return_code(self, mock_run):
+        mock_run.return_value = mock.Mock(returncode=3)
+        with tempfile.TemporaryDirectory() as ws:
+            with self.assertRaisesRegex(CommandError,
+                                        'Rebase did not complete') as raised:
+                _run_todo_rebase('pick abc First\n', 'main', ws,
+                                 edit_todo=False, message=None, dry_run=False)
+        self.assertEqual(raised.exception.returncode, 3)
 
     def test_no_message_writes_no_file(self, _run):
         with tempfile.TemporaryDirectory() as ws:
@@ -171,8 +178,8 @@ class TestSequenceEditorCommand(unittest.TestCase):
         args = mock.Mock(filename='/tmp/git-rebase-todo',
                          workspace_dir='/workspace', no_edit=False)
         with mock.patch('os.path.exists', return_value=False):
-            rc = sequence_editor_command(args)
-        self.assertEqual(rc, 1)
+            with self.assertRaisesRegex(CommandError, 'No review todo file'):
+                sequence_editor_command(args)
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     def test_preserves_git_comments(self, mock_subprocess_run):

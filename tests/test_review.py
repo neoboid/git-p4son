@@ -165,8 +165,8 @@ class TestReviewCommand(unittest.TestCase):
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
-            rc = review_command(args)
-        self.assertEqual(rc, 1)
+            with self.assertRaisesRegex(CommandError, 'No commits found'):
+                review_command(args)
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value=None)
@@ -186,8 +186,8 @@ class TestReviewCommand(unittest.TestCase):
             workspace_dir='/workspace',
         )
         with mock.patch('os.path.exists', return_value=False):
-            rc = review_command(args)
-        self.assertEqual(rc, 1)
+            with self.assertRaisesRegex(CommandError, 'No git editor configured'):
+                review_command(args)
         mock_subprocess_run.assert_not_called()
 
     @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
@@ -254,9 +254,8 @@ class TestReviewCommand(unittest.TestCase):
             with mock.patch('os.makedirs'):
                 with mock.patch('builtins.open', mock.mock_open()):
                     with mock.patch('os.remove'):
-                        rc = review_command(args)
-
-        self.assertEqual(rc, 1)
+                        with self.assertRaisesRegex(CommandError, 'Rebase did not complete'):
+                            review_command(args)
 
 
 if __name__ == '__main__':

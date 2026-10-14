@@ -162,8 +162,8 @@ class TestUpdatePerCommit(unittest.TestCase):
 
     def test_no_commits(self, _update, mock_commits, mock_rebase):
         mock_commits.return_value = []
-        rc = update_command(_args(per_commit=True))
-        self.assertEqual(rc, 1)
+        with self.assertRaisesRegex(CommandError, 'No commits found'):
+            update_command(_args(per_commit=True))
         mock_rebase.assert_not_called()
 
     def test_dry_run_passed_to_the_rebase(self, _update, _commits,

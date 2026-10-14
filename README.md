@@ -113,13 +113,15 @@ without reinstalling. This is also handy if you want to auto-update git-p4son wh
 
 git-p4son only uses Python standard library modules - no additional packages are required.
 
+Run the tests with `python -m pytest tests/` (`pip install pytest`).
+
 ### Git Hooks
 
 The repository includes git hooks in the `hooks/` directory:
 
 - **pre-commit** - verifies that staged Python files are formatted with `autopep8`. Install it with
   `pip install autopep8`.
-- **pre-push** - runs the test suite and blocks the push if any test fails.
+- **pre-push** - runs the test suite and blocks the push if any test fails. It needs `pytest` installed.
 
 To activate the hooks, run:
 
@@ -248,8 +250,9 @@ Initialize a git repository inside a Perforce workspace:
 git p4son init
 ```
 
-This command checks preconditions (Perforce workspace), configures the depot root, runs `git init`,
-sets up `.gitignore`, and creates an initial commit.
+This command checks that it runs in a Perforce workspace, then asks for the depot root, writable mode, split users
+and the Claude Code skill. It then sets up `.gitignore`, runs `git init` and creates a first commit holding only
+`.gitignore`. It ends by listing the next steps, and warns when no git editor is configured.
 
 The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
 workspace or just the directory's subtree where the git root is placed. The selection is saved in
@@ -275,7 +278,7 @@ saves the answer; run `git p4son writable apply` once your files are committed t
 The default is the current setting. Yes adds a `$(user)` entry to the split users and no removes it; other split
 users are left alone.
 
-Finally, if Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
+If Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
 already installed skill is refreshed without asking.
 
 ### Sync Command
@@ -292,10 +295,15 @@ git p4son sync [changelist ...] [--force] [--dry-run] [--split-user NAME ...] [-
   strictly increasing changelist numbers may be given to sync each in sequence, producing one commit per
   changelist. A trailing `head` may close out such a sequence to finish at the latest changelist.
 
+`sync` requires clean git and Perforce workspaces: no uncommitted changes, untracked files included, and no
+git-tracked files opened in Perforce. It checks them after any [blocking processes](#blocking-processes) and before
+the [pre-sync hooks](#pre-sync-hook).
+
 **Options:**
-- `-f, --force`: Allow syncing to changelists older than the current one.
+- `-f, --force`: Allow syncing to changelists older than the current one
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
-  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts.
+  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
+  `Dry run, nothing changed`
 - `-u, --split-user NAME`: Also split out this user's changelists, on top of the configured
   [split users](#split-users). Repeat to give several users. Each name is checked against the Perforce server.
 - `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
@@ -329,7 +337,7 @@ blocking-processes = ["UnrealEditor", "UnrealLightmass"]
 
 Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers `UnrealEditor.exe` on
 Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace checks and the pre-sync hooks. A
-setting that is present but malformed, or a process list that cannot be read, aborts the sync rather than silently
+malformed setting, or a process list that cannot be read, aborts the sync rather than silently
 skipping the check.
 
 Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.
@@ -365,16 +373,9 @@ blocking processes check, the clean-workspace checks and the pre-sync hooks, so 
 workspace or a hook that aborts the sync says so before that work. `--dry-run` skips the checks and hooks but still
 shows the resulting sequence.
 
-#### pre-sync hook
+#### Hooks
 
-Before `git-p4son sync` syncs any changelist, git-p4son runs [hooks](#hooks) from
-`.git-p4son/hooks/pre-sync/`. If any hook exits non-zero the sync is aborted. When a sequence of
-changelists is given, the pre-sync hooks run once, before the first sync.
-
-#### post-sync hook
-
-After a successful `git-p4son sync` that actually performs sync work, git-p4son runs [hooks](#hooks)
-from `.git-p4son/hooks/post-sync/`.
+`sync` runs the [pre-sync](#pre-sync-hook) and [post-sync](#post-sync-hook) hooks.
 
 ### Sync-Split-Users Command
 
@@ -409,7 +410,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 
 ```sh
 git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
-              [--no-alias] [--no-commit-list] [--shelve] [--review]
+              [--no-alias] [--no-commit-list] [--shelve] [--review] [--sleep SECONDS]
 ```
 
 **Arguments:**
@@ -424,7 +425,7 @@ git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
-- `-n, --dry-run`: Pretend and print what would be done, but do not execute
+- `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
@@ -463,7 +464,7 @@ clean git workspace, also with `--no-edit`. If a step fails, the rebase stops; f
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
-                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit]
+                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit] [--sleep SECONDS]
 ```
 
 **Arguments:**
@@ -475,13 +476,14 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
   `HEAD~1`
-- `-n, --dry-run`: Pretend and print what would be done, but do not execute
+- `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
   touched at all
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
 - `--per-commit`: Update the changelist once per commit since the base branch, oldest first, through an
-  interactive rebase. Steps sleep 5 seconds between them to give Perforce/Swarm time to process each shelf.
+  interactive rebase. With `--shelve`, steps sleep 5 seconds between them to give Perforce/Swarm time to process
+  each shelf.
   `--dry-run` prints the generated rebase todo. A message from `-m` or `-F` is saved to
   `.git-p4son/reviews/message` for the first step
 - `-s, --sleep SECONDS`: Sleep for the specified number of seconds after the command is done
@@ -521,7 +523,8 @@ are left out of it.
 
 Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec`
 lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit,
-then opens it in your editor for review before executing.
+then opens it in your editor for review before executing. Like `new`, it needs a clean git workspace, untracked
+files included, and checks it even with `--dry-run`.
 
 ```sh
 git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
@@ -537,7 +540,7 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
   multiple lines
 - `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
-- `-n, --dry-run`: Print the generated rebase todo without executing
+- `-n, --dry-run`: Print the generated rebase todo without executing. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
   each `update` in the rebase todo
 - `--no-edit-todo`: Accept the generated rebase todo as is and start the rebase without opening an editor. No
@@ -547,17 +550,19 @@ When run, the command generates a todo like this and opens it in your editor:
 
 ```
 pick abc1234 First commit
-exec git p4son new my-feature --review -m 'My feature'
+exec git p4son new my-feature --review -F .git-p4son/reviews/message --sleep 5
 pick def5678 Second commit
-exec git p4son update my-feature --shelve
+exec git p4son update my-feature --shelve --sleep 5
 pick ghi9012 Third commit
 exec git p4son update my-feature --shelve
 ```
 
 You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file - just like a
-normal `git rebase -i`. Each `exec` line automatically sleeps after shelving to give Perforce/Swarm time to process.
+normal `git rebase -i`. The message is saved to `.git-p4son/reviews/message` for the first step, and every step but
+the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf.
 
-If the rebase fails mid-way, you can fix the issue and run `git rebase --continue` as usual.
+If the rebase fails mid-way, fix the issue, re-run the failed `git p4son` command (git does not re-run a failed
+`exec` line), and run `git rebase --continue`.
 
 **Examples:**
 ```sh
@@ -770,8 +775,8 @@ has any.
 Most commands that accept an alias or changelist argument default to the current branch name. You can also pass the
 `branch` keyword explicitly - it resolves to an alias name derived from the current git branch.
 
-The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new` and `review`) or supply an
-explicit alias name instead.
+The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new`) or supply an explicit
+alias name instead.
 
 ## Hooks
 
@@ -783,8 +788,9 @@ order.
 The hook process CWD is the directory where git-p4son was invoked, and `GIT_P4SON_REPO_ROOT_DIR` is
 set to the git-p4son repository root.
 
-On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with `powershell.exe`, `nushell.exe`, `bash.exe`, and
-`python.exe` respectively. Customize or add Windows script associations in `.git-p4son/config.toml`:
+On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File`, `nu.exe`, `bash.exe`, and `python.exe` respectively.
+Customize or add Windows script associations in `.git-p4son/config.toml`:
 
 ```toml
 [hooks.extension-associations]
@@ -792,19 +798,19 @@ On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with `powershell.exe`,
 ".py" = "python.exe"
 ```
 
-Non-executable or unrecognized hook files are skipped with a warning.
+Non-executable or unrecognized hook files, and invalid association entries, are skipped with a warning.
 
 ### pre-sync hook
 
 Before `git-p4son sync` syncs any changelist, git-p4son runs executable hooks from
-`.git-p4son/hooks/pre-sync/`. If any hook exits with a non-zero code the sync is aborted before any
-changelist is synced. When a sequence of changelists is synced, the pre-sync hooks run only once,
+`.git-p4son/hooks/pre-sync/`. All of them run, and if any exits with a non-zero code the sync is aborted before
+any changelist is synced. When a sequence of changelists is synced, the pre-sync hooks run only once,
 before the first sync.
 
 ### post-sync hook
 
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
-`.git-p4son/hooks/post-sync/`.
+`.git-p4son/hooks/post-sync/`. They don't run when the workspace is already at the requested changelist.
 
 ## Claude Code Skill
 

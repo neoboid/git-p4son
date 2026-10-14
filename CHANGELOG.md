@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Errors are reported in one line: `sync -u` and `sync-split-users add` and `delete` name all unknown users at once
+  ("No such Perforce users: nobody, typo"), and a failed `review` rebase or a file p4 could not replace no longer
+  prints two error lines. When p4 cannot tell your user for `$(user)`, its own message is shown
 - `sync`, `init` and `sync-split-users` no longer take `*unknown*` for your Perforce user when the server has no
   user named by `P4USER`. `sync` with `$(user)` in the split users stops and says it cannot determine the user
 - A malformed value in `.git-p4son/config.toml` now stops the command with a message naming the setting.

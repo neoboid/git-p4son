@@ -24,12 +24,10 @@ class Color:
     SUCCESS = _GREEN
     ERROR = _RED
     WARNING = _ORANGE
-    FAIL = _RED
     ADD = _GREEN
     DELETE = _RED
     MODIFY = _YELLOW
     UNTRACKED = _ORANGE
-    RESET = _RESET
 
 
 def _is_tty(stream) -> bool:
@@ -94,14 +92,14 @@ class Log:
         print(_color(line, Color.HEADING, sys.stdout))
 
     def success(self, text: str) -> None:
-        """Print an success message to stdout."""
+        """Print a success message to stdout."""
         if self.quiet_mode:
             return
         ok = _color_status('ok', Color.SUCCESS, sys.stdout)
         print(f'{ok} {text}', file=sys.stdout)
 
     def warning(self, text: str) -> None:
-        """Print an warning message to stdout."""
+        """Print a warning message to stdout."""
         if self.quiet_mode:
             return
         warn = _color_status('warn', Color.WARNING, sys.stdout)
@@ -139,12 +137,6 @@ class Log:
         if self._command_line_open:
             print()
             self._command_line_open = False
-
-    def detail(self, key: str, value: object) -> None:
-        """Print a key-value result."""
-        if self.quiet_mode:
-            return
-        print(f'{key}: {value}')
 
     def info(self, text: str) -> None:
         """Print an informational status line."""
@@ -184,11 +176,6 @@ class Log:
         symbol, color = prefixes.get(change, ('?', _RESET))
         prefix = _color(symbol, color, sys.stdout)
         print(f'  {prefix} {filename}')
-
-    def fail(self, returncode: int) -> None:
-        """Print a failure message with return code to stderr."""
-        failed = _color('Failed', Color.FAIL, sys.stderr)
-        print(f'{failed} with return code {returncode}', file=sys.stderr)
 
     def start_spinner(self) -> None:
         """Start the spinner at the end of the current command line."""

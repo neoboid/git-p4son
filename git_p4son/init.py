@@ -62,7 +62,7 @@ def _configure_depot_root(client_name: str, cwd: str,
             log.success('Valid')
             return
     else:
-        log.warning('no root configured')
+        log.warning('No root configured')
 
     log.heading('Configuring depot root')
     depot_root = _select_depot_root(client_name, cwd, p4_workspace_root)
@@ -126,15 +126,15 @@ def _configure_claude_skill() -> None:
         return
     if is_skill_installed():
         install_skill()
-        log.success('installed (refreshed)')
+        log.success('Installed (refreshed)')
         return
     print()
     print('The Claude Code skill teaches AI agents how to use git-p4son.')
     print('It is installed for your user, not in the workspace.')
     if _ask_yes_no('Install the Claude Code skill?', False):
-        log.success(f'installed to {install_skill()}')
+        log.success(f'Installed to {install_skill()}')
     else:
-        log.success('not installed')
+        log.success('Not installed')
 
 
 def _setup_gitignore(cwd: str) -> str:
@@ -143,14 +143,14 @@ def _setup_gitignore(cwd: str) -> str:
     p4ignore_path = os.path.join(cwd, '.p4ignore')
 
     if os.path.exists(gitignore_path):
-        return '.gitignore already exist'
+        return '.gitignore already exists'
 
     if os.path.exists(p4ignore_path):
         shutil.copy2(p4ignore_path, gitignore_path)
-        return 'copied .p4ignore to new .gitignore'
+        return 'Copied .p4ignore to a new .gitignore'
 
     open(gitignore_path, 'w').close()
-    return 'created empty .gitignore'
+    return 'Created an empty .gitignore'
 
 
 def init_command(args: argparse.Namespace) -> int:
@@ -180,7 +180,7 @@ def init_command(args: argparse.Namespace) -> int:
         log.success('.git/ already exists')
     else:
         init_repo(cwd)
-        log.success('created new git repository')
+        log.success('Created a new git repository')
 
     # Also covers a repo left without commits by an init that failed to commit.
     if not has_commits(cwd):

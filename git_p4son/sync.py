@@ -271,7 +271,7 @@ def _resolve_sync_targets(
         if not force:
             raise CommandError(
                 f'Cannot sync to CL {numbers[0]} '
-                f'(currently at CL {last_synced}) without --force.')
+                f'(currently at CL {last_synced}) without --force')
         log.warning(
             f'Syncing to older CL {numbers[0]} '
             f'(currently at CL {last_synced}) with --force')
@@ -334,7 +334,7 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
         targets = _resolve_sync_targets(
             args.changelist, last_synced, depot_root, workspace_dir, args.force)
         if not targets:
-            log.info('Already synced, nothing to do.')
+            log.info('Already synced, nothing to do')
             log.heading('Skipping post-sync hooks')
             return None
 
@@ -414,7 +414,7 @@ def sync_command(args: argparse.Namespace) -> int:
         else:
             log.success(' '.join(str(cl) for cl, _ in plan.targets))
     if args.dry_run:
-        log.info('Dry run, nothing synced.')
+        log.info('Dry run, nothing synced')
         return 0
 
     _run_sync(plan, workspace_dir, args.invocation_dir)

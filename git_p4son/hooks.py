@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import CONFIG_DIR
 from .common import RunResult, run
-from .config import load_config
+from .config import get_setting
 from .log import log
 
 DEFAULT_WINDOWS_ASSOCIATIONS: dict[str, list[str]] = {
@@ -26,8 +26,8 @@ def _hook_dir(workspace_dir: str, hook_name: str) -> Path:
 
 def _windows_associations(workspace_dir: str) -> dict[str, list[str]]:
     """Return default Windows associations overridden by config."""
-    config = load_config(workspace_dir)
-    configured = config.get('hooks', {}).get('extension-associations', {})
+    configured = get_setting(workspace_dir, 'hooks', 'extension-associations',
+                             dict, {})
     associations = DEFAULT_WINDOWS_ASSOCIATIONS.copy()
 
     for extension, command in configured.items():

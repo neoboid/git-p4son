@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son.config import ConfigError
 from git_p4son.hooks import run_hooks
 from tests.helpers import make_run_result
 
@@ -94,6 +95,23 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0],
                          ['pwsh.exe', '-File', script])
+
+    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.hooks.run')
+    def test_windows_associations_not_a_table_is_an_error(
+            self, mock_run, _is_windows):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = os.path.join(tmpdir, '.git-p4son')
+            hook_dir = os.path.join(config_dir, 'hooks', 'post-sync')
+            os.makedirs(hook_dir)
+            with open(os.path.join(hook_dir, 'script.ps1'), 'w') as f:
+                f.write('')
+            with open(os.path.join(config_dir, 'config.toml'), 'w') as f:
+                f.write('[hooks]\nextension-associations = "pwsh.exe"\n')
+
+            with self.assertRaises(ConfigError):
+                run_hooks('post-sync', tmpdir, tmpdir)
+        mock_run.assert_not_called()
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.log')

@@ -439,7 +439,7 @@ since the base branch. Optionally creates a Swarm review.
 
 Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
 is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
-[Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)).
+[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
 
 ```sh
 git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
@@ -482,7 +482,7 @@ range are kept and the list is renumbered. So `update -b main` rebuilds the whol
 it, while `update -b HEAD~3` only refreshes the last three entries. The message above the list is kept unless `-m`
 or `-F` replaces it. By default also opens changed files for
 edit, and reverts files that are no longer part of the git change (see
-[Keeping the changelist in step with git](#keeping-the-changelist-in-step-with-git)). Opening files requires a
+[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files requires a
 clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
 `--no-edit`.
 
@@ -531,7 +531,7 @@ git p4son update -F description.txt   # replace the message, e.g. after review f
 git p4son update -b HEAD~2 --per-commit --shelve   # one shelf for each of the last two commits
 ```
 
-### Keeping the changelist in step with git
+### Keeping the changelist in sync with git
 
 `new` and `update` open every file changed since the base branch in the changelist. A file can later stop being
 part of the change, for example when a later commit undoes an edit, or a file is added in one commit and deleted
@@ -847,7 +847,7 @@ After a successful `git-p4son sync` that actually performs sync work, git-p4son 
 
 ## Claude Code Skill
 
-git-p4son ships a skill for Claude Code that teaches it how git-p4son is meant to be used: keeping `main` in step
+git-p4son ships a skill for Claude Code that teaches it how git-p4son is meant to be used: keeping `main` in sync
 with Perforce, never submitting on your behalf, creating reviews with full control of the changelist description,
 updating them after feedback, and cleaning up after a submit. With it installed, you can
 ask Claude to sync, put a branch up for review or address review feedback, and it will use git-p4son to do it.

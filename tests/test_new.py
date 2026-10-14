@@ -1,8 +1,10 @@
 """Tests for git_p4son.new module."""
 
+import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son.changelist_store import save_changelist_alias
 from git_p4son.git import LocalChanges
 from git_p4son.new import new_command
 
@@ -41,11 +43,13 @@ class TestNewCommandDryRun(unittest.TestCase):
         rc = new_command(_args(alias='bad alias!', no_edit=True))
         self.assertEqual(rc, 1)
 
-    @mock.patch('git_p4son.changelist_store.check_alias_available', return_value=False)
     @mock.patch('git_p4son.lib.get_commit_subjects_since',
                 return_value=[])
-    def test_dry_run_reports_existing_alias(self, _lines, _exists):
-        rc = new_command(_args(alias='taken', no_edit=True))
+    def test_dry_run_reports_existing_alias(self, _lines):
+        with tempfile.TemporaryDirectory() as ws:
+            save_changelist_alias('taken', '1', ws, force=False)
+            rc = new_command(_args(alias='taken', no_edit=True,
+                                   workspace_dir=ws))
         self.assertEqual(rc, 1)
 
 

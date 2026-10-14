@@ -66,20 +66,16 @@ def _alias_path(name: str, workspace_dir: str) -> str | None:
     return os.path.join(_changelists_dir(workspace_dir), name)
 
 
-def check_alias_available(name: str, workspace_dir: str) -> bool:
-    """Report whether no changelist alias has this name yet."""
-    if os.path.exists(os.path.join(_changelists_dir(workspace_dir), name)):
+def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
+    """Report whether name is a valid alias that is free, or force is set; log the reason if not."""
+    alias_path = _alias_path(name, workspace_dir)
+    if alias_path is None:
+        return False
+    if not force and os.path.exists(alias_path):
         log.error(
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
         return False
     return True
-
-
-def check_alias_usable(name: str, workspace_dir: str, force: bool) -> bool:
-    """Report whether name is a valid alias that is free, or force is set; log the reason if not."""
-    if _alias_path(name, workspace_dir) is None:
-        return False
-    return force or check_alias_available(name, workspace_dir)
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> bool:

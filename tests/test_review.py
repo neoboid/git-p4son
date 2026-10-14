@@ -146,9 +146,7 @@ class TestReviewCommand(unittest.TestCase):
             no_commit_list=False,
             workspace_dir='/workspace',
         )
-        with mock.patch('git_p4son.changelist_store.check_alias_available',
-                        return_value=True):
-            rc = review_command(args)
+        rc = review_command(args)
         self.assertEqual(rc, 0)
 
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')

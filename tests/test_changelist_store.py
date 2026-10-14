@@ -8,7 +8,6 @@ from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
     branch_alias,
     branch_to_alias,
-    check_alias_available,
     check_alias_usable,
     delete_changelist_alias,
     load_changelist_alias,
@@ -81,13 +80,7 @@ class TestBranchAlias(unittest.TestCase):
         self.assertIsNone(branch_alias('head'))
 
 
-class TestCheckAliasAvailable(unittest.TestCase):
-    def test_available_until_saved(self):
-        with tempfile.TemporaryDirectory() as ws:
-            self.assertTrue(check_alias_available('feature', ws))
-            save_changelist_alias('feature', '123', ws, force=False)
-            self.assertFalse(check_alias_available('feature', ws))
-
+class TestSaveChangelistAlias(unittest.TestCase):
     def test_save_refuses_an_existing_alias_unless_forced(self):
         with tempfile.TemporaryDirectory() as ws:
             save_changelist_alias('feature', '123', ws, force=False)

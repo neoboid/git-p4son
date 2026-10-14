@@ -47,6 +47,10 @@ The CLI (`cli.py`) dispatches to command modules, each exposing a `*_command(arg
   changelist before each of the split users' submits (`build_sync_targets`), so each of their changelists gets a
   commit of its own; `-u` adds users for one run and `--no-split` ignores the configured ones.
 
+- **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the
+  writable files p4 would touch into tracked and ignored ones and stages the locally modified ones, and
+  `merge_changed_files` merges those local changes back after the sync. Also reports the files p4 did not sync.
+
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
   `$(user)` placeholder to the current Perforce user, and the `sync-split-users` command (`list`, `add`, `delete`).
 

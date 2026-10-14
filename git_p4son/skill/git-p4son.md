@@ -10,14 +10,16 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
 - **The git repository is local only.** It has no remotes: Perforce is where changes are shared. Don't push, pull,
   fetch or open pull requests. Changes reach others as CLs and Swarm reviews, and other people's changes arrive
   through `git p4son sync`.
-- **`main` mirrors Perforce.** `git p4son sync` adds a commit to it for each sync. Do your work on a branch off
-  `main`. The user may keep small local changes committed on `main`, such as local configuration. When a sync touches
-  those files, it merges the local changes on top of the new Perforce content and leaves the result as unstaged
-  changes, with conflict markers if they clash. Leave reviewing, resolving and re-committing them to the user.
+- **`main` mirrors Perforce.** `git p4son sync` adds a commit to it for each changelist it syncs. Do your work on
+  a branch off `main`. The user may keep small local changes committed on `main`, such as local configuration. When
+  a sync touches those files, it merges the local changes on top of the new Perforce content and leaves the result
+  as unstaged changes, with conflict markers if they clash. Leave reviewing, resolving and re-committing them to the
+  user.
 - **Only touch Perforce when asked.** Run `sync`, `new`, `update` and `review` only when the user asks for exactly
   that. Otherwise draft the commits and the CL description, and let the user drive Perforce. Reviews and shelves
   (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm. Read-only commands are always fine:
-  `alias list`, `alias show`, `list-changes`, and any command with `--dry-run`.
+  `alias list`, `alias show`, `list-changes`, `writable` and `sync-split-users` without an action, and any command
+  with `--dry-run`.
 - **Let git-p4son talk to Perforce.** Don't run `p4 sync`, `p4 edit`, `p4 add`, `p4 delete`, `p4 revert`, `p4 shelve`
   or `p4 change` on files git-p4son manages, except to recover as described under "When something refuses".
   Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes` are fine.
@@ -27,12 +29,15 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   by git-p4son. The user checks them out, locks and submits them in P4V as usual, and opens them in a review CL by
   hand when needed (see "Binary assets in a review").
 - **Never submit.** git-p4son has no submit command on purpose: submitting is left to the user, usually in P4V.
-- **Keep the workspace clean.** `sync`, `new` and `update` refuse to run with uncommitted changes, untracked files
-  included. Commit or stash first, and keep scratch files, like a description file, outside the workspace.
+- **Keep the workspace clean.** `sync`, `new`, `update` and `review` refuse to run with uncommitted changes,
+  untracked files included (`new` and `update` don't check with `--no-edit`). `review` checks even on a dry run;
+  `sync --dry-run` does not, so a clean dry run doesn't mean the sync will start. Commit or stash first, and keep
+  scratch files, like a description file, outside the workspace.
 - **Preview first.** `sync`, `new`, `update` and `review` take `-n/--dry-run`, which prints what would happen without
   touching Perforce or git.
 - **Avoid the interactive commands.** `init` and `alias clean` prompt for answers. Setup is the user's job, and
-  `alias delete` covers cleaning up.
+  `alias delete` covers cleaning up. Never use `alias delete --all`, which deletes every alias without asking,
+  unless the user asks for it.
 
 ## Where things stand
 
@@ -110,8 +115,8 @@ git rebase main
   you branch.
 - A sync can take a long time on a big workspace. Allow for it rather than giving up early.
 - If the user has listed blocking processes in `.git-p4son/config.toml` (`[sync] blocking-processes`), `sync`
-  refuses to start while one of them, such as the Unreal editor, is running. Ask the user to close it. Don't pass
-  `--ignore-blocking-processes` unless the user tells you to.
+  refuses to start while one of them, such as the Unreal editor, is running. Ask the user to close it. The error
+  mentions `--ignore-blocking-processes`; don't pass it unless the user tells you to.
 - Read the summary at the end. Local changes committed on `main` come back as unstaged changes, possibly with
   conflict markers (see the ground rules). Report them to the user rather than resolving them yourself.
 
@@ -128,8 +133,10 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 2. Preview the full description and the files the CL would get, then the generated rebase todo:
    ```sh
    git p4son new -F /tmp/my-feature.txt -b main --dry-run
-   git p4son review -F /tmp/my-feature.txt -b main --dry-run
+   git p4son review -F /tmp/my-feature.txt -b main --dry-run --no-edit-todo
    ```
+   The `new` preview lacks the `#review` line the real review ends the description with, and fails if the branch's
+   alias already exists.
 3. Run it, accepting the todo without an editor:
    ```sh
    git p4son review -F /tmp/my-feature.txt -b main --no-edit-todo
@@ -142,9 +149,11 @@ Notes:
 - Always pass `-b main` (or the branch you started from). The default base is `HEAD~1`, which only covers the last
   commit.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
-  `--no-commit-list` leaves it out, so the description holds exactly the text from the file. Use it for a
-  single-commit change, where a one-entry list would just repeat the title.
-- If a step fails, the rebase stops. Tell the user what failed; after fixing it, `git rebase --continue` carries on.
+  `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
+  for a single-commit change, where a one-entry list would just repeat the title.
+- If a step fails, the rebase stops, and git does not re-run a failed `exec` line. Tell the user what failed; after
+  fixing it, re-run the `git p4son ...` command from git's "Execution failed" line, then `git rebase --continue`.
+  When the first step (`new`) failed, the later `update` steps would fail too, as no alias exists yet.
 
 To create a CL without the per-commit steps, use `new`:
 
@@ -162,6 +171,7 @@ to the CL and re-shelve:
 git p4son update --shelve
 ```
 
+This adds the last commit only (`update`'s base defaults to `HEAD~1`); with more, see `--per-commit` below.
 `update` opens the changed files in the CL, reverts files that are no longer part of the change, and adds the commit
 to the commit list. `--shelve` replaces the shelf, which adds a new patch to the Swarm review.
 
@@ -175,8 +185,8 @@ git p4son update -b HEAD~2 --per-commit --shelve
 ```
 
 To find the number, compare the commit list in `p4 describe -s $(git p4son alias show)` with
-`git log --oneline main..`. If a step fails, the rebase stops: tell the user what failed; after fixing it,
-`git rebase --continue` carries on.
+`git log --oneline main..`. If a step fails, the rebase stops: tell the user what failed; after fixing it, re-run
+the failed `git p4son ...` command, then `git rebase --continue`.
 
 To reword the description, `-F FILE` or `-m MESSAGE` replaces everything above the commit list. Add `--no-edit` to
 change only the description and leave the files alone. `--no-commit-list` leaves the commit list as it is.
@@ -221,15 +231,19 @@ Ask before deleting a branch or alias if you are not sure the CL was submitted.
 
 - **The workspace is not clean.** Commit or stash first; untracked files count. Park something unrelated, like a
   scratch file, with `git stash push -u -- <path>`, and restore it with `git stash pop` once git-p4son is done.
-- **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git"). Files that git
+- **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them
+  first: ..."). Files that git
   tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for
   example checked out but never edited, revert just those with `p4 revert -a <files>`: `-a` only reverts files
   whose content is unchanged, so edited files stay opened for the user to deal with. Ask the user first. Files in a
   CL made by `new` or `review` are opened too, and usually unchanged while `main` is checked out; reverting them
-  keeps the shelf and the Swarm review, and the next `update` opens them again.
+  keeps the shelf and the Swarm review. `git p4son update -b main` opens them again later; add `--shelve` only when
+  the user asks to re-shelve, as a shelve from a narrower base would drop the other commits' files.
 - **The alias already exists.** An earlier attempt saved it. `-f` overwrites it, or `git p4son alias delete` removes
   it; ask the user first if the old CL may still be in use.
 - **A tracked file turned read-only**, for example after a manual `p4 revert`. With writable mode on,
   `git p4son writable apply` restores the mode for all tracked files.
+- **`.git-p4son/config.toml` is invalid** ("... in config.toml must be ..." or "... is not valid TOML"). Report
+  the message to the user; don't edit the file yourself.
 - **Something else fails.** `git p4son -v <command>` prints every git and p4 command it runs and their output, the
   fastest way to see why.

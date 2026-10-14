@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from .common import normalize_workspace_path
-from .config import load_config
+from .config import get_setting
 from .log import log
 from .perforce import P4ClientSpec, get_client_spec, p4_depot_root_exists
 
@@ -13,9 +13,8 @@ WORKSPACE_DEPOT_ROOT = f'//{WORKSPACE_PLACEHOLDER}'
 
 
 def get_depot_root(workspace_dir: str) -> str | None:
-    """Get the depot root from config, or None if not configured."""
-    config = load_config(workspace_dir)
-    return config.get('depot', {}).get('root')
+    """Get the depot root from config, or None if not configured; raise ConfigError if malformed."""
+    return get_setting(workspace_dir, 'depot', 'root', str, None)
 
 
 def subdirectory_depot_root(directory: str, workspace_root: str) -> str | None:

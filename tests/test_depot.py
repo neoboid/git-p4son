@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.config import save_config
+from git_p4son.config import ConfigError, save_config
 from git_p4son.depot import (
     check_depot_root,
     expand_depot_root,
@@ -22,6 +22,12 @@ class TestGetDepotRoot(unittest.TestCase):
     def test_returns_none_when_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             self.assertIsNone(get_depot_root(tmpdir))
+
+    def test_non_string_root_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_config(tmpdir, {'depot': {'root': 42}})
+            with self.assertRaises(ConfigError):
+                get_depot_root(tmpdir)
 
     def test_returns_none_when_no_root_key(self):
         with tempfile.TemporaryDirectory() as tmpdir:

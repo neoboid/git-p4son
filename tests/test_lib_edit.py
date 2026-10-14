@@ -13,7 +13,7 @@ from git_p4son.git import (
 )
 from git_p4son.lib import (
     include_changes_in_changelist,
-    open_changes_and_revert_unchanged,
+    edit_and_shelve,
 )
 from git_p4son.perforce import get_opened_files, opened_lookup
 from tests.helpers import make_run_result
@@ -575,14 +575,15 @@ class TestBatchedActions(unittest.TestCase):
 
 
 @mock.patch('git_p4son.lib.revert_unchanged_files')
-class TestOpenChangesAndRevertUnchanged(unittest.TestCase):
+class TestEditAndShelve(unittest.TestCase):
     @mock.patch('git_p4son.lib.include_changes_in_changelist')
     @mock.patch('git_p4son.lib.get_local_changes')
     def test_opens_the_local_changes_then_reverts(self, mock_get_changes,
                                                   mock_include, mock_revert):
         mock_changes = mock.Mock()
         mock_get_changes.return_value = mock_changes
-        open_changes_and_revert_unchanged('100', 'HEAD~1', '/ws', False)
+        edit_and_shelve('100', 'HEAD~1', '/ws', edit=True, shelve=False,
+                        dry_run=False)
         mock_get_changes.assert_called_once_with('HEAD~1', '/ws')
         mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
         mock_revert.assert_called_once_with('100', '/ws', False)
@@ -591,8 +592,19 @@ class TestOpenChangesAndRevertUnchanged(unittest.TestCase):
     def test_get_changes_failure(self, mock_get_changes, mock_revert):
         mock_get_changes.side_effect = RunError('get changes failed')
         with self.assertRaises(RunError):
-            open_changes_and_revert_unchanged('100', 'HEAD~1', '/ws', False)
+            edit_and_shelve('100', 'HEAD~1', '/ws', edit=True, shelve=False,
+                            dry_run=False)
         mock_revert.assert_not_called()
+
+    @mock.patch('git_p4son.lib.p4_shelve_changelist')
+    @mock.patch('git_p4son.lib.get_local_changes')
+    def test_shelves_without_editing(self, mock_get_changes, mock_shelve,
+                                     mock_revert):
+        edit_and_shelve('100', 'HEAD~1', '/ws', edit=False, shelve=True,
+                        dry_run=True)
+        mock_get_changes.assert_not_called()
+        mock_revert.assert_not_called()
+        mock_shelve.assert_called_once_with('100', '/ws', dry_run=True)
 
 
 if __name__ == '__main__':

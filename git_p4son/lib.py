@@ -21,6 +21,7 @@ from .perforce import (
     p4_create_changelist,
     p4_revert,
     p4_revert_unchanged,
+    p4_shelve_changelist,
     opened_lookup,
     replace_description_in_spec,
     run_p4_batch,
@@ -169,15 +170,22 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
 
 
-def open_changes_and_revert_unchanged(changelist: str, base_branch: str,
-                                      workspace_dir: str, dry_run: bool) -> None:
-    """Open the git changes in the changelist, then revert the files no longer part of them."""
-    log.heading('Opening files for edit')
-    changes = get_local_changes(base_branch, workspace_dir)
-    include_changes_in_changelist(changes, changelist, workspace_dir, dry_run)
-    log.success('Done')
+def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
+                    edit: bool, shelve: bool, dry_run: bool) -> None:
+    """Open the git changes and revert the files no longer part of them if edit, then shelve if shelve."""
+    if edit:
+        log.heading('Opening files for edit')
+        changes = get_local_changes(base_branch, workspace_dir)
+        include_changes_in_changelist(
+            changes, changelist, workspace_dir, dry_run)
+        log.success('Done')
 
-    revert_unchanged_files(changelist, workspace_dir, dry_run)
+        revert_unchanged_files(changelist, workspace_dir, dry_run)
+
+    if shelve:
+        log.heading('Shelving')
+        p4_shelve_changelist(changelist, workspace_dir, dry_run=dry_run)
+        log.success('Done')
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,

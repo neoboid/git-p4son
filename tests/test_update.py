@@ -96,7 +96,7 @@ class TestUpdateCommandRevertStep(unittest.TestCase):
                            order.open), \
                 mock.patch('git_p4son.lib.revert_unchanged_files',
                            order.revert), \
-                mock.patch('git_p4son.update.p4_shelve_changelist',
+                mock.patch('git_p4son.lib.p4_shelve_changelist',
                            order.shelve):
             order.revert.return_value = 0
             rc = update_command(_args(**overrides))

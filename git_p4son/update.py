@@ -2,12 +2,7 @@
 
 import argparse
 from .changelist_store import load_changelist_alias
-from .lib import (
-    check_git_workspace_clean,
-    open_changes_and_revert_unchanged,
-    update_changelist,
-)
-from .perforce import p4_shelve_changelist
+from .lib import check_git_workspace_clean, edit_and_shelve, update_changelist
 from .log import log
 from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
 
@@ -58,14 +53,7 @@ def update_command(args: argparse.Namespace) -> int:
             message=args.message, commit_list=not args.no_commit_list)
         log.success('Done')
 
-    if not args.no_edit:
-        open_changes_and_revert_unchanged(changelist, args.base_branch,
-                                          workspace_dir, args.dry_run)
-
-    if args.shelve:
-        log.heading('Shelving')
-        p4_shelve_changelist(
-            changelist, workspace_dir, dry_run=args.dry_run)
-        log.success('Done')
-
+    edit_and_shelve(changelist, args.base_branch, workspace_dir,
+                    edit=not args.no_edit, shelve=args.shelve,
+                    dry_run=args.dry_run)
     return 0

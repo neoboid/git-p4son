@@ -2,12 +2,7 @@
 
 import argparse
 from .changelist_store import check_alias_usable, save_changelist_alias
-from .lib import (
-    check_git_workspace_clean,
-    create_changelist,
-    open_changes_and_revert_unchanged,
-)
-from .perforce import p4_shelve_changelist
+from .lib import check_git_workspace_clean, create_changelist, edit_and_shelve
 from .log import log
 
 
@@ -37,14 +32,7 @@ def new_command(args: argparse.Namespace) -> int:
         else:
             log.success(f'Created CL {changelist}')
 
-    if not args.no_edit:
-        open_changes_and_revert_unchanged(changelist, args.base_branch,
-                                          workspace_dir, args.dry_run)
-
-    if args.shelve or args.review:
-        log.heading('Shelving')
-        p4_shelve_changelist(
-            changelist, workspace_dir, dry_run=args.dry_run)
-        log.success('Done')
-
+    edit_and_shelve(changelist, args.base_branch, workspace_dir,
+                    edit=not args.no_edit, shelve=args.shelve or args.review,
+                    dry_run=args.dry_run)
     return 0

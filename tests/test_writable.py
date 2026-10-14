@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.config import load_config, save_config
+from git_p4son.config import ConfigError, load_config, save_config
 from git_p4son.writable import (
     is_user_writable,
     is_writable_mode,
@@ -33,11 +33,12 @@ class TestWritableMode(unittest.TestCase):
             save_config(tmpdir, {'core': {'other': 'value'}})
             self.assertFalse(is_writable_mode(tmpdir))
 
-    def test_only_a_boolean_true_enables_it(self):
-        """A hand-edited string such as "yes" or "false" must not count."""
+    def test_non_boolean_is_an_error(self):
+        """A hand-edited string such as "true" is refused, not read as off."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            save_config(tmpdir, {'core': {'writable': 'false'}})
-            self.assertFalse(is_writable_mode(tmpdir))
+            save_config(tmpdir, {'core': {'writable': 'true'}})
+            with self.assertRaises(ConfigError):
+                is_writable_mode(tmpdir)
 
     def test_set_and_read_back(self):
         with tempfile.TemporaryDirectory() as tmpdir:

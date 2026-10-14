@@ -7,16 +7,15 @@ import time
 from datetime import timedelta
 from typing import Callable
 
-from .config import load_config, save_config
+from .config import get_setting, save_config
 from .git import list_tracked_files
 from .log import log
 from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
 
 
 def is_writable_mode(workspace_dir: str) -> bool:
-    """Whether writable mode is on: git-tracked files are kept writable."""
-    config = load_config(workspace_dir)
-    return config.get('core', {}).get('writable') is True
+    """Whether writable mode is on: git-tracked files are kept writable; raise ConfigError if malformed."""
+    return get_setting(workspace_dir, 'core', 'writable', bool, False)
 
 
 def set_writable_mode(workspace_dir: str, enabled: bool) -> None:

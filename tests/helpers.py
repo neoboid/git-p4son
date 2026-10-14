@@ -1,7 +1,7 @@
 """Shared test helpers for git_p4son tests."""
 
 from git_p4son.common import RunResult
-from git_p4son.perforce import P4Change
+from git_p4son.perforce import P4Change, P4SyncPreviewFile
 
 
 def make_run_result(returncode=0, stdout=None, stderr=None, elapsed=None):
@@ -12,6 +12,11 @@ def make_run_result(returncode=0, stdout=None, stderr=None, elapsed=None):
         stderr=stderr if stderr is not None else [],
         elapsed=elapsed,
     )
+
+
+def preview_update(path):
+    """Preview entry for a file p4 would update."""
+    return P4SyncPreviewFile(mode='upd', filepath=path)
 
 
 def make_changes(*pairs):

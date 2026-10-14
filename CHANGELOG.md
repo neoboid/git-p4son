@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `sync`, `init` and `sync-split-users` no longer take `*unknown*` for your Perforce user when the server has no
+  user named by `P4USER`. `sync` with `$(user)` in the split users stops and says it cannot determine the user
 - A malformed value in `.git-p4son/config.toml` now stops the command with a message naming the setting.
   Before, a `sync.split-users` or `core.writable` of the wrong type was silently ignored, turning splitting or
   writable mode off

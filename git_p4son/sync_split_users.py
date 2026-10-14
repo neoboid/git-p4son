@@ -3,7 +3,7 @@
 import argparse
 
 from .common import CommandError
-from .config import load_config, save_config
+from .config import get_setting, save_config
 from .log import log
 from .perforce import get_existing_p4_users, get_p4_user
 
@@ -12,12 +12,8 @@ USER_PLACEHOLDER = '$(user)'
 
 
 def get_split_users(workspace_dir: str) -> list[str]:
-    """The configured split users in order; a malformed config value is ignored."""
-    config = load_config(workspace_dir)
-    users = config.get('sync', {}).get('split-users', [])
-    if not isinstance(users, list):
-        return []
-    return [user for user in users if isinstance(user, str)]
+    """The configured split users in order; raise ConfigError if malformed."""
+    return get_setting(workspace_dir, 'sync', 'split-users', list[str], [])
 
 
 def set_split_users(workspace_dir: str, users: list[str]) -> None:

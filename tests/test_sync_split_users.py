@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import RunError
-from git_p4son.config import load_config, save_config
+from git_p4son.config import ConfigError, load_config, save_config
 from git_p4son.sync_split_users import (
     USER_PLACEHOLDER,
     get_split_users,
@@ -48,16 +48,18 @@ class TestSplitUsersConfig(unittest.TestCase):
             self.assertEqual(config['depot'], {'root': '//ws'})
             self.assertEqual(config['sync']['other'], 'value')
 
-    def test_non_list_value_is_ignored(self):
-        """A hand-edited single string is not split into characters."""
+    def test_non_list_value_is_an_error(self):
+        """A hand-edited single string is refused, not silently ignored."""
         with tempfile.TemporaryDirectory() as tmpdir:
             save_config(tmpdir, {'sync': {'split-users': 'alice'}})
-            self.assertEqual(get_split_users(tmpdir), [])
+            with self.assertRaises(ConfigError):
+                get_split_users(tmpdir)
 
-    def test_non_string_entries_are_ignored(self):
+    def test_non_string_entries_are_an_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             save_config(tmpdir, {'sync': {'split-users': ['alice', 1]}})
-            self.assertEqual(get_split_users(tmpdir), ['alice'])
+            with self.assertRaises(ConfigError):
+                get_split_users(tmpdir)
 
 
 class TestSelfSplit(unittest.TestCase):

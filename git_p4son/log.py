@@ -150,11 +150,6 @@ class Log:
             return
         print(line, file=sys.stderr if stderr else sys.stdout)
 
-    def verbose(self, text: str) -> None:
-        """Print verbose-only text (suppressed at normal verbosity)."""
-        if self.verbose_mode and not self.quiet_mode:
-            print(text)
-
     def stdin(self, text: str) -> None:
         """Print stdin input sent to a command (verbose only)."""
         if not self.verbose_mode or self.quiet_mode:

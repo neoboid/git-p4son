@@ -36,7 +36,7 @@ DEFAULT_BASE_BRANCH = 'HEAD~1'
 def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
     """Add -b/--base-branch, defaulting to DEFAULT_BASE_BRANCH."""
     parser.add_argument('-b', '--base-branch', default=DEFAULT_BASE_BRANCH,
-                        help=f'{help}. Default is {DEFAULT_BASE_BRANCH}')
+                        help=f'{help}. Defaults to {DEFAULT_BASE_BRANCH}')
 
 
 def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: str,
@@ -78,7 +78,7 @@ def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='git-p4son',
-        description='Utility for keeping a Perforce workspace and local git repo in sync',
+        description='Keep a local git repository in sync with a Perforce workspace.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -128,14 +128,17 @@ Examples:
         'init',
         help='Initialize a git repository inside a Perforce workspace',
         description='Set up a new git repository inside a Perforce workspace. '
-        'Checks preconditions (P4 workspace), initializes git, '
-        'sets up .gitignore, and creates an initial commit.'
+        'Checks that it runs in a Perforce workspace, asks for the depot root, '
+        'writable mode, split users and the Claude Code skill, then sets up '
+        '.gitignore, initializes git and creates a first commit.'
     ).set_defaults(func=init_command, needs_workspace=False)
 
     sync_parser = subparsers.add_parser(
         'sync',
-        help='Sync local git repository with a Perforce workspace',
-        description='Sync local git repository with a Perforce workspace'
+        help='Sync the git repository with Perforce',
+        description='Sync the Perforce workspace to one or more changelists, '
+        'with a git commit for each. Local changes to synced files are merged '
+        'back afterwards.'
     )
     sync_parser.set_defaults(func=sync_command)
     sync_parser.add_argument(
@@ -234,15 +237,16 @@ Examples:
 
     new_parser = subparsers.add_parser(
         'new',
-        help='Create a new changelist, open files for edit, and optionally create a Swarm review',
-        description='Create a new Perforce changelist with a description and '
-        'enumerated git commits since the base branch. By default also opens '
-        'changed files for edit in the changelist.'
+        help='Create a changelist, open files for edit, and optionally create a Swarm review',
+        description='Create a Perforce changelist with a description and the '
+        'enumerated git commits since the base branch, and save its number '
+        'under an alias. By default also opens the changed files for edit in '
+        'the changelist.'
     )
     new_parser.set_defaults(func=new_command)
     _add_message_args(
         new_parser,
-        'Changelist description message (defaults to HEAD commit subject)',
+        'Changelist description message. Defaults to the HEAD commit subject',
         'Read the changelist description message from the given file',
         from_head=True)
     new_parser.add_argument(
@@ -257,7 +261,7 @@ Examples:
     new_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Overwrite an existing alias file'
+        help='Overwrite an existing alias'
     )
     new_parser.add_argument(
         '--no-alias',
@@ -323,8 +327,10 @@ Examples:
 
     list_changes_parser = subparsers.add_parser(
         'list-changes',
-        help='List commit subjects since base branch',
-        description='List commit subjects since base branch in chronological order (oldest first)'
+        help='List the commit subjects since the base branch',
+        description='List the commit subjects since the base branch as a '
+        'numbered list, oldest first, as new puts them in a changelist '
+        'description.'
     )
     list_changes_parser.set_defaults(func=list_changes_command)
     _add_base_branch(list_changes_parser, 'Base branch to compare against')
@@ -332,7 +338,8 @@ Examples:
     alias_parser = subparsers.add_parser(
         'alias',
         help='Manage changelist aliases',
-        description='Manage changelist aliases stored in .git-p4son/changelists/'
+        description='Manage changelist aliases: names for changelist numbers, '
+        'stored in .git-p4son/changelists/.'
     )
     alias_subparsers = alias_parser.add_subparsers(
         dest='alias_action',
@@ -343,14 +350,15 @@ Examples:
     alias_subparsers.add_parser(
         'list',
         help='List all aliases and their changelist numbers',
-        description='List all changelist aliases stored in .git-p4son/changelists/'
+        description='List all changelist aliases with their changelist '
+        'numbers.'
     ).set_defaults(func=alias_list_command)
 
     alias_show_parser = alias_subparsers.add_parser(
         'show',
         help='Print the changelist number of an alias',
         description='Print only the changelist number saved under an alias, '
-        'for use in scripts'
+        'for use in scripts.'
     )
     # It prints only the changelist number on stdout, so scripts can capture it.
     alias_show_parser.set_defaults(func=alias_show_command, quiet=True)
@@ -361,7 +369,7 @@ Examples:
         'new',
         help='Save a changelist number under a named alias',
         description='Save a changelist number under a named alias in '
-        '.git-p4son/changelists/<alias>'
+        '.git-p4son/changelists/<alias>.'
     )
     alias_new_parser.set_defaults(func=alias_new_command)
     alias_new_parser.add_argument(
@@ -373,13 +381,13 @@ Examples:
     alias_new_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Overwrite an existing alias file'
+        help='Overwrite an existing alias'
     )
 
     alias_delete_parser = alias_subparsers.add_parser(
         'delete',
         help='Delete a changelist alias',
-        description='Delete a changelist alias from .git-p4son/changelists/'
+        description='Delete a changelist alias, or all of them with --all.'
     )
     alias_delete_parser.set_defaults(func=alias_delete_command)
     alias_delete_target = alias_delete_parser.add_mutually_exclusive_group()
@@ -395,12 +403,12 @@ Examples:
         'clean',
         help='Clean up changelist aliases',
         description='List all changelist aliases, then delete all of them '
-        'or review each one interactively with yes/no/all/quit prompts'
+        'or review each one interactively with yes/no/all/quit prompts.'
     ).set_defaults(func=alias_clean_command)
 
     review_parser = subparsers.add_parser(
         'review',
-        help='Create a Swarm review via automated interactive rebase',
+        help='Create a Swarm review, one shelf per commit, through an interactive rebase',
         description='Automate the interactive rebase workflow by generating '
         'a rebase todo with exec lines that run git p4son new/update '
         'for each commit since the base branch.'
@@ -410,7 +418,7 @@ Examples:
                             'Alias name for the new changelist')
     _add_message_args(
         review_parser,
-        'Changelist description message (defaults to HEAD commit subject)',
+        'Changelist description message. Defaults to the HEAD commit subject',
         'Read the changelist description message from the given file',
         from_head=True)
     _add_base_branch(
@@ -418,7 +426,7 @@ Examples:
     review_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Overwrite an existing alias file'
+        help='Overwrite an existing alias'
     )
     _add_dry_run(
         review_parser, 'Print the generated rebase todo without executing')
@@ -470,7 +478,7 @@ Examples:
 
     completion_parser = subparsers.add_parser(
         'completion',
-        help='Print path to a shell completion script',
+        help='Print the path to a shell completion script',
         description='Print the path to a shell completion script '
         'for bash, zsh, or powershell.'
     )
@@ -479,7 +487,7 @@ Examples:
     completion_parser.add_argument(
         'shell',
         choices=['bash', 'zsh', 'powershell'],
-        help='Shell to print completion script path for'
+        help='Shell to print the completion script path for'
     )
     completion_parser.add_argument(
         '-d', '--dirname',
@@ -505,14 +513,14 @@ Examples:
         'install',
         help='Install the skill for Claude Code',
         description='Write the skill to ~/.claude/skills/git-p4son/SKILL.md '
-        '(or under $CLAUDE_CONFIG_DIR), replacing any existing one'
+        '(or under $CLAUDE_CONFIG_DIR), replacing any existing one.'
     ).set_defaults(func=skill_install_command)
     skill_subparsers.add_parser(
         'show',
         help='Print the instructions the skill gives to AI agents',
         description='Print the instructions for AI agents that ship with '
         'this version of git-p4son, followed by the workspace\'s own '
-        'overrides in .git-p4son/skill-override.md, if it has any'
+        'overrides in .git-p4son/skill-override.md, if it has any.'
     ).set_defaults(func=skill_show_command)
 
     # Hidden, used by review. No help, since argparse lists help=SUPPRESS as "==SUPPRESS==".

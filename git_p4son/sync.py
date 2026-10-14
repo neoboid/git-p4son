@@ -1,8 +1,8 @@
 """Sync command implementation for git-p4son."""
 
 import argparse
-import functools
 import tempfile
+from dataclasses import dataclass
 
 from .common import CommandError
 from .git import (
@@ -113,18 +113,28 @@ def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
     return _run_pre_sync_hooks(workspace_dir, invocation_dir)
 
 
-def _sync_pass(changelist: int, label: str, depot_root: str,
-               workspace_dir: str, pre_sync_head_commit: str, temp_root: str,
-               uses_crlf: bool,
-               clobber_mode: ClobberMode) -> WritableSyncFileSet:
+@dataclass(frozen=True)
+class _SyncContext:
+    """What every pass of one sync shares."""
+    workspace_dir: str
+    depot_root: str
+    pre_sync_head_commit: str
+    temp_root: str
+    uses_crlf: bool
+    clobber_mode: ClobberMode
+
+
+def _sync_pass(changelist: int, label: str,
+               ctx: _SyncContext) -> WritableSyncFileSet:
     """Run one sync pass: preview, prepare writable files, and p4 sync."""
-    preview = p4_sync_preview(changelist, depot_root, workspace_dir)
-    prep = prepare_writable_files(preview, workspace_dir, pre_sync_head_commit,
-                                  temp_root, uses_crlf=uses_crlf,
-                                  clobber_mode=clobber_mode)
+    preview = p4_sync_preview(changelist, ctx.depot_root, ctx.workspace_dir)
+    prep = prepare_writable_files(preview, ctx.workspace_dir,
+                                  ctx.pre_sync_head_commit, ctx.temp_root,
+                                  uses_crlf=ctx.uses_crlf,
+                                  clobber_mode=ctx.clobber_mode)
     if preview:
-        prep.not_synced = _sync_changelist(changelist, label, depot_root,
-                                           workspace_dir,
+        prep.not_synced = _sync_changelist(changelist, label, ctx.depot_root,
+                                           ctx.workspace_dir,
                                            expected_clobber=set(prep.ignored))
         prep.synced = [entry.filepath for entry in preview]
     return prep
@@ -367,19 +377,17 @@ def sync_command(args: argparse.Namespace) -> int:
     log.success(f'{pre_sync_head_commit}')
 
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
-        sync_pass = functools.partial(
-            _sync_pass, depot_root=depot_root, workspace_dir=workspace_dir,
-            pre_sync_head_commit=pre_sync_head_commit, temp_root=temp_root,
-            uses_crlf=uses_crlf, clobber_mode=clobber_mode)
+        ctx = _SyncContext(workspace_dir, depot_root, pre_sync_head_commit,
+                           temp_root, uses_crlf, clobber_mode)
 
         preps: list[WritableSyncFileSet] = []
         # Catch-up pass to the last synced changelist, folded into the first commit.
         if last_synced:
-            preps.append(sync_pass(last_synced, LAST_SYNCED_LABEL))
+            preps.append(_sync_pass(last_synced, LAST_SYNCED_LABEL, ctx))
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for changelist, changelist_label in targets:
-            preps.append(sync_pass(changelist, changelist_label))
+            preps.append(_sync_pass(changelist, changelist_label, ctx))
 
             log.heading(f'Committing git changes for CL {changelist}')
             add_all_files(workspace_dir)

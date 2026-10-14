@@ -1,6 +1,7 @@
 """Runs an interactive rebase with a generated todo that runs git p4son after each pick."""
 
 import argparse
+import contextlib
 import os
 import shlex
 import subprocess
@@ -107,7 +108,7 @@ def run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
         log.success('Done')
         return 0
     finally:
-        if os.path.exists(todo_file):
+        with contextlib.suppress(FileNotFoundError):
             os.remove(todo_file)
 
 

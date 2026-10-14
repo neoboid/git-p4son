@@ -105,7 +105,7 @@ def _apply_off(workspace_dir: str) -> None:
         return
 
     # Opened files keep their write bit. The whole client is queried, not just the depot root.
-    log.heading('Finding files opened in Perforce')
+    log.heading('Checking files opened in Perforce')
     opened = dict(p4_get_opened_files(f'//{spec.name}', workspace_dir))
     log.success(f'{plural(len(opened), "file")} opened')
 

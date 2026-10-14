@@ -642,7 +642,7 @@ def main() -> int:
         if exit_code == 0 and getattr(args, 'sleep', None) is not None:
             log.heading(f'Sleeping for {args.sleep} seconds')
             time.sleep(args.sleep)
-            log.success('awake again')
+            log.success(f'Slept {args.sleep} seconds')
 
         return exit_code
     except KeyboardInterrupt:

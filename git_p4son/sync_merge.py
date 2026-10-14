@@ -103,7 +103,7 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
                          clobber_mode: ClobberMode,
                          unchanged_count: int = 0) -> None:
     """Log what the writable-file classification found."""
-    log.heading('Prepare sync summary')
+    log.heading('Sync preparation')
     if unchanged_count:
         label = 'file' if unchanged_count == 1 else 'files'
         log.success(

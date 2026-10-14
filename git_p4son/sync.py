@@ -74,7 +74,7 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
 
 def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
     """Raise CommandError, after listing them, if git-tracked files are opened in Perforce."""
-    log.heading('Checking p4 workspace')
+    log.heading('Checking files opened in Perforce')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
     tracked = get_tracked_files([f for f, _ in opened_files], workspace_dir)
     tracked_opened_files = [(f, change) for f, change in opened_files

@@ -384,6 +384,9 @@ def merge_file(current_path: str, base_path: str, other_path: str,
 
 # --- editor ---
 
+NO_EDITOR_MESSAGE = 'No git editor configured. Set one with: git config core.editor <editor>'
+
+
 def resolve_editor(workspace_dir: str) -> str | None:
     """Resolve the user's editor via git var GIT_EDITOR."""
     try:

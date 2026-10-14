@@ -42,7 +42,7 @@ def check_git_workspace_clean(workspace_dir: str) -> None:
         for filename, change in dirty_files:
             log.file_change(filename, change)
         raise CommandError('Workspace is not clean')
-    log.success('clean')
+    log.success('Clean')
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool,
@@ -140,8 +140,8 @@ def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
-                                  workspace_dir: str, dry_run: bool) -> None:
-    """Open local git changes for add/edit/delete in a Perforce changelist."""
+                                  workspace_dir: str, dry_run: bool) -> int:
+    """Open local git changes for add/edit/delete in a Perforce changelist; returns how many it opened or moved."""
     wanted = ([(f, 'add') for f in changes.adds]
               + [(f, 'edit') for f in changes.mods]
               + [(f, 'delete') for f in changes.dels])
@@ -168,6 +168,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         restore_files(to_restore, workspace_dir, dry_run)
     if to_open and not dry_run:
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
+    return len(to_open) + len(to_reopen)
 
 
 def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
@@ -176,16 +177,16 @@ def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
     if edit:
         log.heading('Opening files for edit')
         changes = get_local_changes(base_branch, workspace_dir)
-        include_changes_in_changelist(
+        opened = include_changes_in_changelist(
             changes, changelist, workspace_dir, dry_run)
-        log.success('Done')
+        log.success(f'Opened {plural(opened, "file")}')
 
         revert_unchanged_files(changelist, workspace_dir, dry_run)
 
     if shelve:
-        log.heading('Shelving')
+        log.heading(f'Shelving CL {changelist}')
         p4_shelve_changelist(changelist, workspace_dir, dry_run=dry_run)
-        log.success('Done')
+        log.success(f'Shelved CL {changelist}')
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,

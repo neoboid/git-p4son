@@ -26,7 +26,7 @@ def review_command(args: argparse.Namespace) -> int:
 
     log.heading(f'Checking alias "{args.alias}"')
     check_alias_usable(args.alias, workspace_dir, args.force)
-    log.success('Done')
+    log.success(f'Alias "{args.alias}" is usable')
 
     new_cmd, update_cmd = _step_commands(args.alias, args.force,
                                          args.no_commit_list)

@@ -8,7 +8,7 @@ import subprocess
 from . import CONFIG_DIR
 from .common import CommandError
 from .config import ensure_config_dir
-from .git import get_commit_lines_since, resolve_editor
+from .git import NO_EDITOR_MESSAGE, get_commit_lines_since, resolve_editor
 from .lib import check_git_workspace_clean
 from .log import log, plural
 
@@ -69,8 +69,7 @@ def _require_editor(workspace_dir: str) -> str:
     """Return the git editor; raise CommandError if none is configured."""
     editor = resolve_editor(workspace_dir)
     if not editor:
-        raise CommandError(
-            'No git editor configured. Set one with: git config core.editor <editor>')
+        raise CommandError(NO_EDITOR_MESSAGE)
     return editor
 
 
@@ -84,7 +83,7 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
     check_git_workspace_clean(workspace_dir)
 
     if edit_todo:
-        log.heading('Checking editor')
+        log.heading('Checking git editor')
         log.success(_require_editor(workspace_dir))
 
     if dry_run:
@@ -124,7 +123,7 @@ def _run_todo_rebase(todo_content: str, base_branch: str, workspace_dir: str,
             raise CommandError('Rebase did not complete. Fix the issues and '
                                'run: git rebase --continue',
                                returncode=result.returncode)
-        log.success('Done')
+        log.success('Rebase complete')
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.remove(todo_file)

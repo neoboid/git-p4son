@@ -14,7 +14,7 @@ from .log import log, plural
 def _print_aliases(aliases: list[tuple[str, str]]) -> None:
     log.info(f'Found {plural(len(aliases), "alias", "aliases")}')
     for name, changelist in aliases:
-        log.info(f'{name} -> {changelist}')
+        log.info(f'{name} -> CL {changelist}')
 
 
 def alias_list_command(args: argparse.Namespace) -> int:
@@ -42,7 +42,7 @@ def alias_new_command(args: argparse.Namespace) -> int:
 
     save_changelist_alias(args.alias, args.changelist, workspace_dir,
                           force=args.force)
-    log.success(f'{args.alias} -> {args.changelist}')
+    log.success(f'{args.alias} -> CL {args.changelist}')
     return 0
 
 
@@ -77,7 +77,7 @@ def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
     """Delete every alias without further prompting."""
     for name, _changelist in aliases:
         if _delete_listed(name, workspace_dir):
-            log.success(f'Deleted "{name}"')
+            log.success(f'Deleted alias "{name}"')
 
 
 def _clean_interactive(aliases: list[tuple[str, str]],

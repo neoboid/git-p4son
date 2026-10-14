@@ -17,6 +17,7 @@ from .log import log
 from .perforce import get_client_spec
 from .skill import install_skill, is_claude_code_installed, is_skill_installed
 from .git import (
+    NO_EDITOR_MESSAGE,
     add_files,
     commit,
     has_commits,
@@ -51,14 +52,14 @@ def _select_depot_root(client_name: str, cwd: str,
 def _configure_depot_root(client_name: str, cwd: str,
                           p4_workspace_root: str) -> None:
     """Configure depot root: validate existing or prompt for new; raise CommandError if none is chosen."""
-    log.heading('Finding git-p4son depot root')
+    log.heading('Finding depot root')
     depot_root = get_depot_root(cwd)
     if depot_root:
         log.success(f'{expand_depot_root(depot_root, client_name)}/...')
 
         log.heading('Validating depot root')
         if check_depot_root(depot_root, client_name, cwd):
-            log.success('all good')
+            log.success('Valid')
             return
     else:
         log.warning('no root configured')
@@ -198,12 +199,11 @@ def init_command(args: argparse.Namespace) -> int:
         log.heading('Next steps')
         log.info('* git p4son writable apply, to update the tracked files')
 
-    log.heading('Validating git editor configuration')
+    log.heading('Checking git editor')
     editor = resolve_editor(cwd)
     if editor:
         log.success(editor)
     else:
-        log.warning(
-            'No editor configured. Set one with: git config core.editor <editor>')
+        log.warning(NO_EDITOR_MESSAGE)
 
     return 0

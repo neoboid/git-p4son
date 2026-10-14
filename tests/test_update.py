@@ -127,7 +127,7 @@ class TestGeneratePerCommitTodo(unittest.TestCase):
         result = _generate_todo(COMMITS, '100', _args(message="It's new"))
         self.assertEqual(result, (
             "pick abc1234 First commit\n"
-            "exec git p4son update 100 -F .git-p4son/reviews/message --sleep 5\n"
+            "exec git p4son update 100 -F .git-p4son/reviews/message\n"
             "pick def5678 Second commit\n"
             "exec git p4son update 100\n"
         ))

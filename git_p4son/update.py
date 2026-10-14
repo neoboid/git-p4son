@@ -27,7 +27,8 @@ def _generate_todo(commit_lines: list[str], changelist: str,
     first_cmd = (f'{cmd} -F {shlex.quote(MESSAGE_FILE)}'
                  if args.message is not None else cmd)
     commands = [first_cmd + flags] + [cmd + flags] * (len(commit_lines) - 1)
-    return build_todo(commit_lines, commands, SWARM_SHELF_DELAY)
+    return build_todo(commit_lines, commands,
+                      SWARM_SHELF_DELAY if args.shelve else None)
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> int:

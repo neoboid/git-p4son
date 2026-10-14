@@ -61,7 +61,7 @@ def _files_at_commits(content):
                               for commit, rel in items}
 
 
-@mock.patch('git_p4son.sync.make_writable', return_value=0)
+@mock.patch('git_p4son.writable.make_writable', return_value=0)
 @mock.patch('git_p4son.sync.get_tracked_files')
 class TestMakeSyncedFilesWritable(unittest.TestCase):
     """Writable mode's post-sync step: tracked synced files go writable."""

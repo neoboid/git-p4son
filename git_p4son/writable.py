@@ -59,6 +59,12 @@ def make_read_only(paths: list[str]) -> int:
     return _set_user_write(paths, False)
 
 
+def restore_writable(paths: list[str], tracked: set[str], workspace_dir: str) -> int:
+    """Make the paths in tracked writable again after p4 wrote them; returns how many changed."""
+    return make_writable([os.path.join(workspace_dir, path)
+                          for path in paths if path in tracked])
+
+
 def _tracked_paths(workspace_dir: str,
                    skip: Callable[[str], object] = lambda rel: False) -> list[str]:
     """Every file tracked by git that skip leaves in, as absolute paths."""

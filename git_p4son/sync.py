@@ -20,7 +20,7 @@ from .depot import resolve_depot_root
 from .log import log
 from .processes import check_no_blocking_processes
 from .writable import (
-    is_writable_mode, make_read_only, make_writable, regular_file_mode,
+    is_writable_mode, make_read_only, make_writable, regular_file_mode, restore_writable,
 )
 from .sync_split_users import (
     USER_PLACEHOLDER,
@@ -467,8 +467,9 @@ def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
     if not synced or not is_writable_mode(workspace_dir):
         return
     log.heading('Making synced tracked files writable (writable mode)')
-    tracked = sorted(get_tracked_files(sorted(set(synced)), workspace_dir))
-    changed = make_writable(tracked)
+    synced = sorted(set(synced))
+    tracked = get_tracked_files(synced, workspace_dir)
+    changed = restore_writable(synced, tracked, workspace_dir)
     log.success(f'{changed} of {len(tracked)} tracked files made writable')
 
 

@@ -26,7 +26,7 @@ from .perforce import (
     run_p4_batch,
     save_changelist_spec,
 )
-from .writable import is_writable_mode, make_writable
+from .writable import is_writable_mode, restore_writable
 
 
 DRY_RUN_CHANGELIST = '<changelist>'
@@ -225,8 +225,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
 
     if not dry_run and is_writable_mode(workspace_dir):
         # p4 revert leaves files read-only; the still opened ones are writable already.
-        make_writable([os.path.join(workspace_dir, path)
-                       for path in revert_if_unchanged + stale_deletes
-                       if path in tracked])
+        restore_writable(revert_if_unchanged + stale_deletes, tracked,
+                         workspace_dir)
 
     return len(reverted) + len(stale_deletes)

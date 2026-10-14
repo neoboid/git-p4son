@@ -12,6 +12,7 @@ from git_p4son.writable import (
     is_writable_mode,
     make_read_only,
     make_writable,
+    restore_writable,
     set_writable_mode,
     writable_command,
 )
@@ -119,6 +120,18 @@ class TestWriteBitHelpers(unittest.TestCase):
                 self.assertFalse(_mode(target) & stat.S_IWUSR)
             finally:
                 os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+
+
+@mock.patch('git_p4son.writable.make_writable', return_value=1)
+class TestRestoreWritable(unittest.TestCase):
+    def test_only_tracked_paths_under_the_workspace(self, mock_make):
+        self.assertEqual(restore_writable(['a.cpp', 'Content/x.uasset'],
+                                          {'a.cpp'}, '/ws'), 1)
+        mock_make.assert_called_once_with([os.path.join('/ws', 'a.cpp')])
+
+    def test_absolute_paths_are_kept(self, mock_make):
+        restore_writable(['/ws/a.cpp'], {'/ws/a.cpp'}, '/ws')
+        mock_make.assert_called_once_with(['/ws/a.cpp'])
 
 
 class TestWritableCommand(unittest.TestCase):

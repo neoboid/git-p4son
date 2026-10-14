@@ -118,7 +118,7 @@ class TestRevertUnchangedFiles(unittest.TestCase):
             'restore': mock.patch('git_p4son.lib.restore_files'),
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
-            'make_writable': mock.patch('git_p4son.lib.make_writable'),
+            'make_writable': mock.patch('git_p4son.writable.make_writable'),
         }
         self.mocks = {name: p.start() for name, p in patches.items()}
         self.addCleanup(mock.patch.stopall)

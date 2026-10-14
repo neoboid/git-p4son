@@ -48,6 +48,24 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
     parser.set_defaults(branch_keyword_arg=dest)
 
 
+def _add_dry_run(parser: argparse.ArgumentParser, help: str) -> None:
+    """Add -n/--dry-run."""
+    parser.add_argument('-n', '--dry-run', action='store_true', help=help)
+
+
+def _add_no_edit(parser: argparse.ArgumentParser) -> None:
+    """Add --no-edit, which skips opening files for edit."""
+    parser.add_argument('--no-edit', action='store_true',
+                        help='Skip opening changed files for edit in Perforce')
+
+
+def _add_sleep(parser: argparse.ArgumentParser) -> None:
+    """Add -s/--sleep, which main honours after the command succeeds."""
+    parser.add_argument(
+        '-s', '--sleep', type=int,
+        help='Sleep for the specified number of seconds after the command is done')
+
+
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
                       file_help: str, from_head: bool = False) -> None:
     """Add -m/--message and -F/--file; with from_head, run_command defaults to the HEAD subject."""
@@ -135,11 +153,8 @@ Examples:
         action='store_true',
         help='Allow syncing to changelists older than the current one.'
     )
-    sync_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Print the resolved sync sequence without syncing'
-    )
+    _add_dry_run(
+        sync_parser, 'Print the resolved sync sequence without syncing')
     sync_parser.add_argument(
         '--ignore-blocking-processes',
         action='store_true',
@@ -249,16 +264,9 @@ Examples:
         action='store_true',
         help='Skip saving a changelist alias'
     )
-    new_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Pretend and print what would be done, but do not execute'
-    )
-    new_parser.add_argument(
-        '--no-edit',
-        action='store_true',
-        help='Skip opening changed files for edit in Perforce'
-    )
+    _add_dry_run(
+        new_parser, 'Pretend and print what would be done, but do not execute')
+    _add_no_edit(new_parser)
     new_parser.add_argument(
         '--shelve',
         action='store_true',
@@ -269,11 +277,7 @@ Examples:
         action='store_true',
         help='Add #review keyword and shelve to create a Swarm review'
     )
-    new_parser.add_argument(
-        '-s', '--sleep',
-        type=int,
-        help='Sleep for the specified number of seconds after the command is done'
-    )
+    _add_sleep(new_parser)
 
     update_parser = subparsers.add_parser(
         'update',
@@ -295,21 +299,14 @@ Examples:
         'with the contents of the given file')
     _add_base_branch(
         update_parser, 'Base branch for enumerating commits and finding changed files')
-    update_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Pretend and print what would be done, but do not execute'
-    )
+    _add_dry_run(
+        update_parser, 'Pretend and print what would be done, but do not execute')
     update_parser.add_argument(
         '--no-commit-list',
         action='store_true',
         help='Leave the enumerated commit list in the changelist description as it is'
     )
-    update_parser.add_argument(
-        '--no-edit',
-        action='store_true',
-        help='Skip opening changed files for edit in Perforce'
-    )
+    _add_no_edit(update_parser)
     update_parser.add_argument(
         '--shelve',
         action='store_true',
@@ -322,11 +319,7 @@ Examples:
              'oldest first, through an interactive rebase. With --shelve each '
              'commit gets a shelf of its own'
     )
-    update_parser.add_argument(
-        '-s', '--sleep',
-        type=int,
-        help='Sleep for the specified number of seconds after the command is done'
-    )
+    _add_sleep(update_parser)
 
     list_changes_parser = subparsers.add_parser(
         'list-changes',
@@ -427,11 +420,8 @@ Examples:
         action='store_true',
         help='Overwrite an existing alias file'
     )
-    review_parser.add_argument(
-        '-n', '--dry-run',
-        action='store_true',
-        help='Print the generated rebase todo without executing'
-    )
+    _add_dry_run(
+        review_parser, 'Print the generated rebase todo without executing')
     review_parser.add_argument(
         '--no-commit-list',
         action='store_true',

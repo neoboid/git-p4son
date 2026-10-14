@@ -47,6 +47,17 @@ def current_p4_user(workspace_dir: str) -> str | None:
         return None
 
 
+def _unique(names: list[str]) -> list[str]:
+    """The names in order, dropping later ones that differ only in case."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            unique.append(name)
+    return unique
+
+
 def resolve_split_users(users: list[str],
                         workspace_dir: str) -> list[str] | None:
     """Substitute the current Perforce user for $(user) and drop repeats.
@@ -61,14 +72,8 @@ def resolve_split_users(users: list[str],
                       'connection, or pass --no-split to sync without '
                       'the configured split users.')
             return None
-    resolved: list[str] = []
-    seen: set[str] = set()
-    for user in users:
-        name = current if user == USER_PLACEHOLDER else user
-        if name.lower() not in seen:
-            seen.add(name.lower())
-            resolved.append(name)
-    return resolved
+    return _unique([current if user == USER_PLACEHOLDER else user
+                    for user in users])
 
 
 def _list(workspace_dir: str) -> int:
@@ -92,13 +97,7 @@ def _list(workspace_dir: str) -> int:
 
 def _requested(names: list[str], me: bool) -> list[str]:
     """The names given on the command line, --me as $(user) first, without repeats."""
-    requested: list[str] = []
-    seen: set[str] = set()
-    for name in ([USER_PLACEHOLDER] if me else []) + names:
-        if name.lower() not in seen:
-            seen.add(name.lower())
-            requested.append(name)
-    return requested
+    return _unique(([USER_PLACEHOLDER] if me else []) + names)
 
 
 def check_p4_users(names: list[str],

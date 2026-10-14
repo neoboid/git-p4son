@@ -60,10 +60,8 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_sleep(parser: argparse.ArgumentParser) -> None:
-    """Add -s/--sleep, which main honours after the command succeeds."""
-    parser.add_argument(
-        '-s', '--sleep', type=int,
-        help='Sleep for the specified number of seconds after the command is done')
+    """Add -s/--sleep, which main honours after the command succeeds; hidden, as only the rebase todo uses it."""
+    parser.add_argument('-s', '--sleep', type=int, help=argparse.SUPPRESS)
 
 
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,

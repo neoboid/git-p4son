@@ -8,33 +8,24 @@ from git_p4son.cli import create_parser
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
-    P4SyncClobberError,
-    P4SyncAbortError,
-    P4SyncOutputProcessor,
     get_latest_changelist,
     get_writable_files,
     p4_get_opened_files,
+    P4SyncAbortError,
+    P4SyncClobberError,
+    P4SyncOutputProcessor,
     parse_p4_sync_line,
 )
-from git_p4son.git import (
-    add_all_files,
-    commit,
-    get_dirty_files,
-)
 from git_p4son.sync import (
+    build_sync_targets,
     _collect_split_users,
     _make_synced_files_writable,
     _should_split,
     _sync_changelist,
-    build_sync_targets,
     sync_command,
     sync_preflight,
 )
-from git_p4son.sync_merge import (
-    ChangedFile,
-    WritableSyncFileSet,
-    prepare_writable_files,
-)
+from git_p4son.sync_merge import ChangedFile, WritableSyncFileSet
 from tests.helpers import make_changes, make_run_result, preview_update
 
 
@@ -129,62 +120,6 @@ class TestGetWritableFiles(unittest.TestCase):
         self.assertEqual(get_writable_files([]), [])
 
 
-class TestGitGetDirtyFiles(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_clean_workspace(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=b'')
-        self.assertEqual(get_dirty_files('/ws'), [])
-
-    @mock.patch('git_p4son.git.run')
-    def test_modified_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=b' M file.txt\0')
-        result = get_dirty_files('/ws')
-        self.assertEqual(result, [('file.txt', 'modify')])
-
-    @mock.patch('git_p4son.git.run')
-    def test_added_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=b'A  new.txt\0')
-        result = get_dirty_files('/ws')
-        self.assertEqual(result, [('new.txt', 'add')])
-
-    @mock.patch('git_p4son.git.run')
-    def test_deleted_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=b' D gone.txt\0')
-        result = get_dirty_files('/ws')
-        self.assertEqual(result, [('gone.txt', 'delete')])
-
-    @mock.patch('git_p4son.git.run')
-    def test_untracked_file(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=b'?? unknown.txt\0')
-        result = get_dirty_files('/ws')
-        self.assertEqual(result, [('unknown.txt', 'untracked')])
-
-    @mock.patch('git_p4son.git.run')
-    def test_multiple_files(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(
-            stdout=b' M mod.txt\0A  add.txt\0?? new.txt\0')
-        result = get_dirty_files('/ws')
-        self.assertEqual(result, [
-            ('mod.txt', 'modify'),
-            ('add.txt', 'add'),
-            ('new.txt', 'untracked'),
-        ])
-
-    @mock.patch('git_p4son.git.run')
-    def test_rename_lists_the_new_path_once(self, mock_rwo):
-        """A rename is "R  <new>\\0<old>\\0"; the old path is not a dirty file of its own."""
-        mock_rwo.return_value = make_run_result(
-            stdout=b'R  b "c".txt\0a.txt\0?? n\xc3\xb6.txt\0')
-        self.assertEqual(get_dirty_files('/ws'), [
-            ('b "c".txt', 'modify'), ('n\u00f6.txt', 'untracked')])
-
-    @mock.patch('git_p4son.git.run')
-    def test_command_failure(self, mock_rwo):
-        mock_rwo.side_effect = RunError('git status failed')
-        with self.assertRaises(RunError):
-            get_dirty_files('/ws')
-
-
 class TestP4GetOpenedFiles(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
     def test_clean(self, mock_run):
@@ -263,35 +198,6 @@ class TestP4GetOpenedFiles(unittest.TestCase):
         mock_run.side_effect = RunError('p4 opened failed')
         with self.assertRaises(RunError):
             p4_get_opened_files('//depot', '/ws')
-
-
-class TestGitAddAllFiles(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_success(self, mock_run):
-        mock_run.return_value = make_run_result()
-        add_all_files('/ws')
-
-    @mock.patch('git_p4son.git.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('git add failed')
-        with self.assertRaises(RunError):
-            add_all_files('/ws')
-
-
-class TestGitCommit(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_success(self, mock_run):
-        mock_run.return_value = make_run_result()
-        commit('msg', '/ws')
-        cmd = mock_run.call_args[0][0]
-        self.assertEqual(cmd, ['git', 'commit', '-m', 'msg'])
-
-    @mock.patch('git_p4son.git.run')
-    def test_allow_empty(self, mock_run):
-        mock_run.return_value = make_run_result()
-        commit('msg', '/ws', allow_empty=True)
-        cmd = mock_run.call_args[0][0]
-        self.assertIn('--allow-empty', cmd)
 
 
 class TestGetLatestChangelist(unittest.TestCase):

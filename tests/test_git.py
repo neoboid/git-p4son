@@ -1,4 +1,4 @@
-"""Tests for new git helper functions."""
+"""Tests for git_p4son.git module."""
 
 import contextlib
 import io
@@ -8,20 +8,29 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import RunError, run
+from git_p4son.common import CommandError, run, RunError, RunResult
 from git_p4son.git import (
+    add_all_files,
     add_files,
+    commit,
     find_base_commits,
     format_sync_subject,
     get_blob_oids,
+    get_commit_lines_since,
+    get_commit_subjects_since,
+    get_current_branch,
     get_dirty_files,
     get_files_at_commits,
     get_head_commit,
+    get_head_subject,
     get_local_changes,
+    _get_rebase_branch,
     get_staged_files,
     get_tracked_files,
+    get_workspace_dir,
     git_last_synced_changelist,
     has_commits,
+    is_workspace_dir,
     list_tracked_files,
     merge_file,
     parse_sync_subject,
@@ -615,6 +624,460 @@ class TestMergeFile(unittest.TestCase):
             self.assertFalse(clean)
             self.assertIn(b'<<<<<<< Perforce\n', merged)
             self.assertIn(b'>>>>>>> local\n', merged)
+
+
+class TestGetCurrentBranch(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_returns_branch_name(self, mock_run):
+        mock_run.return_value = RunResult(0, ['feat/foo'], [])
+        result = get_current_branch('/ws')
+        mock_run.assert_called_once_with(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd='/ws',
+        )
+        self.assertEqual(result, 'feat/foo')
+
+    @mock.patch('git_p4son.git._get_rebase_branch', return_value=None)
+    @mock.patch('git_p4son.git.run')
+    def test_detached_head_returns_none(self, mock_run, mock_rebase):
+        mock_run.return_value = RunResult(0, ['HEAD'], [])
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+        mock_rebase.assert_called_once_with('/ws')
+
+    @mock.patch('git_p4son.git._get_rebase_branch', return_value='feat/my-branch')
+    @mock.patch('git_p4son.git.run')
+    def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
+        mock_run.return_value = RunResult(0, ['HEAD'], [])
+        result = get_current_branch('/ws')
+        self.assertEqual(result, 'feat/my-branch')
+
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
+    def test_command_failure_returns_none(self, mock_run):
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
+    def test_exception_returns_none(self, mock_run):
+        result = get_current_branch('/ws')
+        self.assertIsNone(result)
+
+
+class TestGetHeadSubject(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_returns_subject(self, mock_run):
+        mock_run.return_value = RunResult(0, ['Fix bug'], [])
+        result = get_head_subject('/ws')
+        mock_run.assert_called_once_with(
+            ['git', 'log', '-1', '--format=%s', 'HEAD'],
+            cwd='/ws',
+        )
+        self.assertEqual(result, 'Fix bug')
+
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
+    def test_command_failure_returns_none(self, mock_run):
+        result = get_head_subject('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('git_p4son.git.run')
+    def test_empty_output_returns_none(self, mock_run):
+        mock_run.return_value = RunResult(0, [], [])
+        result = get_head_subject('/ws')
+        self.assertIsNone(result)
+
+    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
+    def test_exception_returns_none(self, mock_run):
+        result = get_head_subject('/ws')
+        self.assertIsNone(result)
+
+
+class TestGetRebaseBranch(unittest.TestCase):
+    _GIT_PATHS = ['.git/rebase-merge/head-name', '.git/rebase-apply/head-name']
+
+    def _read(self, state_dir, ref):
+        """Write ref as the head-name in state_dir and read it back."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if state_dir:
+                os.makedirs(os.path.join(tmpdir, '.git', state_dir))
+                with open(os.path.join(tmpdir, '.git', state_dir,
+                                       'head-name'), 'w') as f:
+                    f.write(ref + '\n')
+            with mock.patch('git_p4son.git.run',
+                            return_value=RunResult(0, self._GIT_PATHS, [])):
+                return _get_rebase_branch(tmpdir)
+
+    def test_reads_branch_from_rebase_merge_state(self):
+        self.assertEqual(self._read('rebase-merge', 'refs/heads/feat/x'),
+                         'feat/x')
+
+    def test_reads_branch_from_rebase_apply_state(self):
+        self.assertEqual(self._read('rebase-apply', 'refs/heads/feat/x'),
+                         'feat/x')
+
+    def test_keeps_a_ref_outside_refs_heads(self):
+        self.assertEqual(self._read('rebase-merge', 'refs/other/x'),
+                         'refs/other/x')
+
+    def test_returns_none_when_no_rebase_state(self):
+        self.assertIsNone(self._read(None, ''))
+
+    def test_returns_none_when_rev_parse_fails(self):
+        with mock.patch('git_p4son.git.run',
+                        side_effect=RunError('failed', returncode=128)):
+            self.assertIsNone(_get_rebase_branch('/ws'))
+
+
+class TestGetCurrentBranchDuringRebase(unittest.TestCase):
+    """Both rebase backends detach HEAD; the branch being rebased is still found."""
+
+    def _repo_mid_rebase(self, ws, *rebase_args):
+        def git(*args):
+            subprocess.run(['git', *args], cwd=ws, capture_output=True)
+
+        def commit(content):
+            with open(os.path.join(ws, 'f.txt'), 'w') as f:
+                f.write(content)
+            git('add', '.')
+            git('commit', '-m', content)
+
+        git('init', '-b', 'main')
+        git('config', 'user.email', 't@t')
+        git('config', 'user.name', 'T')
+        commit('base')
+        git('switch', '-c', 'feat/x')
+        commit('feature')
+        git('switch', 'main')
+        commit('main')
+        git('switch', 'feat/x')
+        # Both commits change f.txt, so the rebase stops on a conflict with HEAD detached.
+        git('rebase', *rebase_args, 'main')
+
+    def test_merge_backend(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self._repo_mid_rebase(ws, '--merge')
+            self.assertEqual(get_current_branch(ws), 'feat/x')
+
+    def test_apply_backend(self):
+        with tempfile.TemporaryDirectory() as ws:
+            self._repo_mid_rebase(ws, '--apply')
+            self.assertEqual(get_current_branch(ws), 'feat/x')
+
+
+class TestIsWorkspaceDir(unittest.TestCase):
+    def test_returns_true_when_git_dir_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, '.git'))
+            self.assertTrue(is_workspace_dir(tmpdir))
+
+    def test_returns_false_when_no_git_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertFalse(is_workspace_dir(tmpdir))
+
+    def test_returns_true_when_git_is_a_file(self):
+        """In linked worktrees and submodules .git is a file pointing at the real git dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, '.git'), 'w') as f:
+                f.write('gitdir: /repo/.git/worktrees/feature\n')
+            self.assertTrue(is_workspace_dir(tmpdir))
+
+
+class TestGetWorkspaceDir(unittest.TestCase):
+    def test_finds_workspace_from_subdirectory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, '.git'))
+            subdir = os.path.join(tmpdir, 'a', 'b')
+            os.makedirs(subdir)
+            with mock.patch('os.getcwd', return_value=subdir):
+                result = get_workspace_dir()
+            self.assertEqual(result, tmpdir)
+
+    def test_returns_none_when_no_workspace(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch('os.getcwd', return_value=tmpdir):
+                result = get_workspace_dir()
+            self.assertIsNone(result)
+
+    def test_stops_at_worktree_root_inside_another_repo(self):
+        """Detection stops at a linked worktree root instead of an enclosing unrelated repo."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, '.git'))
+            worktree = os.path.join(tmpdir, 'wt')
+            os.makedirs(worktree)
+            with open(os.path.join(worktree, '.git'), 'w') as f:
+                f.write('gitdir: /repo/.git/worktrees/wt\n')
+            subdir = os.path.join(worktree, 'src')
+            os.makedirs(subdir)
+
+            with mock.patch('os.getcwd', return_value=subdir):
+                result = get_workspace_dir()
+            self.assertEqual(result, worktree)
+
+
+class TestGetDirtyFiles(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_clean_workspace(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=b'')
+        self.assertEqual(get_dirty_files('/ws'), [])
+
+    @mock.patch('git_p4son.git.run')
+    def test_modified_file(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=b' M file.txt\0')
+        result = get_dirty_files('/ws')
+        self.assertEqual(result, [('file.txt', 'modify')])
+
+    @mock.patch('git_p4son.git.run')
+    def test_added_file(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=b'A  new.txt\0')
+        result = get_dirty_files('/ws')
+        self.assertEqual(result, [('new.txt', 'add')])
+
+    @mock.patch('git_p4son.git.run')
+    def test_deleted_file(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=b' D gone.txt\0')
+        result = get_dirty_files('/ws')
+        self.assertEqual(result, [('gone.txt', 'delete')])
+
+    @mock.patch('git_p4son.git.run')
+    def test_untracked_file(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=b'?? unknown.txt\0')
+        result = get_dirty_files('/ws')
+        self.assertEqual(result, [('unknown.txt', 'untracked')])
+
+    @mock.patch('git_p4son.git.run')
+    def test_multiple_files(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(
+            stdout=b' M mod.txt\0A  add.txt\0?? new.txt\0')
+        result = get_dirty_files('/ws')
+        self.assertEqual(result, [
+            ('mod.txt', 'modify'),
+            ('add.txt', 'add'),
+            ('new.txt', 'untracked'),
+        ])
+
+    @mock.patch('git_p4son.git.run')
+    def test_rename_lists_the_new_path_once(self, mock_rwo):
+        """A rename is "R  <new>\\0<old>\\0"; the old path is not a dirty file of its own."""
+        mock_rwo.return_value = make_run_result(
+            stdout=b'R  b "c".txt\0a.txt\0?? n\xc3\xb6.txt\0')
+        self.assertEqual(get_dirty_files('/ws'), [
+            ('b "c".txt', 'modify'), ('n\u00f6.txt', 'untracked')])
+
+    @mock.patch('git_p4son.git.run')
+    def test_command_failure(self, mock_rwo):
+        mock_rwo.side_effect = RunError('git status failed')
+        with self.assertRaises(RunError):
+            get_dirty_files('/ws')
+
+
+class TestAddAllFiles(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = make_run_result()
+        add_all_files('/ws')
+
+    @mock.patch('git_p4son.git.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = RunError('git add failed')
+        with self.assertRaises(RunError):
+            add_all_files('/ws')
+
+
+class TestCommit(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_success(self, mock_run):
+        mock_run.return_value = make_run_result()
+        commit('msg', '/ws')
+        cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd, ['git', 'commit', '-m', 'msg'])
+
+    @mock.patch('git_p4son.git.run')
+    def test_allow_empty(self, mock_run):
+        mock_run.return_value = make_run_result()
+        commit('msg', '/ws', allow_empty=True)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn('--allow-empty', cmd)
+
+
+class TestGetCommitLinesSince(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_returns_lines(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            'abc1234 First commit',
+            'def5678 Second commit',
+        ])
+        lines = get_commit_lines_since('main', '/workspace')
+        self.assertEqual(
+            lines, ['abc1234 First commit', 'def5678 Second commit'])
+        mock_run.assert_called_once_with(
+            ['git', 'log', '--format=%h %s', '--no-decorate',
+             '--reverse', '--no-merges', 'main..HEAD'],
+            cwd='/workspace',
+        )
+
+    @mock.patch('git_p4son.git.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = RunError('git log failed')
+        with self.assertRaises(RunError):
+            get_commit_lines_since('main', '/workspace')
+
+
+class TestGetCommitSubjectsSince(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_extracts_subjects(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            'abc1234 First commit',
+            'def5678 Second commit',
+        ])
+        subjects = get_commit_subjects_since('HEAD~1', '/workspace')
+        self.assertEqual(subjects, ['First commit', 'Second commit'])
+        mock_run.assert_called_once_with(
+            ['git', 'log', '--format=%h %s', '--no-decorate',
+             '--reverse', '--no-merges', 'HEAD~1..HEAD'],
+            cwd='/workspace',
+        )
+
+    @mock.patch('git_p4son.git.run')
+    def test_empty_log(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[])
+        subjects = get_commit_subjects_since('main', '/workspace')
+        self.assertEqual(subjects, [])
+
+    @mock.patch('git_p4son.git.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = RunError('git log failed')
+        with self.assertRaises(RunError):
+            get_commit_subjects_since('main', '/workspace')
+
+    @mock.patch('git_p4son.git.run')
+    def test_hash_only_line_fallback(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=['abc1234'])
+        subjects = get_commit_subjects_since('main', '/workspace')
+        self.assertEqual(subjects, ['abc1234'])
+
+
+class TestGetLocalChanges(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_parses_all_change_types(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=b'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0R100\0old_name.txt\0new_name.txt\0')
+        changes = get_local_changes('main', '/ws')
+        self.assertEqual(changes.mods, ['modified.txt'])
+        self.assertEqual(changes.adds, ['added.txt'])
+        self.assertEqual(changes.dels, ['deleted.txt'])
+        self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
+        self.assertEqual(mock_run.call_args.args[0],
+                         ['git', 'diff', '--name-status', '-z', 'main...HEAD'])
+
+    @mock.patch('git_p4son.git.run')
+    def test_typechange_treated_as_modify(self, mock_run):
+        """T (e.g. symlink to regular file) is a content change."""
+        mock_run.return_value = make_run_result(stdout=b'T\0link.txt\0')
+        changes = get_local_changes('main', '/ws')
+        self.assertEqual(changes.mods, ['link.txt'])
+
+    @mock.patch('git_p4son.git.run')
+    def test_copy_treated_as_add_of_destination(self, mock_run):
+        """A copy is an add of the destination; the source is untouched."""
+        mock_run.return_value = make_run_result(
+            stdout=b'C100\0src.txt\0copy.txt\0')
+        changes = get_local_changes('main', '/ws')
+        self.assertEqual(changes.adds, ['copy.txt'])
+        self.assertEqual(changes.mods, [])
+        self.assertEqual(changes.dels, [])
+
+    @mock.patch('git_p4son.git.run')
+    def test_diff_failure(self, mock_run):
+        mock_run.side_effect = RunError('diff failed')
+        with self.assertRaises(RunError):
+            get_local_changes('main', '/ws')
+
+    @mock.patch('git_p4son.git.run')
+    def test_unknown_status(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=b'X\0unknown.txt\0')
+        with self.assertRaises(CommandError):
+            get_local_changes('main', '/ws')
+
+
+class TestGetLocalChangesInRepo(unittest.TestCase):
+    def test_changes_on_the_base_branch_since_the_fork_are_left_out(self):
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+
+            def write(name):
+                with open(os.path.join(ws, name), 'w') as f:
+                    f.write(name)
+
+            git('init', '-b', 'main')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            git('commit', '--allow-empty', '-m', 'base')
+            git('switch', '-c', 'feat')
+            write('feature.txt')
+            git('add', '.')
+            git('commit', '-m', 'feature')
+            git('switch', 'main')
+            write('upstream.txt')
+            git('add', '.')
+            git('commit', '-m', 'upstream')
+            git('switch', 'feat')
+
+            changes = get_local_changes('main', ws)
+
+        self.assertEqual(changes.adds, ['feature.txt'])
+        self.assertEqual(changes.dels, [])
+
+    def test_non_ascii_filename_returned_verbatim(self):
+        """Non-ASCII filenames are returned verbatim, not C-quoted."""
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+            git('init')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            git('commit', '--allow-empty', '-m', 'base')
+            base = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=ws,
+                capture_output=True, text=True, check=True).stdout.strip()
+            with open(os.path.join(ws, 'bäck.txt'), 'w') as f:
+                f.write('content')
+            git('add', '.')
+            git('commit', '-m', 'add file')
+
+            changes = get_local_changes(base, ws)
+
+        self.assertEqual(changes.adds, ['bäck.txt'])
+
+    def test_special_characters_returned_verbatim(self):
+        """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
+        names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']
+        with tempfile.TemporaryDirectory() as ws:
+            def git(*args):
+                subprocess.run(['git', *args], cwd=ws,
+                               capture_output=True, check=True)
+            git('init')
+            git('config', 'user.email', 't@t')
+            git('config', 'user.name', 'T')
+            with open(os.path.join(ws, 'old.txt'), 'w') as f:
+                f.write('content to rename\n' * 10)
+            git('add', '.')
+            git('commit', '-m', 'base')
+            base = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=ws,
+                capture_output=True, text=True, check=True).stdout.strip()
+            for name in names:
+                with open(os.path.join(ws, name), 'w') as f:
+                    f.write(name)
+            git('mv', 'old.txt', 'new "name".txt')
+            git('add', '.')
+            git('commit', '-m', 'add files')
+
+            changes = get_local_changes(base, ws)
+
+        self.assertEqual(sorted(changes.adds), sorted(names))
+        self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])
 
 
 if __name__ == '__main__':

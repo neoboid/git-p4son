@@ -73,10 +73,13 @@ def start_patch(test, target, **kwargs):
 
 
 def init_git_repo(path: str) -> None:
-    """Make path a git repository on branch main, with a committer configured."""
+    """Make path a git repository on branch main, with a committer configured and no automatic maintenance."""
+    # No background maintenance after commits: it races with copying a built workspace.
     for args in (['init', '-q', '-b', 'main'],
                  ['config', 'user.email', 'test@example.com'],
-                 ['config', 'user.name', 'Test']):
+                 ['config', 'user.name', 'Test'],
+                 ['config', 'maintenance.auto', 'false'],
+                 ['config', 'gc.auto', '0']):
         subprocess.run(['git', *args], cwd=path, capture_output=True,
                        check=True)
 

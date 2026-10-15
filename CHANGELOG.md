@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-- The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when
   drafting a CL description, so agents read the instructions before preparing a changelist. Run `skill install`
   again to update an installed skill
+- Add support for colocated jj workspaces (jj 0.41 or newer). `new`, `update` and `list-changes` work on the jj
+  change, taking the alias from its bookmark and the message from its description, and keep the working files as
+  they are around Perforce reverts. `sync` moves its bookmark to each sync commit; `--bookmark` picks one when the
+  parent has several. git-p4son holds jj's working-copy lock while it runs. The global `--ignore-jj` flag uses the
+  git workflow instead, which `review` and `update --per-commit` need
 
 ## 0.6.0
 

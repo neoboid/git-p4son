@@ -1,3 +1,8 @@
 #!/bin/sh
 echo "Running tests before push..."
-python -m pytest tests/ -q
+# Run the tests in parallel when pytest-xdist is installed.
+parallel=
+if python -c 'import xdist' 2>/dev/null; then
+    parallel='-n auto --maxprocesses 8'
+fi
+python -m pytest tests/ -q $parallel

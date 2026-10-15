@@ -20,8 +20,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e . && pip install pytest
-      - run: python -m pytest tests/
+      - run: pip install -e . && pip install pytest pytest-xdist
+      - run: python -m pytest tests/ -n auto
 
   publish:
     needs: test

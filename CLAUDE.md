@@ -12,7 +12,7 @@ local development.
 
 ```bash
 # Install in development mode, with the test and format tools
-pip install -e . pytest autopep8
+pip install -e . pytest pytest-xdist autopep8
 
 # Point git at the repo's hooks: pre-commit checks autopep8, pre-push runs the tests
 scripts/setup-hooks.sh
@@ -26,8 +26,11 @@ The project has zero external dependencies (standard library only). Python 3.11+
 
 Run tests with:
 ```bash
-python -m pytest tests/
+python -m pytest tests/ -n auto --maxprocesses 8
 ```
+
+The tests are isolated in temporary directories, so they run in parallel with `pytest-xdist`; without it, drop the
+`-n` options.
 
 Format code with `autopep8`:
 ```bash

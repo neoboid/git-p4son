@@ -10,8 +10,10 @@ from unittest import mock
 from git_p4son.perforce import ClobberMode, P4SyncPreviewFile
 from git_p4son.sync_merge import (
     ChangedFile,
+    WritableSyncFileSet,
     merge_changed_files,
     prepare_writable_files,
+    report_not_synced,
 )
 from tests.helpers import preview_update
 
@@ -689,6 +691,41 @@ class TestMergeChangedFiles(unittest.TestCase):
             self.assertTrue(empty_path.startswith(self.temp_root))
             with open(empty_path, 'rb') as f:
                 self.assertEqual(f.read(), b'')
+
+
+class TestMergeDeletedLocally(unittest.TestCase):
+    @mock.patch('git_p4son.sync_merge.log')
+    def test_file_deleted_locally_keeps_the_perforce_version(self, mock_log):
+        with tempfile.TemporaryDirectory() as ws, \
+                tempfile.TemporaryDirectory() as temp_root:
+            path = os.path.join(ws, 'a.cpp')
+            with open(path, 'w') as f:
+                f.write('from perforce')
+            merge_changed_files(
+                [ChangedFile(filepath=path, base_commit='abc', ours_path=None,
+                             base_path=None)], ws, temp_root)
+            with open(path) as f:
+                self.assertEqual(f.read(), 'from perforce')
+        mock_log.warning.assert_any_call(
+            '1 file deleted locally but modified in Perforce')
+
+
+@mock.patch('git_p4son.sync_merge.log')
+class TestReportNotSynced(unittest.TestCase):
+    def test_clobber_lists_the_ignored_files_p4_overwrote(self, mock_log):
+        preps = [WritableSyncFileSet(ignored=['/ws/b.log', '/ws/a.log']),
+                 WritableSyncFileSet(ignored=['/ws/a.log'])]
+        report_not_synced(preps, ClobberMode.CLOBBER, '/ws')
+        mock_log.heading.assert_called_once_with(
+            'Git-ignored writable files overwritten by p4 (clobber enabled)')
+        self.assertEqual([c.args[0] for c in mock_log.info.call_args_list],
+                         ['a.log', 'b.log'])
+        mock_log.warning.assert_called_once_with('2 files overwritten')
+
+    def test_nothing_to_report_prints_nothing(self, mock_log):
+        report_not_synced([WritableSyncFileSet()],
+                          ClobberMode.NOCLOBBER, '/ws')
+        mock_log.heading.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -173,11 +173,12 @@ class LocalChanges:
     moves: list[tuple[str, str]] = field(default_factory=list)
 
 
-def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
-    """Get local git changes between base_branch and HEAD."""
-    # ...HEAD diffs from the merge base, so changes on base_branch since the fork are left out.
+def get_local_changes(base_branch: str, workspace_dir: str,
+                      revision: str = 'HEAD') -> LocalChanges:
+    """Get local git changes between base_branch and revision."""
+    # ... diffs from the merge base, so changes on base_branch since the fork are left out.
     # -z: paths verbatim, not C-quoted, as "<status>\0<path>\0", with a second path for renames and copies.
-    res = run(['git', 'diff', '--name-status', '-z', f'{base_branch}...HEAD'],
+    res = run(['git', 'diff', '--name-status', '-z', f'{base_branch}...{revision}'],
               cwd=workspace_dir, text=False)
 
     changes = LocalChanges()
@@ -205,37 +206,43 @@ def get_local_changes(base_branch: str, workspace_dir: str) -> LocalChanges:
 
 # --- log ---
 
-def get_commit_lines_since(base_branch: str, workspace_dir: str) -> list[str]:
+def get_commit_lines_since(base_branch: str, workspace_dir: str,
+                           revision: str = 'HEAD') -> list[str]:
     """Return "<short sha> <subject>" lines for the non-merge commits since base_branch, oldest first."""
     # Not --oneline: log.decorate config would prepend "(HEAD -> branch)" to subjects.
     res = run(['git', 'log', '--format=%h %s', '--no-decorate',
                '--reverse', '--no-merges',
-               f'{base_branch}..HEAD'], cwd=workspace_dir)
+               f'{base_branch}..{revision}'], cwd=workspace_dir)
     return res.stdout
 
 
-def get_commit_subjects_since(base_branch: str, workspace_dir: str) -> list[str]:
+def get_commit_subjects_since(base_branch: str, workspace_dir: str,
+                              revision: str = 'HEAD') -> list[str]:
     """Return the subjects of the non-merge commits since base_branch, oldest first."""
     return [line.split(' ', 1)[-1]
-            for line in get_commit_lines_since(base_branch, workspace_dir)]
+            for line in get_commit_lines_since(base_branch, workspace_dir, revision)]
 
 
 # --- tracking ---
 
-def get_tracked_files(filepaths: list[str], workspace_dir: str) -> set[str]:
-    """Return the subset of filepaths that are tracked by git."""
+def get_tracked_files(filepaths: list[str], workspace_dir: str,
+                      revision: str | None = None) -> set[str]:
+    """Return the subset of filepaths that git tracks, in the index or else in revision."""
     if not filepaths:
         return set()
-    # One listing of the index; pathspecs make git match every entry against every path.
-    tracked = set(list_tracked_files(workspace_dir))
+    # One listing; pathspecs make git match every entry against every path.
+    tracked = set(list_tracked_files(workspace_dir, revision))
     return {filepath for filepath in filepaths
             if normalize_workspace_path(filepath, workspace_dir) in tracked}
 
 
-def list_tracked_files(workspace_dir: str) -> list[str]:
-    """Return every file tracked by git, as repo-relative slash paths."""
+def list_tracked_files(workspace_dir: str,
+                       revision: str | None = None) -> list[str]:
+    """Return every file git tracks, in the index or else in revision, as repo-relative slash paths."""
     # -z: non-ASCII paths verbatim, not C-quoted.
-    result = run(['git', 'ls-files', '-z'], cwd=workspace_dir, text=False)
+    command = (['git', 'ls-files', '-z'] if revision is None
+               else ['git', 'ls-tree', '-r', '--name-only', '-z', revision])
+    result = run(command, cwd=workspace_dir, text=False)
     return _nul_fields(result.stdout)
 
 

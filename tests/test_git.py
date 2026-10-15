@@ -191,6 +191,34 @@ class TestListTrackedFiles(GitRepoTestCase):
         self.assertEqual(list_tracked_files(self.ws), [])
 
 
+class TestRevision(GitRepoTestCase):
+    """Reading the change from a revision that is not HEAD, as in a jj workspace."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.base, self.tip = self.commit_history(
+            ('base', {'a.txt': 'a', 'b.txt': 'b'}),
+            ('change', {'a.txt': 'a2', 'b.txt': None, 'c.txt': 'c'}))
+        self.git('reset', '-q', '--hard', self.base)
+
+    def test_local_changes(self):
+        changes = get_local_changes(self.base, self.ws, self.tip)
+        self.assertEqual((changes.adds, changes.mods, changes.dels),
+                         (['c.txt'], ['a.txt'], ['b.txt']))
+
+    def test_commit_subjects(self):
+        self.assertEqual(
+            get_commit_subjects_since(self.base, self.ws, self.tip), ['change'])
+
+    def test_tracked_files_come_from_the_revision_not_the_index(self):
+        self.assertEqual(sorted(list_tracked_files(self.ws, self.tip)),
+                         ['a.txt', 'c.txt'])
+        self.assertEqual(sorted(list_tracked_files(self.ws)),
+                         ['a.txt', 'b.txt'])
+        self.assertEqual(
+            get_tracked_files(['b.txt', 'c.txt'], self.ws, self.tip), {'c.txt'})
+
+
 class TestGetFilesAtCommits(GitRepoTestCase):
     def test_reads_every_pair_in_one_call(self):
         self.write_file('foo.txt', 'version 1')

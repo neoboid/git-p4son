@@ -1,6 +1,7 @@
 """Tests for git_p4son.lib module."""
 
 import os
+import stat
 import unittest
 from unittest import mock
 
@@ -681,6 +682,53 @@ class TestBatchedActions(unittest.TestCase):
                             for c in mock_run.call_args_list))
 
 
+class TestKeepWorkingFiles(WorkspaceTestCase):
+    """A file p4 revert overwrites gets git's version back, or with keep_working_files its working version."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_file('a.txt', 'working')
+        self.restore = start_patch(self, 'git_p4son.lib.restore_files')
+        start_patch(self, 'git_p4son.lib._warn_unopened')
+        start_patch(self, 'git_p4son.lib.get_opened_files',
+                    return_value={'a.txt': ('100', 'delete')})
+        start_patch(self, 'git_p4son.perforce.run', side_effect=self._p4)
+
+    def _p4(self, command, dry_run=False, **kwargs):
+        if 'revert' in command and not dry_run:
+            path = os.path.join(self.ws, 'a.txt')
+            with open(path, 'w') as f:
+                f.write('depot')
+            os.chmod(path, stat.S_IRUSR)
+        return make_run_result()
+
+    def _include(self, keep, dry_run=False):
+        changes = LocalChanges()
+        changes.mods = ['a.txt']
+        with captured_output() as out:
+            include_changes_in_changelist(changes, '100', self.ws, dry_run,
+                                          keep_working_files=keep)
+        return out.getvalue()
+
+    def _read(self):
+        with open(os.path.join(self.ws, 'a.txt')) as f:
+            return f.read()
+
+    def test_restores_git_version(self):
+        self._include(keep=False)
+        self.restore.assert_called_once_with(['a.txt'], self.ws, False)
+
+    def test_keeps_the_working_file(self):
+        self._include(keep=True)
+        self.restore.assert_not_called()
+        self.assertEqual(self._read(), 'working')
+
+    def test_dry_run_says_what_it_would_put_back(self):
+        out = self._include(keep=True, dry_run=True)
+        self.assertIn('Would put back 1 working file', out)
+        self.assertEqual(self._read(), 'working')
+
+
 class TestRevertUnchangedFiles(WorkspaceTestCase):
     """The tracked/untracked boundary decides what may be reverted."""
 
@@ -805,6 +853,17 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
             os.path.join(self.ws, 'a.txt'),
             os.path.join(self.ws, 'c.txt'),
         ])
+
+    def test_revision_keeps_the_working_files(self):
+        self._setup([('c.txt', 'delete')], ['c.txt'], ['c.txt'])
+        self.mocks['revert'].side_effect = lambda files, ws, dry_run: (
+            open(os.path.join(ws, 'c.txt'), 'w').write('depot'))
+        revert_unchanged_files('100', self.ws, dry_run=False, revision='abc')
+        self.mocks['tracked'].assert_called_once_with(
+            ['c.txt'], self.ws, 'abc')
+        self.mocks['restore'].assert_not_called()
+        with open(os.path.join(self.ws, 'c.txt')) as f:
+            self.assertEqual(f.read(), 'content')
 
     def test_writable_mode_off_leaves_permissions(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])

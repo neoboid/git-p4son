@@ -31,12 +31,11 @@ FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': ('101', 'delete'),
 class UpdateTestCase(P4RepoTestCase):
     """update of CL 101, which new created for the two commits on branch feature."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.commit_feature()
         self.run_command(
             new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main'])
-        self.p4.calls.clear()
 
     def update(self, *argv):
         """Run update of CL 101 with argv; returns everything it printed."""
@@ -150,12 +149,15 @@ class TestStepCommand(unittest.TestCase):
 class TestUpdatePerCommit(GitRepoTestCase):
     """update --per-commit of the two commits on branch feature, which needs no Perforce until the rebase runs."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.commit('Base')
         self.git('switch', '-q', '-c', 'feature')
         self.commit('First commit')
         self.commit('Second commit')
+
+    def setUp(self):
+        super().setUp()
         self.rebases = fake_rebase(self)
 
     def update(self, *argv):

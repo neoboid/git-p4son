@@ -20,8 +20,8 @@ FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': ('101', 'delete'),
 class NewTestCase(P4RepoTestCase):
     """new on branch feature, two commits on from main."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.commit_feature()
 
     def new(self, *argv, **overrides):

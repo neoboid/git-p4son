@@ -269,8 +269,8 @@ class TestShouldSplit(unittest.TestCase):
 class SyncTestCase(P4RepoTestCase):
     """sync against a real git repository and a scripted Perforce depot."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.write_config('[depot]\nroot = "//myclient"\n')
 
     def sync(self, *argv):

@@ -15,11 +15,7 @@ from git_p4son.alias import (
     alias_show_command,
 )
 from git_p4son.common import CommandError
-from tests.helpers import WorkspaceTestCase
-
-
-def _args(workspace_dir='/ws'):
-    return mock.Mock(workspace_dir=workspace_dir)
+from tests.helpers import cli_args, WorkspaceTestCase
 
 
 ALIASES = [('feature-a', '100'), ('feature-b', '200'), ('feature-c', '300')]
@@ -30,7 +26,7 @@ class TestAliasShowCommand(unittest.TestCase):
     def test_prints_only_the_changelist(self, mock_load):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             rc = alias_show_command(
-                mock.Mock(workspace_dir='/ws', alias='feature-a'))
+                cli_args(['alias', 'show', 'feature-a']))
         self.assertEqual(rc, 0)
         self.assertEqual(out.getvalue(), '100\n')
         mock_load.assert_called_once_with('feature-a', '/ws')
@@ -39,7 +35,8 @@ class TestAliasShowCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as ws, \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             with self.assertRaisesRegex(CommandError, 'No changelist alias found'):
-                alias_show_command(mock.Mock(workspace_dir=ws, alias='nope'))
+                alias_show_command(
+                    cli_args(['alias', 'show', 'nope'], workspace_dir=ws))
         self.assertEqual(out.getvalue(), '')
 
 
@@ -48,7 +45,7 @@ class TestAliasShowCommand(unittest.TestCase):
 class TestAliasDeleteCommand(unittest.TestCase):
     def test_deletes_named_alias(self, mock_list, mock_delete):
         rc = alias_delete_command(
-            mock.Mock(workspace_dir='/ws', alias='feature-b', all=False))
+            cli_args(['alias', 'delete', 'feature-b']))
         self.assertEqual(rc, 0)
         mock_delete.assert_called_once_with('feature-b', '/ws')
         mock_list.assert_not_called()
@@ -57,7 +54,7 @@ class TestAliasDeleteCommand(unittest.TestCase):
             self, _list, mock_delete):
         with mock.patch('builtins.input') as mock_input:
             rc = alias_delete_command(
-                mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+                cli_args(['alias', 'delete', '--all']))
         self.assertEqual(rc, 0)
         mock_input.assert_not_called()
         self.assertEqual(
@@ -69,7 +66,7 @@ class TestAliasDeleteCommand(unittest.TestCase):
                                               mock_delete):
         mock_delete.side_effect = [None, CommandError('boom'), None]
         rc = alias_delete_command(
-            mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+            cli_args(['alias', 'delete', '--all']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_delete.call_count, 3)
         mock_log.error.assert_called_once_with('boom')
@@ -77,7 +74,7 @@ class TestAliasDeleteCommand(unittest.TestCase):
     def test_all_without_aliases(self, mock_list, mock_delete):
         mock_list.return_value = []
         rc = alias_delete_command(
-            mock.Mock(workspace_dir='/ws', alias='branch', all=True))
+            cli_args(['alias', 'delete', '--all']))
         self.assertEqual(rc, 0)
         mock_delete.assert_not_called()
 
@@ -88,27 +85,27 @@ class TestAliasCleanCommand(unittest.TestCase):
     def test_no_aliases_does_not_prompt(self, mock_list, mock_delete):
         mock_list.return_value = []
         with mock.patch('builtins.input') as mock_input:
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         mock_input.assert_not_called()
         mock_delete.assert_not_called()
 
     def test_quit_deletes_nothing(self, _list, mock_delete):
         with mock.patch('builtins.input', return_value='q'):
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         mock_delete.assert_not_called()
 
     def test_eof_deletes_nothing(self, _list, mock_delete):
         with mock.patch('builtins.input', side_effect=EOFError):
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         mock_delete.assert_not_called()
 
     def test_all_deletes_everything_without_more_prompts(
             self, _list, mock_delete):
         with mock.patch('builtins.input', return_value='a') as mock_input:
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_input.call_count, 1)
         self.assertEqual(
@@ -119,14 +116,14 @@ class TestAliasCleanCommand(unittest.TestCase):
 
     def test_full_words_accepted(self, _list, mock_delete):
         with mock.patch('builtins.input', return_value='all'):
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_delete.call_count, 3)
 
     def test_invalid_mode_reprompts(self, _list, mock_delete):
         with mock.patch('builtins.input',
                         side_effect=['x', '', 'quit']) as mock_input:
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_input.call_count, 3)
         mock_delete.assert_not_called()
@@ -134,7 +131,7 @@ class TestAliasCleanCommand(unittest.TestCase):
     def test_interactive_yes_no_quit(self, _list, mock_delete):
         with mock.patch('builtins.input',
                         side_effect=['i', 'y', 'n', 'q']):
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         mock_delete.assert_called_once_with('feature-a', '/ws')
 
@@ -142,7 +139,7 @@ class TestAliasCleanCommand(unittest.TestCase):
         """Answering no to the aliases worth keeping, then all, sweeps the rest without prompts."""
         with mock.patch('builtins.input',
                         side_effect=['i', 'n', 'a']) as mock_input:
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_input.call_count, 3)
         self.assertEqual(
@@ -152,7 +149,7 @@ class TestAliasCleanCommand(unittest.TestCase):
 
     def test_interactive_eof_aborts(self, _list, mock_delete):
         with mock.patch('builtins.input', side_effect=['i', 'y', EOFError]):
-            rc = alias_clean_command(_args())
+            rc = alias_clean_command(cli_args(['alias', 'clean']))
         self.assertEqual(rc, 0)
         mock_delete.assert_called_once_with('feature-a', '/ws')
 
@@ -161,13 +158,14 @@ class TestAliasNewAndList(WorkspaceTestCase):
     """alias new and alias list against a real alias store."""
 
     def _new(self, changelist, alias, force=False):
-        return alias_new_command(mock.Mock(workspace_dir=self.ws,
-                                           changelist=changelist, alias=alias,
-                                           force=force))
+        return alias_new_command(cli_args(
+            ['alias', 'new', changelist, alias] + (['-f'] if force else []),
+            workspace_dir=self.ws))
 
     def _list(self):
         with mock.patch('git_p4son.alias.log') as mock_log:
-            alias_list_command(mock.Mock(workspace_dir=self.ws))
+            alias_list_command(
+                cli_args(['alias', 'list'], workspace_dir=self.ws))
         return [c.args[0] for c in mock_log.info.call_args_list]
 
     def test_new_aliases_are_listed_in_name_order(self):

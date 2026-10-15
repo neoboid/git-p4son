@@ -5,6 +5,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError
 from git_p4son.update import _step_command, update_command
+from tests.helpers import cli_args
 
 
 def _args(**overrides):
@@ -13,7 +14,7 @@ def _args(**overrides):
                     shelve=False, message=None, no_commit_list=False,
                     file=None, per_commit=False)
     defaults.update(overrides)
-    return mock.Mock(**defaults)
+    return cli_args(['update'], **defaults)
 
 
 class TestUpdateCommandCleanWorkspace(unittest.TestCase):

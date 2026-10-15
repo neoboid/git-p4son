@@ -168,6 +168,43 @@ class GitRepoTestCase(WorkspaceTestCase):
         return subprocess.run(['git', *args], cwd=self.ws, capture_output=True,
                               text=True, check=check).stdout.strip()
 
+    def commit_history(self, *commits):
+        """Commit each (message, {path: content, or None to delete}) on top of HEAD; returns the new commits.
+
+        One git fast-import writes them all, then the index and working tree are reset to the last."""
+        with open(os.path.join(self.ws, '.git', 'HEAD')) as f:
+            ref = f.read().split()[-1]
+        parent = self.git('rev-parse', '-q', '--verify', 'HEAD', check=False)
+        stream = []
+
+        def data(text):
+            encoded = text.encode()
+            stream.append(b'data %d\n' % len(encoded) + encoded + b'\n')
+
+        for mark, (message, files) in enumerate(commits, 1):
+            stream.append(f'commit {ref}\nmark :{mark}\n'
+                          f'committer Test <test@example.com> {mark} +0000\n'.encode())
+            data(message)
+            if mark == 1 and parent:
+                stream.append(f'from {parent}\n'.encode())
+            for path, content in files.items():
+                # fast-import reads C-style quoted paths.
+                quoted = '"' + path.replace('\\', '\\\\').replace('"', '\\"').replace(
+                    '\t', '\\t').replace('\n', '\\n') + '"'
+                if content is None:
+                    stream.append(f'D {quoted}\n'.encode())
+                else:
+                    stream.append(f'M 100644 inline {quoted}\n'.encode())
+                    data(content)
+        with tempfile.TemporaryDirectory() as tempdir:
+            marks = os.path.join(tempdir, 'marks')
+            subprocess.run(['git', 'fast-import', '--quiet', f'--export-marks={marks}'],
+                           cwd=self.ws, input=b''.join(stream), check=True)
+            with open(marks) as f:
+                commit_by_mark = dict(line.split() for line in f)
+        self.git('reset', '-q', '--hard')
+        return [commit_by_mark[f':{mark}'] for mark in range(1, len(commits) + 1)]
+
     def commit(self, message='test commit'):
         """Stage everything and commit it; returns the new commit."""
         self.git('add', '-A')

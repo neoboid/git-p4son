@@ -289,128 +289,84 @@ class TestGetHeadCommit(GitRepoTestCase):
         self.assertTrue(all(c in '0123456789abcdef' for c in sha))
 
 
+SYNC_100 = 'git-p4son: p4 sync //ws/...@100'
+SYNC_200 = 'git-p4son: p4 sync //ws/...@200'
+
+
 class TestFindBaseCommits(GitRepoTestCase):
-    def _rev_parse(self, ref='HEAD'):
-        return self.git('rev-parse', ref)
-
     def test_returns_most_recent_sync_commit_touching_file(self):
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        self.write_file('a.cpp', 'X2')
-        self.commit('git-p4son: p4 sync //ws/...@200')
-        s1 = self._rev_parse()
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s1})
-        self.assertNotEqual(s0, s1)
+        _, s1 = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                    (SYNC_200, {'a.cpp': 'X2'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s1})
 
     def test_skips_sync_commits_that_did_not_touch_file(self):
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        self.write_file('b.cpp', 'B')
-        self.commit('git-p4son: p4 sync //ws/...@200')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s0})
+        s0, _ = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                    (SYNC_200, {'b.cpp': 'B'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s0})
 
     def test_skips_user_commits_that_touched_file(self):
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        self.write_file('a.cpp', 'Y')
-        self.commit('user: my local edit')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s0})
+        s0, _ = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                    ('user: my local edit', {'a.cpp': 'Y'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s0})
 
     def test_falls_back_to_introducing_commit(self):
         """Files never touched by a sync commit fall back to the commit that added them."""
-        self.write_file('a.cpp', 'X')
-        self.commit('initial bulk import')
-        s0 = self._rev_parse()
-        self.write_file('a.cpp', 'Y')
-        self.commit('user: modify a.cpp')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s0})
+        s0, _ = self.commit_history(('initial bulk import', {'a.cpp': 'X'}),
+                                    ('user: modify a.cpp', {'a.cpp': 'Y'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s0})
 
     def test_fallback_is_most_recent_add_when_readded(self):
         """A deleted and re-added file falls back to its most recent add."""
-        self.write_file('a.cpp', 'X')
-        self.commit('add a.cpp')
-        os.remove(os.path.join(self.ws, 'a.cpp'))
-        self.commit('delete a.cpp')
-        self.write_file('a.cpp', 'Z')
-        self.commit('readd a.cpp')
-        s_readd = self._rev_parse()
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s_readd})
+        *_, s_readd = self.commit_history(('add a.cpp', {'a.cpp': 'X'}),
+                                          ('delete a.cpp', {'a.cpp': None}),
+                                          ('readd a.cpp', {'a.cpp': 'Z'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s_readd})
 
     def test_sync_commit_wins_over_more_recent_add(self):
         """A sync commit touching the file wins over a later re-add by a user commit."""
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        os.remove(os.path.join(self.ws, 'a.cpp'))
-        self.commit('user: delete a.cpp')
-        self.write_file('a.cpp', 'Z')
-        self.commit('user: readd a.cpp')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s0})
+        s0, *_ = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                     ('user: delete a.cpp', {'a.cpp': None}),
+                                     ('user: readd a.cpp', {'a.cpp': 'Z'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s0})
 
     def test_returns_none_when_file_not_in_history(self):
-        self.write_file('b.cpp', 'B')
-        self.commit('add b.cpp')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': None})
+        self.commit_history(('add b.cpp', {'b.cpp': 'B'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': None})
 
     def test_respects_before_commit_bound(self):
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        self.write_file('a.cpp', 'X2')
-        self.commit('git-p4son: p4 sync //ws/...@200')
-
-        # Looking from s0 should not see the later sync commit.
-        result = find_base_commits(['a.cpp'], s0, self.ws)
-        self.assertEqual(result, {'a.cpp': s0})
+        """Looking from an earlier commit does not see the later sync commit."""
+        s0, _ = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                    (SYNC_200, {'a.cpp': 'X2'}))
+        self.assertEqual(find_base_commits(['a.cpp'], s0, self.ws),
+                         {'a.cpp': s0})
 
     def test_backslash_paths_keyed_by_input(self):
-        self.write_file('src/engine/test.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-
-        result = find_base_commits(
-            ['src\\engine\\test.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'src\\engine\\test.cpp': s0})
+        s0, = self.commit_history((SYNC_100, {'src/engine/test.cpp': 'X'}))
+        self.assertEqual(
+            find_base_commits(['src\\engine\\test.cpp'], 'HEAD', self.ws),
+            {'src\\engine\\test.cpp': s0})
 
     def test_non_ascii_paths_match(self):
         """Paths git would C-quote in --name-status output still match."""
-        self.write_file('bäck.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-
-        result = find_base_commits(['bäck.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'bäck.cpp': s0})
+        s0, = self.commit_history((SYNC_100, {'bäck.cpp': 'X'}))
+        self.assertEqual(find_base_commits(['bäck.cpp'], 'HEAD', self.ws),
+                         {'bäck.cpp': s0})
 
     def test_paths_git_would_c_quote_match(self):
         """Quotes and tabs come back verbatim, not as "we\\"ird.cpp"."""
         names = ['we"ird.cpp', 'tab\tname.cpp']
-        for name in names:
-            self.write_file(name, 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s0 = self._rev_parse()
-        for name in names:
-            self.write_file(name, 'local')
-        self.commit('local change')
-
-        result = find_base_commits(names, 'HEAD', self.ws)
-        self.assertEqual(result, {name: s0 for name in names})
+        s0, _ = self.commit_history(
+            (SYNC_100, dict.fromkeys(names, 'X')),
+            ('local change', dict.fromkeys(names, 'local')))
+        self.assertEqual(find_base_commits(names, 'HEAD', self.ws),
+                         dict.fromkeys(names, s0))
 
     @mock.patch('git_p4son.git.run')
     def test_commit_without_file_entries_is_skipped(self, mock_run):
@@ -421,13 +377,8 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(result, {'a.cpp': 's1'})
 
     def test_multiple_files_resolved_in_one_walk(self):
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s_sync = self._rev_parse()
-        self.write_file('b.cpp', 'B')
-        self.commit('user: add b.cpp')
-        s_add = self._rev_parse()
-
+        s_sync, s_add = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                            ('user: add b.cpp', {'b.cpp': 'B'}))
         result = find_base_commits(
             ['a.cpp', 'b.cpp', 'missing.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s_sync,
@@ -436,13 +387,8 @@ class TestFindBaseCommits(GitRepoTestCase):
 
     def test_one_walk_for_any_number_of_paths(self):
         """All paths go on stdin, so a single git log call resolves them all."""
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s_sync = self._rev_parse()
-        self.write_file('b.cpp', 'B')
-        self.commit('user: add b.cpp')
-        s_add = self._rev_parse()
-
+        s_sync, s_add = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                            ('user: add b.cpp', {'b.cpp': 'B'}))
         missing = [f'missing/file{i}.cpp' for i in range(5000)]
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -458,14 +404,11 @@ class TestFindBaseCommits(GitRepoTestCase):
 
     def test_only_git_p4son_sync_subjects_are_baselines(self):
         """A commit whose subject merely looks like a sync is not a baseline."""
-        self.write_file('a.cpp', 'X')
-        self.commit('git-p4son: p4 sync //ws/...@100')
-        s_sync = self._rev_parse()
-        self.write_file('a.cpp', 'Y')
-        self.commit('other: p4 sync //ws/...@200')
-
-        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
-        self.assertEqual(result, {'a.cpp': s_sync})
+        s_sync, _ = self.commit_history(
+            (SYNC_100, {'a.cpp': 'X'}),
+            ('other: p4 sync //ws/...@200', {'a.cpp': 'Y'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': s_sync})
 
     def test_empty_input(self):
         self.assertEqual(find_base_commits([], 'HEAD', self.ws), {})

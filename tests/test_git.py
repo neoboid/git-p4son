@@ -247,13 +247,9 @@ class TestGetBlobOids(GitRepoTestCase):
 
     def test_resolves_all_pairs_in_one_call(self):
         """Mixed commits, equal and changed content and missing files resolve in one call."""
-        self.write_file('foo.txt', 'version 1')
-        self.write_file('copy.txt', 'version 1')
-        first_sha = self.commit('first')
-
-        self.write_file('foo.txt', 'version 2')
-        self.commit('second')
-
+        first_sha, _ = self.commit_history(
+            ('first', {'foo.txt': 'version 1', 'copy.txt': 'version 1'}),
+            ('second', {'foo.txt': 'version 2'}))
         oids = get_blob_oids([
             (first_sha, 'foo.txt'),
             (first_sha, 'copy.txt'),
@@ -905,11 +901,11 @@ class TestGetLocalChangesInRepo(GitRepoTestCase):
 
     def test_non_ascii_filename_returned_verbatim(self):
         """Non-ASCII filenames are returned verbatim, not C-quoted."""
-        base = self.commit('base')
+        self.commit('base')
         self.write_file('bäck.txt', 'content')
         self.commit('add file')
 
-        changes = get_local_changes(base, self.ws)
+        changes = get_local_changes('HEAD~1', self.ws)
 
         self.assertEqual(changes.adds, ['bäck.txt'])
 
@@ -917,13 +913,13 @@ class TestGetLocalChangesInRepo(GitRepoTestCase):
         """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
         names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']
         self.write_file('old.txt', 'content to rename\n' * 10)
-        base = self.commit('base')
+        self.commit('base')
         for name in names:
             self.write_file(name, name)
         self.git('mv', 'old.txt', 'new "name".txt')
         self.commit('add files')
 
-        changes = get_local_changes(base, self.ws)
+        changes = get_local_changes('HEAD~1', self.ws)
 
         self.assertEqual(sorted(changes.adds), sorted(names))
         self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])

@@ -657,8 +657,8 @@ class TestGetCurrentBranch(unittest.TestCase):
         result = get_current_branch('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
-    def test_exception_returns_none(self, mock_run):
+    @mock.patch('git_p4son.git.run', side_effect=OSError('git not found'))
+    def test_missing_git_returns_none(self, mock_run):
         result = get_current_branch('/ws')
         self.assertIsNone(result)
 
@@ -685,8 +685,8 @@ class TestGetHeadSubject(unittest.TestCase):
         result = get_head_subject('/ws')
         self.assertIsNone(result)
 
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
-    def test_exception_returns_none(self, mock_run):
+    @mock.patch('git_p4son.git.run', side_effect=OSError('git not found'))
+    def test_missing_git_returns_none(self, mock_run):
         result = get_head_subject('/ws')
         self.assertIsNone(result)
 

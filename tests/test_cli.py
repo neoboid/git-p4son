@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.cli import create_parser, run_command, _resolve_branch_keyword
-from git_p4son.common import CommandError
+from git_p4son.cli import create_parser, main, run_command, _resolve_branch_keyword
+from git_p4son.common import CommandError, RunError
 from git_p4son.git import get_head_subject
 from git_p4son.log import log
 
@@ -504,6 +504,43 @@ class TestCommandsWithoutWorkspace(unittest.TestCase):
                 '^No skill action specified. Use "git-p4son skill -h" for help.$'):
             run_command(args)
         mock_ws.assert_not_called()
+
+
+@mock.patch('sys.argv', ['git-p4son', 'list-changes'])
+class TestMain(unittest.TestCase):
+    """main turns what run_command raises into error lines and an exit code."""
+
+    def _main(self, side_effect):
+        with mock.patch('git_p4son.cli.run_command', side_effect=side_effect), \
+                contextlib.redirect_stderr(io.StringIO()) as err, \
+                contextlib.redirect_stdout(io.StringIO()):
+            rc = main()
+        return rc, err.getvalue()
+
+    def test_success_returns_the_command_exit_code(self):
+        self.assertEqual(self._main([0])[0], 0)
+
+    def test_run_error_prints_stderr_and_passes_on_the_return_code(self):
+        rc, err = self._main(RunError('p4 sync', returncode=4,
+                                      stderr=['p4: boom']))
+        self.assertEqual(rc, 4)
+        self.assertIn('p4: boom', err)
+        self.assertIn('Process failed with return code 4', err)
+
+    def test_command_error_prints_its_message_and_return_code(self):
+        rc, err = self._main(CommandError('Nope', returncode=3))
+        self.assertEqual(rc, 3)
+        self.assertIn('Nope', err)
+
+    def test_ctrl_c_is_reported_as_cancelled(self):
+        rc, err = self._main(KeyboardInterrupt())
+        self.assertEqual(rc, 1)
+        self.assertIn('Operation cancelled by user', err)
+
+    def test_unexpected_error_prints_its_message(self):
+        rc, err = self._main(ValueError('weird'))
+        self.assertEqual(rc, 1)
+        self.assertIn('weird', err)
 
 
 if __name__ == '__main__':

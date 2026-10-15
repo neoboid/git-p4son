@@ -480,5 +480,16 @@ class TestRunError(unittest.TestCase):
         self.assertEqual(e.stderr, [])
 
 
+class TestRunWithStreamOutputFailure(unittest.TestCase):
+    def test_non_zero_exit_raises_run_error_with_stderr(self):
+        code = 'import sys; print("cannot clobber", file=sys.stderr); sys.exit(2)'
+        with mock.patch('git_p4son.common.log'), \
+                self.assertRaises(RunError) as raised:
+            run_with_stream_output([sys.executable, '-c', code],
+                                   lambda line, stream: None)
+        self.assertEqual(raised.exception.returncode, 2)
+        self.assertEqual(raised.exception.stderr, ['cannot clobber'])
+
+
 if __name__ == '__main__':
     unittest.main()

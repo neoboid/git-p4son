@@ -1,12 +1,16 @@
 """Tests for git_p4son.update module."""
 
 import unittest
-from unittest import mock
 
-from git_p4son.common import CommandError
+from git_p4son.changelist_store import save_changelist_alias
 from git_p4son.new import new_command
 from git_p4son.update import _step_command, update_command
-from tests.helpers import cli_args, P4RepoTestCase
+from tests.helpers import (
+    cli_args,
+    fake_rebase,
+    GitRepoTestCase,
+    P4RepoTestCase,
+)
 
 
 def _args(**overrides):
@@ -132,9 +136,6 @@ class TestUpdateCleanWorkspace(UpdateTestCase):
                          {'a.txt', 'b.txt', 'c.txt'})
 
 
-COMMITS = ['abc1234 First commit', 'def5678 Second commit']
-
-
 class TestStepCommand(unittest.TestCase):
     def test_plain_update(self):
         self.assertEqual(_step_command('100', _args()), 'update 100')
@@ -146,55 +147,62 @@ class TestStepCommand(unittest.TestCase):
             'update 100 --no-commit-list --no-edit --shelve')
 
 
-@mock.patch('git_p4son.rebase_todo.check_git_workspace_clean', mock.Mock())
-@mock.patch('git_p4son.rebase_todo._run_todo_rebase', return_value=0)
-@mock.patch('git_p4son.rebase_todo.get_commit_lines_since', return_value=COMMITS)
-@mock.patch('git_p4son.update.update_changelist')
-class TestUpdatePerCommit(unittest.TestCase):
-    def test_runs_rebase_without_editor(self, mock_update,
-                                        mock_commits, mock_rebase):
-        rc = update_command(_args(per_commit=True, base_branch='HEAD~2',
-                                  shelve=True))
-        self.assertEqual(rc, 0)
-        mock_update.assert_not_called()
-        mock_commits.assert_called_once_with('HEAD~2', '/ws')
-        todo, base, ws = mock_rebase.call_args.args
-        self.assertEqual((base, ws), ('HEAD~2', '/ws'))
-        self.assertFalse(mock_rebase.call_args.kwargs['edit_todo'])
-        self.assertIn('exec git p4son update 100 --shelve', todo)
+class TestUpdatePerCommit(GitRepoTestCase):
+    """update --per-commit of the two commits on branch feature, which needs no Perforce until the rebase runs."""
 
-    @mock.patch('git_p4son.update.load_changelist_alias', return_value='200')
-    def test_alias_resolved_to_changelist(self, _load, _update,
-                                          _commits, mock_rebase):
-        rc = update_command(_args(per_commit=True, changelist='feat'))
-        self.assertEqual(rc, 0)
-        self.assertIn('exec git p4son update 200',
-                      mock_rebase.call_args.args[0])
+    def setUp(self):
+        super().setUp()
+        self.commit('Base')
+        self.git('switch', '-q', '-c', 'feature')
+        self.commit('First commit')
+        self.commit('Second commit')
+        self.rebases = fake_rebase(self)
 
-    def test_sleeps_between_steps_only_when_shelving(self, _update, _commits,
-                                                     mock_rebase):
-        update_command(_args(per_commit=True, shelve=True))
-        self.assertIn('--sleep 5', mock_rebase.call_args.args[0])
-        update_command(_args(per_commit=True))
-        self.assertNotIn('--sleep', mock_rebase.call_args.args[0])
+    def update(self, *argv):
+        return self.run_command(
+            update_command, ['update', '100', '--per-commit', '-b', 'main', *argv])
 
-    def test_no_commits(self, _update, mock_commits, mock_rebase):
-        mock_commits.return_value = []
-        with self.assertRaisesRegex(CommandError, 'No commits found'):
-            update_command(_args(per_commit=True))
-        mock_rebase.assert_not_called()
+    def exec_lines(self):
+        return [line for line in self.rebases[0][2].splitlines()
+                if line.startswith('exec')]
 
-    def test_dry_run_passed_to_the_rebase(self, _update, _commits,
-                                          mock_rebase):
-        rc = update_command(_args(per_commit=True, dry_run=True))
-        self.assertEqual(rc, 0)
-        self.assertTrue(mock_rebase.call_args.kwargs['dry_run'])
+    def test_runs_the_rebase_without_an_editor(self):
+        self.update('--shelve')
+        command, editor, _, message = self.rebases[0]
+        self.assertEqual(command, ['git', 'rebase', '-i', 'main'])
+        self.assertEqual(editor, 'git-p4son _sequence-editor --no-edit')
+        self.assertIsNone(message)
+        self.assertEqual(self.exec_lines(),
+                         ['exec git p4son update 100 --shelve --sleep 5',
+                          'exec git p4son update 100 --shelve'])
 
-    def test_message_passed_to_the_rebase(self, _update, _commits,
-                                          mock_rebase):
-        rc = update_command(_args(per_commit=True, message='One\nTwo'))
-        self.assertEqual(rc, 0)
-        self.assertEqual(mock_rebase.call_args.kwargs['message'], 'One\nTwo')
+    def test_sleeps_between_steps_only_when_shelving(self):
+        self.update()
+        self.assertEqual(self.exec_lines(), ['exec git p4son update 100'] * 2)
+
+    def test_alias_resolved_to_changelist(self):
+        save_changelist_alias('feat', '200', self.ws, force=False)
+        self.run_command(update_command, [
+                         'update', 'feat', '--per-commit', '-b', 'main'])
+        self.assertEqual(self.exec_lines(), ['exec git p4son update 200'] * 2)
+
+    def test_message_goes_to_the_first_step(self):
+        self.update('-m', 'One\nTwo')
+        self.assertEqual(self.rebases[0][3], 'One\nTwo')
+        self.assertEqual(self.exec_lines(),
+                         ['exec git p4son update 100 -F .git-p4son/reviews/message',
+                          'exec git p4son update 100'])
+
+    def test_no_commits(self):
+        self.command_fails(update_command,
+                           ['update', '100', '--per-commit', '-b', 'feature'],
+                           message='No commits found')
+        self.assertEqual(self.rebases, [])
+
+    def test_dry_run_prints_the_todo(self):
+        out = self.update('--dry-run')
+        self.assertEqual(self.rebases, [])
+        self.assertIn('exec git p4son update 100', out)
 
 
 if __name__ == '__main__':

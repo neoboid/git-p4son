@@ -206,10 +206,9 @@ class GitRepoTestCase(WorkspaceTestCase):
         return [commit_by_mark[f':{mark}'] for mark in range(1, len(commits) + 1)]
 
     def commit(self, message='test commit'):
-        """Stage everything and commit it; returns the new commit."""
+        """Stage everything and commit it."""
         self.git('add', '-A')
         self.git('commit', '-q', '--allow-empty', '-m', message)
-        return self.git('rev-parse', 'HEAD')
 
 
 class FakeP4:

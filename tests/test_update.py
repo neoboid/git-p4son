@@ -4,8 +4,9 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError
+from git_p4son.new import new_command
 from git_p4son.update import _step_command, update_command
-from tests.helpers import cli_args
+from tests.helpers import cli_args, P4RepoTestCase
 
 
 def _args(**overrides):
@@ -17,103 +18,118 @@ def _args(**overrides):
     return cli_args(['update'], **defaults)
 
 
-class TestUpdateCommandCleanWorkspace(unittest.TestCase):
-    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
-    @mock.patch('git_p4son.lib.include_changes_in_changelist')
-    @mock.patch('git_p4son.update.update_changelist')
-    @mock.patch('git_p4son.lib.get_dirty_files',
-                return_value=[('mod.txt', 'modify')])
-    def test_refuses_dirty_workspace_before_touching_changelist(
-            self, _dirty, mock_update, mock_open):
-        with self.assertRaisesRegex(CommandError, 'not clean'):
-            update_command(_args())
-        mock_update.assert_not_called()
-        mock_open.assert_not_called()
-
-    @mock.patch('git_p4son.update.update_changelist')
-    @mock.patch('git_p4son.lib.get_dirty_files',
-                return_value=[('mod.txt', 'modify')])
-    def test_refuses_dirty_workspace_on_dry_run(self, _dirty, mock_update):
-        with self.assertRaisesRegex(CommandError, 'not clean'):
-            update_command(_args(dry_run=True))
-        mock_update.assert_not_called()
-
-    @mock.patch('git_p4son.lib.revert_unchanged_files')
-    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
-    @mock.patch('git_p4son.lib.include_changes_in_changelist')
-    @mock.patch('git_p4son.update.update_changelist')
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_clean_workspace_proceeds(self, _dirty, mock_update, mock_open,
-                                      _revert):
-        rc = update_command(_args())
-        self.assertEqual(rc, 0)
-        mock_update.assert_called_once()
-        mock_open.assert_called_once()
-
-    @mock.patch('git_p4son.update.update_changelist')
-    @mock.patch('git_p4son.lib.get_dirty_files')
-    def test_no_edit_skips_check(self, mock_dirty, mock_update):
-        rc = update_command(_args(no_edit=True))
-        self.assertEqual(rc, 0)
-        mock_dirty.assert_not_called()
-        mock_update.assert_called_once()
+FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
+                       '1. Change a', '2. Replace b with c']
+FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': ('101', 'delete'),
+                  'c.txt': ('101', 'add')}
 
 
-class TestUpdateCommandMessage(unittest.TestCase):
-    @mock.patch('git_p4son.lib.revert_unchanged_files')
-    @mock.patch('git_p4son.lib.get_local_changes', mock.Mock())
-    @mock.patch('git_p4son.lib.include_changes_in_changelist')
-    @mock.patch('git_p4son.update.update_changelist')
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_passes_message_on(self, _dirty, mock_update, _open, _revert):
-        rc = update_command(_args(message='New title'))
-        self.assertEqual(rc, 0)
-        mock_update.assert_called_once_with(
-            '100', 'HEAD~1', '/ws', dry_run=False, message='New title',
-            commit_list=True)
+class UpdateTestCase(P4RepoTestCase):
+    """update of CL 101, which new created for the two commits on branch feature."""
 
-    @mock.patch('git_p4son.update.update_changelist')
-    def test_no_commit_list_leaves_description_alone(self, mock_update):
-        rc = update_command(_args(no_edit=True, no_commit_list=True))
-        self.assertEqual(rc, 0)
-        mock_update.assert_not_called()
+    def setUp(self):
+        super().setUp()
+        self.commit_feature()
+        self.run_command(
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main'])
+        self.p4.calls.clear()
 
-    @mock.patch('git_p4son.update.update_changelist')
-    def test_message_with_no_commit_list_keeps_list(self, mock_update):
-        rc = update_command(_args(no_edit=True, no_commit_list=True,
-                                  message='New title'))
-        self.assertEqual(rc, 0)
-        mock_update.assert_called_once_with(
-            '100', 'HEAD~1', '/ws', dry_run=False, message='New title',
-            commit_list=False)
+    def update(self, *argv):
+        """Run update of CL 101 with argv; returns everything it printed."""
+        return self.run_command(update_command, ['update', '101', '-b', 'main', *argv])
+
+    def update_fails(self, *argv, message):
+        self.command_fails(update_command, ['update', '101', '-b', 'main', *argv],
+                           message)
+
+    def commit_change_c(self):
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
 
 
-class TestUpdateCommandRevertStep(unittest.TestCase):
-    def _run(self, **overrides):
-        order = mock.Mock()
-        with mock.patch('git_p4son.lib.get_dirty_files', return_value=[]), \
-                mock.patch('git_p4son.update.update_changelist'), \
-                mock.patch('git_p4son.lib.get_local_changes'), \
-                mock.patch('git_p4son.lib.include_changes_in_changelist',
-                           order.open), \
-                mock.patch('git_p4son.lib.revert_unchanged_files',
-                           order.revert), \
-                mock.patch('git_p4son.lib.p4_shelve_changelist',
-                           order.shelve):
-            order.revert.return_value = 0
-            rc = update_command(_args(**overrides))
-        self.assertEqual(rc, 0)
-        return order
+class TestUpdate(UpdateTestCase):
+    def test_merges_new_commits_into_the_description(self):
+        self.commit_change_c()
+        out = self.update()
+        self.assertEqual(self.p4.pending['101'],
+                         FEATURE_DESCRIPTION + ['3. Change c'])
+        self.assertIn('Updated CL 101', out)
+        self.assertEqual(self.p4.shelved, {})
 
-    def test_reverts_after_opening_and_before_shelving(self):
-        order = self._run(shelve=True)
-        self.assertEqual([c[0] for c in order.mock_calls],
-                         ['open', 'revert', 'shelve'])
-        order.revert.assert_called_once_with('100', '/ws', False)
+    def test_message_replaces_the_message(self):
+        self.update('-m', 'New title')
+        self.assertEqual(self.p4.pending['101'],
+                         ['New title'] + FEATURE_DESCRIPTION[1:])
 
-    def test_no_edit_skips_revert(self):
-        order = self._run(no_edit=True, shelve=True)
-        self.assertEqual([c[0] for c in order.mock_calls], ['shelve'])
+    def test_no_commit_list_leaves_the_description_alone(self):
+        self.p4.pending['101'] = ['Edited by hand']
+        self.commit_change_c()
+        self.update('--no-commit-list')
+        self.assertEqual(self.p4.pending['101'], ['Edited by hand'])
+        self.assertNotIn(['change', '-o', '101'], self.p4.calls)
+
+    def test_message_with_no_commit_list_keeps_the_list(self):
+        self.commit_change_c()
+        self.update('-m', 'New title', '--no-commit-list')
+        self.assertEqual(self.p4.pending['101'],
+                         ['New title'] + FEATURE_DESCRIPTION[1:])
+
+    def test_alias_names_the_changelist(self):
+        self.commit_change_c()
+        out = self.run_command(
+            update_command, ['update', 'feat', '-b', 'main'])
+        self.assertIn('feat -> CL 101', out)
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+
+    def test_reverts_files_no_longer_changed_before_shelving(self):
+        self.edit('a.txt', 'a1\n')
+        self.write_file('b.txt', 'b1\n')
+        self.commit('Restore a and b')
+        out = self.update('--shelve')
+        self.assertEqual(self.p4.opened, {'c.txt': ('101', 'add')})
+        self.assertEqual(self.p4.shelved, {'101': {'c.txt': 'c1\n'}})
+        self.assertEqual(self.read('b.txt'), 'b1\n')
+        self.assertIn('2 files reverted', out)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_dry_run_changes_nothing(self):
+        self.edit('a.txt', 'a1\n')
+        self.commit('Restore a')
+        out = self.update('--dry-run', '--shelve')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.opened['a.txt'], ('101', 'edit'))
+        self.assertEqual(self.p4.shelved, {})
+        self.assertIn('Would update CL 101 with this description', out)
+        self.assertIn('3. Restore a', out)
+        self.assertIn('1 file would be reverted', out)
+        self.assertIn('Would shelve CL 101', out)
+
+
+class TestUpdateCleanWorkspace(UpdateTestCase):
+    def test_refuses_a_dirty_workspace_before_touching_the_changelist(self):
+        self.commit_change_c()
+        self.edit('a.txt', 'dirty\n')
+        for argv in ([], ['--dry-run']):
+            with self.subTest(argv=argv):
+                self.update_fails(*argv, message='not clean')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.calls, [])
+
+    def test_no_edit_skips_the_check_and_opens_nothing(self):
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.edit('a.txt', 'dirty\n')
+        self.update('--no-edit')
+        self.assertEqual(self.p4.pending['101'][-1], '3. Add d')
+        self.assertNotIn('d.txt', self.p4.opened)
+
+    def test_no_edit_shelves_without_reverting(self):
+        self.edit('a.txt', 'a1\n')
+        self.commit('Restore a')
+        self.update('--no-edit', '--shelve')
+        self.assertEqual(self.p4.opened, FEATURE_OPENED)
+        self.assertEqual(set(self.p4.shelved['101']),
+                         {'a.txt', 'b.txt', 'c.txt'})
 
 
 COMMITS = ['abc1234 First commit', 'def5678 Second commit']

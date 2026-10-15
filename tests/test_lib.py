@@ -9,7 +9,6 @@ from git_p4son.git import LocalChanges
 from git_p4son.lib import (
     create_changelist,
     DRY_RUN_CHANGELIST,
-    edit_and_shelve,
     include_changes_in_changelist,
     revert_unchanged_files,
     update_changelist,
@@ -681,39 +680,6 @@ class TestBatchedActions(unittest.TestCase):
         include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
         self.assertTrue(all(c.kwargs['dry_run']
                             for c in mock_run.call_args_list))
-
-
-@mock.patch('git_p4son.lib.revert_unchanged_files')
-class TestEditAndShelve(unittest.TestCase):
-    @mock.patch('git_p4son.lib.include_changes_in_changelist')
-    @mock.patch('git_p4son.lib.get_local_changes')
-    def test_opens_the_local_changes_then_reverts(self, mock_get_changes,
-                                                  mock_include, mock_revert):
-        mock_changes = mock.Mock()
-        mock_get_changes.return_value = mock_changes
-        edit_and_shelve('100', 'HEAD~1', '/ws', edit=True, shelve=False,
-                        dry_run=False)
-        mock_get_changes.assert_called_once_with('HEAD~1', '/ws')
-        mock_include.assert_called_once_with(mock_changes, '100', '/ws', False)
-        mock_revert.assert_called_once_with('100', '/ws', False)
-
-    @mock.patch('git_p4son.lib.get_local_changes')
-    def test_get_changes_failure(self, mock_get_changes, mock_revert):
-        mock_get_changes.side_effect = RunError('get changes failed')
-        with self.assertRaises(RunError):
-            edit_and_shelve('100', 'HEAD~1', '/ws', edit=True, shelve=False,
-                            dry_run=False)
-        mock_revert.assert_not_called()
-
-    @mock.patch('git_p4son.lib.p4_shelve_changelist')
-    @mock.patch('git_p4son.lib.get_local_changes')
-    def test_shelves_without_editing(self, mock_get_changes, mock_shelve,
-                                     mock_revert):
-        edit_and_shelve('100', 'HEAD~1', '/ws', edit=False, shelve=True,
-                        dry_run=True)
-        mock_get_changes.assert_not_called()
-        mock_revert.assert_not_called()
-        mock_shelve.assert_called_once_with('100', '/ws', dry_run=True)
 
 
 class TestRevertUnchangedFiles(WorkspaceTestCase):

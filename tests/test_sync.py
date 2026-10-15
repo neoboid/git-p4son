@@ -1,7 +1,5 @@
 """Tests for git_p4son.sync module."""
 
-import contextlib
-import io
 import os
 import stat
 import sys
@@ -23,10 +21,9 @@ from git_p4son.sync import (
 )
 from tests.helpers import (
     cli_args,
-    FakeP4,
-    GitRepoTestCase,
     make_changes,
     make_run_result,
+    P4RepoTestCase,
 )
 
 
@@ -271,51 +268,26 @@ class TestShouldSplit(unittest.TestCase):
             ['me'], self._last_synced, [(90, '90')]))
 
 
-class SyncTestCase(GitRepoTestCase):
-    """sync against a real git repository and a scripted Perforce depot.
-
-    The depot has CL 100 (a.txt, b.txt), which the workspace is synced to and git has committed."""
+class SyncTestCase(P4RepoTestCase):
+    """sync against a real git repository and a scripted Perforce depot."""
 
     def setUp(self):
         super().setUp()
-        self.p4 = FakeP4(self.ws)
-        self.p4.install(self)
         self.write_config('[depot]\nroot = "//myclient"\n')
-        self.p4.submit(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
-        self.p4.sync_to(100)
-        self.commit(format_sync_subject('//myclient', 100))
 
     def sync(self, *argv):
         """Run sync with argv; returns everything it printed."""
-        with contextlib.redirect_stdout(io.StringIO()) as out, \
-                contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(
-                sync_command(cli_args(['sync', *argv], workspace_dir=self.ws)), 0)
-        return out.getvalue() + err.getvalue()
+        return self.run_command(sync_command, ['sync', *argv])
 
     def sync_fails(self, *argv, message):
         """Run sync with argv, expecting a CommandError matching message."""
-        with contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()), \
-                self.assertRaisesRegex(CommandError, message):
-            sync_command(cli_args(['sync', *argv], workspace_dir=self.ws))
+        self.command_fails(sync_command, ['sync', *argv], message)
 
     def synced_commits(self):
         """The changelists of the sync commits after the setup's, oldest first."""
         subjects = self.git('log', '--reverse', '--format=%s').splitlines()
         return [int(s.rsplit('@', 1)[1]) for s in subjects[1:]
                 if s.startswith('git-p4son: p4 sync')]
-
-    def read(self, path):
-        with open(os.path.join(self.ws, path)) as f:
-            return f.read()
-
-    def edit(self, path, content):
-        """Change a file as the user would, making it writable first."""
-        local = os.path.join(self.ws, path)
-        if os.path.exists(local):
-            os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
-        self.write_file(path, content)
 
     def hook(self, name, body):
         """Add a Python hook script under .git-p4son/hooks/<name>/."""
@@ -436,13 +408,13 @@ class TestSync(SyncTestCase):
 
     def test_tracked_files_opened_in_perforce_fail_the_sync(self):
         self.p4.submit(101, {'a.txt': 'a2\n'})
-        self.p4.opened = {'a.txt': 'edit'}
+        self.p4.opened = {'a.txt': ('default', 'edit')}
         self.sync_fails(message='p4-opened files tracked by git')
         self.assertEqual(self.p4.synced(), [])
 
     def test_untracked_files_opened_in_perforce_are_allowed(self):
         self.p4.submit(101, {'a.txt': 'a2\n'})
-        self.p4.opened = {'Content/level.umap': 'edit'}
+        self.p4.opened = {'Content/level.umap': ('default', 'edit')}
         self.sync()
         self.assertEqual(self.synced_commits(), [101])
 

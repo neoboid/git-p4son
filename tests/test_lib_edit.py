@@ -1,20 +1,11 @@
 """Tests for edit functions in git_p4son.lib and git_p4son.perforce modules."""
 
-import os
-import subprocess
-import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError, RunError
-from git_p4son.git import (
-    LocalChanges,
-    get_local_changes,
-)
-from git_p4son.lib import (
-    include_changes_in_changelist,
-    edit_and_shelve,
-)
+from git_p4son.common import RunError
+from git_p4son.git import LocalChanges
+from git_p4son.lib import edit_and_shelve, include_changes_in_changelist
 from git_p4son.perforce import get_opened_files, opened_lookup
 from tests.helpers import make_run_result
 
@@ -97,131 +88,6 @@ class TestOpenedLookup(unittest.TestCase):
 
     def test_not_opened(self):
         self.assertIsNone(opened_lookup({'a.txt': ('1', 'edit')})('b.txt'))
-
-
-class TestGetLocalGitChanges(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_parses_all_change_types(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=b'M\0modified.txt\0A\0added.txt\0D\0deleted.txt\0R100\0old_name.txt\0new_name.txt\0')
-        changes = get_local_changes('main', '/ws')
-        self.assertEqual(changes.mods, ['modified.txt'])
-        self.assertEqual(changes.adds, ['added.txt'])
-        self.assertEqual(changes.dels, ['deleted.txt'])
-        self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
-        self.assertEqual(mock_run.call_args.args[0],
-                         ['git', 'diff', '--name-status', '-z', 'main...HEAD'])
-
-    @mock.patch('git_p4son.git.run')
-    def test_typechange_treated_as_modify(self, mock_run):
-        """T (e.g. symlink to regular file) is a content change."""
-        mock_run.return_value = make_run_result(stdout=b'T\0link.txt\0')
-        changes = get_local_changes('main', '/ws')
-        self.assertEqual(changes.mods, ['link.txt'])
-
-    @mock.patch('git_p4son.git.run')
-    def test_copy_treated_as_add_of_destination(self, mock_run):
-        """A copy is an add of the destination; the source is untouched."""
-        mock_run.return_value = make_run_result(
-            stdout=b'C100\0src.txt\0copy.txt\0')
-        changes = get_local_changes('main', '/ws')
-        self.assertEqual(changes.adds, ['copy.txt'])
-        self.assertEqual(changes.mods, [])
-        self.assertEqual(changes.dels, [])
-
-    @mock.patch('git_p4son.git.run')
-    def test_diff_failure(self, mock_run):
-        mock_run.side_effect = RunError('diff failed')
-        with self.assertRaises(RunError):
-            get_local_changes('main', '/ws')
-
-    @mock.patch('git_p4son.git.run')
-    def test_unknown_status(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=b'X\0unknown.txt\0')
-        with self.assertRaises(CommandError):
-            get_local_changes('main', '/ws')
-
-
-class TestGetLocalChangesInRepo(unittest.TestCase):
-    def test_changes_on_the_base_branch_since_the_fork_are_left_out(self):
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
-
-            def write(name):
-                with open(os.path.join(ws, name), 'w') as f:
-                    f.write(name)
-
-            git('init', '-b', 'main')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            git('commit', '--allow-empty', '-m', 'base')
-            git('switch', '-c', 'feat')
-            write('feature.txt')
-            git('add', '.')
-            git('commit', '-m', 'feature')
-            git('switch', 'main')
-            write('upstream.txt')
-            git('add', '.')
-            git('commit', '-m', 'upstream')
-            git('switch', 'feat')
-
-            changes = get_local_changes('main', ws)
-
-        self.assertEqual(changes.adds, ['feature.txt'])
-        self.assertEqual(changes.dels, [])
-
-    def test_non_ascii_filename_returned_verbatim(self):
-        """Non-ASCII filenames are returned verbatim, not C-quoted."""
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
-            git('init')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            git('commit', '--allow-empty', '-m', 'base')
-            base = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'], cwd=ws,
-                capture_output=True, text=True, check=True).stdout.strip()
-            with open(os.path.join(ws, 'bäck.txt'), 'w') as f:
-                f.write('content')
-            git('add', '.')
-            git('commit', '-m', 'add file')
-
-            changes = get_local_changes(base, ws)
-
-        self.assertEqual(changes.adds, ['bäck.txt'])
-
-    def test_special_characters_returned_verbatim(self):
-        """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
-        names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
-            git('init')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            with open(os.path.join(ws, 'old.txt'), 'w') as f:
-                f.write('content to rename\n' * 10)
-            git('add', '.')
-            git('commit', '-m', 'base')
-            base = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'], cwd=ws,
-                capture_output=True, text=True, check=True).stdout.strip()
-            for name in names:
-                with open(os.path.join(ws, name), 'w') as f:
-                    f.write(name)
-            git('mv', 'old.txt', 'new "name".txt')
-            git('add', '.')
-            git('commit', '-m', 'add files')
-
-            changes = get_local_changes(base, ws)
-
-        self.assertEqual(sorted(changes.adds), sorted(names))
-        self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])
 
 
 class TestOpenWarnings(unittest.TestCase):

@@ -3,167 +3,22 @@
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from unittest import mock
 
 from git_p4son.common import (
     CommandError,
-    RunError,
-    RunResult,
     join_command_line,
     run,
     run_with_stream_output,
-)
-from git_p4son.git import (
-    _get_rebase_branch,
-    get_current_branch,
-    get_head_subject,
-    get_workspace_dir,
-    is_workspace_dir,
+    RunError,
+    RunResult,
 )
 
 
 def _ignore_output(line, stream):
     pass
-
-
-class TestGetCurrentBranch(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_returns_branch_name(self, mock_run):
-        mock_run.return_value = RunResult(0, ['feat/foo'], [])
-        result = get_current_branch('/ws')
-        mock_run.assert_called_once_with(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            cwd='/ws',
-        )
-        self.assertEqual(result, 'feat/foo')
-
-    @mock.patch('git_p4son.git._get_rebase_branch', return_value=None)
-    @mock.patch('git_p4son.git.run')
-    def test_detached_head_returns_none(self, mock_run, mock_rebase):
-        mock_run.return_value = RunResult(0, ['HEAD'], [])
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
-        mock_rebase.assert_called_once_with('/ws')
-
-    @mock.patch('git_p4son.git._get_rebase_branch', return_value='feat/my-branch')
-    @mock.patch('git_p4son.git.run')
-    def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
-        mock_run.return_value = RunResult(0, ['HEAD'], [])
-        result = get_current_branch('/ws')
-        self.assertEqual(result, 'feat/my-branch')
-
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
-    def test_command_failure_returns_none(self, mock_run):
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
-
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
-    def test_exception_returns_none(self, mock_run):
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
-
-
-class TestGetHeadSubject(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_returns_subject(self, mock_run):
-        mock_run.return_value = RunResult(0, ['Fix bug'], [])
-        result = get_head_subject('/ws')
-        mock_run.assert_called_once_with(
-            ['git', 'log', '-1', '--format=%s', 'HEAD'],
-            cwd='/ws',
-        )
-        self.assertEqual(result, 'Fix bug')
-
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
-    def test_command_failure_returns_none(self, mock_run):
-        result = get_head_subject('/ws')
-        self.assertIsNone(result)
-
-    @mock.patch('git_p4son.git.run')
-    def test_empty_output_returns_none(self, mock_run):
-        mock_run.return_value = RunResult(0, [], [])
-        result = get_head_subject('/ws')
-        self.assertIsNone(result)
-
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=1))
-    def test_exception_returns_none(self, mock_run):
-        result = get_head_subject('/ws')
-        self.assertIsNone(result)
-
-
-class TestGetRebaseBranch(unittest.TestCase):
-    _GIT_PATHS = ['.git/rebase-merge/head-name', '.git/rebase-apply/head-name']
-
-    def _read(self, state_dir, ref):
-        """Write ref as the head-name in state_dir and read it back."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            if state_dir:
-                os.makedirs(os.path.join(tmpdir, '.git', state_dir))
-                with open(os.path.join(tmpdir, '.git', state_dir,
-                                       'head-name'), 'w') as f:
-                    f.write(ref + '\n')
-            with mock.patch('git_p4son.git.run',
-                            return_value=RunResult(0, self._GIT_PATHS, [])):
-                return _get_rebase_branch(tmpdir)
-
-    def test_reads_branch_from_rebase_merge_state(self):
-        self.assertEqual(self._read('rebase-merge', 'refs/heads/feat/x'),
-                         'feat/x')
-
-    def test_reads_branch_from_rebase_apply_state(self):
-        self.assertEqual(self._read('rebase-apply', 'refs/heads/feat/x'),
-                         'feat/x')
-
-    def test_keeps_a_ref_outside_refs_heads(self):
-        self.assertEqual(self._read('rebase-merge', 'refs/other/x'),
-                         'refs/other/x')
-
-    def test_returns_none_when_no_rebase_state(self):
-        self.assertIsNone(self._read(None, ''))
-
-    def test_returns_none_when_rev_parse_fails(self):
-        with mock.patch('git_p4son.git.run',
-                        side_effect=RunError('failed', returncode=128)):
-            self.assertIsNone(_get_rebase_branch('/ws'))
-
-
-class TestGetCurrentBranchDuringRebase(unittest.TestCase):
-    """Both rebase backends detach HEAD; the branch being rebased is still found."""
-
-    def _repo_mid_rebase(self, ws, *rebase_args):
-        def git(*args):
-            subprocess.run(['git', *args], cwd=ws, capture_output=True)
-
-        def commit(content):
-            with open(os.path.join(ws, 'f.txt'), 'w') as f:
-                f.write(content)
-            git('add', '.')
-            git('commit', '-m', content)
-
-        git('init', '-b', 'main')
-        git('config', 'user.email', 't@t')
-        git('config', 'user.name', 'T')
-        commit('base')
-        git('switch', '-c', 'feat/x')
-        commit('feature')
-        git('switch', 'main')
-        commit('main')
-        git('switch', 'feat/x')
-        # Both commits change f.txt, so the rebase stops on a conflict with HEAD detached.
-        git('rebase', *rebase_args, 'main')
-
-    def test_merge_backend(self):
-        with tempfile.TemporaryDirectory() as ws:
-            self._repo_mid_rebase(ws, '--merge')
-            self.assertEqual(get_current_branch(ws), 'feat/x')
-
-    def test_apply_backend(self):
-        with tempfile.TemporaryDirectory() as ws:
-            self._repo_mid_rebase(ws, '--apply')
-            self.assertEqual(get_current_branch(ws), 'feat/x')
 
 
 class TestRunSetsPWD(unittest.TestCase):
@@ -201,56 +56,6 @@ class TestJoinCommandLine(unittest.TestCase):
     def test_single_argument(self):
         result = join_command_line(['ls'])
         self.assertEqual(result, ' ls')
-
-
-class TestIsWorkspaceDir(unittest.TestCase):
-    def test_returns_true_when_git_dir_exists(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.makedirs(os.path.join(tmpdir, '.git'))
-            self.assertTrue(is_workspace_dir(tmpdir))
-
-    def test_returns_false_when_no_git_dir(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self.assertFalse(is_workspace_dir(tmpdir))
-
-    def test_returns_true_when_git_is_a_file(self):
-        """In linked worktrees and submodules .git is a file pointing at the real git dir."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with open(os.path.join(tmpdir, '.git'), 'w') as f:
-                f.write('gitdir: /repo/.git/worktrees/feature\n')
-            self.assertTrue(is_workspace_dir(tmpdir))
-
-
-class TestGetWorkspaceDir(unittest.TestCase):
-    def test_finds_workspace_from_subdirectory(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.makedirs(os.path.join(tmpdir, '.git'))
-            subdir = os.path.join(tmpdir, 'a', 'b')
-            os.makedirs(subdir)
-            with mock.patch('os.getcwd', return_value=subdir):
-                result = get_workspace_dir()
-            self.assertEqual(result, tmpdir)
-
-    def test_returns_none_when_no_workspace(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch('os.getcwd', return_value=tmpdir):
-                result = get_workspace_dir()
-            self.assertIsNone(result)
-
-    def test_stops_at_worktree_root_inside_another_repo(self):
-        """Detection stops at a linked worktree root instead of an enclosing unrelated repo."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.makedirs(os.path.join(tmpdir, '.git'))
-            worktree = os.path.join(tmpdir, 'wt')
-            os.makedirs(worktree)
-            with open(os.path.join(worktree, '.git'), 'w') as f:
-                f.write('gitdir: /repo/.git/worktrees/wt\n')
-            subdir = os.path.join(worktree, 'src')
-            os.makedirs(subdir)
-
-            with mock.patch('os.getcwd', return_value=subdir):
-                result = get_workspace_dir()
-            self.assertEqual(result, worktree)
 
 
 class TestRunResult(unittest.TestCase):

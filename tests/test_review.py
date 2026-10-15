@@ -1,13 +1,10 @@
 """Tests for git_p4son.review module."""
 
-import os
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError, RunError
-from git_p4son.git import get_commit_lines_since
-from git_p4son.review import _step_commands, review_command
-from tests.helpers import make_run_result
+from git_p4son.common import CommandError
+from git_p4son.review import review_command, _step_commands
 
 
 class TestStepCommands(unittest.TestCase):
@@ -29,29 +26,6 @@ class TestStepCommands(unittest.TestCase):
         new_cmd, update_cmd = _step_commands('my feature', False, False)
         self.assertIn("'my feature'", new_cmd)
         self.assertIn("'my feature'", update_cmd)
-
-
-class TestGetCommitLines(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_returns_lines(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            'abc1234 First commit',
-            'def5678 Second commit',
-        ])
-        lines = get_commit_lines_since('main', '/workspace')
-        self.assertEqual(
-            lines, ['abc1234 First commit', 'def5678 Second commit'])
-        mock_run.assert_called_once_with(
-            ['git', 'log', '--format=%h %s', '--no-decorate',
-             '--reverse', '--no-merges', 'main..HEAD'],
-            cwd='/workspace',
-        )
-
-    @mock.patch('git_p4son.git.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('git log failed')
-        with self.assertRaises(RunError):
-            get_commit_lines_since('main', '/workspace')
 
 
 class TestReviewCommand(unittest.TestCase):

@@ -1,6 +1,5 @@
 """Tests for git_p4son.sync module."""
 
-import sys
 import unittest
 from unittest import mock
 
@@ -8,13 +7,8 @@ from git_p4son.cli import create_parser
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
-    get_latest_changelist,
-    get_writable_files,
-    p4_get_opened_files,
     P4SyncAbortError,
     P4SyncClobberError,
-    P4SyncOutputProcessor,
-    parse_p4_sync_line,
 )
 from git_p4son.sync import (
     build_sync_targets,
@@ -73,177 +67,6 @@ class TestMakeSyncedFilesWritable(unittest.TestCase):
         mock_tracked.assert_called_once_with(
             ['/ws/Content/x.uasset', '/ws/a.cpp', '/ws/b.h'], '/ws')
         mock_make.assert_called_once_with(['/ws/a.cpp', '/ws/b.h'])
-
-
-class TestParseP4SyncLine(unittest.TestCase):
-    def test_added_file(self):
-        mode, filename = parse_p4_sync_line(
-            '//depot/foo.txt#1 - added as /ws/foo.txt')
-        self.assertEqual(mode, 'add')
-        self.assertEqual(filename, '/ws/foo.txt')
-
-    def test_deleted_file(self):
-        mode, filename = parse_p4_sync_line(
-            '//depot/foo.txt#2 - deleted as /ws/foo.txt')
-        self.assertEqual(mode, 'del')
-        self.assertEqual(filename, '/ws/foo.txt')
-
-    def test_updated_file(self):
-        mode, filename = parse_p4_sync_line(
-            '//depot/foo.txt#3 - updating /ws/foo.txt')
-        self.assertEqual(mode, 'upd')
-        self.assertEqual(filename, '/ws/foo.txt')
-
-    def test_clobber_file(self):
-        mode, filename = parse_p4_sync_line(
-            "Can't clobber writable file /ws/foo.txt")
-        self.assertEqual(mode, 'clb')
-        self.assertEqual(filename, '/ws/foo.txt')
-
-    def test_unparsable_line(self):
-        mode, filename = parse_p4_sync_line('some random output')
-        self.assertIsNone(mode)
-        self.assertIsNone(filename)
-
-
-class TestGetWritableFiles(unittest.TestCase):
-    def test_extracts_writable_files(self):
-        stderr = [
-            "Can't clobber writable file /ws/a.txt",
-            "Can't clobber writable file /ws/b.txt",
-            "some other error",
-        ]
-        result = get_writable_files(stderr)
-        self.assertEqual(result, ['/ws/a.txt', '/ws/b.txt'])
-
-    def test_empty_stderr(self):
-        self.assertEqual(get_writable_files([]), [])
-
-
-class TestP4GetOpenedFiles(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run')
-    def test_clean(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        self.assertEqual(p4_get_opened_files('//depot', '/ws'), [])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_returns_workspace_relative_client_path(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/foo.txt',
-            '... path /ws/foo.txt',
-            '... action edit',
-        ])
-        result = p4_get_opened_files('//depot', '/ws')
-        self.assertEqual(result, [('foo.txt', 'modify')])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_add(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/new.txt',
-            '... path /ws/new.txt',
-            '... action add',
-        ])
-        result = p4_get_opened_files('//depot', '/ws')
-        self.assertEqual(result, [('new.txt', 'add')])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_delete(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/old.txt',
-            '... path /ws/old.txt',
-            '... action delete',
-        ])
-        result = p4_get_opened_files('//depot', '/ws')
-        self.assertEqual(result, [('old.txt', 'delete')])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_move_add(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/new.txt',
-            '... path /ws/new.txt',
-            '... action move/add',
-        ])
-        result = p4_get_opened_files('//depot', '/ws')
-        self.assertEqual(result, [('new.txt', 'add')])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_multiple_files(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/a.txt',
-            '... path /ws/a.txt',
-            '... action edit',
-            '',
-            '... depotFile //depot/b.txt',
-            '... path /ws/b.txt',
-            '... action add',
-        ])
-        result = p4_get_opened_files('//depot', '/ws')
-        self.assertEqual(result, [
-            ('a.txt', 'modify'),
-            ('b.txt', 'add'),
-        ])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_normalizes_slashes(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... depotFile //depot/dir/foo.txt',
-            r'... path C:\ws\dir\foo.txt',
-            '... action add',
-        ])
-        result = p4_get_opened_files('//depot', r'C:\ws')
-        self.assertEqual(result, [('dir/foo.txt', 'add')])
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_command_failure(self, mock_run):
-        mock_run.side_effect = RunError('p4 opened failed')
-        with self.assertRaises(RunError):
-            p4_get_opened_files('//depot', '/ws')
-
-
-class TestGetLatestChangelist(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run')
-    def test_success(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... change 54321',
-            '... time 1704067200',
-            '... user user',
-            '... client ws',
-        ])
-        cl = get_latest_changelist('//myclient', '/ws')
-        self.assertEqual(cl, 54321)
-        mock_run.assert_called_once_with(
-            ['p4', '-L', 'en', '-ztag', 'changes', '-m1', '-s', 'submitted',
-             '//myclient/...#head'], cwd='/ws')
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_no_changes_found(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        with self.assertRaises(CommandError):
-            get_latest_changelist('//myclient', '/ws')
-
-
-class TestP4SyncOutputProcessor(unittest.TestCase):
-    def test_tracks_added_file(self):
-        processor = P4SyncOutputProcessor()
-        processor('//depot/foo.txt#1 - added as /ws/foo.txt', sys.stdout)
-        self.assertEqual(processor.stats['add'], 1)
-
-    def test_tracks_deleted_file(self):
-        processor = P4SyncOutputProcessor()
-        processor('//depot/foo.txt#2 - deleted as /ws/foo.txt', sys.stdout)
-        self.assertEqual(processor.stats['del'], 1)
-
-    def test_up_to_date_message(self):
-        processor = P4SyncOutputProcessor()
-        processor('//...@12345 - file(s) up-to-date.', sys.stdout)
-        self.assertEqual(sum(processor.stats.values()), 0)
-
-    def test_failed_rename_aborts(self):
-        processor = P4SyncOutputProcessor()
-        with self.assertRaises(P4SyncAbortError):
-            processor('rename: failed to rename D:\\ws\\a.uasset after 10 '
-                      'attempts: Cannot create a file when that file '
-                      'already exists.', sys.stderr)
 
 
 @mock.patch('git_p4son.sync.p4_sync')

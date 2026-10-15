@@ -40,3 +40,33 @@ class MockRunDispatcher:
             if tuple(command[:len(prefix)]) == prefix:
                 return result
         return self.default
+
+
+# A pending changelist spec as p4 change -o prints it.
+SAMPLE_SPEC = """\
+# A Perforce Change Specification.
+Change:\t12345
+
+Client:\tmyclient
+
+User:\tmyuser
+
+Status:\tpending
+
+Description:
+\tFix the login bug
+\t1. Add validation
+\t2. Fix redirect
+
+Files:
+\t//depot/src/login.py\t# edit
+"""
+
+SAMPLE_SPEC_NO_COMMITS = """\
+Change:\tnew
+
+Description:
+\tJust a message
+
+Files:
+"""

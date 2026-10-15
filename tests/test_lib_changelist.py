@@ -3,37 +3,14 @@
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError, RunError
+from git_p4son.common import RunError
 from git_p4son.lib import (
-    DRY_RUN_CHANGELIST,
     create_changelist,
+    DRY_RUN_CHANGELIST,
     update_changelist,
 )
-from git_p4son.perforce import (
-    extract_description_lines,
-    get_changelist_spec,
-    replace_description_in_spec,
-)
-from tests.helpers import make_run_result
+from tests.helpers import make_run_result, SAMPLE_SPEC, SAMPLE_SPEC_NO_COMMITS
 
-SAMPLE_SPEC = """\
-# A Perforce Change Specification.
-Change:\t12345
-
-Client:\tmyclient
-
-User:\tmyuser
-
-Status:\tpending
-
-Description:
-\tFix the login bug
-\t1. Add validation
-\t2. Fix redirect
-
-Files:
-\t//depot/src/login.py\t# edit
-"""
 
 SPEC_NO_LIST_WITH_KEYWORD = """\
 Change:\t12345
@@ -59,44 +36,6 @@ Description:
 
 Files:
 """
-
-SAMPLE_SPEC_NO_COMMITS = """\
-Change:\tnew
-
-Description:
-\tJust a message
-
-Files:
-"""
-
-
-class TestExtractDescriptionLines(unittest.TestCase):
-    def test_extracts_multiline_description(self):
-        lines = extract_description_lines(SAMPLE_SPEC)
-        self.assertEqual(
-            lines, ['Fix the login bug', '1. Add validation', '2. Fix redirect'])
-
-    def test_extracts_simple_description(self):
-        lines = extract_description_lines(SAMPLE_SPEC_NO_COMMITS)
-        self.assertEqual(lines, ['Just a message'])
-
-    def test_empty_spec(self):
-        lines = extract_description_lines('')
-        self.assertEqual(lines, [])
-
-
-class TestReplaceDescriptionInSpec(unittest.TestCase):
-    def test_replaces_description(self):
-        new_spec = replace_description_in_spec(
-            SAMPLE_SPEC, ['New description', 'Line 2'])
-        self.assertIn('\tNew description\n', new_spec)
-        self.assertIn('\tLine 2\n', new_spec)
-        self.assertNotIn('Fix the login bug', new_spec)
-
-    def test_preserves_other_fields(self):
-        new_spec = replace_description_in_spec(SAMPLE_SPEC, ['Replaced'])
-        self.assertIn('Change:\t12345', new_spec)
-        self.assertIn('Files:', new_spec)
 
 
 class TestCreateChangelist(unittest.TestCase):
@@ -189,21 +128,6 @@ class TestCreateChangelistWithoutCommitList(unittest.TestCase):
         self.assertEqual(
             mock_run.call_args.kwargs['input'],
             'Change: new\n\nDescription:\n\tTitle\n\t\n\tBody\n')
-
-
-class TestGetChangelistSpec(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run')
-    def test_success(self, mock_run):
-        mock_run.return_value = make_run_result(
-            stdout=SAMPLE_SPEC.splitlines())
-        spec = get_changelist_spec('12345', '/ws')
-        self.assertEqual(spec, SAMPLE_SPEC)
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('Changelist not found')
-        with self.assertRaises(RunError):
-            get_changelist_spec('99999', '/ws')
 
 
 class TestUpdateChangelist(unittest.TestCase):

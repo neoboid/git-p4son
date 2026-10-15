@@ -1,5 +1,11 @@
 """Shared test helpers for git_p4son tests."""
 
+import os
+import subprocess
+import tempfile
+import unittest
+
+from git_p4son import CONFIG_DIR
 from git_p4son.common import RunResult
 from git_p4son.perforce import P4Change, P4SyncPreviewFile
 
@@ -22,6 +28,56 @@ def preview_update(path):
 def make_changes(*pairs):
     """Build a change list from (changelist, user) pairs."""
     return [P4Change(change=cl, user=user) for cl, user in pairs]
+
+
+def init_git_repo(path: str) -> None:
+    """Make path a git repository on branch main, with a committer configured."""
+    for args in (['init', '-q', '-b', 'main'],
+                 ['config', 'user.email', 'test@example.com'],
+                 ['config', 'user.name', 'Test']):
+        subprocess.run(['git', *args], cwd=path, capture_output=True,
+                       check=True)
+
+
+class WorkspaceTestCase(unittest.TestCase):
+    """A temporary workspace directory for each test, at self.ws."""
+
+    def setUp(self):
+        super().setUp()
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+
+    def write_file(self, rel_path, content=''):
+        """Write a file under the workspace, creating its directories; returns its path."""
+        path = os.path.join(self.ws, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def write_config(self, text):
+        """Write the workspace's .git-p4son/config.toml."""
+        self.write_file(os.path.join(CONFIG_DIR, 'config.toml'), text)
+
+
+class GitRepoTestCase(WorkspaceTestCase):
+    """A temporary git repository on branch main for each test, at self.ws."""
+
+    def setUp(self):
+        super().setUp()
+        init_git_repo(self.ws)
+
+    def git(self, *args, check=True):
+        """Run git in the repository and return its stripped stdout."""
+        return subprocess.run(['git', *args], cwd=self.ws, capture_output=True,
+                              text=True, check=check).stdout.strip()
+
+    def commit(self, message='test commit'):
+        """Stage everything and commit it; returns the new commit."""
+        self.git('add', '-A')
+        self.git('commit', '-q', '--allow-empty', '-m', message)
+        return self.git('rev-parse', 'HEAD')
 
 
 class MockRunDispatcher:

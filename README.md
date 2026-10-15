@@ -113,7 +113,8 @@ without reinstalling. This is also handy if you want to auto-update git-p4son wh
 
 git-p4son only uses Python standard library modules - no additional packages are required.
 
-Run the tests with `python -m pytest tests/` (`pip install pytest`).
+Run the tests with `python -m pytest tests/` (`pip install pytest`). With `pytest-xdist` installed, add
+`-n auto --maxprocesses 8` to run them in parallel, which is about three times faster.
 
 ### Git Hooks
 
@@ -121,7 +122,8 @@ The repository includes git hooks in the `hooks/` directory:
 
 - **pre-commit** - verifies that staged Python files are formatted with `autopep8`. Install it with
   `pip install autopep8`.
-- **pre-push** - runs the test suite and blocks the push if any test fails. It needs `pytest` installed.
+- **pre-push** - runs the test suite and blocks the push if any test fails. It needs `pytest` installed, and runs
+  the tests in parallel when `pytest-xdist` is too.
 
 To activate the hooks, run:
 

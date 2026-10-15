@@ -1,5 +1,7 @@
 """Tests for git_p4son.common module."""
 
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -10,6 +12,8 @@ from unittest import mock
 from git_p4son.common import (
     CommandError,
     join_command_line,
+    prompt_choice,
+    prompt_menu,
     run,
     run_with_stream_output,
     RunError,
@@ -294,6 +298,51 @@ class TestRunWithStreamOutputFailure(unittest.TestCase):
                                    lambda line, stream: None)
         self.assertEqual(raised.exception.returncode, 2)
         self.assertEqual(raised.exception.stderr, ['cannot clobber'])
+
+
+class TestPromptChoice(unittest.TestCase):
+    def test_renders_prompt_from_options(self):
+        with mock.patch('builtins.input', return_value='n') as mock_input:
+            result = prompt_choice('Delete?', ['yes', 'no'])
+        self.assertEqual(result, 'no')
+        mock_input.assert_called_once_with('Delete? [y]es / [n]o: ')
+
+    def test_accepts_full_word(self):
+        with mock.patch('builtins.input', return_value='quit'):
+            self.assertEqual(
+                prompt_choice('Delete', ['all', 'quit']), 'quit')
+
+    def test_empty_answer_picks_the_default_shown_in_capitals(self):
+        with mock.patch('builtins.input', return_value='') as mock_input:
+            self.assertEqual(prompt_choice('Keep?', ['yes', 'no'], 'no'), 'no')
+        mock_input.assert_called_once_with('Keep? [y]es / [N]o: ')
+
+    def test_empty_answer_without_default_asks_again(self):
+        with mock.patch('builtins.input', side_effect=['', 'y']) as mock_input:
+            self.assertEqual(prompt_choice('Keep?', ['yes', 'no']), 'yes')
+        self.assertEqual(mock_input.call_count, 2)
+
+    def test_options_need_distinct_first_letters(self):
+        with self.assertRaises(ValueError):
+            prompt_choice('Pick', ['apple', 'avocado'])
+
+
+class TestPromptMenu(unittest.TestCase):
+    def test_lists_options_with_aligned_descriptions(self):
+        buffer = io.StringIO()
+        with mock.patch('builtins.input', return_value='') as mock_input, \
+                contextlib.redirect_stdout(buffer):
+            result = prompt_menu('Pick one:', [('entire workspace', '//ws/...'),
+                                               ('current', '//ws/sub/...'),
+                                               ('quit', '')],
+                                 'entire workspace')
+        self.assertEqual(result, 'entire workspace')
+        self.assertEqual(buffer.getvalue(), (
+            'Pick one:\n'
+            '  [e]ntire workspace  //ws/...\n'
+            '  [c]urrent           //ws/sub/...\n'
+            '  [q]uit\n'))
+        mock_input.assert_called_once_with('Choice [E/c/q]: ')
 
 
 if __name__ == '__main__':

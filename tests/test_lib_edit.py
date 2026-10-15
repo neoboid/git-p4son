@@ -6,88 +6,12 @@ from unittest import mock
 from git_p4son.common import RunError
 from git_p4son.git import LocalChanges
 from git_p4son.lib import edit_and_shelve, include_changes_in_changelist
-from git_p4son.perforce import get_opened_files, opened_lookup
 from tests.helpers import make_run_result
 
 
 def _commands(mock_run):
     """The (command, stdin) of each run() call."""
     return [(c.args[0], c.kwargs.get('input')) for c in mock_run.call_args_list]
-
-
-class TestGetOpenedFiles(unittest.TestCase):
-    @mock.patch('git_p4son.perforce.run')
-    def test_one_query_for_all_files(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... path /ws/a.txt',
-            '... action edit',
-            '... change 100',
-            '',
-            '... path /ws/sub/b.txt',
-            '... action add',
-            '... change default',
-        ])
-        opened = get_opened_files(['a.txt', 'sub/b.txt', 'c.txt'], '/ws')
-        self.assertEqual(opened, {'a.txt': ('100', 'edit'),
-                                  'sub/b.txt': ('default', 'add')})
-        mock_run.assert_called_once()
-        self.assertEqual(mock_run.call_args.args[0],
-                         ['p4', '-L', 'en', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
-                          '-T', 'path,clientFile,action,change'])
-        self.assertEqual(mock_run.call_args.kwargs['input'],
-                         'a.txt\nsub/b.txt\nc.txt')
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_no_files_makes_no_query(self, mock_run):
-        self.assertEqual(get_opened_files([], '/ws'), {})
-        mock_run.assert_not_called()
-
-    @mock.patch('git_p4son.perforce.log')
-    @mock.patch('git_p4son.perforce.run')
-    def test_unopened_and_new_files_are_not_errors(self, mock_run, mock_log):
-        mock_run.return_value = make_run_result(returncode=1, stderr=[
-            'c.txt - file(s) not opened on this client.',
-            'new.txt - no such file(s).',
-        ])
-        self.assertEqual(get_opened_files(['c.txt', 'new.txt'], '/ws'), {})
-        mock_log.warning.assert_not_called()
-
-    @mock.patch('git_p4son.perforce.log')
-    @mock.patch('git_p4son.perforce.run')
-    def test_other_errors_warn(self, mock_run, mock_log):
-        mock_run.return_value = make_run_result(
-            returncode=1, stderr=['Perforce password (P4PASSWD) invalid.'])
-        self.assertEqual(get_opened_files(['a.txt'], '/ws'), {})
-        mock_log.warning.assert_called_once()
-
-    @mock.patch('git_p4son.perforce.run')
-    def test_windows_paths(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            '... path D:\\p4\\Games\\Script\\a.as',
-            '... action edit',
-            '... change 100',
-        ])
-        opened = get_opened_files(['Script/a.as'], 'D:\\p4\\Games')
-        self.assertEqual(opened, {'Script/a.as': ('100', 'edit')})
-
-
-class TestOpenedLookup(unittest.TestCase):
-    def test_exact_match(self):
-        lookup = opened_lookup({'a.txt': ('1', 'edit')})
-        self.assertEqual(lookup('a.txt'), ('1', 'edit'))
-
-    def test_case_differs(self):
-        """p4 may spell the path in the client's case."""
-        lookup = opened_lookup({'Source/A.cpp': ('1', 'edit')})
-        self.assertEqual(lookup('source/a.cpp'), ('1', 'edit'))
-
-    def test_exact_match_wins_over_case_fold(self):
-        lookup = opened_lookup({'a.txt': ('1', 'edit'),
-                                'A.txt': ('2', 'add')})
-        self.assertEqual(lookup('A.txt'), ('2', 'add'))
-
-    def test_not_opened(self):
-        self.assertIsNone(opened_lookup({'a.txt': ('1', 'edit')})('b.txt'))
 
 
 class TestOpenWarnings(unittest.TestCase):

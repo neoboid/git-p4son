@@ -1,8 +1,11 @@
 """Shared test helpers for git_p4son tests."""
 
+import atexit
 import contextlib
+import copy
 import io
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -78,14 +81,55 @@ def init_git_repo(path: str) -> None:
                        check=True)
 
 
+# The workspaces build_workspace built, by the class defining it: (directory, the attributes it set).
+_built_workspaces = {}
+
+
 class WorkspaceTestCase(unittest.TestCase):
-    """A temporary workspace directory for each test, at self.ws."""
+    """A temporary workspace directory for each test, at self.ws.
+
+    A subclass fills it in build_workspace, which runs once per class; each test starts from a copy."""
 
     def setUp(self):
         super().setUp()
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
         self.ws = tempdir.name
+        built = self._built_workspace()
+        if built is not None:
+            built_dir, attributes = built
+            shutil.copytree(built_dir, self.ws, symlinks=True,
+                            dirs_exist_ok=True)
+            for name, value in copy.deepcopy(attributes).items():
+                setattr(self, name, value)
+            self.adopt_workspace()
+
+    def build_workspace(self):
+        """Fill self.ws with what each test starts from; each test gets a copy of the attributes it sets."""
+
+    def adopt_workspace(self):
+        """Point what build_workspace set up at this test's copy of the workspace."""
+
+    def _built_workspace(self):
+        owner = next(c for c in type(self).__mro__
+                     if 'build_workspace' in vars(c))
+        if owner is WorkspaceTestCase:
+            return None
+        if owner not in _built_workspaces:
+            tempdir = tempfile.TemporaryDirectory()
+            atexit.register(tempdir.cleanup)
+            # A test of its own, so the patches build_workspace starts end with the build.
+            builder = type(self)(self._testMethodName)
+            builder.ws = tempdir.name
+            before = set(vars(builder))
+            try:
+                builder.build_workspace()
+            finally:
+                builder.doCleanups()
+            _built_workspaces[owner] = (tempdir.name, {
+                name: value for name, value in vars(builder).items()
+                if name not in before})
+        return _built_workspaces[owner]
 
     def write_file(self, rel_path, content=''):
         """Write a file under the workspace, creating its directories; returns its path."""
@@ -116,8 +160,7 @@ class WorkspaceTestCase(unittest.TestCase):
 class GitRepoTestCase(WorkspaceTestCase):
     """A temporary git repository on branch main for each test, at self.ws."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
         init_git_repo(self.ws)
 
     def git(self, *args, check=True):
@@ -416,13 +459,19 @@ class P4RepoTestCase(GitRepoTestCase):
 
     The depot has CL 100 (a.txt, b.txt), which the workspace is synced to and main has committed."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.p4 = FakeP4(self.ws)
         self.p4.install(self)
         self.p4.submit(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
         self.p4.sync_to(100)
         self.commit(format_sync_subject('//myclient', 100))
+
+    def adopt_workspace(self):
+        super().adopt_workspace()
+        self.p4.ws = self.ws
+        self.p4.calls.clear()
+        self.p4.install(self)
 
     def commit_feature(self):
         """On branch feature, commit an edit of a.txt, then the delete of b.txt and the add of c.txt."""

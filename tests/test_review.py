@@ -25,14 +25,17 @@ class TestStepCommands(unittest.TestCase):
 class TestReview(GitRepoTestCase):
     """review of the two commits on branch feature."""
 
-    def setUp(self):
-        super().setUp()
+    def build_workspace(self):
+        super().build_workspace()
         self.commit('Base')
         self.git('switch', '-q', '-c', 'feature')
         self.commit('First commit')
         self.commit('Second commit')
         self.first, self.second = self.git(
             'log', '--reverse', '--format=%h %s', 'main..').splitlines()
+
+    def setUp(self):
+        super().setUp()
         self.rebases = fake_rebase(self)
 
     def review(self, *argv):

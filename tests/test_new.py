@@ -4,10 +4,14 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.changelist_store import load_changelist_alias, save_changelist_alias
+from git_p4son.changelist_store import (
+    load_changelist_alias,
+    save_changelist_alias,
+)
 from git_p4son.common import CommandError
 from git_p4son.git import LocalChanges
 from git_p4son.new import new_command
+from tests.helpers import cli_args
 
 
 def _args(**overrides):
@@ -16,7 +20,7 @@ def _args(**overrides):
                     no_edit=False, review=False, shelve=False,
                     no_commit_list=False)
     defaults.update(overrides)
-    return mock.Mock(**defaults)
+    return cli_args(['new'], **defaults)
 
 
 class TestNewCommandDryRun(unittest.TestCase):

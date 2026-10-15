@@ -17,7 +17,7 @@ from git_p4son.writable import (
     set_writable_mode,
     writable_command,
 )
-from tests.helpers import GitRepoTestCase
+from tests.helpers import cli_args, GitRepoTestCase
 
 
 def _mode(path):
@@ -181,8 +181,9 @@ class TestWritableCommand(GitRepoTestCase):
         return bool(os.stat(path).st_mode & stat.S_IWUSR)
 
     def _run(self, action):
-        return writable_command(mock.Mock(workspace_dir=self.ws,
-                                          writable_action=action))
+        return writable_command(
+            cli_args(['writable'] + ([action] if action else []),
+                     workspace_dir=self.ws))
 
     def test_show_reports_the_mode(self):
         with mock.patch('git_p4son.writable.log') as mock_log:

@@ -15,7 +15,7 @@ from git_p4son.sync_split_users import (
     sync_split_users_command,
     USER_PLACEHOLDER,
 )
-from tests.helpers import WorkspaceTestCase
+from tests.helpers import cli_args, WorkspaceTestCase
 
 
 class TestSplitUsersConfig(unittest.TestCase):
@@ -114,7 +114,8 @@ class TestSyncSplitUsersList(WorkspaceTestCase):
         self.addCleanup(patcher.stop)
 
     def _run(self, action):
-        args = mock.Mock(workspace_dir=self.ws, split_users_action=action)
+        args = cli_args(['sync-split-users'] + ([action] if action else []),
+                        workspace_dir=self.ws)
         return sync_split_users_command(args)
 
     def _printed(self):
@@ -172,8 +173,8 @@ class TestSyncSplitUsersAdd(WorkspaceTestCase):
         self.addCleanup(patcher.stop)
 
     def _run(self, *names, me=False):
-        args = mock.Mock(workspace_dir=self.ws, split_users_action='add',
-                         names=list(names), me=me)
+        args = cli_args(['sync-split-users', 'add', *names]
+                        + (['--me'] if me else []), workspace_dir=self.ws)
         return sync_split_users_command(args)
 
     def test_adds_users_in_order(self):
@@ -254,8 +255,8 @@ class TestSyncSplitUsersDelete(WorkspaceTestCase):
         set_split_users(self.ws, [USER_PLACEHOLDER, 'Alice', 'bob'])
 
     def _run(self, *names, me=False):
-        args = mock.Mock(workspace_dir=self.ws, split_users_action='delete',
-                         names=list(names), me=me)
+        args = cli_args(['sync-split-users', 'delete', *names]
+                        + (['--me'] if me else []), workspace_dir=self.ws)
         return sync_split_users_command(args)
 
     def test_removes_users_keeping_the_rest_in_order(self):

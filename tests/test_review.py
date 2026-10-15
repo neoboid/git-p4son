@@ -5,6 +5,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError
 from git_p4son.review import review_command, _step_commands
+from tests.helpers import cli_args
 
 
 class TestStepCommands(unittest.TestCase):
@@ -28,6 +29,11 @@ class TestStepCommands(unittest.TestCase):
         self.assertIn("'my feature'", update_cmd)
 
 
+def _args(**overrides):
+    return cli_args(['review', 'my-feature', '-m', 'My feature', '-b', 'main'],
+                    workspace_dir='/workspace', **overrides)
+
+
 class TestReviewCommand(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean',
@@ -45,17 +51,7 @@ class TestReviewCommand(unittest.TestCase):
         ]
         mock_subprocess_run.return_value = mock.Mock(returncode=0)
 
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args()
 
         with mock.patch('os.path.exists', return_value=False):
             with mock.patch('os.makedirs'):
@@ -80,17 +76,7 @@ class TestReviewCommand(unittest.TestCase):
         mock_run.return_value = ['abc1234 First commit']
         mock_subprocess_run.return_value = mock.Mock(returncode=0)
 
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=True,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args(no_edit_todo=True)
 
         with mock.patch('os.path.exists', return_value=False):
             with mock.patch('os.makedirs'):
@@ -109,17 +95,7 @@ class TestReviewCommand(unittest.TestCase):
     def test_multiline_message_accepted(self, mock_run, _editor):
         """The message goes through a file, so -m may span lines too."""
         mock_run.return_value = ['abc1234 First commit']
-        args = mock.Mock(
-            alias='my-feature',
-            message='Line one\nLine two',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=True,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args(message='Line one\nLine two', dry_run=True)
         rc = review_command(args)
         self.assertEqual(rc, 0)
 
@@ -127,17 +103,7 @@ class TestReviewCommand(unittest.TestCase):
     @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_no_commits(self, mock_run, mock_resolve_editor):
         mock_run.return_value = []
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args()
         with mock.patch('os.path.exists', return_value=False):
             with self.assertRaisesRegex(CommandError, 'No commits found'):
                 review_command(args)
@@ -148,17 +114,7 @@ class TestReviewCommand(unittest.TestCase):
                 return_value=['abc1234 First commit'])
     def test_no_editor_fails_before_the_rebase(self, _commits, _editor,
                                                mock_subprocess_run):
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args()
         with mock.patch('os.path.exists', return_value=False):
             with self.assertRaisesRegex(CommandError, 'No git editor configured'):
                 review_command(args)
@@ -166,17 +122,7 @@ class TestReviewCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
     def test_existing_alias_without_force(self, mock_run):
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args()
         with mock.patch('os.path.exists', return_value=True), \
                 self.assertRaisesRegex(CommandError, 'already exists'):
             review_command(args)
@@ -188,17 +134,7 @@ class TestReviewCommand(unittest.TestCase):
             'abc1234 First commit',
             'def5678 Second commit',
         ]
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=True,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args(dry_run=True)
         rc = review_command(args)
         self.assertEqual(rc, 0)
 
@@ -212,17 +148,7 @@ class TestReviewCommand(unittest.TestCase):
         ]
         mock_subprocess_run.return_value = mock.Mock(returncode=1)
 
-        args = mock.Mock(
-            alias='my-feature',
-            message='My feature',
-            file=None,
-            base_branch='main',
-            force=False,
-            dry_run=False,
-            no_edit_todo=False,
-            no_commit_list=False,
-            workspace_dir='/workspace',
-        )
+        args = _args()
 
         with mock.patch('os.path.exists', return_value=False):
             with mock.patch('os.makedirs'):

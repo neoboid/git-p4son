@@ -30,6 +30,23 @@ def make_changes(*pairs):
     return [P4Change(change=cl, user=user) for cl, user in pairs]
 
 
+def cli_args(argv, **overrides):
+    """Parse argv with the real parser, then set the workspace and overrides as run_command would.
+
+    An override the command has no argument for raises AttributeError, so tests follow renames."""
+    from git_p4son.cli import create_parser
+    args = create_parser().parse_args(argv)
+    args.workspace_dir = '/ws'
+    args.invocation_dir = None
+    for name, value in overrides.items():
+        if name not in ('workspace_dir', 'invocation_dir') and not hasattr(args, name):
+            raise AttributeError(f'{argv[0]} has no argument {name!r}')
+        setattr(args, name, value)
+    if args.invocation_dir is None:
+        args.invocation_dir = args.workspace_dir
+    return args
+
+
 def init_git_repo(path: str) -> None:
     """Make path a git repository on branch main, with a committer configured."""
     for args in (['init', '-q', '-b', 'main'],

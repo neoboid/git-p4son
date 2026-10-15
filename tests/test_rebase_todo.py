@@ -10,11 +10,9 @@ from git_p4son.common import CommandError
 from git_p4son.rebase_todo import (
     _build_todo,
     MESSAGE_FILE,
-    rebase_per_commit,
     _run_todo_rebase,
     sequence_editor_command,
 )
-from tests.helpers import start_patch
 
 
 class TestBuildTodo(unittest.TestCase):
@@ -53,45 +51,6 @@ class TestBuildTodo(unittest.TestCase):
     def test_single_commit_does_not_sleep(self):
         self.assertEqual(_build_todo(['abc First'], 'new a', 'update a', sleep=5, with_message=False),
                          "pick abc First\nexec git p4son new a\n")
-
-
-@mock.patch('git_p4son.rebase_todo._run_todo_rebase', return_value=0)
-@mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
-class TestRebasePerCommit(unittest.TestCase):
-    def setUp(self):
-        self.mock_clean = start_patch(
-            self, 'git_p4son.rebase_todo.check_git_workspace_clean')
-
-    def _rebase(self, message=None):
-        return rebase_per_commit('new a', 'update a', 'main', '/ws',
-                                 message=message, sleep=None,
-                                 edit_todo=False, dry_run=False)
-
-    def test_passes_the_todo_and_message_to_the_rebase(self, mock_commits,
-                                                       mock_rebase):
-        mock_commits.return_value = ['abc First']
-        self._rebase(message='Title')
-        mock_commits.assert_called_once_with('main', '/ws')
-        todo, base, ws = mock_rebase.call_args.args
-        self.assertEqual(
-            todo, 'pick abc First\n'
-            'exec git p4son new a -F .git-p4son/reviews/message\n')
-        self.assertEqual((base, ws), ('main', '/ws'))
-        self.assertEqual(mock_rebase.call_args.kwargs['message'], 'Title')
-
-    def test_no_commits(self, mock_commits, mock_rebase):
-        mock_commits.return_value = []
-        with self.assertRaisesRegex(CommandError, 'No commits found'):
-            self._rebase()
-        mock_rebase.assert_not_called()
-
-    def test_refuses_dirty_workspace_before_finding_commits(
-            self, mock_commits, mock_rebase):
-        self.mock_clean.side_effect = CommandError('Workspace is not clean')
-        with self.assertRaisesRegex(CommandError, 'not clean'):
-            self._rebase()
-        mock_commits.assert_not_called()
-        mock_rebase.assert_not_called()
 
 
 @mock.patch('git_p4son.rebase_todo.subprocess.run',

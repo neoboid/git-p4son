@@ -19,7 +19,7 @@ from git_p4son.init import (
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-from tests.helpers import start_patch, WorkspaceTestCase
+from tests.helpers import captured_output, start_patch, WorkspaceTestCase
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -301,9 +301,9 @@ class TestInitCommand(unittest.TestCase):
                            return_value=_MOCK_SPEC), \
                 mock.patch('os.path.exists', return_value=True), \
                 mock.patch('os.getcwd', return_value='/ws'), \
-                mock.patch('git_p4son.init.log') as mock_log:
+                captured_output() as out:
             self.assertEqual(init_command(self._make_args()), 0)
-        return [str(c.args[0]) for c in mock_log.info.call_args_list]
+        return out.getvalue().partition('Next steps')[2].splitlines()
 
     def test_configures_split_users(self):
         self._next_steps(has_commits=False)

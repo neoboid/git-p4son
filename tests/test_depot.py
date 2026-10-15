@@ -11,6 +11,7 @@ from git_p4son.depot import (
     get_depot_root,
     subdirectory_depot_root,
 )
+from tests.helpers import captured_output
 
 
 class TestGetDepotRoot(unittest.TestCase):
@@ -79,9 +80,10 @@ class TestCheckDepotRoot(unittest.TestCase):
             '//$(workspace)/Engine', 'my-ws', '/ws'))
         mock_exists.assert_called_once_with('//my-ws/Engine', '/ws')
 
-    @mock.patch('git_p4son.depot.log')
     @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=False)
-    def test_logs_an_invalid_root(self, _exists, mock_log):
-        self.assertFalse(check_depot_root('//$(workspace)', 'my-ws', '/ws'))
-        mock_log.error.assert_called_once_with(
-            'Depot root //my-ws/... is not valid')
+    def test_logs_an_invalid_root(self, _exists):
+        with captured_output() as out:
+            self.assertFalse(check_depot_root(
+                '//$(workspace)', 'my-ws', '/ws'))
+        self.assertEqual(
+            out.getvalue(), '[err] Depot root //my-ws/... is not valid\n')

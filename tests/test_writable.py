@@ -17,7 +17,7 @@ from git_p4son.writable import (
     set_writable_mode,
     writable_command,
 )
-from tests.helpers import cli_args, GitRepoTestCase
+from tests.helpers import captured_output, cli_args, GitRepoTestCase
 
 
 def _mode(path):
@@ -186,13 +186,13 @@ class TestWritableCommand(GitRepoTestCase):
                      workspace_dir=self.ws))
 
     def test_show_reports_the_mode(self):
-        with mock.patch('git_p4son.writable.log') as mock_log:
+        with captured_output() as out:
             self.assertEqual(self._run(None), 0)
-        mock_log.success.assert_called_with('off')
+        self.assertTrue(out.getvalue().endswith('[ok] off\n'))
         set_writable_mode(self.ws, True)
-        with mock.patch('git_p4son.writable.log') as mock_log:
+        with captured_output() as out:
             self._run(None)
-        mock_log.success.assert_called_with('on')
+        self.assertTrue(out.getvalue().endswith('[ok] on\n'))
 
     def test_apply_on_makes_tracked_files_writable(self):
         set_writable_mode(self.ws, True)

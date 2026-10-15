@@ -1,5 +1,7 @@
 """Tests for git_p4son.hooks module."""
 
+import contextlib
+import io
 import os
 import stat
 import tempfile
@@ -8,7 +10,7 @@ from unittest import mock
 
 from git_p4son.config import ConfigError
 from git_p4son.hooks import run_hooks
-from tests.helpers import make_run_result
+from tests.helpers import captured_output, make_run_result
 
 
 class TestRunHooks(unittest.TestCase):
@@ -20,10 +22,9 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_not_called()
 
     @unittest.skipIf(os.name == 'nt', 'POSIX executable bit test')
-    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks.run')
     def test_posix_runs_executable_and_warns_for_non_executable(
-            self, mock_run, mock_log):
+            self, mock_run):
         mock_run.return_value = make_run_result()
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
@@ -36,7 +37,8 @@ class TestRunHooks(unittest.TestCase):
                 f.write('#!/bin/sh\n')
             os.chmod(executable, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
 
-            run_hooks('post-sync', tmpdir, os.path.join(tmpdir, 'subdir'))
+            with captured_output() as out:
+                run_hooks('post-sync', tmpdir, os.path.join(tmpdir, 'subdir'))
 
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0], [executable])
@@ -45,7 +47,8 @@ class TestRunHooks(unittest.TestCase):
         self.assertEqual(
             mock_run.call_args.kwargs['env']['GIT_P4SON_REPO_ROOT_DIR'],
             os.path.abspath(tmpdir))
-        mock_log.warning.assert_called_once()
+        self.assertEqual(out.getvalue().count('[warn]'), 1)
+        self.assertIn('skip-me', out.getvalue())
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
@@ -114,9 +117,8 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_not_called()
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
-    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks.run')
-    def test_windows_warns_for_unknown_extension(self, mock_run, mock_log,
+    def test_windows_warns_for_unknown_extension(self, mock_run,
                                                  _is_windows):
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
@@ -124,16 +126,16 @@ class TestRunHooks(unittest.TestCase):
             with open(os.path.join(hook_dir, 'readme.txt'), 'w') as f:
                 f.write('')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            with captured_output() as out:
+                run_hooks('post-sync', tmpdir, tmpdir)
 
         mock_run.assert_not_called()
-        mock_log.warning.assert_called_once()
+        self.assertEqual(out.getvalue().count('[warn]'), 1)
 
-    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_prints_hook_stdout_after_command_finishes(
-            self, mock_run, _is_windows, mock_log):
+            self, mock_run, _is_windows):
         mock_run.return_value = make_run_result(stdout=['hook output'])
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
@@ -141,16 +143,16 @@ class TestRunHooks(unittest.TestCase):
             with open(os.path.join(hook_dir, 'script.py'), 'w') as f:
                 f.write('')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            with captured_output() as out:
+                run_hooks('post-sync', tmpdir, tmpdir)
 
         mock_run.assert_called_once()
-        mock_log.output.assert_called_once_with('hook output')
+        self.assertIn('\nhook output\n', out.getvalue())
 
-    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_failing_hook_does_not_stop_remaining_hooks(
-            self, mock_run, _is_windows, mock_log):
+            self, mock_run, _is_windows):
         """One failing hook is reported and the rest still run."""
         mock_run.side_effect = [
             make_run_result(returncode=1, stderr=['boom']),
@@ -164,16 +166,16 @@ class TestRunHooks(unittest.TestCase):
                 with open(os.path.join(hook_dir, name), 'w') as f:
                     f.write('')
 
-            results = run_hooks('post-sync', tmpdir, tmpdir)
+            with captured_output() as out:
+                results = run_hooks('post-sync', tmpdir, tmpdir)
 
         self.assertEqual(mock_run.call_count, 2)
         self.assertEqual(len(results), 2)
-        mock_log.error.assert_called_once()
+        self.assertEqual(out.getvalue().count('[err]'), 1)
 
-    @mock.patch('git_p4son.hooks.log')
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
-    def test_prints_hook_stderr(self, mock_run, _is_windows, mock_log):
+    def test_prints_hook_stderr(self, mock_run, _is_windows):
         mock_run.return_value = make_run_result(stderr=['a warning'])
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks',
@@ -182,9 +184,10 @@ class TestRunHooks(unittest.TestCase):
             with open(os.path.join(hook_dir, 'script.py'), 'w') as f:
                 f.write('')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                run_hooks('post-sync', tmpdir, tmpdir)
 
-        mock_log.output.assert_called_once_with('a warning', stderr=True)
+        self.assertEqual(err.getvalue(), 'a warning\n')
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')

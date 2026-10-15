@@ -10,12 +10,12 @@ from unittest import mock
 from git_p4son.perforce import ClobberMode, P4SyncPreviewFile
 from git_p4son.sync_merge import (
     ChangedFile,
-    WritableSyncFileSet,
     merge_changed_files,
     prepare_writable_files,
     report_not_synced,
+    WritableSyncFileSet,
 )
-from tests.helpers import preview_update
+from tests.helpers import captured_output, preview_update
 
 
 def _files_at_commits(content):
@@ -405,15 +405,13 @@ class TestPrepareWritableFiles(unittest.TestCase):
                         'git_p4son.sync_merge.p4_head_types',
                         return_value={
                             path: 'binary+w'}), \
-                    mock.patch('git_p4son.sync_merge.log') as mock_log:
+                    captured_output() as out:
                 result = _prepare([preview_update(path)], ws, 'head123',
                                   self.temp_root)
 
             self.assertEqual(result.ignored, [])
             self.assertEqual(result.always_writable, [path])
-            warnings = ' '.join(
-                str(c.args[0]) for c in mock_log.warning.call_args_list)
-            self.assertNotIn('will not be synced', warnings)
+            self.assertNotIn('will not be synced', out.getvalue())
             mode = os.stat(path).st_mode
             self.assertTrue(mode & stat.S_IWUSR)
 
@@ -438,8 +436,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(result.ignored, [ignored])
             self.assertEqual(result.always_writable, [always])
 
-    def _run_with_tracked_and_ignored(self, ws, mode, level='warning'):
-        """Prepare one unchanged tracked and one ignored file, returning the messages logged at level."""
+    def _run_with_tracked_and_ignored(self, ws, mode):
+        """Prepare one unchanged tracked and one ignored file, returning what it printed."""
         tracked = self._make_file(ws, 'a.txt')
         ignored = self._make_file(ws, 'build.log')
         with mock.patch('git_p4son.sync_merge.get_tracked_files',
@@ -449,14 +447,13 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 mock.patch('git_p4son.sync_merge.find_base_commits',
                            return_value={'a.txt': 'head123'}), \
                 mock.patch('git_p4son.sync_merge.get_blob_oids', return_value={}), \
-                mock.patch('git_p4son.sync_merge.log') as mock_log:
+                captured_output() as out:
             result = _prepare(
                 [preview_update(tracked), preview_update(
                     ignored)], ws, 'head123',
                 self.temp_root, clobber_mode=mode)
         self.assertEqual(result.ignored, [ignored])
-        return ' '.join(str(c.args[0]) for c in
-                        getattr(mock_log, level).call_args_list)
+        return out.getvalue()
 
     def test_ignored_message_without_clobber(self):
         with tempfile.TemporaryDirectory() as ws:
@@ -476,13 +473,11 @@ class TestPrepareWritableFiles(unittest.TestCase):
     def test_ignored_message_with_allwrite(self):
         """With allwrite the summary says ignored files sync unless modified."""
         with tempfile.TemporaryDirectory() as ws:
-            warnings = self._run_with_tracked_and_ignored(
+            out = self._run_with_tracked_and_ignored(
                 ws, ClobberMode.ALLWRITE)
-            self.assertNotIn('will not be synced', warnings)
-            infos = self._run_with_tracked_and_ignored(
-                ws, ClobberMode.ALLWRITE, level='info')
-            self.assertIn('unless modified locally', infos)
-            self.assertNotIn('build.log', infos)
+            self.assertNotIn('will not be synced', out)
+            self.assertIn('unless modified locally', out)
+            self.assertNotIn('build.log', out)
 
     def test_nonexistent_files_skipped(self):
         result = _prepare(
@@ -694,10 +689,10 @@ class TestMergeChangedFiles(unittest.TestCase):
 
 
 class TestMergeDeletedLocally(unittest.TestCase):
-    @mock.patch('git_p4son.sync_merge.log')
-    def test_file_deleted_locally_keeps_the_perforce_version(self, mock_log):
+    def test_file_deleted_locally_keeps_the_perforce_version(self):
         with tempfile.TemporaryDirectory() as ws, \
-                tempfile.TemporaryDirectory() as temp_root:
+                tempfile.TemporaryDirectory() as temp_root, \
+                captured_output() as out:
             path = os.path.join(ws, 'a.cpp')
             with open(path, 'w') as f:
                 f.write('from perforce')
@@ -706,26 +701,27 @@ class TestMergeDeletedLocally(unittest.TestCase):
                              base_path=None)], ws, temp_root)
             with open(path) as f:
                 self.assertEqual(f.read(), 'from perforce')
-        mock_log.warning.assert_any_call(
-            '1 file deleted locally but modified in Perforce')
+        self.assertIn('[warn] 1 file deleted locally but modified in Perforce\n',
+                      out.getvalue())
 
 
-@mock.patch('git_p4son.sync_merge.log')
 class TestReportNotSynced(unittest.TestCase):
-    def test_clobber_lists_the_ignored_files_p4_overwrote(self, mock_log):
+    def test_clobber_lists_the_ignored_files_p4_overwrote(self):
         preps = [WritableSyncFileSet(ignored=['/ws/b.log', '/ws/a.log']),
                  WritableSyncFileSet(ignored=['/ws/a.log'])]
-        report_not_synced(preps, ClobberMode.CLOBBER, '/ws')
-        mock_log.heading.assert_called_once_with(
-            'Git-ignored writable files overwritten by p4 (clobber enabled)')
-        self.assertEqual([c.args[0] for c in mock_log.info.call_args_list],
-                         ['a.log', 'b.log'])
-        mock_log.warning.assert_called_once_with('2 files overwritten')
+        with captured_output() as out:
+            report_not_synced(preps, ClobberMode.CLOBBER, '/ws')
+        self.assertEqual(
+            out.getvalue().lstrip('\n'),
+            '# Git-ignored writable files overwritten by p4 (clobber enabled)\n'
+            'a.log\nb.log\n'
+            '[warn] 2 files overwritten\n')
 
-    def test_nothing_to_report_prints_nothing(self, mock_log):
-        report_not_synced([WritableSyncFileSet()],
-                          ClobberMode.NOCLOBBER, '/ws')
-        mock_log.heading.assert_not_called()
+    def test_nothing_to_report_prints_nothing(self):
+        with captured_output() as out:
+            report_not_synced([WritableSyncFileSet()],
+                              ClobberMode.NOCLOBBER, '/ws')
+        self.assertEqual(out.getvalue(), '')
 
 
 if __name__ == '__main__':

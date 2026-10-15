@@ -15,7 +15,7 @@ from git_p4son.alias import (
     alias_show_command,
 )
 from git_p4son.common import CommandError
-from tests.helpers import cli_args, WorkspaceTestCase
+from tests.helpers import captured_output, cli_args, WorkspaceTestCase
 
 
 ALIASES = [('feature-a', '100'), ('feature-b', '200'), ('feature-c', '300')]
@@ -61,15 +61,14 @@ class TestAliasDeleteCommand(unittest.TestCase):
             [c.args[0] for c in mock_delete.call_args_list],
             ['feature-a', 'feature-b', 'feature-c'])
 
-    @mock.patch('git_p4son.alias.log')
-    def test_all_goes_on_past_a_failed_delete(self, mock_log, _list,
-                                              mock_delete):
+    def test_all_goes_on_past_a_failed_delete(self, _list, mock_delete):
         mock_delete.side_effect = [None, CommandError('boom'), None]
-        rc = alias_delete_command(
-            cli_args(['alias', 'delete', '--all']))
+        with captured_output() as out:
+            rc = alias_delete_command(
+                cli_args(['alias', 'delete', '--all']))
         self.assertEqual(rc, 0)
         self.assertEqual(mock_delete.call_count, 3)
-        mock_log.error.assert_called_once_with('boom')
+        self.assertIn('[err] boom\n', out.getvalue())
 
     def test_all_without_aliases(self, mock_list, mock_delete):
         mock_list.return_value = []
@@ -163,15 +162,14 @@ class TestAliasNewAndList(WorkspaceTestCase):
             workspace_dir=self.ws))
 
     def _list(self):
-        with mock.patch('git_p4son.alias.log') as mock_log:
+        with captured_output() as out:
             alias_list_command(
                 cli_args(['alias', 'list'], workspace_dir=self.ws))
-        return [c.args[0] for c in mock_log.info.call_args_list]
+        return out.getvalue().splitlines()
 
     def test_new_aliases_are_listed_in_name_order(self):
-        with mock.patch('git_p4son.alias.log'):
-            self.assertEqual(self._new('200', 'feature-b'), 0)
-            self.assertEqual(self._new('100', 'feature-a'), 0)
+        self.assertEqual(self._new('200', 'feature-b'), 0)
+        self.assertEqual(self._new('100', 'feature-a'), 0)
         self.assertEqual(self._list(), ['Found 2 aliases',
                                         'feature-a -> CL 100',
                                         'feature-b -> CL 200'])
@@ -180,8 +178,7 @@ class TestAliasNewAndList(WorkspaceTestCase):
         self.assertEqual(self._list(), ['No aliases defined'])
 
     def test_empty_alias_files_are_left_out(self):
-        with mock.patch('git_p4son.alias.log'):
-            self._new('100', 'feature-a')
+        self._new('100', 'feature-a')
         open(os.path.join(self.ws, '.git-p4son', 'changelists', 'empty'),
              'w').close()
         self.assertEqual(self._list(), ['Found 1 alias',

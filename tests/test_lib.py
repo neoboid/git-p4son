@@ -14,6 +14,7 @@ from git_p4son.lib import (
     update_changelist,
 )
 from tests.helpers import (
+    captured_output,
     make_run_result,
     SAMPLE_SPEC,
     SAMPLE_SPEC_NO_COMMITS,
@@ -347,33 +348,32 @@ class TestOpenWarnings(unittest.TestCase):
                 mock.patch('git_p4son.perforce.run',
                            return_value=make_run_result(
                                returncode=1, stdout=output)), \
-                mock.patch('git_p4son.perforce.log'), \
-                mock.patch('git_p4son.lib.log') as mock_log:
+                captured_output() as out:
             include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
-        return mock_opened, mock_log
+        return mock_opened, out.getvalue()
 
     def test_warns_about_files_left_unopened(self):
         """A file matching .p4ignore is skipped with a warning and the rest still open."""
-        _, mock_log = self._run(
+        _, out = self._run(
             ['generated.cs', 'real.txt'], {'real.txt': ('100', 'add')},
             ['//depot/real.txt#1 - opened for add',
              "generated.cs - ignored file can't be added."])
-        mock_log.warning.assert_called_once_with(
-            'p4 did not open 1 of 2 files:')
-        logged = [c.args[0] for c in mock_log.info.call_args_list]
-        self.assertIn('  generated.cs (for add)', logged)
-        self.assertIn("  generated.cs - ignored file can't be added.", logged)
-        self.assertNotIn('  //depot/real.txt#1 - opened for add', logged)
+        self.assertTrue(out.endswith(
+            '[warn] p4 did not open 1 of 2 files:\n'
+            '  generated.cs (for add)\n'
+            'p4 said:\n'
+            "  generated.cs - ignored file can't be added.\n"))
 
     def test_file_opened_in_another_changelist_warns(self):
-        _, mock_log = self._run(['a.txt'], {'a.txt': ('200', 'add')}, [])
-        mock_log.warning.assert_called_once()
+        _, out = self._run(['a.txt'], {'a.txt': ('200', 'add')}, [])
+        self.assertIn('[warn] p4 did not open 1 of 1 file:\n  a.txt (for add)\n',
+                      out)
 
     def test_no_warning_when_all_opened(self):
-        mock_opened, mock_log = self._run(
+        mock_opened, out = self._run(
             ['new.txt'], {'new.txt': ('100', 'add')},
             ['//depot/new.txt#1 - opened for add'])
-        mock_log.warning.assert_not_called()
+        self.assertNotIn('[warn]', out)
         self.assertEqual(mock_opened.call_args_list[1].args,
                          (['new.txt'], '/ws'))
 
@@ -651,25 +651,24 @@ class TestActionMismatch(unittest.TestCase):
 class TestBatchedActions(unittest.TestCase):
     @mock.patch('git_p4son.lib.restore_files')
     @mock.patch('git_p4son.lib._warn_unopened')
-    @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files', return_value={
         'a.txt': ('100', 'delete'), 'b.txt': ('200', 'delete'),
         'c.txt': ('200', 'edit'), 'd.txt': ('300', 'edit')})
     def test_reverts_reopens_and_restores_in_one_call_each(
-            self, _opened, mock_run, mock_log, _warn, mock_restore):
+            self, _opened, mock_run, _warn, mock_restore):
         changes = LocalChanges()
         changes.mods = ['a.txt', 'b.txt', 'c.txt', 'd.txt']
-        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
+        with captured_output() as out:
+            include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
             (['p4', '-L', 'en', '-x', '-', 'revert'], 'a.txt\nb.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'c.txt\nd.txt'),
         ])
         mock_restore.assert_called_once_with(['a.txt', 'b.txt'], '/ws', False)
-        logged = [c.args[0] for c in mock_log.info.call_args_list]
-        self.assertIn('Moving files from other changelists:', logged)
-        self.assertIn('  c.txt', logged)
+        self.assertIn('Moving files from other changelists:\n  c.txt\n  d.txt\n',
+                      out.getvalue())
 
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files',
@@ -698,10 +697,10 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
             'make_writable': mock.patch('git_p4son.writable.make_writable'),
-            'log': mock.patch('git_p4son.lib.log'),
         }
         self.mocks = {name: p.start() for name, p in patches.items()}
         self.addCleanup(mock.patch.stopall)
+        self.out = self.enterContext(captured_output())
 
     def _setup(self, opened, tracked, on_disk):
         self.mocks['opened'].return_value = opened
@@ -735,7 +734,8 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
             ['a.txt', 'b.txt'], self.ws, False)
         self.mocks['restore'].assert_called_once_with(
             ['a.txt', 'b.txt'], self.ws, False)
-        self.mocks['log'].success.assert_called_once_with('2 files reverted')
+        self.assertTrue(self.out.getvalue().endswith(
+            '[ok] 2 files reverted\n'))
 
     def test_real_delete_is_left_alone(self):
         """Opened for delete and gone from git and disk: a real delete."""
@@ -779,7 +779,8 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self.mocks['revert_unchanged'].return_value = [
             '//depot/a.txt#1 - was edit, reverted']
         revert_unchanged_files('100', self.ws, dry_run=False)
-        self.mocks['log'].success.assert_called_once_with('2 files reverted')
+        self.assertTrue(self.out.getvalue().endswith(
+            '[ok] 2 files reverted\n'))
 
     def test_dry_run_reverts_and_restores_nothing(self):
         self._setup([('a.txt', 'edit'), ('c.txt', 'delete')],

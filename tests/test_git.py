@@ -26,6 +26,7 @@ from git_p4son.git import (
     _get_rebase_branch,
     get_staged_files,
     get_tracked_files,
+    get_untracked_files,
     get_workspace_dir,
     git_last_synced_changelist,
     has_commits,
@@ -209,6 +210,15 @@ class TestRevision(GitRepoTestCase):
     def test_commit_subjects(self):
         self.assertEqual(
             get_commit_subjects_since(self.base, self.ws, self.tip), ['change'])
+
+    def test_untracked_files_are_those_the_revision_lacks(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.write_file('new.txt')
+        self.write_file('build.log')
+        self.assertEqual(sorted(get_untracked_files(self.tip, self.ws)),
+                         ['.gitignore', 'b.txt', 'new.txt'])
+        self.assertEqual(sorted(list_tracked_files(self.ws)),
+                         ['a.txt', 'b.txt'])
 
     def test_tracked_files_come_from_the_revision_not_the_index(self):
         self.assertEqual(sorted(list_tracked_files(self.ws, self.tip)),

@@ -3,6 +3,7 @@
 import os
 import os.path
 import re
+import tempfile
 from dataclasses import dataclass, field
 
 from .common import (
@@ -124,6 +125,16 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
         if 'R' in status or 'C' in status:
             next(entries)
     return files
+
+
+def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
+    """List the files git does not ignore that revision does not hold, leaving the real index alone."""
+    with tempfile.TemporaryDirectory(prefix='git-p4son-index-') as directory:
+        env = {'GIT_INDEX_FILE': os.path.join(directory, 'index')}
+        run(['git', 'read-tree', revision], cwd=workspace_dir, env=env)
+        result = run(['git', 'ls-files', '--others', '--exclude-standard', '-z'],
+                     cwd=workspace_dir, env=env, text=False)
+        return _nul_fields(result.stdout)
 
 
 # --- staging and committing ---

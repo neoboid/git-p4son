@@ -15,7 +15,12 @@ from git_p4son.sync_split_users import (
     sync_split_users_command,
     USER_PLACEHOLDER,
 )
-from tests.helpers import cli_args, start_patch, WorkspaceTestCase
+from tests.helpers import (
+    captured_output,
+    cli_args,
+    start_patch,
+    WorkspaceTestCase,
+)
 
 
 class TestSplitUsersConfig(unittest.TestCase):
@@ -81,22 +86,22 @@ class TestSelfSplit(unittest.TestCase):
             self.assertFalse(is_self_split(tmpdir))
 
 
-@mock.patch('git_p4son.sync_split_users.log')
 @mock.patch('git_p4son.sync_split_users.get_p4_user')
 class TestResolveSplitUsers(unittest.TestCase):
-    def test_placeholder_becomes_the_current_user(self, mock_user, _log):
+    def test_placeholder_becomes_the_current_user(self, mock_user):
         mock_user.return_value = 'carol'
         self.assertEqual(resolve_split_users(['bob', USER_PLACEHOLDER], '/ws'),
                          ['bob', 'carol'])
 
-    def test_p4_failure_is_shown_before_the_error(self, mock_user, mock_log):
+    def test_p4_failure_is_shown_before_the_error(self, mock_user):
         mock_user.side_effect = RunError(
             'p4 info failed', stderr=['Connect to server failed'])
-        with self.assertRaisesRegex(CommandError, '--no-split'):
+        with captured_output() as out, \
+                self.assertRaisesRegex(CommandError, '--no-split'):
             resolve_split_users([USER_PLACEHOLDER], '/ws')
-        mock_log.info.assert_called_once_with('Connect to server failed')
+        self.assertEqual(out.getvalue(), 'Connect to server failed\n')
 
-    def test_unknown_user_is_an_error(self, mock_user, _log):
+    def test_unknown_user_is_an_error(self, mock_user):
         mock_user.return_value = None
         with self.assertRaisesRegex(CommandError, 'Cannot determine'):
             resolve_split_users([USER_PLACEHOLDER], '/ws')

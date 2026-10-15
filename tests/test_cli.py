@@ -7,10 +7,15 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.cli import create_parser, main, run_command, _resolve_branch_keyword
+from git_p4son.cli import (
+    create_parser,
+    main,
+    _resolve_branch_keyword,
+    run_command,
+)
 from git_p4son.common import CommandError, RunError
-from git_p4son.git import get_head_subject
 from git_p4son.log import log
+from tests.helpers import captured_output
 
 
 class TestCreateParser(unittest.TestCase):
@@ -248,17 +253,18 @@ class TestRunCommand(unittest.TestCase):
         mock_sync.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.log')
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
-    def test_dry_run_ends_with_one_final_line(self, _sync, mock_log, _ws):
-        run_command(create_parser().parse_args(['sync', '-n']))
-        mock_log.info.assert_called_once_with('Dry run, nothing changed')
+    def test_dry_run_ends_with_one_final_line(self, _sync, _ws):
+        with captured_output() as out:
+            run_command(create_parser().parse_args(['sync', '-n']))
+        self.assertTrue(out.getvalue().endswith(
+            '\nDry run, nothing changed\n'))
 
-    @mock.patch('git_p4son.cli.log')
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
-    def test_real_run_has_no_dry_run_line(self, _sync, mock_log, _ws):
-        run_command(create_parser().parse_args(['sync']))
-        mock_log.info.assert_not_called()
+    def test_real_run_has_no_dry_run_line(self, _sync, _ws):
+        with captured_output() as out:
+            run_command(create_parser().parse_args(['sync']))
+        self.assertNotIn('Dry run', out.getvalue())
 
     @mock.patch('git_p4son.cli.writable_command', return_value=0)
     def test_dispatches_writable(self, mock_writable, _ws):

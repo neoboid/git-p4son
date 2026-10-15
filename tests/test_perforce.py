@@ -37,7 +37,12 @@ from git_p4son.perforce import (
     parse_ztag_output,
     replace_description_in_spec,
 )
-from tests.helpers import make_run_result, SAMPLE_SPEC, SAMPLE_SPEC_NO_COMMITS
+from tests.helpers import (
+    captured_output,
+    make_run_result,
+    SAMPLE_SPEC,
+    SAMPLE_SPEC_NO_COMMITS,
+)
 
 
 class TestParseZtagOutput(unittest.TestCase):
@@ -667,23 +672,25 @@ class TestGetOpenedFiles(unittest.TestCase):
         self.assertEqual(get_opened_files([], '/ws'), {})
         mock_run.assert_not_called()
 
-    @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run')
-    def test_unopened_and_new_files_are_not_errors(self, mock_run, mock_log):
+    def test_unopened_and_new_files_are_not_errors(self, mock_run):
         mock_run.return_value = make_run_result(returncode=1, stderr=[
             'c.txt - file(s) not opened on this client.',
             'new.txt - no such file(s).',
         ])
-        self.assertEqual(get_opened_files(['c.txt', 'new.txt'], '/ws'), {})
-        mock_log.warning.assert_not_called()
+        with captured_output() as out:
+            self.assertEqual(get_opened_files(['c.txt', 'new.txt'], '/ws'), {})
+        self.assertEqual(out.getvalue(), '')
 
-    @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run')
-    def test_other_errors_warn(self, mock_run, mock_log):
+    def test_other_errors_warn(self, mock_run):
         mock_run.return_value = make_run_result(
             returncode=1, stderr=['Perforce password (P4PASSWD) invalid.'])
-        self.assertEqual(get_opened_files(['a.txt'], '/ws'), {})
-        mock_log.warning.assert_called_once()
+        with captured_output() as out:
+            self.assertEqual(get_opened_files(['a.txt'], '/ws'), {})
+        self.assertEqual(out.getvalue(),
+                         '[warn] p4 fstat failed to list opened files:\n'
+                         '  Perforce password (P4PASSWD) invalid.\n')
 
     @mock.patch('git_p4son.perforce.run')
     def test_windows_paths(self, mock_run):
@@ -760,21 +767,22 @@ class TestGetOpenedFilesInChangelist(unittest.TestCase):
         ])
         self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
 
-    @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run')
-    def test_nothing_opened(self, mock_run, mock_log):
+    def test_nothing_opened(self, mock_run):
         mock_run.return_value = make_run_result(
             returncode=1, stderr=['... - file(s) not opened on this client.'])
-        self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
-        mock_log.warning.assert_not_called()
+        with captured_output() as out:
+            self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
+        self.assertEqual(out.getvalue(), '')
 
-    @mock.patch('git_p4son.perforce.log')
     @mock.patch('git_p4son.perforce.run')
-    def test_error_is_warned_about(self, mock_run, mock_log):
+    def test_error_is_warned_about(self, mock_run):
         mock_run.return_value = make_run_result(
             returncode=1, stderr=['Perforce client error: connect failed'])
-        self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
-        mock_log.warning.assert_called_once()
+        with captured_output() as out:
+            self.assertEqual(get_opened_files_in_changelist('100', '/ws'), [])
+        self.assertIn('[warn] p4 fstat failed to list opened files:\n'
+                      '  Perforce client error: connect failed\n', out.getvalue())
 
 
 class TestP4RevertUnchanged(unittest.TestCase):

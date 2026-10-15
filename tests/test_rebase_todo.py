@@ -13,6 +13,7 @@ from git_p4son.rebase_todo import (
     _run_todo_rebase,
     sequence_editor_command,
 )
+from tests.helpers import captured_output
 
 
 class TestBuildTodo(unittest.TestCase):
@@ -66,16 +67,16 @@ class TestRunTodoRebase(unittest.TestCase):
                 os.path.join(ws, CONFIG_DIR, 'reviews', 'todo')))
 
     def test_dry_run_prints_and_writes_nothing(self, mock_run):
-        with tempfile.TemporaryDirectory() as ws, \
-                mock.patch('git_p4son.rebase_todo.log') as mock_log:
+        with tempfile.TemporaryDirectory() as ws, captured_output() as out:
             _run_todo_rebase('pick abc First\n', 'main', ws,
                              edit_todo=False, message='Title', dry_run=True)
             self.assertEqual(os.listdir(ws), [])
         mock_run.assert_not_called()
-        printed = [c.args[0] for c in mock_log.info.call_args_list]
-        self.assertIn('pick abc First', printed)
-        self.assertIn('Title', printed)
-        mock_log.success.assert_called_once_with('Would rebase with this todo')
+        self.assertEqual(out.getvalue(),
+                         'pick abc First\n'
+                         'Message for .git-p4son/reviews/message:\n'
+                         'Title\n'
+                         '[ok] Would rebase with this todo\n')
 
     def test_failed_rebase_passes_on_git_return_code(self, mock_run):
         mock_run.return_value = mock.Mock(returncode=3)

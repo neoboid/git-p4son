@@ -16,6 +16,14 @@ from git_p4son.git import format_sync_subject
 from git_p4son.perforce import P4Change, P4SyncPreviewFile
 
 
+@contextlib.contextmanager
+def captured_output():
+    """Capture what is printed to stdout and stderr together; yields the StringIO it goes to."""
+    with contextlib.redirect_stdout(io.StringIO()) as out, \
+            contextlib.redirect_stderr(out):
+        yield out
+
+
 def make_run_result(returncode=0, stdout=None, stderr=None, elapsed=None):
     """Build a RunResult for mocking run()."""
     return RunResult(
@@ -94,17 +102,14 @@ class WorkspaceTestCase(unittest.TestCase):
 
     def run_command(self, command, argv, **overrides):
         """Run command with cli_args(argv, **overrides); returns everything it printed."""
-        with contextlib.redirect_stdout(io.StringIO()) as out, \
-                contextlib.redirect_stderr(io.StringIO()) as err:
+        with captured_output() as out:
             self.assertEqual(
                 command(cli_args(argv, workspace_dir=self.ws, **overrides)), 0)
-        return out.getvalue() + err.getvalue()
+        return out.getvalue()
 
     def command_fails(self, command, argv, message):
         """Run command with cli_args(argv), expecting a CommandError matching message."""
-        with contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()), \
-                self.assertRaisesRegex(CommandError, message):
+        with captured_output(), self.assertRaisesRegex(CommandError, message):
             command(cli_args(argv, workspace_dir=self.ws))
 
 

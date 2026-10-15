@@ -20,6 +20,7 @@ from git_p4son.sync import (
     sync_preflight,
 )
 from tests.helpers import (
+    captured_output,
     cli_args,
     make_changes,
     make_run_result,
@@ -85,21 +86,21 @@ class TestSyncChangelist(unittest.TestCase):
     def test_failed_rename_aborts_with_advice(self, mock_p4_sync):
         mock_p4_sync.side_effect = P4SyncAbortError(
             'rename: failed to rename D:\\ws\\a.uasset')
-        with mock.patch('git_p4son.sync.log') as mock_log, \
+        with captured_output() as out, \
                 self.assertRaises(CommandError) as ctx:
             _sync_changelist(12345, 'test', '//myclient',
                              '/ws', expected_clobber=set())
-        mock_log.info.assert_called_once_with(
-            'rename: failed to rename D:\\ws\\a.uasset')
+        self.assertIn('\nrename: failed to rename D:\\ws\\a.uasset\n',
+                      out.getvalue())
         self.assertIn('partially synced', str(ctx.exception))
 
     def test_unexpected_clobber_raises(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
-        with mock.patch('git_p4son.sync.log') as mock_log, \
+        with captured_output() as out, \
                 self.assertRaisesRegex(CommandError, 'Unexpected clobber'):
             _sync_changelist(12345, 'test', '//myclient', '/ws',
                              expected_clobber=set())
-        mock_log.info.assert_called_once_with('/ws/a.txt')
+        self.assertIn('\n/ws/a.txt\n', out.getvalue())
 
 
 class TestBuildSyncTargets(unittest.TestCase):
@@ -221,8 +222,7 @@ class TestCollectSplitUsers(unittest.TestCase):
         with mock.patch('git_p4son.sync.get_split_users',
                         return_value=configured), \
                 mock.patch('git_p4son.sync_split_users.get_existing_p4_users',
-                           return_value=list((known or {}).values())), \
-                mock.patch('git_p4son.sync_split_users.log'):
+                           return_value=list((known or {}).values())):
             return _collect_split_users(args, '/ws')
 
     def test_configured_users(self):
@@ -258,12 +258,10 @@ class TestShouldSplit(unittest.TestCase):
     def test_no_targets(self):
         self.assertFalse(_should_split(['me'], self._last_synced, []))
 
-    @mock.patch('git_p4son.sync.log')
-    def test_no_previous_sync(self, _log):
+    def test_no_previous_sync(self):
         self.assertFalse(_should_split(['me'], None, [(106, 'latest')]))
 
-    @mock.patch('git_p4son.sync.log')
-    def test_syncing_backwards(self, _log):
+    def test_syncing_backwards(self):
         self.assertFalse(_should_split(
             ['me'], self._last_synced, [(90, '90')]))
 

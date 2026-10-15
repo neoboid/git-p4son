@@ -15,7 +15,7 @@ from git_p4son.sync_split_users import (
     sync_split_users_command,
     USER_PLACEHOLDER,
 )
-from tests.helpers import cli_args, WorkspaceTestCase
+from tests.helpers import cli_args, start_patch, WorkspaceTestCase
 
 
 class TestSplitUsersConfig(unittest.TestCase):
@@ -105,13 +105,9 @@ class TestResolveSplitUsers(unittest.TestCase):
 class TestSyncSplitUsersList(WorkspaceTestCase):
     def setUp(self):
         super().setUp()
-        patcher = mock.patch('git_p4son.sync_split_users.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
-                             return_value='alice')
-        self.mock_user = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_log = start_patch(self, 'git_p4son.sync_split_users.log')
+        self.mock_user = start_patch(self, 'git_p4son.sync_split_users.get_p4_user',
+                                     return_value='alice')
 
     def _run(self, action):
         args = cli_args(['sync-split-users'] + ([action] if action else []),
@@ -160,17 +156,12 @@ class TestSyncSplitUsersList(WorkspaceTestCase):
 class TestSyncSplitUsersAdd(WorkspaceTestCase):
     def setUp(self):
         super().setUp()
-        patcher = mock.patch('git_p4son.sync_split_users.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_log = start_patch(self, 'git_p4son.sync_split_users.log')
         # The server knows alice (spelled "Alice") and bob.
-        patcher = mock.patch(
-            'git_p4son.sync_split_users.get_existing_p4_users',
-            side_effect=lambda names, _ws: [
-                {'alice': 'Alice', 'bob': 'bob'}[n.lower()] for n in names
-                if n.lower() in ('alice', 'bob')])
-        self.mock_existing = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_existing = start_patch(self, 'git_p4son.sync_split_users.get_existing_p4_users',
+                                         side_effect=lambda names, _ws: [
+                                             {'alice': 'Alice', 'bob': 'bob'}[n.lower()] for n in names
+                                             if n.lower() in ('alice', 'bob')])
 
     def _run(self, *names, me=False):
         args = cli_args(['sync-split-users', 'add', *names]
@@ -245,13 +236,9 @@ class TestSyncSplitUsersAdd(WorkspaceTestCase):
 class TestSyncSplitUsersDelete(WorkspaceTestCase):
     def setUp(self):
         super().setUp()
-        patcher = mock.patch('git_p4son.sync_split_users.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
-                             return_value='Carol')
-        self.mock_user = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_log = start_patch(self, 'git_p4son.sync_split_users.log')
+        self.mock_user = start_patch(self, 'git_p4son.sync_split_users.get_p4_user',
+                                     return_value='Carol')
         set_split_users(self.ws, [USER_PLACEHOLDER, 'Alice', 'bob'])
 
     def _run(self, *names, me=False):

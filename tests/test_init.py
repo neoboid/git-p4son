@@ -19,7 +19,7 @@ from git_p4son.init import (
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-from tests.helpers import WorkspaceTestCase
+from tests.helpers import start_patch, WorkspaceTestCase
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -186,13 +186,9 @@ class TestConfigureWritableMode(unittest.TestCase):
 class TestConfigureSplitUsers(WorkspaceTestCase):
     def setUp(self):
         super().setUp()
-        patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
-                             return_value='alice')
-        self.mock_user = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.init.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_user = start_patch(self, 'git_p4son.sync_split_users.get_p4_user',
+                                     return_value='alice')
+        self.mock_log = start_patch(self, 'git_p4son.init.log')
 
     def _answer(self, answer):
         with mock.patch('git_p4son.init._ask_yes_no',
@@ -281,16 +277,12 @@ class TestConfigureClaudeSkill(unittest.TestCase):
 
 class TestInitCommand(unittest.TestCase):
     def setUp(self):
-        patcher = mock.patch('git_p4son.init._configure_writable_mode',
-                             return_value=(False, False))
-        self.mock_writable = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.init._configure_split_users')
-        self.mock_split_users = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.init._configure_claude_skill')
-        self.mock_claude_skill = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_writable = start_patch(self, 'git_p4son.init._configure_writable_mode',
+                                         return_value=(False, False))
+        self.mock_split_users = start_patch(
+            self, 'git_p4son.init._configure_split_users')
+        self.mock_claude_skill = start_patch(
+            self, 'git_p4son.init._configure_claude_skill')
 
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])

@@ -24,6 +24,7 @@ from tests.helpers import (
     make_changes,
     make_run_result,
     preview_update,
+    start_patch,
 )
 
 
@@ -274,15 +275,11 @@ class TestSyncCommand(unittest.TestCase):
 
     def setUp(self):
         # Default to no client spec, so these tests never shell out to p4.
-        patcher = mock.patch('git_p4son.depot.get_client_spec',
-                             return_value=None)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        start_patch(self, 'git_p4son.depot.get_client_spec',
+                    return_value=None)
         # Default the clean-workspace check in lib to clean.
-        patcher = mock.patch('git_p4son.lib.get_dirty_files',
-                             return_value=[])
-        self.mock_workspace_dirty = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_workspace_dirty = start_patch(self, 'git_p4son.lib.get_dirty_files',
+                                                return_value=[])
 
     def _empty_prep(self):
         return WritableSyncFileSet()
@@ -946,23 +943,15 @@ class TestSyncDryRun(unittest.TestCase):
                 ('git_p4son.depot.get_client_spec', None),
                 ('git_p4son.depot.get_depot_root', '//myclient'),
                 ('git_p4son.sync.get_latest_changelist', 10500)):
-            patcher = mock.patch(target, return_value=value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.sync.git_last_synced_changelist',
-                             return_value=10000)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.sync.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
+            start_patch(self, target, return_value=value)
+        start_patch(self, 'git_p4son.sync.git_last_synced_changelist',
+                    return_value=10000)
+        self.mock_log = start_patch(self, 'git_p4son.sync.log')
         # Everything past the dry-run exit: none of it may run.
         self.untouched = {}
         for name in ('sync_preflight', 'run_hooks', 'get_head_commit',
                      '_sync_pass', 'commit'):
-            patcher = mock.patch(f'git_p4son.sync.{name}')
-            self.untouched[name] = patcher.start()
-            self.addCleanup(patcher.stop)
+            self.untouched[name] = start_patch(self, f'git_p4son.sync.{name}')
 
     def _run(self, changelist, force=False):
         args = _sync_args(changelist=changelist, force=force,
@@ -1054,16 +1043,12 @@ class TestSyncSplitting(unittest.TestCase):
                 ('git_p4son.sync.merge_changed_files', None),
                 ('git_p4son.sync._make_synced_files_writable', None),
                 ('git_p4son.sync.run_hooks', [])):
-            patcher = mock.patch(target, return_value=value)
-            self.patches[target.rsplit('.', 1)[1]] = patcher.start()
-            self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.sync.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
+            self.patches[target.rsplit('.', 1)[1]] = start_patch(
+                self, target, return_value=value)
+        self.mock_log = start_patch(self, 'git_p4son.sync.log')
         # User checks and resolution log from their own module.
-        patcher = mock.patch('git_p4son.sync_split_users.log')
-        self.mock_users_log = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_users_log = start_patch(
+            self, 'git_p4son.sync_split_users.log')
 
     def _run(self, *changelist, configured=(), split_user=None,
              no_split=False, force=False, dry_run=False):

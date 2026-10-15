@@ -5,7 +5,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError
 from git_p4son.review import review_command, _step_commands
-from tests.helpers import cli_args
+from tests.helpers import cli_args, start_patch
 
 
 class TestStepCommands(unittest.TestCase):
@@ -36,10 +36,8 @@ def _args(**overrides):
 
 class TestReviewCommand(unittest.TestCase):
     def setUp(self):
-        patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean',
-                             return_value=True)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        start_patch(self, 'git_p4son.rebase_todo.check_git_workspace_clean',
+                    return_value=True)
 
     @mock.patch('git_p4son.rebase_todo.subprocess.run')
     @mock.patch('git_p4son.rebase_todo.resolve_editor', return_value='vim')

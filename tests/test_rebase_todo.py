@@ -8,9 +8,13 @@ from unittest import mock
 from git_p4son import CONFIG_DIR
 from git_p4son.common import CommandError
 from git_p4son.rebase_todo import (
-    MESSAGE_FILE, _build_todo, rebase_per_commit, _run_todo_rebase,
+    _build_todo,
+    MESSAGE_FILE,
+    rebase_per_commit,
+    _run_todo_rebase,
     sequence_editor_command,
 )
+from tests.helpers import start_patch
 
 
 class TestBuildTodo(unittest.TestCase):
@@ -55,9 +59,8 @@ class TestBuildTodo(unittest.TestCase):
 @mock.patch('git_p4son.rebase_todo.get_commit_lines_since')
 class TestRebasePerCommit(unittest.TestCase):
     def setUp(self):
-        patcher = mock.patch('git_p4son.rebase_todo.check_git_workspace_clean')
-        self.mock_clean = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_clean = start_patch(
+            self, 'git_p4son.rebase_todo.check_git_workspace_clean')
 
     def _rebase(self, message=None):
         return rebase_per_commit('new a', 'update a', 'main', '/ws',

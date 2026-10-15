@@ -11,7 +11,7 @@ from git_p4son.processes import (
     get_running_processes,
     normalize_process_name,
 )
-from tests.helpers import make_run_result, WorkspaceTestCase
+from tests.helpers import make_run_result, start_patch, WorkspaceTestCase
 
 
 class TestGetBlockingProcesses(WorkspaceTestCase):
@@ -92,13 +92,9 @@ class TestCheckNoBlockingProcesses(WorkspaceTestCase):
 
     def setUp(self):
         super().setUp()
-        patcher = mock.patch('git_p4son.processes.log')
-        self.mock_log = patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('git_p4son.processes.get_running_processes',
-                             return_value={'zsh', 'unrealeditor'})
-        self.mock_running = patcher.start()
-        self.addCleanup(patcher.stop)
+        self.mock_log = start_patch(self, 'git_p4son.processes.log')
+        self.mock_running = start_patch(self, 'git_p4son.processes.get_running_processes',
+                                        return_value={'zsh', 'unrealeditor'})
 
     def test_nothing_configured_lists_nothing(self):
         check_no_blocking_processes(self.ws, False)

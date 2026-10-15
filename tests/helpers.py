@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from git_p4son import CONFIG_DIR
 from git_p4son.common import RunResult
@@ -45,6 +46,14 @@ def cli_args(argv, **overrides):
     if args.invocation_dir is None:
         args.invocation_dir = args.workspace_dir
     return args
+
+
+def start_patch(test, target, **kwargs):
+    """Patch target until test ends; returns the mock."""
+    patcher = mock.patch(target, **kwargs)
+    mocked = patcher.start()
+    test.addCleanup(patcher.stop)
+    return mocked
 
 
 def init_git_repo(path: str) -> None:

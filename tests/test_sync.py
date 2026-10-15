@@ -1,14 +1,17 @@
 """Tests for git_p4son.sync module."""
 
+import contextlib
+import io
+import os
+import stat
+import sys
+import tempfile
 import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
-from git_p4son.perforce import (
-    ClobberMode,
-    P4SyncAbortError,
-    P4SyncClobberError,
-)
+from git_p4son.git import format_sync_subject
+from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.sync import (
     build_sync_targets,
     _collect_split_users,
@@ -18,13 +21,12 @@ from git_p4son.sync import (
     sync_command,
     sync_preflight,
 )
-from git_p4son.sync_merge import ChangedFile, WritableSyncFileSet
 from tests.helpers import (
     cli_args,
+    FakeP4,
+    GitRepoTestCase,
     make_changes,
     make_run_result,
-    preview_update,
-    start_patch,
 )
 
 
@@ -269,923 +271,327 @@ class TestShouldSplit(unittest.TestCase):
             ['me'], self._last_synced, [(90, '90')]))
 
 
-class TestSyncCommand(unittest.TestCase):
+class SyncTestCase(GitRepoTestCase):
+    """sync against a real git repository and a scripted Perforce depot.
 
-    _last_synced = 10000
-
-    def setUp(self):
-        # Default to no client spec, so these tests never shell out to p4.
-        start_patch(self, 'git_p4son.depot.get_client_spec',
-                    return_value=None)
-        # Default the clean-workspace check in lib to clean.
-        self.mock_workspace_dirty = start_patch(self, 'git_p4son.lib.get_dirty_files',
-                                                return_value=[])
-
-    def _empty_prep(self):
-        return WritableSyncFileSet()
-
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_sync_specific_cl(self, _depot, _p4clean, mock_last_synced,
-                              _head, _preview, mock_prep, _p4sync,
-                              mock_staged, _git_add, _git_commit):
-        mock_last_synced.return_value = self._last_synced
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = ['file.txt']
-        args = _sync_args(changelist=['12345'],
-                          force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-
-    @mock.patch('git_p4son.sync_merge.log')
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist', return_value=['/ws/edited.log'])
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/edited.log')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_client_spec')
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_allwrite_reports_only_refused_ignored_files(
-            self, _depot, mock_spec, _p4clean, mock_last_synced, _head,
-            _preview, mock_prep, _p4sync, _git_clean, _add, _commit, _merge,
-            mock_log):
-        """With allwrite only the ignored files p4 refused are reported."""
-        spec = mock.Mock(uses_crlf=False, clobber_mode=ClobberMode.ALLWRITE)
-        spec.name = 'myclient'
-        mock_spec.return_value = spec
-        mock_last_synced.return_value = self._last_synced
-        mock_prep.return_value = WritableSyncFileSet(
-            ignored=['/ws/pristine.log', '/ws/edited.log'])
-        args = _sync_args(changelist=['12345'], force=False)
-        self.assertEqual(sync_command(args), 0)
-
-        headings = [str(c.args[0]) for c in mock_log.heading.call_args_list]
-        self.assertIn('Files not synced (git-ignored and locally modified)',
-                      headings)
-        infos = [str(c.args[0]) for c in mock_log.info.call_args_list]
-        self.assertIn('edited.log', infos)
-        self.assertNotIn('pristine.log', infos)
-
-    @mock.patch('git_p4son.sync._make_synced_files_writable')
-    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview')
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_writable_mode_restores_files_from_every_pass(
-            self, _depot, _p4clean, mock_last_synced, _head, mock_preview,
-            mock_prep, _p4sync, _git_clean, _add, _commit, _merge, _mode,
-            mock_restore):
-        """Every pass feeds the writable restore, and all writable files go read-only first."""
-        mock_last_synced.return_value = self._last_synced
-        mock_preview.side_effect = [[preview_update('/ws/a.cpp')],
-                                    [preview_update('/ws/b.cpp')]]
-        mock_prep.side_effect = [self._empty_prep(), self._empty_prep()]
-        args = _sync_args(changelist=['12345'], force=False)
-        self.assertEqual(sync_command(args), 0)
-
-        mock_restore.assert_called_once_with(['/ws/a.cpp', '/ws/b.cpp'],
-                                             '/ws')
-        for call in mock_prep.call_args_list:
-            self.assertIs(call.kwargs['clobber_mode'], ClobberMode.NOCLOBBER)
-
-    @mock.patch('git_p4son.depot.get_depot_root', return_value=None)
-    def test_no_depot_root_aborts(self, _depot):
-        args = _sync_args(changelist=['100'], force=False)
-        with self.assertRaisesRegex(CommandError, 'No depot root configured'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_client_spec')
-    @mock.patch('git_p4son.depot.get_depot_root',
-                return_value='//$(workspace)/Engine')
-    def test_workspace_placeholder_resolved(self, _depot, mock_spec,
-                                            _p4clean, mock_last_synced, _head,
-                                            mock_preview, mock_prep, _p4sync,
-                                            mock_staged, _git_add,
-                                            _git_commit):
-        spec = mock.Mock()
-        spec.name = 'real-client'
-        spec.uses_crlf = False
-        spec.clobber_mode = ClobberMode.NOCLOBBER
-        mock_spec.return_value = spec
-        mock_last_synced.return_value = self._last_synced
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = ['file.txt']
-        args = _sync_args(changelist=['12345'],
-                          force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        # $(workspace) is resolved before any p4 command runs against the depot.
-        self.assertEqual(
-            mock_preview.call_args.args[1], '//real-client/Engine')
-
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_client_spec', return_value=None)
-    @mock.patch('git_p4son.depot.get_depot_root',
-                return_value='//$(workspace)/Engine')
-    def test_workspace_placeholder_without_client_spec_aborts(
-            self, _depot, _spec, _p4clean):
-        args = _sync_args(changelist=['100'], force=False)
-        with self.assertRaisesRegex(CommandError, 'Cannot resolve'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.git_last_synced_changelist', return_value=None)
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_dirty_git_workspace_aborts(self, _depot, _last_synced):
-        self.mock_workspace_dirty.return_value = [('file.txt', 'modify')]
-        args = _sync_args(changelist=['100'], force=False)
-        with self.assertRaisesRegex(CommandError, 'not clean'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.git_last_synced_changelist', return_value=None)
-    @mock.patch('git_p4son.sync.get_tracked_files', return_value={'foo.txt'})
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync.p4_get_opened_files',
-                return_value=[('foo.txt', 'modify')])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_dirty_p4_workspace_aborts(self, _depot, _p4clean, _git_clean,
-                                       _tracked, _last_synced):
-        args = _sync_args(changelist=['100'], force=False)
-        with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.get_tracked_files', return_value=set())
-    @mock.patch('git_p4son.sync.p4_get_opened_files',
-                return_value=[('ignored.bin', 'modify')])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_untracked_p4_opened_files_are_allowed(
-            self, _depot, _p4clean, _tracked, mock_last_synced,
-            _head, _preview, mock_prep, _p4sync,
-            mock_staged, _add, _commit):
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = []
-        args = _sync_args(changelist=['200'], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_older_cl_without_force_aborts(self, _depot, _git_clean,
-                                           _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 200
-        args = _sync_args(changelist=['100'], force=False)
-        with self.assertRaisesRegex(CommandError, 'without --force'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_older_cl_with_force_proceeds(self, _depot, _p4clean,
-                                          mock_last_synced, _head, _preview,
-                                          mock_prep, _p4sync,
-                                          mock_staged, _add, _commit):
-        mock_last_synced.return_value = 200
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = ['file.txt']
-        args = _sync_args(changelist=['100'], force=True)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-
-    @mock.patch('git_p4son.sync.log')
-    @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_same_cl_is_noop(self, _depot, mock_git_clean, mock_p4clean,
-                             mock_last_synced, _head, mock_run_hooks, mock_log):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['100'], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        # Nothing to sync, so the whole preflight is skipped, not merely the hooks.
-        mock_git_clean.assert_not_called()
-        mock_p4clean.assert_not_called()
-        mock_run_hooks.assert_not_called()
-        mock_log.success.assert_any_call('Already at CL 100, nothing to sync')
-
-    @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_last_synced(self, _depot, _git_clean, _p4clean,
-                         mock_last_synced, _head, _preview, mock_prep,
-                         mock_p4sync, mock_run_hooks):
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        mock_p4sync.return_value = None
-        mock_run_hooks.return_value = []
-        args = _sync_args(changelist=['last-synced'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        mock_p4sync.assert_called_once_with(
-            100, 'last synced', '//myclient', '/ws',
-            expected_clobber=set())
-        mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
-        mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
-
-    @mock.patch('git_p4son.sync._make_synced_files_writable')
-    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_last_synced_restores_writable_files(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head,
-            _preview, mock_prep, _p4sync, _hooks, mock_restore):
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['last-synced'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        self.assertEqual(sync_command(args), 0)
-        mock_restore.assert_called_once_with(['/ws/a.txt'], '/ws')
-
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist', return_value=[])
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_last_synced_merges_local_changes_without_committing(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head,
-            _preview, mock_prep, _p4sync, _hooks, mock_merge, mock_commit):
-        """last-synced is a catch-up pass: local changes are merged back and nothing is committed."""
-        mock_last_synced.return_value = 100
-        changed = ChangedFile(filepath='/ws/a.txt', base_commit='abc',
-                              ours_path='/tmp/a.ours', base_path='/tmp/a.base')
-        mock_prep.return_value = WritableSyncFileSet(changed=[changed])
-        args = _sync_args(changelist=['last-synced'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        self.assertEqual(sync_command(args), 0)
-        mock_merge.assert_called_once()
-        self.assertEqual(mock_merge.call_args.args[0], [changed])
-        mock_commit.assert_not_called()
-
-    @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_last_synced_skips_sync_when_preview_empty(
-            self, _depot, _git_clean, _p4clean, mock_last_synced,
-            _head, _preview, mock_p4sync, mock_run_hooks):
-        mock_last_synced.return_value = 100
-        mock_run_hooks.return_value = []
-        args = _sync_args(changelist=['last-synced'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        mock_p4sync.assert_not_called()
-        mock_run_hooks.assert_any_call('pre-sync', '/ws', '/invoked')
-        mock_run_hooks.assert_any_call('post-sync', '/ws', '/invoked')
-
-    @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_failing_pre_sync_hook_aborts(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head,
-            _preview, mock_prep, mock_p4sync, mock_run_hooks):
-        """A non-zero pre-sync hook aborts before any changelist is synced."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        mock_run_hooks.return_value = [make_run_result(returncode=1)]
-        args = _sync_args(changelist=['200'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        with self.assertRaisesRegex(CommandError, 'pre-sync hook failed'):
-            sync_command(args)
-        mock_p4sync.assert_not_called()
-        mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
-
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.run_hooks')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_pre_sync_hook_runs_once_for_multiple_changelists(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head,
-            _preview, mock_prep, mock_p4sync, mock_run_hooks, _add, _commit,
-            _merge):
-        """Pre-sync hooks run once, not per changelist, for a CL sequence."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        mock_run_hooks.return_value = []
-        args = _sync_args(changelist=['150', '200'], force=False,
-                          workspace_dir='/ws', invocation_dir='/invoked')
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        pre_sync_calls = [
-            call for call in mock_run_hooks.call_args_list
-            if call.args[0] == 'pre-sync'
-        ]
-        self.assertEqual(len(pre_sync_calls), 1)
-
-    @mock.patch('git_p4son.sync.add_all_files', mock.Mock())
-    @mock.patch('git_p4son.sync.get_latest_changelist')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_latest_keyword(self, _depot, _p4clean, mock_last_synced, _head,
-                            _preview, mock_prep, _p4sync,
-                            mock_staged, _commit, mock_get_latest):
-        mock_last_synced.return_value = 100
-        mock_get_latest.return_value = 200
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = []
-        args = _sync_args(changelist=[], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-
-    @mock.patch('git_p4son.sync.add_all_files', mock.Mock())
-    @mock.patch('git_p4son.sync.get_latest_changelist')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.get_staged_files')
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview', return_value=[])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_explicit_head_keyword(self, _depot, _p4clean, mock_last_synced,
-                                   _head, _preview, mock_prep, _p4sync,
-                                   mock_staged, _commit, mock_get_latest):
-        """An explicit "head" syncs to the latest changelist."""
-        mock_last_synced.return_value = 100
-        mock_get_latest.return_value = 200
-        mock_prep.return_value = self._empty_prep()
-        mock_staged.return_value = []
-        args = _sync_args(changelist=['head'],
-                          force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        mock_get_latest.assert_called_once()
-
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_multiple_changelists_commit_each(
-            self, _depot, _p4clean, mock_last_synced, _head, _preview, mock_prep,
-            mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """Multiple changelists sync in sequence after a catch-up pass, one commit each."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['123', '156', '178'], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-
-        # One commit per specified changelist, in order.
-        commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
-        self.assertEqual(commit_msgs, [
-            'git-p4son: p4 sync //myclient/...@123',
-            'git-p4son: p4 sync //myclient/...@156',
-            'git-p4son: p4 sync //myclient/...@178',
-        ])
-        # Catch-up to the last synced CL, then each target in order.
-        synced_cls = [c.args[0] for c in mock_p4sync.call_args_list]
-        self.assertEqual(synced_cls, [100, 123, 156, 178])
-        # Local changes are merged back exactly once, after all commits.
-        _merge.assert_called_once()
-
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_explicit_last_synced_in_list_is_skipped(
-            self, _depot, _p4clean, mock_last_synced, _head, _preview, mock_prep,
-            mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """A specified changelist equal to the last synced one is skipped."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['100', '156'], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
-        self.assertEqual(commit_msgs,
-                         ['git-p4son: p4 sync //myclient/...@156'])
-
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_older_changelist_in_list_synced_with_force(
-            self, _depot, _p4clean, mock_last_synced, _head, _preview, mock_prep,
-            mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """An older changelist is synced, not skipped, with --force."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['50', '156'], force=True)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
-        self.assertEqual(commit_msgs, [
-            'git-p4son: p4 sync //myclient/...@50',
-            'git-p4son: p4 sync //myclient/...@156',
-        ])
-
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_three_changelists_starting_backward_with_force(
-            self, _depot, _p4clean, mock_last_synced, _head, _preview, mock_prep,
-            mock_p4sync, _git_clean, _add, mock_commit, _merge):
-        """With --force the first target may be older than the last synced changelist."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['50', '156', '178'], force=True)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
-        self.assertEqual(commit_msgs, [
-            'git-p4son: p4 sync //myclient/...@50',
-            'git-p4son: p4 sync //myclient/...@156',
-            'git-p4son: p4 sync //myclient/...@178',
-        ])
-        # Catch-up to the last synced CL, then each target in order.
-        synced_cls = [c.args[0] for c in mock_p4sync.call_args_list]
-        self.assertEqual(synced_cls, [100, 50, 156, 178])
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_older_changelist_in_list_without_force_aborts(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['50', '156'], force=False)
-        with self.assertRaisesRegex(CommandError, 'without --force'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_non_increasing_changelists_abort(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['156', '123'], force=False)
-        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_duplicate_changelists_abort(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['123', '123'], force=False)
-        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_last_synced_combined_with_number_aborts(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['last-synced', '123'], force=False)
-        with self.assertRaisesRegex(CommandError, 'cannot be combined'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_head_not_last_aborts(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head):
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['head', '123'], force=False)
-        with self.assertRaisesRegex(CommandError, 'must come last'):
-            sync_command(args)
-
-    @mock.patch('git_p4son.sync.get_latest_changelist', return_value=200)
-    @mock.patch('git_p4son.sync.merge_changed_files')
-    @mock.patch('git_p4son.sync.commit')
-    @mock.patch('git_p4son.sync.add_all_files')
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.sync._sync_changelist')
-    @mock.patch('git_p4son.sync.prepare_writable_files')
-    @mock.patch('git_p4son.sync.p4_sync_preview',
-                return_value=[preview_update('/ws/a.txt')])
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_trailing_head_resolves_and_syncs(
-            self, _depot, _p4clean, mock_last_synced, _head, _preview, mock_prep,
-            mock_p4sync, _git_clean, _add, mock_commit, _merge, _latest):
-        """A trailing "head" resolves to the latest changelist and is synced last."""
-        mock_last_synced.return_value = 100
-        mock_prep.return_value = self._empty_prep()
-        args = _sync_args(changelist=['123', '156', 'head'], force=False)
-        rc = sync_command(args)
-        self.assertEqual(rc, 0)
-        commit_msgs = [c.args[0] for c in mock_commit.call_args_list]
-        self.assertEqual(commit_msgs, [
-            'git-p4son: p4 sync //myclient/...@123',
-            'git-p4son: p4 sync //myclient/...@156',
-            'git-p4son: p4 sync //myclient/...@200',
-        ])
-
-    @mock.patch('git_p4son.sync.get_latest_changelist', return_value=140)
-    @mock.patch('git_p4son.sync.get_head_commit', return_value='def456')
-    @mock.patch('git_p4son.sync.git_last_synced_changelist')
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.sync.get_staged_files', return_value=[])
-    @mock.patch('git_p4son.depot.get_depot_root', return_value='//myclient')
-    def test_trailing_head_below_preceding_cl_aborts(
-            self, _depot, _git_clean, _p4clean, mock_last_synced, _head,
-            _latest):
-        """A "head" not above the preceding changelist fails the strictly increasing check."""
-        mock_last_synced.return_value = 100
-        args = _sync_args(changelist=['123', '156', 'head'], force=False)
-        with self.assertRaisesRegex(CommandError, 'strictly increasing'):
-            sync_command(args)
-
-
-class TestSyncDryRun(unittest.TestCase):
-    """A dry run prints the sync sequence and stops before touching the workspaces."""
+    The depot has CL 100 (a.txt, b.txt), which the workspace is synced to and git has committed."""
 
     def setUp(self):
-        for target, value in (
-                ('git_p4son.depot.get_client_spec', None),
-                ('git_p4son.depot.get_depot_root', '//myclient'),
-                ('git_p4son.sync.get_latest_changelist', 10500)):
-            start_patch(self, target, return_value=value)
-        start_patch(self, 'git_p4son.sync.git_last_synced_changelist',
-                    return_value=10000)
-        self.mock_log = start_patch(self, 'git_p4son.sync.log')
-        # Everything past the dry-run exit: none of it may run.
-        self.untouched = {}
-        for name in ('sync_preflight', 'run_hooks', 'get_head_commit',
-                     '_sync_pass', 'commit'):
-            self.untouched[name] = start_patch(self, f'git_p4son.sync.{name}')
+        super().setUp()
+        self.p4 = FakeP4(self.ws)
+        self.p4.install(self)
+        self.write_config('[depot]\nroot = "//myclient"\n')
+        self.p4.submit(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
+        self.p4.sync_to(100)
+        self.commit(format_sync_subject('//myclient', 100))
 
-    def _run(self, changelist, force=False):
-        args = _sync_args(changelist=changelist, force=force,
-                          workspace_dir='/ws', dry_run=True)
-        return sync_command(args)
+    def sync(self, *argv):
+        """Run sync with argv; returns everything it printed."""
+        with contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(
+                sync_command(cli_args(['sync', *argv], workspace_dir=self.ws)), 0)
+        return out.getvalue() + err.getvalue()
 
-    def _sequence(self):
-        """The line logged under the "Sync sequence" heading."""
-        self.mock_log.heading.assert_any_call('Sync sequence')
-        return self.mock_log.success.call_args_list[-1].args[0]
+    def sync_fails(self, *argv, message):
+        """Run sync with argv, expecting a CommandError matching message."""
+        with contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()), \
+                self.assertRaisesRegex(CommandError, message):
+            sync_command(cli_args(['sync', *argv], workspace_dir=self.ws))
 
-    def _assert_nothing_run(self):
-        for name, patched in self.untouched.items():
-            with self.subTest(name=name):
-                patched.assert_not_called()
+    def synced_commits(self):
+        """The changelists of the sync commits after the setup's, oldest first."""
+        subjects = self.git('log', '--reverse', '--format=%s').splitlines()
+        return [int(s.rsplit('@', 1)[1]) for s in subjects[1:]
+                if s.startswith('git-p4son: p4 sync')]
 
-    def test_latest(self):
-        self.assertEqual(self._run([]), 0)
-        self.assertEqual(self._sequence(), '10500')
-        self._assert_nothing_run()
+    def read(self, path):
+        with open(os.path.join(self.ws, path)) as f:
+            return f.read()
 
-    def test_sequence_ending_in_head(self):
-        self.assertEqual(self._run(['10100', '10200', 'head']), 0)
-        self.assertEqual(self._sequence(), '10100 10200 10500')
-        self._assert_nothing_run()
+    def edit(self, path, content):
+        """Change a file as the user would, making it writable first."""
+        local = os.path.join(self.ws, path)
+        if os.path.exists(local):
+            os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
+        self.write_file(path, content)
 
-    def test_last_synced(self):
-        self.assertEqual(self._run(['last-synced']), 0)
-        self.assertEqual(self._sequence(), '10000 (last synced)')
-        self._assert_nothing_run()
+    def hook(self, name, body):
+        """Add a Python hook script under .git-p4son/hooks/<name>/."""
+        path = self.write_file(os.path.join('.git-p4son', 'hooks', name, 'hook.py'),
+                               f'#!{sys.executable}\n{body}')
+        os.chmod(path, stat.S_IRWXU)
 
-    def test_older_changelist_with_force(self):
-        self.assertEqual(self._run(['9000'], force=True), 0)
-        self.assertEqual(self._sequence(), '9000')
-        self._assert_nothing_run()
+    def hook_log(self):
+        """A file outside the workspace for hooks to append to, and a reader for it."""
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        path = os.path.join(tempdir.name, 'hooks.log')
 
-    def test_invalid_arguments_still_fail(self):
-        """A dry run validates the targets exactly as a real sync does."""
-        with self.assertRaisesRegex(CommandError, 'without --force'):
-            self._run(['9000'])
-        self._assert_nothing_run()
+        def read():
+            if not os.path.exists(path):
+                return []
+            with open(path) as f:
+                return f.read().split()
+        return path, read
 
-    def test_non_numeric_changelist_fails(self):
-        with self.assertRaisesRegex(CommandError,
-                                    'Invalid changelist number: 12a'):
-            self._run(['12a'])
-        self._assert_nothing_run()
+
+class TestSync(SyncTestCase):
+    def test_syncs_to_the_latest_changelist_by_default(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'c.txt': 'c1\n'})
+        self.sync()
+        self.assertEqual(self.synced_commits(), [102])
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+        self.assertEqual(self.read('c.txt'), 'c1\n')
+
+    def test_explicit_head_keyword(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('head')
+        self.assertEqual(self.synced_commits(), [101])
+
+    def test_syncs_a_specific_changelist(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        self.sync('101')
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+
+    def test_several_changelists_get_a_commit_each(self):
+        for change, content in ((101, 'a2\n'), (102, 'a3\n'), (103, 'a4\n')):
+            self.p4.submit(change, {'a.txt': content})
+        self.sync('101', '103')
+        self.assertEqual(self.synced_commits(), [101, 103])
+        self.assertEqual(self.git('show', 'HEAD~1:a.txt'), 'a2')
+
+    def test_trailing_head_closes_a_sequence(self):
+        for change in (101, 102, 103):
+            self.p4.submit(change, {'a.txt': f'a{change}\n'})
+        self.sync('101', 'head')
+        self.assertEqual(self.synced_commits(), [101, 103])
+
+    def test_the_last_synced_changelist_in_a_list_is_skipped(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('100', '101')
+        self.assertEqual(self.synced_commits(), [101])
+
+    def test_already_synced_does_nothing(self):
+        path, read_log = self.hook_log()
+        self.hook('post-sync', f'open({path!r}, "a").write("post ")\n')
+        out = self.sync('100')
+        self.assertIn('Already at CL 100, nothing to sync', out)
+        self.assertEqual(self.synced_commits(), [])
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(read_log(), [])
+
+    def test_older_changelist_needs_force(self):
+        self.p4.submit(50, {'a.txt': 'old\n'})
+        self.sync_fails('50', message='without --force')
+        self.sync('--force', '50')
+        self.assertEqual(self.synced_commits(), [50])
+        self.assertEqual(self.read('a.txt'), 'old\n')
+
+    def test_force_sequence_may_start_before_the_last_sync(self):
+        self.p4.submit(50, {'a.txt': 'old\n'})
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('--force', '50', '101')
+        self.assertEqual(self.synced_commits(), [50, 101])
+
+    def test_invalid_arguments_fail_before_any_work(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        for argv, message in (
+                (['101', '101'], 'strictly increasing'),
+                (['102', '101'], 'strictly increasing'),
+                (['head', '101'], 'must come last'),
+                (['last-synced', '101'], 'cannot be combined'),
+                (['50', '101'], 'without --force'),
+                (['12a'], 'Invalid changelist number')):
+            with self.subTest(argv=argv):
+                self.sync_fails(*argv, message=message)
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(self.synced_commits(), [])
+
+    def test_workspace_placeholder_is_expanded(self):
+        self.write_config('[depot]\nroot = "//$(workspace)"\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync()
+        self.assertEqual(self.git('log', '-1', '--format=%s'),
+                         'git-p4son: p4 sync //myclient/...@101')
+
+    def test_workspace_placeholder_needs_a_perforce_workspace(self):
+        self.write_config('[depot]\nroot = "//$(workspace)"\n')
+        self.p4.in_workspace = False
+        self.sync_fails(message='Cannot resolve')
+
+    def test_no_depot_root_fails(self):
+        self.write_config('')
+        self.sync_fails(message='No depot root configured')
+
+    def test_dirty_git_workspace_fails_before_syncing(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.write_file('stray.txt', 'x')
+        self.sync_fails(message='not clean')
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_tracked_files_opened_in_perforce_fail_the_sync(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.opened = {'a.txt': 'edit'}
+        self.sync_fails(message='p4-opened files tracked by git')
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_untracked_files_opened_in_perforce_are_allowed(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.opened = {'Content/level.umap': 'edit'}
+        self.sync()
+        self.assertEqual(self.synced_commits(), [101])
+
+
+class TestSyncLocalChanges(SyncTestCase):
+    def test_local_changes_are_merged_back_after_pure_perforce_commits(self):
+        self.edit('a.txt', 'local\na1\n')
+        self.commit('local change')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertEqual(self.git('show', 'HEAD:a.txt'), 'a1\nupstream')
+        self.assertIn('1 file merged successfully', out)
+
+    def test_last_synced_resyncs_without_committing(self):
+        self.p4.have = 0
+        self.sync('last-synced')
+        self.assertEqual(self.p4.synced(), [100])
+        self.assertEqual(self.read('a.txt'), 'a1\n')
+        self.assertEqual(self.synced_commits(), [])
+
+    def test_last_synced_with_nothing_to_resync(self):
+        self.sync('last-synced')
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(self.synced_commits(), [])
 
     def test_last_synced_without_a_previous_sync_fails(self):
-        with mock.patch('git_p4son.sync.git_last_synced_changelist',
-                        return_value=None), \
-                self.assertRaisesRegex(CommandError, 'No previous sync found'):
-            self._run(['last-synced'])
-        self._assert_nothing_run()
+        self.git('commit', '--amend', '-q', '-m', 'Initial')
+        self.sync_fails('last-synced', message='No previous sync found')
 
-    def test_already_synced(self):
-        self.assertEqual(self._run(['10000']), 0)
-        self.mock_log.success.assert_any_call(
-            'Already at CL 10000, nothing to sync')
-        self._assert_nothing_run()
+    def test_ignored_writable_files_are_reported_not_synced(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.p4.submit(101, {'x.log': 'one\n'})
+        self.p4.sync_to(101)
+        self.commit(format_sync_subject('//myclient', 101))
+        self.edit('x.log', 'mine\n')
+        self.p4.submit(102, {'x.log': 'two\n'})
+        out = self.sync()
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertIn('Files not synced (git-ignored and writable)', out)
+        self.assertIn('x.log', out)
+
+    def test_writable_mode_makes_synced_files_writable(self):
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n[core]\nwritable = true\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync()
+        self.assertTrue(os.stat(os.path.join(self.ws, 'a.txt')).st_mode
+                        & stat.S_IWUSR)
 
 
-class TestSyncSplitting(unittest.TestCase):
-    """sync splits out the configured split users unless --no-split, plus any given with -u."""
+@unittest.skipIf(os.name == 'nt', 'hooks run as executable scripts')
+class TestSyncHooks(SyncTestCase):
+    def test_pre_sync_hooks_run_once_for_a_sequence(self):
+        path, read_log = self.hook_log()
+        self.hook('pre-sync', f'open({path!r}, "a").write("pre ")\n')
+        self.hook('post-sync', f'open({path!r}, "a").write("post ")\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        self.sync('101', '102')
+        self.assertEqual(read_log(), ['pre', 'post'])
 
-    # Last synced at 100, latest 106; "me" submitted 102 and 105.
-    _changes = make_changes(
-        (100, 'other'), (101, 'other'), (102, 'me'), (103, 'other'),
-        (104, 'other'), (105, 'me'), (106, 'other'))
+    def test_failing_pre_sync_hook_aborts_before_syncing(self):
+        self.hook('pre-sync', 'raise SystemExit(1)\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync_fails(message='pre-sync hook failed')
+        self.assertEqual(self.p4.synced(), [])
+
+
+class TestSyncDryRun(SyncTestCase):
+    def test_prints_the_sequence_and_syncs_nothing(self):
+        for change in (101, 102):
+            self.p4.submit(change, {'a.txt': f'a{change}\n'})
+        self.write_file('stray.txt', 'dry runs skip the checks')
+        out = self.sync('-n', '101', 'head')
+        self.assertIn('Sync sequence', out)
+        self.assertIn('101 102', out)
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(self.synced_commits(), [])
+
+    def test_last_synced(self):
+        out = self.sync('-n', 'last-synced')
+        self.assertIn('100 (last synced)', out)
+
+    def test_invalid_arguments_still_fail(self):
+        self.sync_fails('-n', '50', message='without --force')
+
+
+class TestSyncSplitting(SyncTestCase):
+    """Last synced at 100, latest 106; me submitted 102 and 105."""
 
     def setUp(self):
-        self.patches = {}
-        for target, value in (
-                ('git_p4son.depot.get_client_spec', None),
-                ('git_p4son.depot.get_depot_root', '//myclient'),
-                ('git_p4son.sync.git_last_synced_changelist',
-                 100),
-                ('git_p4son.sync.get_latest_changelist', 106),
-                ('git_p4son.sync.get_split_users', []),
-                ('git_p4son.sync.get_submitted_changes', self._changes),
-                ('git_p4son.sync_split_users.get_p4_user', 'me'),
-                ('git_p4son.sync_split_users.get_existing_p4_users', []),
-                ('git_p4son.sync.sync_preflight', True),
-                ('git_p4son.sync.get_head_commit', 'def456'),
-                ('git_p4son.sync._sync_pass', WritableSyncFileSet()),
-                ('git_p4son.sync.get_staged_files', []),
-                ('git_p4son.sync.add_all_files', None),
-                ('git_p4son.sync.commit', None),
-                ('git_p4son.sync.merge_changed_files', None),
-                ('git_p4son.sync._make_synced_files_writable', None),
-                ('git_p4son.sync.run_hooks', [])):
-            self.patches[target.rsplit('.', 1)[1]] = start_patch(
-                self, target, return_value=value)
-        self.mock_log = start_patch(self, 'git_p4son.sync.log')
-        # User checks and resolution log from their own module.
-        self.mock_users_log = start_patch(
-            self, 'git_p4son.sync_split_users.log')
+        super().setUp()
+        for change in range(101, 107):
+            self.p4.submit(change, {'a.txt': f'a{change}\n'},
+                           user='me' if change in (102, 105) else 'other')
 
-    def _run(self, *changelist, configured=(), split_user=None,
-             no_split=False, force=False, dry_run=False):
-        self.patches['get_split_users'].return_value = list(configured)
-        args = _sync_args(changelist=list(changelist), force=force,
-                          workspace_dir='/ws', dry_run=dry_run,
-                          split_user=split_user, no_split=no_split)
-        return sync_command(args)
+    def configure(self, *users):
+        listed = ', '.join(f'"{u}"' for u in users)
+        self.write_config(
+            f'[depot]\nroot = "//myclient"\n[sync]\nsplit-users = [{listed}]\n')
 
-    def _synced(self):
-        """The (changelist, label) of each target pass, catch-up excluded."""
-        calls = self.patches['_sync_pass'].call_args_list
-        return [(c.args[0], c.args[1]) for c in calls
-                if c.args[1] != 'last synced']
+    def test_configured_users_get_commits_of_their_own(self):
+        self.configure('me')
+        self.sync()
+        self.assertEqual(self.synced_commits(), [101, 102, 104, 105, 106])
 
-    def _assert_not_split(self):
-        self.patches['get_submitted_changes'].assert_not_called()
-
-    def test_configured_user_changelists_get_their_own_commits(self):
-        self.assertEqual(self._run(configured=['me']), 0)
-        self.assertEqual(self._synced(), [
-            (101, 'split'), (102, 'split'), (104, 'split'), (105, 'split'),
-            (106, 'latest')])
-        self.patches['get_submitted_changes'].assert_called_once_with(
-            '//myclient', 100, 106, '/ws')
-
-    def test_no_split_users_makes_no_extra_queries(self):
-        self.assertEqual(self._run(), 0)
-        self.assertEqual(self._synced(), [(106, 'latest')])
-        self._assert_not_split()
-        self.patches['get_p4_user'].assert_not_called()
-        self.patches['get_existing_p4_users'].assert_not_called()
-
-    def test_placeholder_resolves_to_the_current_user(self):
-        self.assertEqual(self._run(configured=['$(user)']), 0)
-        self.assertEqual([cl for cl, _ in self._synced()],
-                         [101, 102, 104, 105, 106])
+    def test_placeholder_is_the_current_user(self):
+        self.configure('$(user)')
+        self.sync()
+        self.assertEqual(self.synced_commits(), [101, 102, 104, 105, 106])
 
     def test_unresolvable_placeholder_fails_without_syncing(self):
-        self.patches['get_p4_user'].return_value = None
-        with self.assertRaisesRegex(CommandError, '--no-split'):
-            self._run(configured=['$(user)'])
-        self.patches['_sync_pass'].assert_not_called()
-
-    def test_explicit_sequence_is_merged_with_split_points(self):
-        self.assertEqual(self._run('101', '103', 'head', configured=['me']),
-                         0)
-        self.assertEqual(self._synced(), [
-            (101, 'specified'), (102, 'split'), (103, 'specified'),
-            (104, 'split'), (105, 'split'), (106, 'latest')])
+        self.configure('$(user)')
+        self.p4.user = '*unknown*'
+        self.sync_fails(message='--no-split')
+        self.assertEqual(self.p4.synced(), [])
 
     def test_explicit_target_bounds_the_range(self):
-        self.patches['get_submitted_changes'].return_value = (
-            self._changes[:5])
-        self.assertEqual(self._run('104', configured=['me']), 0)
-        self.assertEqual(self._synced(), [
-            (101, 'split'), (102, 'split'), (104, 'specified')])
-        self.patches['get_submitted_changes'].assert_called_once_with(
-            '//myclient', 100, 104, '/ws')
-        self.patches['get_latest_changelist'].assert_not_called()
+        self.configure('me')
+        self.sync('103')
+        self.assertEqual(self.synced_commits(), [101, 102, 103])
 
-    def test_split_user_adds_to_the_configured_users(self):
-        self.patches['get_existing_p4_users'].return_value = ['Other']
-        self.assertEqual(self._run(configured=['me'], split_user=['other']),
-                         0)
-        # Everyone's changelists are split out, so every one is a target.
-        self.assertEqual([cl for cl, _ in self._synced()],
-                         [101, 102, 103, 104, 105, 106])
-        self.patches['get_existing_p4_users'].assert_called_once_with(
-            ['other'], '/ws')
+    def test_split_user_option_adds_a_user(self):
+        self.sync('-u', 'me')
+        self.assertEqual(self.synced_commits(), [101, 102, 104, 105, 106])
 
     def test_unknown_split_user_fails_before_any_work(self):
-        with self.assertRaisesRegex(CommandError,
-                                    '^No such Perforce user: nobody$'):
-            self._run(split_user=['nobody'])
-        self.patches['get_latest_changelist'].assert_not_called()
-        self.patches['sync_preflight'].assert_not_called()
-        self.patches['_sync_pass'].assert_not_called()
-
-    def test_quoted_placeholder_split_user_is_not_checked(self):
-        self.assertEqual(self._run(split_user=['$(user)']), 0)
-        self.patches['get_existing_p4_users'].assert_not_called()
-        self.assertEqual([cl for cl, _ in self._synced()],
-                         [101, 102, 104, 105, 106])
+        self.sync_fails(
+            '-u', 'nobody', message='No such Perforce user: nobody')
+        self.assertEqual(self.p4.synced(), [])
 
     def test_no_split_ignores_the_configured_users(self):
-        self.assertEqual(self._run(configured=['me'], no_split=True), 0)
-        self.assertEqual(self._synced(), [(106, 'latest')])
-        self._assert_not_split()
-
-    def test_no_split_with_split_user_splits_only_that_user(self):
-        self.patches['get_existing_p4_users'].return_value = ['me']
-        self.patches['get_submitted_changes'].return_value = make_changes(
-            (100, 'other'), (101, 'other'), (102, 'me'), (103, 'bob'),
-            (104, 'other'))
-        self.patches['get_latest_changelist'].return_value = 104
-        self.assertEqual(self._run(configured=['bob'], split_user=['me'],
-                                   no_split=True), 0)
-        self.assertEqual([cl for cl, _ in self._synced()], [101, 102, 104])
-
-    def test_last_synced_is_not_split(self):
-        self.assertEqual(self._run('last-synced', configured=['me']), 0)
-        self._assert_not_split()
+        self.configure('me')
+        self.sync('--no-split')
+        self.assertEqual(self.synced_commits(), [106])
 
     def test_first_sync_is_not_split(self):
-        self.patches['git_last_synced_changelist'].return_value = None
-        self.assertEqual(self._run(configured=['me']), 0)
-        self.assertEqual(self._synced(), [(106, 'latest')])
-        self._assert_not_split()
-        self.mock_log.info.assert_any_call(
-            'Not splitting out changelists: no previous sync to start from')
-
-    def test_syncing_backwards_is_not_split(self):
-        self.assertEqual(self._run('90', configured=['me'], force=True), 0)
-        self.assertEqual(self._synced(), [(90, 'specified')])
-        self._assert_not_split()
-        self.mock_log.info.assert_any_call(
-            'Not splitting out changelists: syncing to an older changelist')
-
-    def test_already_synced_makes_no_split_queries(self):
-        self.patches['get_latest_changelist'].return_value = 100
-        self.assertEqual(self._run(configured=['me']), 0)
-        self._assert_not_split()
-        self.patches['sync_preflight'].assert_not_called()
-
-    def test_preflight_runs_before_the_split_queries(self):
-        self.patches['sync_preflight'].side_effect = CommandError('failed')
-        with self.assertRaises(CommandError):
-            self._run(configured=['me'])
-        self._assert_not_split()
-        self.patches['get_p4_user'].assert_not_called()
+        self.configure('me')
+        self.git('commit', '--amend', '-q', '-m', 'Initial')
+        out = self.sync()
+        self.assertIn('no previous sync to start from', out)
+        self.assertEqual(self.p4.synced(), [106])
 
     def test_dry_run_prints_the_split_sequence(self):
-        self.assertEqual(self._run(configured=['me'], dry_run=True), 0)
-        self.mock_log.success.assert_any_call('101 102 104 105 106')
-        self.patches['sync_preflight'].assert_not_called()
-        self.patches['_sync_pass'].assert_not_called()
+        self.configure('me')
+        out = self.sync('-n')
+        self.assertIn('101 102 104 105 106', out)
+        self.assertEqual(self.p4.synced(), [])
 
 
 class TestSyncPreflight(unittest.TestCase):

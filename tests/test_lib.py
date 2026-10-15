@@ -18,6 +18,7 @@ from tests.helpers import (
     make_run_result,
     SAMPLE_SPEC,
     SAMPLE_SPEC_NO_COMMITS,
+    start_patch,
     WorkspaceTestCase,
 )
 
@@ -393,10 +394,8 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         for target, value in (('get_opened_files', {}),
                               ('_warn_unopened', None),
                               ('restore_files', None)):
-            patcher = mock.patch(f'git_p4son.lib.{target}',
-                                 return_value=value)
-            self.mocks[target] = patcher.start()
-            self.addCleanup(patcher.stop)
+            self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
+                                             return_value=value)
     # --- added files ---
 
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -558,10 +557,8 @@ class TestActionMismatch(unittest.TestCase):
         for target, value in (('get_opened_files', {}),
                               ('_warn_unopened', None),
                               ('restore_files', None)):
-            patcher = mock.patch(f'git_p4son.lib.{target}',
-                                 return_value=value)
-            self.mocks[target] = patcher.start()
-            self.addCleanup(patcher.stop)
+            self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
+                                             return_value=value)
 
     # --- edit -> delete ---
     @mock.patch('git_p4son.lib.opened_lookup',

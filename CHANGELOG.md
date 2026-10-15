@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0
+
 - `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped
   instructions, so workspace-specific guidance for agents survives reinstalling the skill
 - A malformed value in `.git-p4son/config.toml` now stops the command with a message naming the setting.

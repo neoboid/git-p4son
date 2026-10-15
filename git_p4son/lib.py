@@ -1,7 +1,11 @@
 """Bridge functions that combine git and Perforce operations."""
 
+import contextlib
 import os
-from typing import Callable
+import shutil
+import stat
+import tempfile
+from typing import Callable, Iterator
 
 from .common import CommandError
 from .description import Description
@@ -47,13 +51,15 @@ def check_git_workspace_clean(workspace_dir: str) -> None:
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool,
-                      commit_list: bool = True, review: bool = False) -> str:
-    """Create a changelist from message and, unless commit_list is False, the git commits.
+                      commit_list: bool = True, review: bool = False,
+                      revision: str | None = None) -> str:
+    """Create a changelist from message and, unless commit_list is False, the commits since base_branch.
 
     With review, the description ends with #review unless the message has one on a line of its own.
     On dry run, creates nothing and returns DRY_RUN_CHANGELIST."""
     description = Description(
-        commits=get_commit_subjects_since(base_branch, workspace_dir)
+        commits=get_commit_subjects_since(base_branch, workspace_dir,
+                                          revision or 'HEAD')
         if commit_list else [])
     description.set_message(message)
     if review and not description.keywords:
@@ -68,15 +74,17 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
 
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool,
-                      message: str | None, commit_list: bool) -> None:
-    """Update a changelist description, merging commits since base_branch into its commit list."""
+                      message: str | None, commit_list: bool,
+                      revision: str | None = None) -> None:
+    """Update a changelist description, merging the commits since base_branch into its commit list."""
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
     description = Description.parse(extract_description_lines(spec_text))
     if message is not None:
         description.set_message(message)
     if commit_list:
         description.merge_commits(
-            get_commit_subjects_since(base_branch, workspace_dir))
+            get_commit_subjects_since(base_branch, workspace_dir,
+                                      revision or 'HEAD'))
     new_description_lines = description.format()
 
     if dry_run:
@@ -138,9 +146,46 @@ def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str
     return to_open, to_reopen, to_revert, to_restore
 
 
+@contextlib.contextmanager
+def _restoring(filepaths: list[str], workspace_dir: str, dry_run: bool,
+               keep_working_files: bool) -> Iterator[None]:
+    """Put back the files a p4 revert in the block overwrites, from git or with keep_working_files as they were."""
+    if not filepaths:
+        yield
+        return
+    if not keep_working_files:
+        yield
+        restore_files(filepaths, workspace_dir, dry_run)
+        return
+    if dry_run:
+        yield
+        log.info(f'Would put back {plural(len(filepaths), "working file")}')
+        return
+    with tempfile.TemporaryDirectory(prefix='git-p4son-restore-') as directory:
+        saved = []
+        for index, filename in enumerate(filepaths):
+            path = os.path.join(workspace_dir, filename)
+            backup = os.path.join(directory, str(index))
+            shutil.copy2(path, backup, follow_symlinks=False)
+            saved.append((path, backup))
+        try:
+            yield
+        finally:
+            for path, backup in saved:
+                if os.path.lexists(path):
+                    if not os.path.islink(path):
+                        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+                    os.unlink(path)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                shutil.copy2(backup, path, follow_symlinks=False)
+
+
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
-                                  workspace_dir: str, dry_run: bool) -> int:
-    """Open local git changes for add/edit/delete in a Perforce changelist; returns how many it opened or moved."""
+                                  workspace_dir: str, dry_run: bool,
+                                  keep_working_files: bool = False) -> int:
+    """Open local git changes for add/edit/delete in a Perforce changelist; returns how many it opened or moved.
+
+    Files reopened with another action get git's version back, or with keep_working_files their working version."""
     wanted = ([(f, 'add') for f in changes.adds]
               + [(f, 'edit') for f in changes.mods]
               + [(f, 'delete') for f in changes.dels])
@@ -152,19 +197,18 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
     to_open, to_reopen, to_revert, to_restore = _plan_opens(
         wanted, opened, changelist)
 
-    run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
-                 workspace_dir, dry_run)
-    p4_output = []
-    for p4_action in ('add', 'edit', 'delete'):
-        p4_output += run_p4_batch(
-            [p4_action, '-c', changelist],
-            [f for f, action in to_open if action == p4_action],
-            f'Opening for {p4_action}', workspace_dir, dry_run,
-            fail_on_returncode=False)
-    run_p4_batch(['reopen', '-c', changelist], to_reopen,
-                 'Moving files from other changelists', workspace_dir, dry_run)
-    if to_restore:
-        restore_files(to_restore, workspace_dir, dry_run)
+    with _restoring(to_restore, workspace_dir, dry_run, keep_working_files):
+        run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
+                     workspace_dir, dry_run)
+        p4_output = []
+        for p4_action in ('add', 'edit', 'delete'):
+            p4_output += run_p4_batch(
+                [p4_action, '-c', changelist],
+                [f for f, action in to_open if action == p4_action],
+                f'Opening for {p4_action}', workspace_dir, dry_run,
+                fail_on_returncode=False)
+        run_p4_batch(['reopen', '-c', changelist], to_reopen,
+                     'Moving files from other changelists', workspace_dir, dry_run)
     if to_open and not dry_run:
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
     return len(to_open) + len(to_reopen)
@@ -177,17 +221,23 @@ def _changelist_name(changelist: str) -> str:
 
 
 def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
-                    edit: bool, shelve: bool, dry_run: bool) -> None:
-    """Open the git changes and revert the files no longer part of them if edit, then shelve if shelve."""
+                    edit: bool, shelve: bool, dry_run: bool,
+                    revision: str | None = None) -> None:
+    """Open the git changes and revert the files no longer part of them if edit, then shelve if shelve.
+
+    A revision names the commit holding the change when git's HEAD and index do not, as in a jj workspace; the
+    working files are then left as they are. create_changelist and update_changelist take it the same way."""
     if edit:
         log.heading('Opening files for edit')
-        changes = get_local_changes(base_branch, workspace_dir)
+        changes = get_local_changes(base_branch, workspace_dir,
+                                    revision or 'HEAD')
         opened = include_changes_in_changelist(
-            changes, changelist, workspace_dir, dry_run)
+            changes, changelist, workspace_dir, dry_run,
+            keep_working_files=revision is not None)
         log.success(f'Would open {plural(opened, "file")}' if dry_run
                     else f'Opened {plural(opened, "file")}')
 
-        revert_unchanged_files(changelist, workspace_dir, dry_run)
+        revert_unchanged_files(changelist, workspace_dir, dry_run, revision)
 
     if shelve:
         name = _changelist_name(changelist)
@@ -197,8 +247,8 @@ def edit_and_shelve(changelist: str, base_branch: str, workspace_dir: str, *,
 
 
 def revert_unchanged_files(changelist: str, workspace_dir: str,
-                           dry_run: bool) -> None:
-    """Revert files in a changelist that are no longer part of the git change.
+                           dry_run: bool, revision: str | None = None) -> None:
+    """Revert files in a changelist that are no longer part of the git change, in the index or else in revision.
 
     Requires a clean git workspace."""
     log.heading('Reverting unchanged files')
@@ -207,7 +257,8 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
         return
 
     opened = get_opened_files_in_changelist(changelist, workspace_dir)
-    tracked = get_tracked_files([path for path, _ in opened], workspace_dir)
+    tracked = get_tracked_files([path for path, _ in opened], workspace_dir,
+                                revision)
 
     # revert -a only reverts the unchanged ones, so changed files stay opened.
     revert_if_unchanged = []
@@ -227,10 +278,11 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     for line in reverted:
         log.info(line)
 
-    if stale_deletes:
-        # p4 revert writes the depot version to disk, so restore git's.
-        p4_revert(stale_deletes, workspace_dir, dry_run)
-        restore_files(stale_deletes, workspace_dir, dry_run)
+    # p4 revert writes the depot version to disk.
+    with _restoring(stale_deletes, workspace_dir, dry_run,
+                    keep_working_files=revision is not None):
+        if stale_deletes:
+            p4_revert(stale_deletes, workspace_dir, dry_run)
 
     count = len(reverted) + len(stale_deletes)
     log.success(f'{plural(count, "file")} would be reverted' if dry_run

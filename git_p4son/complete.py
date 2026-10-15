@@ -3,8 +3,10 @@
 import argparse
 
 from .changelist_store import branch_alias, list_changelist_aliases
+from .common import CommandError
 from .git import get_current_branch, get_workspace_dir
 from .log import log
+from . import jj
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset(
@@ -86,30 +88,41 @@ def _filter(candidates, prefix):
             if name.startswith(prefix)]
 
 
-def _complete_flag_value(flag):
+def _complete_flag_value(flag, workspace_dir=None, ignore_jj=False):
     """Complete the value for a flag."""
     if flag in ('-b', '--base-branch'):
+        if workspace_dir and not ignore_jj and jj.is_workspace(workspace_dir):
+            try:
+                workspace = jj.Workspace.load(workspace_dir, '@')
+            except (CommandError, OSError):
+                return []
+            return [(name, 'jj bookmark') for name in workspace.bookmarks]
         return [('__branch__', '')]
     return []
 
 
-def _get_branch_candidates(prefix, workspace_dir):
+def _get_branch_candidates(prefix, workspace_dir, ignore_jj=False):
     """Get 'branch' completion candidates based on prefix."""
     keyword = 'branch'
     if not workspace_dir or not keyword.startswith(prefix):
         return []
-    branch = get_current_branch(workspace_dir)
+    use_jj = not ignore_jj and jj.is_workspace(workspace_dir)
+    try:
+        branch = (jj.Workspace.load(workspace_dir, '@').current_bookmark()
+                  if use_jj else get_current_branch(workspace_dir))
+    except (CommandError, OSError):
+        return []
     alias = branch_alias(branch) if branch else None
     if alias is None:
         return []
     if prefix == keyword:
-        return [(alias, 'Current branch')]
-    return [(keyword, 'Use current branch name')]
+        return [(alias, 'Current bookmark' if use_jj else 'Current branch')]
+    return [(keyword, 'Use current bookmark name' if use_jj else 'Use current branch name')]
 
 
 def _complete_positional(command, subcommand, positional_count,
                          prefix, workspace_dir, command_parser,
-                         subcommand_parser, actions):
+                         subcommand_parser, actions, ignore_jj=False):
     """Complete a positional argument."""
     # Arguments added with the branch keyword name themselves in branch_keyword_arg.
     target = subcommand_parser or command_parser
@@ -118,7 +131,7 @@ def _complete_positional(command, subcommand, positional_count,
                    and not isinstance(a, argparse._SubParsersAction)]
     if dest and positional_count < len(positionals) \
             and positionals[positional_count].dest == dest:
-        return (_get_branch_candidates(prefix, workspace_dir)
+        return (_get_branch_candidates(prefix, workspace_dir, ignore_jj)
                 + _filter(_get_alias_names(workspace_dir), prefix))
 
     if command == 'sync':
@@ -193,7 +206,8 @@ def _complete(parser, words, workspace_dir=None):
         positional_count += 1
 
     if expecting_flag_name is not None:
-        return _complete_flag_value(expecting_flag_name)
+        return _complete_flag_value(expecting_flag_name, workspace_dir,
+                                    '--ignore-jj' in preceding)
 
     if command is None:
         if prefix.startswith('-'):
@@ -210,7 +224,7 @@ def _complete(parser, words, workspace_dir=None):
 
     return _complete_positional(command, subcommand, positional_count,
                                 prefix, workspace_dir, command_parser,
-                                subcommand_parser, actions)
+                                subcommand_parser, actions, '--ignore-jj' in preceding)
 
 
 def run_complete(words):

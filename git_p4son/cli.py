@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from importlib.resources import files
-from . import __version__
+from . import __version__, jj
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
@@ -36,7 +36,8 @@ DEFAULT_BASE_BRANCH = 'HEAD~1'
 def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
     """Add -b/--base-branch, defaulting to DEFAULT_BASE_BRANCH."""
     parser.add_argument('-b', '--base-branch', default=DEFAULT_BASE_BRANCH,
-                        help=f'{help}. Defaults to {DEFAULT_BASE_BRANCH}')
+                        help=f'{help}. Defaults to {DEFAULT_BASE_BRANCH}, '
+                        'or in a jj workspace the parent of the jj change')
 
 
 def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: str,
@@ -44,7 +45,7 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
     """Add an optional positional that defaults to the branch keyword, which run_command resolves."""
     (group or parser).add_argument(
         dest, nargs='?', default='branch',
-        help=f'{help}. Defaults to the current branch name')
+        help=f'{help}. Defaults to the current branch name, or jj bookmark')
     parser.set_defaults(branch_keyword_arg=dest)
 
 
@@ -115,6 +116,10 @@ Examples:
         action='store_true',
         help='Show verbose output (commands, elapsed times, raw subprocess output)'
     )
+    parser.add_argument(
+        '--ignore-jj', action='store_true',
+        help='Use git branches and HEAD in a jj workspace, still holding jj\'s working-copy lock'
+    )
 
     subparsers = parser.add_subparsers(
         dest='command',
@@ -139,6 +144,10 @@ Examples:
         'back afterwards.'
     )
     sync_parser.set_defaults(func=sync_command)
+    sync_parser.add_argument(
+        '--bookmark',
+        help='jj bookmark to move to each sync commit, when the parent of the jj working change has several'
+    )
     sync_parser.add_argument(
         'changelist',
         nargs='*',
@@ -244,7 +253,8 @@ Examples:
     new_parser.set_defaults(func=new_command)
     _add_message_args(
         new_parser,
-        'Changelist description message. Defaults to the HEAD commit subject',
+        'Changelist description message. Defaults to the HEAD commit subject, '
+        'or in a jj workspace the jj change description',
         'Read the changelist description message from the given file',
         from_head=True)
     new_parser.add_argument(
@@ -416,7 +426,8 @@ Examples:
                             'Alias name for the new changelist')
     _add_message_args(
         review_parser,
-        'Changelist description message. Defaults to the HEAD commit subject',
+        'Changelist description message. Defaults to the HEAD commit subject, '
+        'or in a jj workspace the jj change description',
         'Read the changelist description message from the given file',
         from_head=True)
     _add_base_branch(
@@ -539,9 +550,11 @@ Examples:
     return parser
 
 
-def _resolve_branch_keyword(workspace_dir: str) -> str:
-    """Resolve the current git branch to an alias name; raise CommandError if it has none."""
-    branch = get_current_branch(workspace_dir)
+def _resolve_branch_keyword(workspace_dir: str,
+                            jj_workspace: jj.Workspace | None = None) -> str:
+    """Resolve the current git branch, or jj bookmark, to an alias name; raise CommandError if it has none."""
+    branch = (jj_workspace.current_bookmark() if jj_workspace
+              else get_current_branch(workspace_dir))
     if not branch:
         raise CommandError('Cannot resolve the branch keyword on a detached '
                            'HEAD. Name the alias or changelist explicitly.')
@@ -593,14 +606,40 @@ def run_command(args: argparse.Namespace) -> int:
             'Run "git p4son init" first.')
     log.success(args.workspace_dir)
 
+    # The rebase todo's _sequence-editor runs under the lock review already holds.
+    ignore_jj = args.ignore_jj or args.command == '_sequence-editor'
+    if (not ignore_jj and jj.is_workspace(args.workspace_dir)
+            and (args.command == 'review' or getattr(args, 'per_commit', False))):
+        raise CommandError('review and update --per-commit rebase with git, which a jj workspace does not '
+                           'support. Put --ignore-jj before the command to run it with git.')
+    snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
+    with jj.operation(args.workspace_dir, ignore=ignore_jj,
+                      snapshot=snapshot) as jj_workspace:
+        args.jj_workspace = jj_workspace
+        exit_code = _run_in_workspace(args)
+    if exit_code == 0 and getattr(args, 'dry_run', False):
+        log.info('Dry run, nothing changed')
+    return exit_code
+
+
+def _run_in_workspace(args: argparse.Namespace) -> int:
+    """Resolve the arguments that depend on the workspace, then run the command."""
+    jj_workspace = args.jj_workspace
+    if jj_workspace is not None:
+        if hasattr(args, 'base_branch'):
+            args.base_branch = jj_workspace.resolve_base(args.base_branch)
+        if args.command == 'sync':
+            jj_workspace.prepare_sync(args.bookmark)
+
     if getattr(args, 'no_alias', False):
         args.alias = None
 
     branch_attr = getattr(args, 'branch_keyword_arg', None)
     if (branch_attr and getattr(args, branch_attr) == 'branch'
             and not getattr(args, 'all', False)):
-        log.heading('Resolving alias from current git branch')
-        resolved = _resolve_branch_keyword(args.workspace_dir)
+        log.heading('Resolving alias from current jj bookmark' if jj_workspace
+                    else 'Resolving alias from current git branch')
+        resolved = _resolve_branch_keyword(args.workspace_dir, jj_workspace)
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
@@ -617,16 +656,21 @@ def run_command(args: argparse.Namespace) -> int:
         log.success(args.file)
 
     if getattr(args, 'message_from_head', False) and args.message is None:
-        log.heading('Resolving message from HEAD commit')
-        args.message = get_head_subject(args.workspace_dir)
-        if args.message is None:
-            raise CommandError('No commits found to derive message from')
+        if jj_workspace:
+            log.heading('Resolving message from jj change description')
+            lines = jj_workspace.tip.description.splitlines()
+            args.message = lines[0] if lines else None
+            if args.message is None:
+                raise CommandError('The jj change has no description. '
+                                   'Describe it with "jj describe", or pass -m or -F.')
+        else:
+            log.heading('Resolving message from HEAD commit')
+            args.message = get_head_subject(args.workspace_dir)
+            if args.message is None:
+                raise CommandError('No commits found to derive message from')
         log.success(args.message)
 
-    exit_code = args.func(args)
-    if exit_code == 0 and getattr(args, 'dry_run', False):
-        log.info('Dry run, nothing changed')
-    return exit_code
+    return args.func(args)
 
 
 def main() -> int:

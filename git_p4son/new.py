@@ -2,17 +2,19 @@
 
 import argparse
 from .changelist_store import check_alias_usable, save_changelist_alias
-from .lib import check_git_workspace_clean, create_changelist, edit_and_shelve
+from .jj import change_revision
+from .lib import check_workspace_clean, create_changelist, edit_and_shelve
 from .log import log
 
 
 def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
+    revision = change_revision(args)
 
-    # Opening and reverting files relies on every tracked file matching HEAD.
+    # Opening and reverting files relies on every tracked file matching the change.
     if not args.no_edit:
-        check_git_workspace_clean(workspace_dir)
+        check_workspace_clean(workspace_dir, args.jj_workspace)
 
     if args.alias:
         check_alias_usable(args.alias, workspace_dir, args.force)
@@ -20,7 +22,8 @@ def new_command(args: argparse.Namespace) -> int:
     log.heading('Creating changelist')
     changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
-        commit_list=not args.no_commit_list, review=args.review)
+        commit_list=not args.no_commit_list, review=args.review,
+        revision=revision)
 
     alias_note = f' (alias={args.alias})' if args.alias else ''
     if args.dry_run:
@@ -34,5 +37,5 @@ def new_command(args: argparse.Namespace) -> int:
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve or args.review,
-                    dry_run=args.dry_run)
+                    dry_run=args.dry_run, revision=revision)
     return 0

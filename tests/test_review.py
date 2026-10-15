@@ -16,6 +16,11 @@ class TestStepCommands(unittest.TestCase):
                          ('new feat --review --no-commit-list',
                           'update feat --shelve --no-commit-list'))
 
+    def test_ignore_jj_carries_to_each_step(self):
+        self.assertEqual(_step_commands('feat', False, False, ignore_jj=True),
+                         ('--ignore-jj new feat --review',
+                          '--ignore-jj update feat --shelve'))
+
     def test_alias_with_special_chars(self):
         new_cmd, update_cmd = _step_commands('my feature', False, False)
         self.assertIn("'my feature'", new_cmd)

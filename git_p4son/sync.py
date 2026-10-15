@@ -9,6 +9,7 @@ from .git import (
     add_all_files, commit, get_head_commit, get_staged_files, get_tracked_files,
     format_sync_subject, git_last_synced_changelist,
 )
+from . import jj
 from .hooks import run_hooks
 from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
@@ -350,9 +351,13 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
                       else ClobberMode.NOCLOBBER))
 
 
-def _run_sync(plan: _SyncPlan, workspace_dir: str,
-              invocation_dir: str) -> None:
-    """Sync and commit each target, then merge local changes back and run the post-sync hooks."""
+def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str,
+              jj_workspace: jj.Workspace | None) -> None:
+    """Sync and commit each target, then merge local changes back and run the post-sync hooks.
+
+    In a jj workspace, the sync bookmark moves to each sync commit."""
+    if jj_workspace is not None:
+        jj_workspace.detach_for_sync()
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
@@ -371,10 +376,13 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str,
             preps.append(_sync_pass(changelist, changelist_label, ctx))
 
             log.heading(f'Committing git changes for CL {changelist}')
-            add_all_files(workspace_dir)
+            add_all_files(workspace_dir, jj_workspace.eol_conversion
+                          if jj_workspace is not None else None)
             staged = get_staged_files(workspace_dir)
             commit(format_sync_subject(plan.depot_root, changelist),
                    workspace_dir, allow_empty=True)
+            if jj_workspace is not None:
+                jj_workspace.advance_sync()
             log.success(f'Committed {plural(len(staged), "file")}')
 
         # Dedup files that showed up in several sync passes.
@@ -419,5 +427,5 @@ def sync_command(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
 
-    _run_sync(plan, workspace_dir, args.invocation_dir)
+    _run_sync(plan, workspace_dir, args.invocation_dir, args.jj_workspace)
     return 0

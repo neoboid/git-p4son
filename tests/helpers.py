@@ -55,8 +55,9 @@ def cli_args(argv, **overrides):
     args = create_parser().parse_args(argv)
     args.workspace_dir = '/ws'
     args.invocation_dir = None
+    args.jj_workspace = None
     for name, value in overrides.items():
-        if name not in ('workspace_dir', 'invocation_dir') and not hasattr(args, name):
+        if name not in ('workspace_dir', 'invocation_dir', 'jj_workspace') and not hasattr(args, name):
             raise AttributeError(f'{argv[0]} has no argument {name!r}')
         setattr(args, name, value)
     if args.invocation_dir is None:

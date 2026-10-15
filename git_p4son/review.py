@@ -7,13 +7,15 @@ from .log import log
 from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
 
 
-def _step_commands(alias: str, force: bool,
-                   no_commit_list: bool) -> tuple[str, str]:
+def _step_commands(alias: str, force: bool, no_commit_list: bool,
+                   ignore_jj: bool = False) -> tuple[str, str]:
     """The new command for the first commit and the update command for the others."""
-    new_cmd = f'new {shlex.quote(alias)} --review'
+    # With --ignore-jj, each step runs under the lock this command holds.
+    prefix = '--ignore-jj ' if ignore_jj else ''
+    new_cmd = f'{prefix}new {shlex.quote(alias)} --review'
     if force:
         new_cmd += ' --force'
-    update_cmd = f'update {shlex.quote(alias)} --shelve'
+    update_cmd = f'{prefix}update {shlex.quote(alias)} --shelve'
     if no_commit_list:
         new_cmd += ' --no-commit-list'
         update_cmd += ' --no-commit-list'
@@ -29,7 +31,7 @@ def review_command(args: argparse.Namespace) -> int:
     log.success(f'Alias "{args.alias}" is usable')
 
     new_cmd, update_cmd = _step_commands(args.alias, args.force,
-                                         args.no_commit_list)
+                                         args.no_commit_list, args.ignore_jj)
     rebase_per_commit(new_cmd, update_cmd, args.base_branch, workspace_dir,
                       message=args.message, sleep=SWARM_SHELF_DELAY,
                       edit_todo=not args.no_edit_todo, dry_run=args.dry_run)

@@ -139,6 +139,10 @@ class TestStepCommand(unittest.TestCase):
     def test_plain_update(self):
         self.assertEqual(_step_command('100', _args()), 'update 100')
 
+    def test_ignore_jj_carries_to_each_step(self):
+        self.assertEqual(_step_command('100', _args(ignore_jj=True)),
+                         '--ignore-jj update 100')
+
     def test_flags(self):
         self.assertEqual(
             _step_command('100', _args(no_commit_list=True, no_edit=True,

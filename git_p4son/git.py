@@ -139,9 +139,16 @@ def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
 
 # --- staging and committing ---
 
-def add_all_files(workspace_dir: str) -> None:
-    """Stage every change in the workspace, untracked files included."""
-    run(['git', 'add', '.'], cwd=workspace_dir)
+# jj's working-copy.eol-conversion values, as git's core.autocrlf.
+_AUTOCRLF = {'none': 'false', 'input': 'input', 'input-output': 'true'}
+
+
+def add_all_files(workspace_dir: str, eol_conversion: str | None = None) -> None:
+    """Stage every change in the workspace, untracked files included, converting line endings as jj would if given."""
+    command = ['git']
+    if eol_conversion is not None:
+        command += ['-c', f'core.autocrlf={_AUTOCRLF[eol_conversion]}']
+    run(command + ['add', '.'], cwd=workspace_dir)
 
 
 def add_files(filepaths: list[str], workspace_dir: str) -> None:

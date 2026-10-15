@@ -27,6 +27,8 @@ class TestReview(GitRepoTestCase):
 
     def build_workspace(self):
         super().build_workspace()
+        # review refuses to start without an editor for the todo, and CI has none.
+        self.git('config', 'core.editor', 'true')
         self.commit('Base')
         self.git('switch', '-q', '-c', 'feature')
         self.commit('First commit')

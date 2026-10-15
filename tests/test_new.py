@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.changelist_store import save_changelist_alias
+from git_p4son.changelist_store import load_changelist_alias, save_changelist_alias
 from git_p4son.common import CommandError
 from git_p4son.git import LocalChanges
 from git_p4son.new import new_command
@@ -118,6 +118,32 @@ class TestNewCommandRevertStep(unittest.TestCase):
         order = self._run(no_edit=True, shelve=True)
         self.assertEqual([c[0] for c in order.mock_calls],
                          ['create', 'shelve'])
+
+
+@mock.patch('git_p4son.new.create_changelist', return_value='123')
+class TestNewCommandSavesAlias(unittest.TestCase):
+    def test_saves_the_new_changelist_under_the_alias(self, _create):
+        with tempfile.TemporaryDirectory() as ws:
+            rc = new_command(_args(alias='feat', dry_run=False, no_edit=True,
+                                   workspace_dir=ws))
+            self.assertEqual(rc, 0)
+            self.assertEqual(load_changelist_alias('feat', ws), '123')
+
+    def test_existing_alias_stops_before_creating(self, mock_create):
+        with tempfile.TemporaryDirectory() as ws:
+            save_changelist_alias('feat', '1', ws, force=False)
+            with self.assertRaisesRegex(CommandError, 'already exists'):
+                new_command(_args(alias='feat', dry_run=False, no_edit=True,
+                                  workspace_dir=ws))
+            self.assertEqual(load_changelist_alias('feat', ws), '1')
+        mock_create.assert_not_called()
+
+    def test_force_replaces_an_existing_alias(self, _create):
+        with tempfile.TemporaryDirectory() as ws:
+            save_changelist_alias('feat', '1', ws, force=False)
+            new_command(_args(alias='feat', force=True, dry_run=False,
+                              no_edit=True, workspace_dir=ws))
+            self.assertEqual(load_changelist_alias('feat', ws), '123')
 
 
 if __name__ == '__main__':

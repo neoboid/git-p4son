@@ -14,7 +14,7 @@ from git_p4son.config import (
     load_config,
     save_config,
 )
-from tests.helpers import init_git_repo
+from tests.helpers import init_git_repo, WorkspaceTestCase
 
 
 def _read_config_gitignore(workspace_dir):
@@ -23,14 +23,7 @@ def _read_config_gitignore(workspace_dir):
         return f.read()
 
 
-class TestEnsureConfigDir(unittest.TestCase):
-    def setUp(self):
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.ws = self._tempdir.name
-
-    def tearDown(self):
-        self._tempdir.cleanup()
-
+class TestEnsureConfigDir(WorkspaceTestCase):
     def test_creates_dir_ignoring_everything(self):
         ensure_config_dir(self.ws)
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
@@ -149,38 +142,31 @@ class TestLoadConfigInvalid(unittest.TestCase):
                 load_config(ws)
 
 
-class TestGetSetting(unittest.TestCase):
-    def setUp(self):
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tempdir.cleanup)
-        self.ws = self._tempdir.name
-
-    def _write(self, text):
-        os.makedirs(os.path.join(self.ws, CONFIG_DIR), exist_ok=True)
-        with open(config_path(self.ws), 'w', encoding='utf-8') as f:
-            f.write(text)
+class TestGetSetting(WorkspaceTestCase):
 
     def test_default_when_unset(self):
         self.assertEqual(get_setting(self.ws, 'sync', 'x', str, 'd'), 'd')
-        self._write('[sync]\n')
+        self.write_config('[sync]\n')
         self.assertEqual(get_setting(self.ws, 'sync', 'x', str, 'd'), 'd')
 
     def test_returns_a_value_of_the_expected_type(self):
-        self._write('[core]\nwritable = true\n[sync]\nusers = ["a", "b"]\n')
+        self.write_config(
+            '[core]\nwritable = true\n[sync]\nusers = ["a", "b"]\n')
         self.assertIs(get_setting(self.ws, 'core',
                       'writable', bool, False), True)
         self.assertEqual(get_setting(self.ws, 'sync', 'users', list[str], []),
                          ['a', 'b'])
 
     def test_wrong_type_raises(self):
-        self._write('[core]\nwritable = "true"\n[sync]\nusers = ["a", 1]\n')
+        self.write_config(
+            '[core]\nwritable = "true"\n[sync]\nusers = ["a", 1]\n')
         with self.assertRaisesRegex(ConfigError, 'core.writable .* true or false'):
             get_setting(self.ws, 'core', 'writable', bool, False)
         with self.assertRaisesRegex(ConfigError, 'sync.users .* a list of strings'):
             get_setting(self.ws, 'sync', 'users', list[str], [])
 
     def test_section_not_a_table_raises(self):
-        self._write('sync = "x"\n')
+        self.write_config('sync = "x"\n')
         with self.assertRaisesRegex(ConfigError, 'sync in config.toml is not a table'):
             get_setting(self.ws, 'sync', 'users', list[str], [])
 

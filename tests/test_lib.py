@@ -1,7 +1,6 @@
 """Tests for git_p4son.lib module."""
 
 import os
-import tempfile
 import unittest
 from unittest import mock
 
@@ -15,7 +14,12 @@ from git_p4son.lib import (
     revert_unchanged_files,
     update_changelist,
 )
-from tests.helpers import make_run_result, SAMPLE_SPEC, SAMPLE_SPEC_NO_COMMITS
+from tests.helpers import (
+    make_run_result,
+    SAMPLE_SPEC,
+    SAMPLE_SPEC_NO_COMMITS,
+    WorkspaceTestCase,
+)
 
 
 def _commands(mock_run):
@@ -715,12 +719,11 @@ class TestEditAndShelve(unittest.TestCase):
         mock_shelve.assert_called_once_with('100', '/ws', dry_run=True)
 
 
-class TestRevertUnchangedFiles(unittest.TestCase):
+class TestRevertUnchangedFiles(WorkspaceTestCase):
     """The tracked/untracked boundary decides what may be reverted."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.ws = self.tmp.name
+        super().setUp()
         patches = {
             'opened': mock.patch(
                 'git_p4son.lib.get_opened_files_in_changelist'),
@@ -736,7 +739,6 @@ class TestRevertUnchangedFiles(unittest.TestCase):
         }
         self.mocks = {name: p.start() for name, p in patches.items()}
         self.addCleanup(mock.patch.stopall)
-        self.addCleanup(self.tmp.cleanup)
 
     def _setup(self, opened, tracked, on_disk):
         self.mocks['opened'].return_value = opened

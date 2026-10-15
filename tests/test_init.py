@@ -13,12 +13,13 @@ from git_p4son.init import (
     _configure_depot_root,
     _configure_split_users,
     _configure_writable_mode,
-    _setup_gitignore,
     init_command,
+    _setup_gitignore,
 )
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
+from tests.helpers import WorkspaceTestCase
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -182,11 +183,9 @@ class TestConfigureWritableMode(unittest.TestCase):
             self.assertEqual(load_config(ws), {})
 
 
-class TestConfigureSplitUsers(unittest.TestCase):
+class TestConfigureSplitUsers(WorkspaceTestCase):
     def setUp(self):
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        self.ws = tempdir.name
+        super().setUp()
         patcher = mock.patch('git_p4son.sync_split_users.get_p4_user',
                              return_value='alice')
         self.mock_user = patcher.start()

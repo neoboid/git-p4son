@@ -8,11 +8,8 @@ import unittest
 from unittest import mock
 
 from git_p4son.cli import main
-from git_p4son.skill import (
-    install_skill,
-    is_skill_installed,
-    skill_path,
-)
+from git_p4son.skill import install_skill, is_skill_installed, skill_path
+from tests.helpers import WorkspaceTestCase
 
 
 class TestSkillPath(unittest.TestCase):
@@ -66,12 +63,7 @@ class TestInstallSkill(unittest.TestCase):
         self.assertTrue(is_skill_installed())
 
 
-class TestSkillShow(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.workspace = tmp.name
-        os.makedirs(os.path.join(self.workspace, '.git-p4son'))
+class TestSkillShow(WorkspaceTestCase):
 
     def _show(self, workspace_dir):
         with mock.patch('sys.argv', ['git-p4son', 'skill', 'show']), \
@@ -82,18 +74,16 @@ class TestSkillShow(unittest.TestCase):
         return out.getvalue()
 
     def _write_override(self, text):
-        path = os.path.join(self.workspace, '.git-p4son', 'skill-override.md')
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(text)
+        self.write_file(os.path.join('.git-p4son', 'skill-override.md'), text)
 
     def test_prints_instructions(self):
-        out = self._show(self.workspace)
+        out = self._show(self.ws)
         self.assertTrue(out.startswith('# Working with git-p4son\n'))
         self.assertNotIn('Overrides for this workspace', out)
 
     def test_appends_workspace_overrides(self):
         self._write_override('### Local rule\n\nDo the local thing.\n')
-        out = self._show(self.workspace)
+        out = self._show(self.ws)
         self.assertTrue(out.startswith('# Working with git-p4son\n'))
         self.assertIn('## Overrides for this workspace', out)
         self.assertTrue(out.endswith('Do the local thing.\n'))
@@ -102,7 +92,7 @@ class TestSkillShow(unittest.TestCase):
     def test_skips_blank_overrides(self):
         self._write_override('\n  \n')
         self.assertNotIn('Overrides for this workspace',
-                         self._show(self.workspace))
+                         self._show(self.ws))
 
     def test_works_outside_a_workspace(self):
         out = self._show(None)

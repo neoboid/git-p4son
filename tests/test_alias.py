@@ -15,6 +15,7 @@ from git_p4son.alias import (
     alias_show_command,
 )
 from git_p4son.common import CommandError
+from tests.helpers import WorkspaceTestCase
 
 
 def _args(workspace_dir='/ws'):
@@ -156,13 +157,8 @@ class TestAliasCleanCommand(unittest.TestCase):
         mock_delete.assert_called_once_with('feature-a', '/ws')
 
 
-class TestAliasNewAndList(unittest.TestCase):
+class TestAliasNewAndList(WorkspaceTestCase):
     """alias new and alias list against a real alias store."""
-
-    def setUp(self):
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        self.ws = tempdir.name
 
     def _new(self, changelist, alias, force=False):
         return alias_new_command(mock.Mock(workspace_dir=self.ws,

@@ -7,14 +7,15 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError, load_config, save_config
 from git_p4son.sync_split_users import (
-    USER_PLACEHOLDER,
     get_split_users,
-    resolve_split_users,
     is_self_split,
+    resolve_split_users,
     set_self_split,
     set_split_users,
     sync_split_users_command,
+    USER_PLACEHOLDER,
 )
+from tests.helpers import WorkspaceTestCase
 
 
 class TestSplitUsersConfig(unittest.TestCase):
@@ -101,11 +102,9 @@ class TestResolveSplitUsers(unittest.TestCase):
             resolve_split_users([USER_PLACEHOLDER], '/ws')
 
 
-class TestSyncSplitUsersList(unittest.TestCase):
+class TestSyncSplitUsersList(WorkspaceTestCase):
     def setUp(self):
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        self.ws = tempdir.name
+        super().setUp()
         patcher = mock.patch('git_p4son.sync_split_users.log')
         self.mock_log = patcher.start()
         self.addCleanup(patcher.stop)
@@ -157,11 +156,9 @@ class TestSyncSplitUsersList(unittest.TestCase):
         self.mock_user.assert_not_called()
 
 
-class TestSyncSplitUsersAdd(unittest.TestCase):
+class TestSyncSplitUsersAdd(WorkspaceTestCase):
     def setUp(self):
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        self.ws = tempdir.name
+        super().setUp()
         patcher = mock.patch('git_p4son.sync_split_users.log')
         self.mock_log = patcher.start()
         self.addCleanup(patcher.stop)
@@ -244,11 +241,9 @@ class TestSyncSplitUsersAdd(unittest.TestCase):
         mock_set.assert_not_called()
 
 
-class TestSyncSplitUsersDelete(unittest.TestCase):
+class TestSyncSplitUsersDelete(WorkspaceTestCase):
     def setUp(self):
-        tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tempdir.cleanup)
-        self.ws = tempdir.name
+        super().setUp()
         patcher = mock.patch('git_p4son.sync_split_users.log')
         self.mock_log = patcher.start()
         self.addCleanup(patcher.stop)

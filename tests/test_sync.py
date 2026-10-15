@@ -1295,6 +1295,19 @@ class TestSyncDryRun(unittest.TestCase):
             self._run(['9000'])
         self._assert_nothing_run()
 
+    def test_non_numeric_changelist_fails(self):
+        with self.assertRaisesRegex(CommandError,
+                                    'Invalid changelist number: 12a'):
+            self._run(['12a'])
+        self._assert_nothing_run()
+
+    def test_last_synced_without_a_previous_sync_fails(self):
+        with mock.patch('git_p4son.sync.git_last_synced_changelist',
+                        return_value=None), \
+                self.assertRaisesRegex(CommandError, 'No previous sync found'):
+            self._run(['last-synced'])
+        self._assert_nothing_run()
+
     def test_already_synced(self):
         self.assertEqual(self._run(['10000']), 0)
         self.mock_log.success.assert_any_call(

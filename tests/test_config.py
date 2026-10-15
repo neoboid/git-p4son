@@ -7,13 +7,14 @@ import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.config import (
-    ConfigError,
     config_path,
+    ConfigError,
     ensure_config_dir,
     get_setting,
     load_config,
     save_config,
 )
+from tests.helpers import init_git_repo
 
 
 def _read_config_gitignore(workspace_dir):
@@ -48,7 +49,7 @@ class TestEnsureConfigDir(unittest.TestCase):
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
 
     def test_git_ignores_config_dir(self):
-        subprocess.run(['git', 'init', '-q', self.ws], check=True)
+        init_git_repo(self.ws)
         save_config(self.ws, {'depot': {'root': '//ws/...'}})
         status = subprocess.run(
             ['git', 'status', '--porcelain', '--untracked-files=all'],

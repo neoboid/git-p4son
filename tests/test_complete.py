@@ -3,8 +3,6 @@
 import argparse
 import contextlib
 import io
-import subprocess
-import tempfile
 import unittest
 from unittest import mock
 
@@ -17,27 +15,22 @@ from git_p4son.complete import (
     run_complete,
 )
 from git_p4son.log import log
+from tests.helpers import GitRepoTestCase
 
 
-class TestRunCompleteOutput(unittest.TestCase):
+class TestRunCompleteOutput(GitRepoTestCase):
     def tearDown(self):
         # run_complete enables quiet mode on the log singleton.
         log.quiet_mode = False
 
     def test_emits_only_candidates(self):
         """Completion stdout holds nothing but candidates, no command echo or spinner."""
-        with tempfile.TemporaryDirectory() as ws:
-            for cmd in (['git', 'init'],
-                        ['git', 'config', 'user.email', 't@t'],
-                        ['git', 'config', 'user.name', 'T'],
-                        ['git', 'commit', '--allow-empty', '-m', 'x']):
-                subprocess.run(cmd, cwd=ws, capture_output=True, check=True)
-
-            buffer = io.StringIO()
-            with mock.patch('git_p4son.complete.get_workspace_dir',
-                            return_value=ws), \
-                    contextlib.redirect_stdout(buffer):
-                rc = run_complete(['update', 'b'])
+        self.commit('x')
+        buffer = io.StringIO()
+        with mock.patch('git_p4son.complete.get_workspace_dir',
+                        return_value=self.ws), \
+                contextlib.redirect_stdout(buffer):
+            rc = run_complete(['update', 'b'])
 
         self.assertEqual(rc, 0)
         lines = buffer.getvalue().splitlines()

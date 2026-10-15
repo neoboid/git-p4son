@@ -2,7 +2,6 @@
 
 import os
 import stat
-import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -18,6 +17,7 @@ from git_p4son.writable import (
     set_writable_mode,
     writable_command,
 )
+from tests.helpers import GitRepoTestCase
 
 
 def _mode(path):
@@ -154,38 +154,24 @@ class TestRestoreWritable(unittest.TestCase):
         mock_make.assert_called_once_with(['/ws/a.cpp'])
 
 
-class TestWritableCommand(unittest.TestCase):
+class TestWritableCommand(GitRepoTestCase):
     """The writable command against a real git repo; Perforce is mocked."""
 
     def setUp(self):
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.ws = self._tempdir.name
-        for args in (['init'], ['config', 'user.email', 't@t.com'],
-                     ['config', 'user.name', 'T']):
-            subprocess.run(['git'] + args, cwd=self.ws, check=True,
-                           capture_output=True)
-        self.tracked = self._file('src/main.cpp')
-        self.opened = self._file('src/open.cpp')
-        self._file('.gitignore', 'Content/\n')
-        subprocess.run(['git', 'add', '-A'], cwd=self.ws, check=True,
-                       capture_output=True)
-        subprocess.run(['git', 'commit', '-m', 'init'], cwd=self.ws,
-                       check=True, capture_output=True)
-        self.ignored = self._file('Content/level.umap')
+        super().setUp()
+        # Read-only files cannot be removed on Windows.
+        self.addCleanup(self._make_all_writable)
+        self.tracked = self.write_file('src/main.cpp', 'content\n')
+        self.opened = self.write_file('src/open.cpp', 'content\n')
+        self.write_file('.gitignore', 'Content/\n')
+        self.commit('init')
+        self.ignored = self.write_file('Content/level.umap', 'content\n')
 
-    def tearDown(self):
+    def _make_all_writable(self):
         for root, _dirs, names in os.walk(self.ws):
             for name in names:
                 os.chmod(os.path.join(root, name),
                          stat.S_IRUSR | stat.S_IWUSR)
-        self._tempdir.cleanup()
-
-    def _file(self, rel, content='content\n'):
-        path = os.path.join(self.ws, rel)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
-            f.write(content)
-        return path
 
     def _set_all(self, mode):
         for path in (self.tracked, self.opened, self.ignored):

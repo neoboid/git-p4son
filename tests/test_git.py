@@ -3,7 +3,6 @@
 import contextlib
 import io
 import os
-import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -36,37 +35,7 @@ from git_p4son.git import (
     parse_sync_subject,
     restore_files,
 )
-from tests.helpers import make_run_result
-
-
-class GitRepoTestCase(unittest.TestCase):
-    """Base class that creates a temporary git repo for each test."""
-
-    def setUp(self):
-        self.tmpdir = tempfile.mkdtemp()
-        subprocess.run(['git', 'init'], cwd=self.tmpdir,
-                       capture_output=True, check=True)
-        subprocess.run(['git', 'config', 'user.email', 'test@test.com'],
-                       cwd=self.tmpdir, capture_output=True, check=True)
-        subprocess.run(['git', 'config', 'user.name', 'Test'],
-                       cwd=self.tmpdir, capture_output=True, check=True)
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmpdir)
-
-    def _write_file(self, name, content):
-        path = os.path.join(self.tmpdir, name)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
-            f.write(content)
-        return path
-
-    def _commit(self, message='test commit'):
-        subprocess.run(['git', 'add', '.'], cwd=self.tmpdir,
-                       capture_output=True, check=True)
-        subprocess.run(['git', 'commit', '-m', message],
-                       cwd=self.tmpdir, capture_output=True, check=True)
+from tests.helpers import GitRepoTestCase, make_run_result
 
 
 class TestControlCharactersInPaths(GitRepoTestCase):
@@ -76,170 +45,167 @@ class TestControlCharactersInPaths(GitRepoTestCase):
 
     def _commit_names(self, content, message):
         for name in self.NAMES:
-            self._write_file(name, content)
-        self._commit(message)
+            self.write_file(name, content)
+        self.commit(message)
 
     def test_names_come_back_verbatim(self):
         self._commit_names('base', 'git-p4son: p4 sync //ws/...@1')
-        base = get_head_commit(self.tmpdir)
+        base = get_head_commit(self.ws)
         self._commit_names('changed', 'local change')
 
-        self.assertEqual(sorted(list_tracked_files(self.tmpdir)),
+        self.assertEqual(sorted(list_tracked_files(self.ws)),
                          sorted(self.NAMES))
-        self.assertEqual(sorted(get_local_changes(base, self.tmpdir).mods),
+        self.assertEqual(sorted(get_local_changes(base, self.ws).mods),
                          sorted(self.NAMES))
-        self.assertEqual(find_base_commits(self.NAMES, 'HEAD', self.tmpdir),
+        self.assertEqual(find_base_commits(self.NAMES, 'HEAD', self.ws),
                          dict.fromkeys(self.NAMES, base))
 
         for name in self.NAMES:
-            self._write_file(name, 'dirty')
-        self.assertEqual(sorted(name for name, _ in get_dirty_files(self.tmpdir)),
+            self.write_file(name, 'dirty')
+        self.assertEqual(sorted(name for name, _ in get_dirty_files(self.ws)),
                          sorted(self.NAMES))
-        add_files(self.NAMES, self.tmpdir)
-        self.assertEqual(sorted(get_staged_files(self.tmpdir)),
+        add_files(self.NAMES, self.ws)
+        self.assertEqual(sorted(get_staged_files(self.ws)),
                          sorted(self.NAMES))
 
 
 class TestRepoSetup(GitRepoTestCase):
     def test_has_commits(self):
-        self.assertFalse(has_commits(self.tmpdir))
-        self._write_file('a.txt', 'a')
-        self._commit()
-        self.assertTrue(has_commits(self.tmpdir))
+        self.assertFalse(has_commits(self.ws))
+        self.write_file('a.txt', 'a')
+        self.commit()
+        self.assertTrue(has_commits(self.ws))
 
     def test_add_files_stages_only_those(self):
-        self._write_file('a.txt', 'a')
-        self._write_file('b.txt', 'b')
-        add_files(['a.txt'], self.tmpdir)
-        self.assertEqual(get_staged_files(self.tmpdir), ['a.txt'])
+        self.write_file('a.txt', 'a')
+        self.write_file('b.txt', 'b')
+        add_files(['a.txt'], self.ws)
+        self.assertEqual(get_staged_files(self.ws), ['a.txt'])
 
 
 class TestRestoreFiles(GitRepoTestCase):
     def test_restore_files_from_the_index(self):
-        self._write_file('a.txt', 'git')
-        self._write_file('b c.txt', 'git')
-        self._commit()
-        self._write_file('a.txt', 'depot')
-        self._write_file('b c.txt', 'depot')
-        restore_files(['a.txt', 'b c.txt'], self.tmpdir, dry_run=False)
+        self.write_file('a.txt', 'git')
+        self.write_file('b c.txt', 'git')
+        self.commit()
+        self.write_file('a.txt', 'depot')
+        self.write_file('b c.txt', 'depot')
+        restore_files(['a.txt', 'b c.txt'], self.ws, dry_run=False)
         for name in ('a.txt', 'b c.txt'):
-            with open(os.path.join(self.tmpdir, name)) as f:
+            with open(os.path.join(self.ws, name)) as f:
                 self.assertEqual(f.read(), 'git')
 
 
 class TestGetTrackedFiles(GitRepoTestCase):
     def test_returns_tracked_subset(self):
-        self._write_file('src/main.py', 'code')
-        self._commit()
-        self._write_file('untracked.log', '')
+        self.write_file('src/main.py', 'code')
+        self.commit()
+        self.write_file('untracked.log', '')
 
         result = get_tracked_files(
-            ['src/main.py', 'untracked.log'], self.tmpdir)
+            ['src/main.py', 'untracked.log'], self.ws)
         self.assertEqual(result, {'src/main.py'})
 
     def test_tracked_file_matching_ignore_pattern_is_tracked(self):
         """A tracked file matching a .gitignore pattern is still tracked."""
-        self._write_file('.gitignore', '*.ini\n')
-        self._write_file('config.ini', 'tracked anyway')
-        subprocess.run(['git', 'add', '-f', 'config.ini', '.gitignore'],
-                       cwd=self.tmpdir, capture_output=True, check=True)
-        subprocess.run(['git', 'commit', '-m', 'add'],
-                       cwd=self.tmpdir, capture_output=True, check=True)
-        self._write_file('other.ini', 'ignored and untracked')
+        self.write_file('.gitignore', '*.ini\n')
+        self.write_file('config.ini', 'tracked anyway')
+        self.git('add', '-f', 'config.ini', '.gitignore')
+        self.git('commit', '-m', 'add')
+        self.write_file('other.ini', 'ignored and untracked')
 
         result = get_tracked_files(
-            ['config.ini', 'other.ini'], self.tmpdir)
+            ['config.ini', 'other.ini'], self.ws)
         self.assertEqual(result, {'config.ini'})
 
     def test_absolute_paths_map_back_to_input(self):
-        self._write_file('src/main.py', 'code')
-        self._commit()
-        abs_path = os.path.join(self.tmpdir, 'src', 'main.py')
+        self.write_file('src/main.py', 'code')
+        self.commit()
+        abs_path = os.path.join(self.ws, 'src', 'main.py')
 
-        result = get_tracked_files([abs_path], self.tmpdir)
+        result = get_tracked_files([abs_path], self.ws)
         self.assertEqual(result, {abs_path})
 
     def test_non_ascii_paths_match(self):
         """Non-ASCII paths match the input paths rather than coming back C-quoted."""
         name = 'bäck.py'
-        self._write_file(name, 'code')
-        self._commit()
+        self.write_file(name, 'code')
+        self.commit()
 
-        result = get_tracked_files([name], self.tmpdir)
+        result = get_tracked_files([name], self.ws)
         self.assertEqual(result, {name})
 
     def test_one_listing_for_any_number_of_paths(self):
         for name in ('a.py', 'b.py'):
-            self._write_file(name, name)
-        self._commit()
-        self._write_file('c.log', '')
+            self.write_file(name, name)
+        self.commit()
+        self.write_file('c.log', '')
         with mock.patch('git_p4son.git.run', wraps=run) as mock_run:
             result = get_tracked_files(
-                ['a.py', 'b.py', 'c.log'] * 1000, self.tmpdir)
+                ['a.py', 'b.py', 'c.log'] * 1000, self.ws)
         self.assertEqual(result, {'a.py', 'b.py'})
         mock_run.assert_called_once()
 
     def test_empty_input(self):
-        result = get_tracked_files([], self.tmpdir)
+        result = get_tracked_files([], self.ws)
         self.assertEqual(result, set())
 
 
 class TestGetStagedFiles(GitRepoTestCase):
     def test_lists_each_staged_file_including_new_folders(self):
-        self._write_file('a.txt', 'A')
-        self._write_file('b.txt', 'B')
-        self._commit('initial')
-        self._write_file('a.txt', 'A2')
-        os.remove(os.path.join(self.tmpdir, 'b.txt'))
-        self._write_file('new/one.txt', '1')
-        self._write_file('new/two.txt', '2')
-        subprocess.run(['git', 'add', '.'], cwd=self.tmpdir,
-                       capture_output=True, check=True)
+        self.write_file('a.txt', 'A')
+        self.write_file('b.txt', 'B')
+        self.commit('initial')
+        self.write_file('a.txt', 'A2')
+        os.remove(os.path.join(self.ws, 'b.txt'))
+        self.write_file('new/one.txt', '1')
+        self.write_file('new/two.txt', '2')
+        self.git('add', '.')
 
-        self.assertEqual(sorted(get_staged_files(self.tmpdir)),
+        self.assertEqual(sorted(get_staged_files(self.ws)),
                          ['a.txt', 'b.txt', 'new/one.txt', 'new/two.txt'])
 
     def test_nothing_staged(self):
-        self._write_file('a.txt', 'A')
-        self._commit('initial')
-        self.assertEqual(get_staged_files(self.tmpdir), [])
+        self.write_file('a.txt', 'A')
+        self.commit('initial')
+        self.assertEqual(get_staged_files(self.ws), [])
 
 
 class TestListTrackedFiles(GitRepoTestCase):
     def test_lists_tracked_files_only(self):
-        self._write_file('src/main.py', 'code')
-        self._write_file('.gitignore', '*.log\n')
-        self._commit()
-        self._write_file('untracked.txt', '')
-        self._write_file('build.log', '')
+        self.write_file('src/main.py', 'code')
+        self.write_file('.gitignore', '*.log\n')
+        self.commit()
+        self.write_file('untracked.txt', '')
+        self.write_file('build.log', '')
 
-        self.assertEqual(sorted(list_tracked_files(self.tmpdir)),
+        self.assertEqual(sorted(list_tracked_files(self.ws)),
                          ['.gitignore', 'src/main.py'])
 
     def test_non_ascii_paths_are_not_quoted(self):
-        self._write_file('src/Ärlig.py', 'code')
-        self._commit()
-        self.assertEqual(list_tracked_files(self.tmpdir), ['src/Ärlig.py'])
+        self.write_file('src/Ärlig.py', 'code')
+        self.commit()
+        self.assertEqual(list_tracked_files(self.ws), ['src/Ärlig.py'])
 
     def test_empty_repo(self):
-        self.assertEqual(list_tracked_files(self.tmpdir), [])
+        self.assertEqual(list_tracked_files(self.ws), [])
 
 
 class TestGetFilesAtCommits(GitRepoTestCase):
     def test_reads_every_pair_in_one_call(self):
-        self._write_file('foo.txt', 'version 1')
-        self._write_file('src/engine/test.cpp', 'hello')
-        self._commit('first')
-        first_sha = get_head_commit(self.tmpdir)
-        self._write_file('foo.txt', 'version 2\nwith\nlines\n')
-        self._commit('second')
+        self.write_file('foo.txt', 'version 1')
+        self.write_file('src/engine/test.cpp', 'hello')
+        self.commit('first')
+        first_sha = get_head_commit(self.ws)
+        self.write_file('foo.txt', 'version 2\nwith\nlines\n')
+        self.commit('second')
 
         items = [('HEAD', 'foo.txt'), (first_sha, 'foo.txt'),
                  ('HEAD', 'missing.txt'), ('HEAD', 'src'),
                  ('HEAD', 'src\\engine\\test.cpp')]
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            contents = get_files_at_commits(items, self.tmpdir)
+            contents = get_files_at_commits(items, self.ws)
         commands = [line for line in buffer.getvalue().splitlines()
                     if line.startswith('>')]
         self.assertEqual(len(commands), 1)
@@ -252,54 +218,48 @@ class TestGetFilesAtCommits(GitRepoTestCase):
         })
 
     def test_binary_content_is_returned_verbatim(self):
-        path = os.path.join(self.tmpdir, 'blob.bin')
+        path = os.path.join(self.ws, 'blob.bin')
         data = bytes(range(256)) + b'\r\n\n\0'
         with open(path, 'wb') as f:
             f.write(data)
-        self._commit()
+        self.commit()
         self.assertEqual(
-            get_files_at_commits([('HEAD', 'blob.bin')], self.tmpdir),
+            get_files_at_commits([('HEAD', 'blob.bin')], self.ws),
             {('HEAD', 'blob.bin'): data})
 
     def test_empty_input(self):
-        self.assertEqual(get_files_at_commits([], self.tmpdir), {})
+        self.assertEqual(get_files_at_commits([], self.ws), {})
 
 
 class TestGetBlobOids(GitRepoTestCase):
     def test_returns_oid_for_existing_file(self):
-        self._write_file('foo.txt', 'hello world')
-        self._commit()
-        oids = get_blob_oids([('HEAD', 'foo.txt')], self.tmpdir)
-        expected = subprocess.run(
-            ['git', 'rev-parse', 'HEAD:foo.txt'], cwd=self.tmpdir,
-            capture_output=True, text=True).stdout.strip()
+        self.write_file('foo.txt', 'hello world')
+        self.commit()
+        oids = get_blob_oids([('HEAD', 'foo.txt')], self.ws)
+        expected = self.git('rev-parse', 'HEAD:foo.txt')
         self.assertEqual(oids, {('HEAD', 'foo.txt'): expected})
 
     def test_returns_none_for_missing_file(self):
-        self._write_file('foo.txt', 'hello')
-        self._commit()
-        oids = get_blob_oids([('HEAD', 'nonexistent.txt')], self.tmpdir)
+        self.write_file('foo.txt', 'hello')
+        self.commit()
+        oids = get_blob_oids([('HEAD', 'nonexistent.txt')], self.ws)
         self.assertEqual(oids, {('HEAD', 'nonexistent.txt'): None})
 
     def test_resolves_all_pairs_in_one_call(self):
         """Mixed commits, equal and changed content and missing files resolve in one call."""
-        self._write_file('foo.txt', 'version 1')
-        self._write_file('copy.txt', 'version 1')
-        self._commit('first')
-        result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'], cwd=self.tmpdir,
-            capture_output=True, text=True)
-        first_sha = result.stdout.strip()
+        self.write_file('foo.txt', 'version 1')
+        self.write_file('copy.txt', 'version 1')
+        first_sha = self.commit('first')
 
-        self._write_file('foo.txt', 'version 2')
-        self._commit('second')
+        self.write_file('foo.txt', 'version 2')
+        self.commit('second')
 
         oids = get_blob_oids([
             (first_sha, 'foo.txt'),
             (first_sha, 'copy.txt'),
             ('HEAD', 'foo.txt'),
             ('HEAD', 'missing.txt'),
-        ], self.tmpdir)
+        ], self.ws)
 
         self.assertEqual(oids[(first_sha, 'foo.txt')],
                          oids[(first_sha, 'copy.txt')])
@@ -308,151 +268,148 @@ class TestGetBlobOids(GitRepoTestCase):
         self.assertIsNone(oids[('HEAD', 'missing.txt')])
 
     def test_backslash_paths_normalized(self):
-        self._write_file('src/engine/test.cpp', 'hello')
-        self._commit()
+        self.write_file('src/engine/test.cpp', 'hello')
+        self.commit()
         oids = get_blob_oids([('HEAD', 'src\\engine\\test.cpp'),
-                              ('HEAD', 'src/engine/test.cpp')], self.tmpdir)
+                              ('HEAD', 'src/engine/test.cpp')], self.ws)
         self.assertIsNotNone(oids[('HEAD', 'src\\engine\\test.cpp')])
         self.assertEqual(oids[('HEAD', 'src\\engine\\test.cpp')],
                          oids[('HEAD', 'src/engine/test.cpp')])
 
     def test_empty_input(self):
-        self.assertEqual(get_blob_oids([], self.tmpdir), {})
+        self.assertEqual(get_blob_oids([], self.ws), {})
 
 
 class TestGetHeadCommit(GitRepoTestCase):
     def test_returns_sha(self):
-        self._write_file('foo.txt', 'hello')
-        self._commit()
-        sha = get_head_commit(self.tmpdir)
+        self.write_file('foo.txt', 'hello')
+        self.commit()
+        sha = get_head_commit(self.ws)
         self.assertEqual(len(sha), 40)
         self.assertTrue(all(c in '0123456789abcdef' for c in sha))
 
 
 class TestFindBaseCommits(GitRepoTestCase):
     def _rev_parse(self, ref='HEAD'):
-        result = subprocess.run(
-            ['git', 'rev-parse', ref], cwd=self.tmpdir,
-            capture_output=True, text=True, check=True)
-        return result.stdout.strip()
+        return self.git('rev-parse', ref)
 
     def test_returns_most_recent_sync_commit_touching_file(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
-        self._write_file('a.cpp', 'X2')
-        self._commit('git-p4son: p4 sync //ws/...@200')
+        self.write_file('a.cpp', 'X2')
+        self.commit('git-p4son: p4 sync //ws/...@200')
         s1 = self._rev_parse()
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s1})
         self.assertNotEqual(s0, s1)
 
     def test_skips_sync_commits_that_did_not_touch_file(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
-        self._write_file('b.cpp', 'B')
-        self._commit('git-p4son: p4 sync //ws/...@200')
+        self.write_file('b.cpp', 'B')
+        self.commit('git-p4son: p4 sync //ws/...@200')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_skips_user_commits_that_touched_file(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
-        self._write_file('a.cpp', 'Y')
-        self._commit('user: my local edit')
+        self.write_file('a.cpp', 'Y')
+        self.commit('user: my local edit')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_falls_back_to_introducing_commit(self):
         """Files never touched by a sync commit fall back to the commit that added them."""
-        self._write_file('a.cpp', 'X')
-        self._commit('initial bulk import')
+        self.write_file('a.cpp', 'X')
+        self.commit('initial bulk import')
         s0 = self._rev_parse()
-        self._write_file('a.cpp', 'Y')
-        self._commit('user: modify a.cpp')
+        self.write_file('a.cpp', 'Y')
+        self.commit('user: modify a.cpp')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_fallback_is_most_recent_add_when_readded(self):
         """A deleted and re-added file falls back to its most recent add."""
-        self._write_file('a.cpp', 'X')
-        self._commit('add a.cpp')
-        os.remove(os.path.join(self.tmpdir, 'a.cpp'))
-        self._commit('delete a.cpp')
-        self._write_file('a.cpp', 'Z')
-        self._commit('readd a.cpp')
+        self.write_file('a.cpp', 'X')
+        self.commit('add a.cpp')
+        os.remove(os.path.join(self.ws, 'a.cpp'))
+        self.commit('delete a.cpp')
+        self.write_file('a.cpp', 'Z')
+        self.commit('readd a.cpp')
         s_readd = self._rev_parse()
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s_readd})
 
     def test_sync_commit_wins_over_more_recent_add(self):
         """A sync commit touching the file wins over a later re-add by a user commit."""
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
-        os.remove(os.path.join(self.tmpdir, 'a.cpp'))
-        self._commit('user: delete a.cpp')
-        self._write_file('a.cpp', 'Z')
-        self._commit('user: readd a.cpp')
+        os.remove(os.path.join(self.ws, 'a.cpp'))
+        self.commit('user: delete a.cpp')
+        self.write_file('a.cpp', 'Z')
+        self.commit('user: readd a.cpp')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_returns_none_when_file_not_in_history(self):
-        self._write_file('b.cpp', 'B')
-        self._commit('add b.cpp')
+        self.write_file('b.cpp', 'B')
+        self.commit('add b.cpp')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': None})
 
     def test_respects_before_commit_bound(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
-        self._write_file('a.cpp', 'X2')
-        self._commit('git-p4son: p4 sync //ws/...@200')
+        self.write_file('a.cpp', 'X2')
+        self.commit('git-p4son: p4 sync //ws/...@200')
 
         # Looking from s0 should not see the later sync commit.
-        result = find_base_commits(['a.cpp'], s0, self.tmpdir)
+        result = find_base_commits(['a.cpp'], s0, self.ws)
         self.assertEqual(result, {'a.cpp': s0})
 
     def test_backslash_paths_keyed_by_input(self):
-        self._write_file('src/engine/test.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('src/engine/test.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
 
         result = find_base_commits(
-            ['src\\engine\\test.cpp'], 'HEAD', self.tmpdir)
+            ['src\\engine\\test.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'src\\engine\\test.cpp': s0})
 
     def test_non_ascii_paths_match(self):
         """Paths git would C-quote in --name-status output still match."""
-        self._write_file('bäck.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('bäck.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
 
-        result = find_base_commits(['bäck.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['bäck.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'bäck.cpp': s0})
 
     def test_paths_git_would_c_quote_match(self):
         """Quotes and tabs come back verbatim, not as "we\\"ird.cpp"."""
         names = ['we"ird.cpp', 'tab\tname.cpp']
         for name in names:
-            self._write_file(name, 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+            self.write_file(name, 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s0 = self._rev_parse()
         for name in names:
-            self._write_file(name, 'local')
-        self._commit('local change')
+            self.write_file(name, 'local')
+        self.commit('local change')
 
-        result = find_base_commits(names, 'HEAD', self.tmpdir)
+        result = find_base_commits(names, 'HEAD', self.ws)
         self.assertEqual(result, {name: s0 for name in names})
 
     @mock.patch('git_p4son.git.run')
@@ -460,37 +417,37 @@ class TestFindBaseCommits(GitRepoTestCase):
         """A header with no status after it, e.g. a merge, does not swallow the next commit's entries."""
         mock_run.return_value = make_run_result(
             stdout=b'\x01m1\x01Merge branch\0\x01s1\x01git-p4son: p4 sync //ws/...@100\nM\0a.cpp\0')
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': 's1'})
 
     def test_multiple_files_resolved_in_one_walk(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s_sync = self._rev_parse()
-        self._write_file('b.cpp', 'B')
-        self._commit('user: add b.cpp')
+        self.write_file('b.cpp', 'B')
+        self.commit('user: add b.cpp')
         s_add = self._rev_parse()
 
         result = find_base_commits(
-            ['a.cpp', 'b.cpp', 'missing.cpp'], 'HEAD', self.tmpdir)
+            ['a.cpp', 'b.cpp', 'missing.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s_sync,
                                   'b.cpp': s_add,
                                   'missing.cpp': None})
 
     def test_one_walk_for_any_number_of_paths(self):
         """All paths go on stdin, so a single git log call resolves them all."""
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s_sync = self._rev_parse()
-        self._write_file('b.cpp', 'B')
-        self._commit('user: add b.cpp')
+        self.write_file('b.cpp', 'B')
+        self.commit('user: add b.cpp')
         s_add = self._rev_parse()
 
         missing = [f'missing/file{i}.cpp' for i in range(5000)]
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             result = find_base_commits(
-                ['a.cpp', 'b.cpp'] + missing, 'HEAD', self.tmpdir)
+                ['a.cpp', 'b.cpp'] + missing, 'HEAD', self.ws)
         commands = [line for line in buffer.getvalue().splitlines()
                     if line.startswith('>')]
         self.assertEqual(len(commands), 1)
@@ -501,17 +458,17 @@ class TestFindBaseCommits(GitRepoTestCase):
 
     def test_only_git_p4son_sync_subjects_are_baselines(self):
         """A commit whose subject merely looks like a sync is not a baseline."""
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
         s_sync = self._rev_parse()
-        self._write_file('a.cpp', 'Y')
-        self._commit('other: p4 sync //ws/...@200')
+        self.write_file('a.cpp', 'Y')
+        self.commit('other: p4 sync //ws/...@200')
 
-        result = find_base_commits(['a.cpp'], 'HEAD', self.tmpdir)
+        result = find_base_commits(['a.cpp'], 'HEAD', self.ws)
         self.assertEqual(result, {'a.cpp': s_sync})
 
     def test_empty_input(self):
-        self.assertEqual(find_base_commits([], 'HEAD', self.tmpdir), {})
+        self.assertEqual(find_base_commits([], 'HEAD', self.ws), {})
 
 
 class TestGitLastSyncedChangelist(unittest.TestCase):
@@ -567,12 +524,12 @@ class TestGitLastSyncedChangelist(unittest.TestCase):
 
 class TestGitLastSyncedChangelistInRepo(GitRepoTestCase):
     def test_skips_commits_that_only_mention_a_sync_subject(self):
-        self._write_file('a.cpp', 'X')
-        self._commit('git-p4son: p4 sync //ws/...@100')
-        self._write_file('a.cpp', 'Y')
-        self._commit('Revert "git-p4son: p4 sync //ws/...@200"')
+        self.write_file('a.cpp', 'X')
+        self.commit('git-p4son: p4 sync //ws/...@100')
+        self.write_file('a.cpp', 'Y')
+        self.commit('Revert "git-p4son: p4 sync //ws/...@200"')
 
-        self.assertEqual(git_last_synced_changelist(self.tmpdir), 100)
+        self.assertEqual(git_last_synced_changelist(self.ws), 100)
 
 
 class TestSyncSubject(unittest.TestCase):
@@ -727,40 +684,29 @@ class TestGetRebaseBranch(unittest.TestCase):
             self.assertIsNone(_get_rebase_branch('/ws'))
 
 
-class TestGetCurrentBranchDuringRebase(unittest.TestCase):
+class TestGetCurrentBranchDuringRebase(GitRepoTestCase):
     """Both rebase backends detach HEAD; the branch being rebased is still found."""
 
-    def _repo_mid_rebase(self, ws, *rebase_args):
-        def git(*args):
-            subprocess.run(['git', *args], cwd=ws, capture_output=True)
-
-        def commit(content):
-            with open(os.path.join(ws, 'f.txt'), 'w') as f:
-                f.write(content)
-            git('add', '.')
-            git('commit', '-m', content)
-
-        git('init', '-b', 'main')
-        git('config', 'user.email', 't@t')
-        git('config', 'user.name', 'T')
-        commit('base')
-        git('switch', '-c', 'feat/x')
-        commit('feature')
-        git('switch', 'main')
-        commit('main')
-        git('switch', 'feat/x')
+    def _stop_mid_rebase(self, *rebase_args):
+        self.write_file('f.txt', 'base')
+        self.commit('base')
+        self.git('switch', '-c', 'feat/x')
+        self.write_file('f.txt', 'feature')
+        self.commit('feature')
+        self.git('switch', 'main')
+        self.write_file('f.txt', 'main')
+        self.commit('main')
+        self.git('switch', 'feat/x')
         # Both commits change f.txt, so the rebase stops on a conflict with HEAD detached.
-        git('rebase', *rebase_args, 'main')
+        self.git('rebase', *rebase_args, 'main', check=False)
 
     def test_merge_backend(self):
-        with tempfile.TemporaryDirectory() as ws:
-            self._repo_mid_rebase(ws, '--merge')
-            self.assertEqual(get_current_branch(ws), 'feat/x')
+        self._stop_mid_rebase('--merge')
+        self.assertEqual(get_current_branch(self.ws), 'feat/x')
 
     def test_apply_backend(self):
-        with tempfile.TemporaryDirectory() as ws:
-            self._repo_mid_rebase(ws, '--apply')
-            self.assertEqual(get_current_branch(ws), 'feat/x')
+        self._stop_mid_rebase('--apply')
+        self.assertEqual(get_current_branch(self.ws), 'feat/x')
 
 
 class TestIsWorkspaceDir(unittest.TestCase):
@@ -998,83 +944,43 @@ class TestGetLocalChanges(unittest.TestCase):
             get_local_changes('main', '/ws')
 
 
-class TestGetLocalChangesInRepo(unittest.TestCase):
+class TestGetLocalChangesInRepo(GitRepoTestCase):
     def test_changes_on_the_base_branch_since_the_fork_are_left_out(self):
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
+        self.commit('base')
+        self.git('switch', '-c', 'feat')
+        self.write_file('feature.txt', 'feature.txt')
+        self.commit('feature')
+        self.git('switch', 'main')
+        self.write_file('upstream.txt', 'upstream.txt')
+        self.commit('upstream')
+        self.git('switch', 'feat')
 
-            def write(name):
-                with open(os.path.join(ws, name), 'w') as f:
-                    f.write(name)
-
-            git('init', '-b', 'main')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            git('commit', '--allow-empty', '-m', 'base')
-            git('switch', '-c', 'feat')
-            write('feature.txt')
-            git('add', '.')
-            git('commit', '-m', 'feature')
-            git('switch', 'main')
-            write('upstream.txt')
-            git('add', '.')
-            git('commit', '-m', 'upstream')
-            git('switch', 'feat')
-
-            changes = get_local_changes('main', ws)
+        changes = get_local_changes('main', self.ws)
 
         self.assertEqual(changes.adds, ['feature.txt'])
         self.assertEqual(changes.dels, [])
 
     def test_non_ascii_filename_returned_verbatim(self):
         """Non-ASCII filenames are returned verbatim, not C-quoted."""
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
-            git('init')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            git('commit', '--allow-empty', '-m', 'base')
-            base = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'], cwd=ws,
-                capture_output=True, text=True, check=True).stdout.strip()
-            with open(os.path.join(ws, 'bäck.txt'), 'w') as f:
-                f.write('content')
-            git('add', '.')
-            git('commit', '-m', 'add file')
+        base = self.commit('base')
+        self.write_file('bäck.txt', 'content')
+        self.commit('add file')
 
-            changes = get_local_changes(base, ws)
+        changes = get_local_changes(base, self.ws)
 
         self.assertEqual(changes.adds, ['bäck.txt'])
 
     def test_special_characters_returned_verbatim(self):
         """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
         names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']
-        with tempfile.TemporaryDirectory() as ws:
-            def git(*args):
-                subprocess.run(['git', *args], cwd=ws,
-                               capture_output=True, check=True)
-            git('init')
-            git('config', 'user.email', 't@t')
-            git('config', 'user.name', 'T')
-            with open(os.path.join(ws, 'old.txt'), 'w') as f:
-                f.write('content to rename\n' * 10)
-            git('add', '.')
-            git('commit', '-m', 'base')
-            base = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'], cwd=ws,
-                capture_output=True, text=True, check=True).stdout.strip()
-            for name in names:
-                with open(os.path.join(ws, name), 'w') as f:
-                    f.write(name)
-            git('mv', 'old.txt', 'new "name".txt')
-            git('add', '.')
-            git('commit', '-m', 'add files')
+        self.write_file('old.txt', 'content to rename\n' * 10)
+        base = self.commit('base')
+        for name in names:
+            self.write_file(name, name)
+        self.git('mv', 'old.txt', 'new "name".txt')
+        self.commit('add files')
 
-            changes = get_local_changes(base, ws)
+        changes = get_local_changes(base, self.ws)
 
         self.assertEqual(sorted(changes.adds), sorted(names))
         self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])

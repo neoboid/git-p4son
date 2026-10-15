@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from unittest import mock
@@ -9,6 +10,8 @@ from unittest import mock
 from git_p4son.alias import (
     alias_clean_command,
     alias_delete_command,
+    alias_list_command,
+    alias_new_command,
     alias_show_command,
 )
 from git_p4son.common import CommandError, prompt_choice, prompt_menu
@@ -196,6 +199,50 @@ class TestAliasCleanCommand(unittest.TestCase):
             rc = alias_clean_command(_args())
         self.assertEqual(rc, 0)
         mock_delete.assert_called_once_with('feature-a', '/ws')
+
+
+class TestAliasNewAndList(unittest.TestCase):
+    """alias new and alias list against a real alias store."""
+
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+
+    def _new(self, changelist, alias, force=False):
+        return alias_new_command(mock.Mock(workspace_dir=self.ws,
+                                           changelist=changelist, alias=alias,
+                                           force=force))
+
+    def _list(self):
+        with mock.patch('git_p4son.alias.log') as mock_log:
+            alias_list_command(mock.Mock(workspace_dir=self.ws))
+        return [c.args[0] for c in mock_log.info.call_args_list]
+
+    def test_new_aliases_are_listed_in_name_order(self):
+        with mock.patch('git_p4son.alias.log'):
+            self.assertEqual(self._new('200', 'feature-b'), 0)
+            self.assertEqual(self._new('100', 'feature-a'), 0)
+        self.assertEqual(self._list(), ['Found 2 aliases',
+                                        'feature-a -> CL 100',
+                                        'feature-b -> CL 200'])
+
+    def test_no_aliases(self):
+        self.assertEqual(self._list(), ['No aliases defined'])
+
+    def test_empty_alias_files_are_left_out(self):
+        with mock.patch('git_p4son.alias.log'):
+            self._new('100', 'feature-a')
+        open(os.path.join(self.ws, '.git-p4son', 'changelists', 'empty'),
+             'w').close()
+        self.assertEqual(self._list(), ['Found 1 alias',
+                                        'feature-a -> CL 100'])
+
+    def test_new_refuses_a_non_numeric_changelist(self):
+        with self.assertRaisesRegex(CommandError,
+                                    'Invalid changelist number: abc'):
+            self._new('abc', 'feature-a')
+        self.assertEqual(self._list(), ['No aliases defined'])
 
 
 if __name__ == '__main__':

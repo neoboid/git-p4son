@@ -845,6 +845,80 @@ before the first sync.
 After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
 `.git-p4son/hooks/post-sync/`. They don't run when the workspace is already at the requested changelist.
 
+## Jujutsu (jj)
+
+git-p4son detects a jj workspace colocated with the git repository, which needs jj 0.41 or newer. Separate jj
+workspaces, sparse working copies, and conflicted or divergent changes are not supported. Without a `.jj` folder,
+nothing changes.
+
+In a jj workspace:
+
+- `new`, `update` and `list-changes` work on the jj working change `@`. When `@` is empty, has no description or
+  bookmark and has one parent, they work on that parent instead, so a fresh working change above a feature still
+  refers to the feature.
+- The default alias comes from the one local bookmark at that change, with `/` replaced by `-`. With no bookmark,
+  or several, name the alias or changelist explicitly.
+- The default message is the first line of the change's description. Use `jj describe`, `-m` or `-F`.
+- `-b/--base-branch` takes a jj revision that resolves to one change, such as a bookmark, change ID or commit ID.
+  It defaults to the change's parent rather than git's `HEAD~1`.
+- `new` and `update` use jj's snapshot of the working copy, check that it did not change while git-p4son took the
+  lock, and refuse files jj left untracked. You do not need a separate committed change before opening files in
+  Perforce. Before a Perforce revert overwrites a file, git-p4son saves the working file and puts it back
+  afterwards, keeping its bytes, line endings and permissions instead of taking git's index version.
+- `init` holds jj's working-copy lock while it sets up the git repository.
+
+For example:
+
+```sh
+jj git init --colocate       # Add jj to an existing git-p4son repository
+jj new main
+git p4son sync
+
+jj new main -m "Fix login"
+# Edit files
+jj bookmark create fix-login
+git p4son new -b main --review
+# Edit more files
+git p4son update -b main --shelve
+```
+
+### Syncing a bookmark
+
+Run `jj new main` before syncing. `sync` needs an empty working change with no description or bookmark and one
+parent, and moves the bookmark at that parent to each sync commit. When several bookmarks point there, pick one
+with `git p4son sync --bookmark main`; the others stay where they are.
+
+`sync` still stages and commits with git, including git attributes and filters, and sets `core.autocrlf` to match
+jj's line ending conversion. Local changes that `sync` merges back are left in the new working change for you to
+review.
+
+### Locking, and the git workflow
+
+git-p4son holds jj's working-copy lock while commands run, including sync hooks and temporary Perforce reverts,
+so other jj processes cannot snapshot files halfway through. A busy lock stops the command. Queries during the
+command use a pinned jj operation without snapshotting.
+
+jj's first snapshot and final reconciliation happen outside the lock, so another jj command can import the
+finished git changes before git-p4son does: this is not one atomic jj transaction. The lock does not keep out
+editors, git commands or other jj workspaces. If a command fails, look at the workspace before continuing: the
+lock is released, but Perforce operations that completed are not undone.
+
+Hooks must not run ordinary jj commands, which would wait for the lock their caller holds. Read-only queries such
+as `jj --at-op=@ log` avoid snapshotting and the git import.
+
+`review` and `update --per-commit` rebase with git, so a jj workspace refuses them. To use the git workflow on
+purpose, put the global `--ignore-jj` flag **before** the command:
+
+```sh
+git switch fix-login
+git p4son --ignore-jj review -b main
+git p4son --ignore-jj update --per-commit --shelve -b main
+```
+
+This uses git branches, `HEAD` and git's clean-workspace check, and still holds jj's lock. The rebase steps pass
+`--ignore-jj` on and reuse their caller's lock. If the rebase stops, the lock is released: a later
+`git rebase --continue` is not protected as a whole, though each git-p4son step takes the lock again.
+
 ## Claude Code Skill
 
 git-p4son ships a skill for Claude Code that teaches it how git-p4son is meant to be used: keeping `main` in sync

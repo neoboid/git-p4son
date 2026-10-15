@@ -120,6 +120,18 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
   `completions/` call `git p4son complete`.
 
+- **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
+  command runs, yielding a `Workspace` (or None outside jj, or with `--ignore-jj`) that `run_command` stores as
+  `args.jj_workspace`. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
+  when the working change is empty and new), its bookmark and the default base, and `change_revision` gives the
+  commit the git functions read the change from. git still reads objects, diffs and makes the sync commits; `sync`
+  moves the selected bookmark itself. With a revision, `lib.py` keeps the working files around Perforce reverts
+  instead of restoring git's index version.
+
+- **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
+  Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
+  nested rebase steps inherit their caller's lock.
+
 ### Shared modules
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,

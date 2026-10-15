@@ -245,5 +245,8 @@ Ask before deleting a branch or alias if you are not sure the CL was submitted.
   `git p4son writable apply` restores the mode for all tracked files.
 - **`.git-p4son/config.toml` is invalid** ("... in config.toml must be ..." or "... is not valid TOML"). Report
   the message to the user; don't edit the file yourself.
+- **In a jj workspace** (a `.jj` folder next to `.git`), git-p4son works on the jj change, so commit with jj,
+  not git. `review` and `update --per-commit` refuse there; don't add `--ignore-jj` yourself, ask the user. "The jj
+  working copy is busy" means a jj command is running; try again once it finishes.
 - **Something else fails.** `git p4son -v <command>` prints every git and p4 command it runs and their output, the
   fastest way to see why.

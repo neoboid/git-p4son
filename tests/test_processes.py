@@ -1,67 +1,52 @@
 """Tests for git_p4son.processes module."""
 
-import os
-import tempfile
 import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError
 from git_p4son.processes import (
-    check_no_blocking_processes, get_blocking_processes,
-    get_running_processes, normalize_process_name,
+    check_no_blocking_processes,
+    get_blocking_processes,
+    get_running_processes,
+    normalize_process_name,
 )
-from tests.helpers import make_run_result
+from tests.helpers import make_run_result, WorkspaceTestCase
 
 
-class _WorkspaceTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tmp.cleanup)
-        self.workspace = self._tmp.name
-
-    def write_config(self, text):
-        config_dir = os.path.join(self.workspace, '.git-p4son')
-        os.makedirs(config_dir, exist_ok=True)
-        with open(os.path.join(config_dir, 'config.toml'), 'w',
-                  encoding='utf-8') as f:
-            f.write(text)
-
-
-class TestGetBlockingProcesses(_WorkspaceTestCase):
+class TestGetBlockingProcesses(WorkspaceTestCase):
 
     def test_no_config_file(self):
-        self.assertEqual(get_blocking_processes(self.workspace), [])
+        self.assertEqual(get_blocking_processes(self.ws), [])
 
     def test_no_sync_table(self):
         self.write_config('[depot]\nroot = "//ws"\n')
-        self.assertEqual(get_blocking_processes(self.workspace), [])
+        self.assertEqual(get_blocking_processes(self.ws), [])
 
     def test_no_key(self):
         self.write_config('[sync]\nother = 1\n')
-        self.assertEqual(get_blocking_processes(self.workspace), [])
+        self.assertEqual(get_blocking_processes(self.ws), [])
 
     def test_names(self):
         self.write_config(
             '[sync]\nblocking-processes = ["UnrealEditor", "Lightmass"]\n')
-        self.assertEqual(get_blocking_processes(self.workspace),
+        self.assertEqual(get_blocking_processes(self.ws),
                          ['UnrealEditor', 'Lightmass'])
 
     def test_not_a_list(self):
         self.write_config('[sync]\nblocking-processes = "UnrealEditor"\n')
         with self.assertRaises(ConfigError):
-            get_blocking_processes(self.workspace)
+            get_blocking_processes(self.ws)
 
     def test_non_string_entry(self):
         self.write_config('[sync]\nblocking-processes = ["a", 1]\n')
         with self.assertRaises(ConfigError):
-            get_blocking_processes(self.workspace)
+            get_blocking_processes(self.ws)
 
     def test_sync_not_a_table(self):
         self.write_config('sync = 1\n')
         with self.assertRaises(ConfigError):
-            get_blocking_processes(self.workspace)
+            get_blocking_processes(self.ws)
 
 
 class TestNormalizeProcessName(unittest.TestCase):
@@ -103,7 +88,7 @@ class TestGetRunningProcesses(unittest.TestCase):
         self.assertEqual(mock_run.call_args.args[0][0], 'tasklist')
 
 
-class TestCheckNoBlockingProcesses(_WorkspaceTestCase):
+class TestCheckNoBlockingProcesses(WorkspaceTestCase):
 
     def setUp(self):
         super().setUp()
@@ -116,39 +101,39 @@ class TestCheckNoBlockingProcesses(_WorkspaceTestCase):
         self.addCleanup(patcher.stop)
 
     def test_nothing_configured_lists_nothing(self):
-        check_no_blocking_processes(self.workspace, False)
+        check_no_blocking_processes(self.ws, False)
         self.mock_running.assert_not_called()
 
     def test_none_running(self):
         self.write_config('[sync]\nblocking-processes = ["Lightmass"]\n')
-        check_no_blocking_processes(self.workspace, False)
+        check_no_blocking_processes(self.ws, False)
         self.mock_log.success.assert_called_once_with('None running')
 
     def test_running_blocks(self):
         self.write_config(
             '[sync]\nblocking-processes = ["UnrealEditor.exe", "Lightmass"]\n')
         with self.assertRaisesRegex(CommandError, '--ignore-blocking-processes'):
-            check_no_blocking_processes(self.workspace, False)
+            check_no_blocking_processes(self.ws, False)
         self.mock_log.info.assert_called_once_with('UnrealEditor.exe')
 
     def test_ignore_skips_listing(self):
         self.write_config('[sync]\nblocking-processes = ["UnrealEditor"]\n')
-        check_no_blocking_processes(self.workspace, True)
+        check_no_blocking_processes(self.ws, True)
         self.mock_running.assert_not_called()
 
     def test_ignore_skips_malformed_config(self):
         self.write_config('[sync]\nblocking-processes = "UnrealEditor"\n')
-        check_no_blocking_processes(self.workspace, True)
+        check_no_blocking_processes(self.ws, True)
 
     def test_malformed_config_fails(self):
         self.write_config('[sync]\nblocking-processes = "UnrealEditor"\n')
         with self.assertRaisesRegex(ConfigError, 'blocking-processes'):
-            check_no_blocking_processes(self.workspace, False)
+            check_no_blocking_processes(self.ws, False)
 
     def test_invalid_toml_fails(self):
         self.write_config('[sync\n')
         with self.assertRaisesRegex(ConfigError, 'not valid TOML'):
-            check_no_blocking_processes(self.workspace, False)
+            check_no_blocking_processes(self.ws, False)
 
     def test_listing_failure_fails(self):
         self.write_config('[sync]\nblocking-processes = ["UnrealEditor"]\n')
@@ -156,4 +141,4 @@ class TestCheckNoBlockingProcesses(_WorkspaceTestCase):
             self.mock_running.side_effect = error
             with self.assertRaisesRegex(CommandError,
                                         'Could not list running processes'):
-                check_no_blocking_processes(self.workspace, False)
+                check_no_blocking_processes(self.ws, False)

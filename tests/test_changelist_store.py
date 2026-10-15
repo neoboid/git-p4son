@@ -5,7 +5,6 @@ import tempfile
 import unittest
 
 from git_p4son import CONFIG_DIR
-from git_p4son.common import CommandError
 from git_p4son.changelist_store import (
     branch_alias,
     branch_to_alias,
@@ -15,17 +14,12 @@ from git_p4son.changelist_store import (
     save_changelist_alias,
     validate_alias_name,
 )
+from git_p4son.common import CommandError
+from tests.helpers import WorkspaceTestCase
 
 
-class TestAliasStoreValidatesNames(unittest.TestCase):
+class TestAliasStoreValidatesNames(WorkspaceTestCase):
     """load and delete validate names like save, so ../../somefile cannot escape the store."""
-
-    def setUp(self):
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.ws = self._tempdir.name
-
-    def tearDown(self):
-        self._tempdir.cleanup()
 
     def test_save_load_delete_roundtrip(self):
         save_changelist_alias('feature', '123', self.ws, force=False)

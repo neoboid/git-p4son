@@ -10,7 +10,9 @@ from unittest import mock
 from git_p4son import jj
 from git_p4son.common import CommandError
 from git_p4son.jj_lock import working_copy_lock
-from tests.helpers import captured_output, WorkspaceTestCase
+from git_p4son.changelist_store import load_changelist_alias
+from git_p4son.cli import create_parser, run_command
+from tests.helpers import captured_output, P4RepoTestCase, WorkspaceTestCase
 
 
 def isolate_jj(test):
@@ -140,6 +142,101 @@ class TestWorkspace(JjRepoTestCase):
         with self.assertRaisesRegex(CommandError, 'git operation is in progress'):
             with self.operation():
                 pass
+
+
+@unittest.skipUnless(shutil.which('jj'), 'jj is not installed')
+class JjP4RepoTestCase(P4RepoTestCase):
+    """git-p4son commands in a colocated jj repo on top of the synced workspace, whose main jj tracks as a bookmark."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        isolate_jj(self)
+        self.write_config('[depot]\nroot = "//myclient"\n')
+        self.commit('Add config')
+        self.jj('git', 'init', '--colocate')
+
+    def setUp(self):
+        super().setUp()
+        isolate_jj(self)
+
+    def jj(self, *args):
+        """Run jj in the workspace and return its stripped stdout."""
+        return subprocess.run(['jj', '--no-pager', '--color', 'never', *args], cwd=self.ws,
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    def describe(self, revision, template='description.first_line()'):
+        return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', template)
+
+    def p4son(self, *argv):
+        """Run git-p4son with argv as the command line would; returns everything it printed."""
+        with captured_output() as out, \
+                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
+            self.assertEqual(run_command(create_parser().parse_args(argv)), 0)
+        return out.getvalue()
+
+    def p4son_fails(self, *argv, message):
+        with captured_output(), \
+                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
+                self.assertRaisesRegex(CommandError, message):
+            run_command(create_parser().parse_args(argv))
+
+
+class TestJjNew(JjP4RepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        self.jj('new', 'main', '-m', 'Change a')
+        self.edit('a.txt', 'a2\n')
+        self.jj('bookmark', 'create', 'feat', '-r', '@')
+        self.jj('new')
+
+    def test_new_takes_the_change_its_description_and_bookmark_from_jj(self):
+        self.p4son('new')
+        self.assertEqual(self.p4.pending,
+                         {'101': ['Change a', '', 'Changes included:', '1. Change a']})
+        self.assertEqual(self.p4.opened, {'a.txt': ('101', 'edit')})
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+
+    def test_new_takes_a_described_working_change_git_has_not_committed(self):
+        self.jj('describe', '-m', 'Change b')
+        self.edit('b.txt', 'b2\n')
+        self.jj('bookmark', 'set', 'feat', '-r', '@', '--allow-backwards')
+        self.p4son('new', '-b', 'main')
+        self.assertEqual(self.p4.pending['101'],
+                         ['Change b', '', 'Changes included:', '1. Change a', '2. Change b'])
+        self.assertEqual(self.p4.opened, {'a.txt': (
+            '101', 'edit'), 'b.txt': ('101', 'edit')})
+        self.assertEqual(self.read('b.txt'), 'b2\n')
+
+    def test_review_needs_ignore_jj(self):
+        self.p4son_fails('review', 'feat', message='--ignore-jj')
+
+    def test_update_per_commit_needs_ignore_jj(self):
+        self.p4son_fails('update', '101', '--per-commit',
+                         message='--ignore-jj')
+
+
+class TestJjSync(JjP4RepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        self.jj('new', 'main')
+
+    def test_sync_moves_the_bookmark_to_each_sync_commit(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'c.txt': 'c1\n'})
+        self.p4son('sync', '101', '102')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@102')
+        self.assertEqual(self.describe('main-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-', 'commit_id'),
+                         self.describe('main', 'commit_id'))
+        self.assertEqual(self.read('c.txt'), 'c1\n')
+
+    def test_sync_needs_an_empty_working_change(self):
+        self.jj('describe', '-m', 'work in progress')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4son_fails('sync', message='jj new')
 
 
 if __name__ == '__main__':

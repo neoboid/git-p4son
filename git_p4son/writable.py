@@ -10,6 +10,7 @@ from typing import Callable
 from .common import CommandError
 from .config import get_setting, save_config
 from .git import list_tracked_files
+from .jj import change_revision
 from .log import log, plural
 from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
 
@@ -71,11 +72,11 @@ def restore_writable(paths: list[str], tracked: set[str], workspace_dir: str) ->
                           for path in paths if path in tracked])
 
 
-def _tracked_paths(workspace_dir: str,
+def _tracked_paths(workspace_dir: str, revision: str | None,
                    skip: Callable[[str], object] = lambda rel: False) -> list[str]:
-    """Every file tracked by git that skip leaves in, as absolute paths."""
+    """Every file tracked by git, in the index or else in revision, that skip leaves in, as absolute paths."""
     return [os.path.join(workspace_dir, rel)
-            for rel in list_tracked_files(workspace_dir) if not skip(rel)]
+            for rel in list_tracked_files(workspace_dir, revision) if not skip(rel)]
 
 
 def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
@@ -85,13 +86,13 @@ def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
     log.success(f'{changed} of {plural(len(paths), "tracked file")} changed')
 
 
-def _apply_on(workspace_dir: str) -> None:
+def _apply_on(workspace_dir: str, revision: str | None) -> None:
     """Make every tracked file writable."""
     log.heading('Making git-tracked files writable')
-    _change_modes(make_writable, _tracked_paths(workspace_dir))
+    _change_modes(make_writable, _tracked_paths(workspace_dir, revision))
 
 
-def _apply_off(workspace_dir: str) -> None:
+def _apply_off(workspace_dir: str, revision: str | None) -> None:
     """Make tracked files read-only, except those opened in Perforce."""
     log.heading('Checking Perforce workspace')
     spec = get_client_spec(workspace_dir)
@@ -112,7 +113,7 @@ def _apply_off(workspace_dir: str) -> None:
 
     log.heading('Making git-tracked files read-only')
     _change_modes(make_read_only,
-                  _tracked_paths(workspace_dir, opened_lookup(opened)))
+                  _tracked_paths(workspace_dir, revision, opened_lookup(opened)))
 
 
 def writable_command(args: argparse.Namespace) -> int:
@@ -131,8 +132,9 @@ def writable_command(args: argparse.Namespace) -> int:
         log.heading('Setting writable mode')
         set_writable_mode(workspace_dir, enabled)
         log.success('on' if enabled else 'off')
+    revision = change_revision(args)
     if enabled:
-        _apply_on(workspace_dir)
+        _apply_on(workspace_dir, revision)
     else:
-        _apply_off(workspace_dir)
+        _apply_off(workspace_dir, revision)
     return 0

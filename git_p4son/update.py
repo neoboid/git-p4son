@@ -2,7 +2,8 @@
 
 import argparse
 from .changelist_store import load_changelist_alias
-from .lib import check_git_workspace_clean, edit_and_shelve, update_changelist
+from .jj import change_revision
+from .lib import check_workspace_clean, edit_and_shelve, update_changelist
 from .log import log
 from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
 
@@ -13,7 +14,9 @@ def _step_command(changelist: str, args: argparse.Namespace) -> str:
         ('--no-commit-list', args.no_commit_list),
         ('--no-edit', args.no_edit),
         ('--shelve', args.shelve)) if on)
-    return f'update {changelist}{flags}'
+    # Each step runs under the lock this command holds.
+    ignore_jj = '--ignore-jj ' if args.ignore_jj else ''
+    return f'{ignore_jj}update {changelist}{flags}'
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
@@ -41,19 +44,22 @@ def update_command(args: argparse.Namespace) -> int:
         _update_per_commit(changelist, args)
         return 0
 
-    # Opening and reverting files relies on every tracked file matching HEAD.
+    revision = change_revision(args)
+
+    # Opening and reverting files relies on every tracked file matching the change.
     if not args.no_edit:
-        check_git_workspace_clean(workspace_dir)
+        check_workspace_clean(workspace_dir, args.jj_workspace)
 
     if args.message is not None or not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')
         update_changelist(
             changelist, args.base_branch, workspace_dir, dry_run=args.dry_run,
-            message=args.message, commit_list=not args.no_commit_list)
+            message=args.message, commit_list=not args.no_commit_list,
+            revision=revision)
         log.success(f'Would update CL {changelist} with this description'
                     if args.dry_run else f'Updated CL {changelist}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve,
-                    dry_run=args.dry_run)
+                    dry_run=args.dry_run, revision=revision)
     return 0

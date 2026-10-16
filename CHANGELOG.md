@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when
   drafting a CL description, so agents read the instructions before preparing a changelist. Run `skill install`
   again to update an installed skill
 - Add support for colocated jj workspaces (jj 0.41 or newer). `new`, `update` and `list-changes` work on the jj

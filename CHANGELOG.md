@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when
+  drafting a CL description, so agents read the instructions before preparing a changelist. Run `skill install`
+  again to update an installed skill
+
 ## 0.6.0
 
 - `skill show` appends the workspace's own overrides from `.git-p4son/skill-override.md` after the shipped

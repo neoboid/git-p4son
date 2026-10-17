@@ -585,7 +585,7 @@ def run_command(args: argparse.Namespace) -> int:
                            'does not support yet. Put --ignore-jj before the command to run it with git.')
     snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
     with (jj.operation(args.workspace_dir, ignore=args.ignore_jj, snapshot=snapshot) as jj_workspace,
-          open_backend(args.workspace_dir) as backend):
+          open_backend(args.workspace_dir, jj_workspace) as backend):
         args.jj_workspace = jj_workspace
         args.backend = backend
         exit_code = _run_in_workspace(args)

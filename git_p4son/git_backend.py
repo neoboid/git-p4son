@@ -5,14 +5,21 @@ from collections.abc import Callable, Iterator
 
 from .common import RunError
 from .git import get_current_branch, get_head_commit, switch_branch, switch_detached
+from .lib import check_git_workspace_clean
 from .log import log
 
 
 class GitBackend:
     """The git backend."""
 
+    revision: str | None = None
+
     def __init__(self, workspace_dir: str) -> None:
         self.workspace_dir = workspace_dir
+
+    def check_clean(self) -> None:
+        """Raise CommandError, after listing them, if the workspace has uncommitted changes."""
+        check_git_workspace_clean(self.workspace_dir)
 
     @contextlib.contextmanager
     def checkouts(self) -> Iterator[Callable[[str], None]]:

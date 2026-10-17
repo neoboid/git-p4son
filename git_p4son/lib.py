@@ -38,14 +38,6 @@ from .writable import is_writable_mode, restore_writable
 DRY_RUN_CHANGELIST = '<changelist>'
 
 
-def check_workspace_clean(workspace_dir: str, jj_workspace) -> None:
-    """Raise CommandError if the change has uncommitted work: files jj left out of its snapshot, or else git's."""
-    if jj_workspace is not None:
-        jj_workspace.check_snapshot()
-    else:
-        check_git_workspace_clean(workspace_dir)
-
-
 def check_git_workspace_clean(workspace_dir: str) -> None:
     """Raise CommandError, after listing them, if the git workspace has uncommitted changes."""
     log.heading('Checking git workspace')

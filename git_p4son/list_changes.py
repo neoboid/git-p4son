@@ -3,14 +3,13 @@
 import argparse
 from .description import number_commits
 from .git import get_commit_subjects_since
-from .jj import change_revision
 from .log import log
 
 
 def list_changes_command(args: argparse.Namespace) -> int:
     """Execute the list-changes command."""
     subjects = get_commit_subjects_since(args.base_branch, args.workspace_dir,
-                                         change_revision(args) or 'HEAD')
+                                         args.backend.revision or 'HEAD')
     if subjects:
         log.info('\n'.join(number_commits(subjects)))
     else:

@@ -1,6 +1,5 @@
 """Colocated jj workspace selection and operation boundaries."""
 
-import argparse
 import contextlib
 import json
 import os
@@ -225,12 +224,6 @@ class Workspace:
         run(['git', 'update-ref', ref, head, self.tip.commit],
             cwd=self.directory)
         self.tip.commit = head
-
-
-def change_revision(args: argparse.Namespace) -> str | None:
-    """The commit holding the change in a jj workspace, or None to use git's HEAD and index."""
-    workspace = args.jj_workspace
-    return workspace.tip.commit if workspace is not None else None
 
 
 @contextlib.contextmanager

@@ -17,11 +17,17 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Ubuntu jobs keep the names required checks know them by, e.g. "test (3.11)".
+    name: test (${{ matrix.python-version }}${{ matrix.os == 'windows-latest' && ', windows' || '' }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ['3.11', '3.12', '3.13']
+        include:
+          - os: windows-latest
+            python-version: '3.13'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

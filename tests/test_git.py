@@ -3,6 +3,7 @@
 import contextlib
 import io
 import os
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -39,6 +40,7 @@ from git_p4son.git import (
 from tests.helpers import GitRepoTestCase, make_run_result
 
 
+@unittest.skipIf(sys.platform == 'win32', 'Windows does not allow carriage returns or trailing spaces in file names')
 class TestControlCharactersInPaths(GitRepoTestCase):
     """-z output is read as bytes: text mode would turn a carriage return in a path into a newline."""
 
@@ -393,6 +395,7 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(find_base_commits(['bäck.cpp'], 'HEAD', self.ws),
                          {'bäck.cpp': s0})
 
+    @unittest.skipIf(sys.platform == 'win32', 'Windows does not allow quotes or tabs in file names')
     def test_paths_git_would_c_quote_match(self):
         """Quotes and tabs come back verbatim, not as "we\\"ird.cpp"."""
         names = ['we"ird.cpp', 'tab\tname.cpp']
@@ -944,6 +947,7 @@ class TestGetLocalChangesInRepo(GitRepoTestCase):
 
         self.assertEqual(changes.adds, ['bäck.txt'])
 
+    @unittest.skipIf(sys.platform == 'win32', 'Windows does not allow quotes, backslashes or tabs in file names')
     def test_special_characters_returned_verbatim(self):
         """Quotes, backslashes and tabs, which git otherwise C-quotes, come back as the real names."""
         names = ['we"ird.txt', 'back\\slash.txt', 'tab\tname.txt']

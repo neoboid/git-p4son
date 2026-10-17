@@ -535,6 +535,8 @@ class P4RepoTestCase(GitRepoTestCase):
         self.git('switch', '-q', '-c', 'feature')
         self.edit('a.txt', 'a2\n')
         self.commit('Change a')
+        # Synced files are read-only, and Windows refuses to delete a read-only file.
+        os.chmod(os.path.join(self.ws, 'b.txt'), stat.S_IRUSR | stat.S_IWUSR)
         os.remove(os.path.join(self.ws, 'b.txt'))
         self.write_file('c.txt', 'c1\n')
         self.commit('Replace b with c')

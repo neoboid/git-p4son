@@ -1,16 +1,19 @@
 """Tests for git_p4son.init module."""
 
 import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son import jj
 from git_p4son.common import CommandError
 from git_p4son.config import load_config
 from git_p4son.init import (
     _ask_yes_no,
     _configure_claude_skill,
     _configure_depot_root,
+    _configure_jj,
     _configure_split_users,
     _configure_sync_branch,
     _configure_writable_mode,
@@ -21,7 +24,9 @@ from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
 from git_p4son.sync_branch import get_sync_branch_setting
-from tests.helpers import captured_output, GitRepoTestCase, start_patch, WorkspaceTestCase
+from tests.helpers import (
+    captured_output, GitRepoTestCase, isolate_jj, make_run_result, requires_jj, run_jj, start_patch, WorkspaceTestCase,
+)
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -332,6 +337,76 @@ class TestConfigureClaudeSkill(unittest.TestCase):
             self.assertNotEqual(f.read(), 'old')
 
 
+class TestConfigureJjWithoutJj(WorkspaceTestCase):
+    @mock.patch('builtins.input')
+    def test_skipped_without_jj(self, mock_input):
+        with mock.patch('git_p4son.jj.run', side_effect=FileNotFoundError('jj')), captured_output():
+            self.assertFalse(_configure_jj(self.ws))
+        mock_input.assert_not_called()
+
+    @mock.patch('builtins.input')
+    def test_skipped_with_jj_older_than_0_41(self, mock_input):
+        with mock.patch('git_p4son.jj.run', return_value=make_run_result(stdout=['jj 0.40.0'])), \
+                captured_output():
+            self.assertFalse(_configure_jj(self.ws))
+        mock_input.assert_not_called()
+
+
+@requires_jj
+class TestConfigureJj(GitRepoTestCase):
+    """_configure_jj in a git repository, with jj installed and a user config of its own."""
+
+    def setUp(self):
+        super().setUp()
+        isolate_jj(self, self.ws)
+
+    def configure(self, *answers):
+        """Run _configure_jj with answers to its questions; returns whether to colocate and the questions asked."""
+        with mock.patch('builtins.input', side_effect=list(answers)) as mock_input, captured_output():
+            colocate = _configure_jj(self.ws)
+        return colocate, [call.args[0] for call in mock_input.call_args_list]
+
+    def alias(self):
+        return run_jj(self.ws, '--ignore-working-copy', 'config', 'get', 'aliases.p4son')
+
+    def test_colocating_also_offers_the_alias(self):
+        colocate, questions = self.configure('yes', '')
+        self.assertTrue(colocate)
+        self.assertEqual(len(questions), 2)
+        self.assertIn(
+            'Use jj in this workspace too (colocated)?', questions[0])
+        self.assertIn('[N]o', questions[0])
+        self.assertIn('[Y]es', questions[1])
+        self.assertEqual(self.alias(), '["util", "exec", "--", "git-p4son"]')
+
+    def test_not_colocating_offers_no_alias(self):
+        colocate, questions = self.configure('')
+        self.assertFalse(colocate)
+        self.assertEqual(len(questions), 1)
+        self.assertFalse(os.path.exists(os.path.join(self.ws, '.jj')))
+
+    def test_a_jj_workspace_is_only_offered_the_alias(self):
+        run_jj(self.ws, 'git', 'init', '--colocate')
+        colocate, questions = self.configure('no')
+        self.assertFalse(colocate)
+        self.assertEqual(len(questions), 1)
+        self.assertIn('jj p4son', questions[0])
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.alias()
+
+    def test_rerunning_asks_nothing_once_done(self):
+        run_jj(self.ws, 'git', 'init', '--colocate')
+        self.configure('yes')
+        self.assertEqual(self.configure(), (False, []))
+
+    def test_colocate_imports_the_branch(self):
+        self.commit('First')
+        with captured_output():
+            jj.colocate(self.ws)
+        self.assertTrue(jj.is_workspace(self.ws))
+        self.assertIn('main', run_jj(self.ws, 'bookmark', 'list'))
+
+
 class TestInitCommand(unittest.TestCase):
     def setUp(self):
         self.mock_writable = start_patch(self, 'git_p4son.init._configure_writable_mode',
@@ -342,6 +417,9 @@ class TestInitCommand(unittest.TestCase):
             self, 'git_p4son.init._configure_claude_skill')
         self.mock_sync_branch = start_patch(
             self, 'git_p4son.init._configure_sync_branch')
+        self.mock_jj = start_patch(
+            self, 'git_p4son.init._configure_jj', return_value=False)
+        self.mock_colocate = start_patch(self, 'git_p4son.init.jj.colocate')
 
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
@@ -375,6 +453,24 @@ class TestInitCommand(unittest.TestCase):
     def test_configures_claude_skill(self):
         self._next_steps(has_commits=False)
         self.mock_claude_skill.assert_called_once_with()
+
+    def test_configures_jj_without_colocating(self):
+        self._next_steps(has_commits=False)
+        self.mock_jj.assert_called_once_with('/ws')
+        self.mock_colocate.assert_not_called()
+
+    def test_an_existing_repo_colocates_at_the_end(self):
+        self.mock_jj.return_value = True
+        self._next_steps(has_commits=True)
+        self.mock_colocate.assert_called_once_with('/ws')
+
+    def test_a_new_repo_colocates_as_a_next_step_after_the_initial_commit(self):
+        """jj would snapshot every untracked file before .gitignore is reviewed, so colocating waits for the commit."""
+        self.mock_jj.return_value = True
+        steps = self._next_steps(has_commits=False)
+        self.mock_colocate.assert_not_called()
+        commit = steps.index('* git commit -m "Initial commit"')
+        self.assertEqual(steps[commit + 1], '* jj git init --colocate')
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

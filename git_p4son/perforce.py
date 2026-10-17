@@ -236,7 +236,7 @@ def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
 
 # --- file operations ---
 
-def _warn_p4_errors(res: RunResult, expected: tuple[str, ...],
+def _warn_p4_errors(res: RunResult[list[str]], expected: tuple[str, ...],
                     summary: str) -> None:
     """Warn with the stderr lines of a failed p4 command that match none of the expected messages."""
     errors = [line for line in res.stderr
@@ -247,7 +247,7 @@ def _warn_p4_errors(res: RunResult, expected: tuple[str, ...],
             log.info(f'  {line}')
 
 
-def _fstat_records(res: RunResult, workspace_dir: str,
+def _fstat_records(res: RunResult[list[str]], workspace_dir: str,
                    allow_outside: bool = False) -> list[tuple[str, dict[str, str]]]:
     """Pair each fstat record with its workspace-relative path, skipping records without one."""
     records = []
@@ -470,7 +470,7 @@ class P4SyncPreviewFile:
 
 def _run_p4_sync(args: list[str], workspace_dir: str,
                  processor: P4SyncOutputProcessor,
-                 keep_stdout: bool = True) -> RunResult:
+                 keep_stdout: bool = True) -> RunResult[list[str]]:
     """Run a p4 sync with processor watching its output, then log how long it took."""
     result = run_with_stream_output([*_P4, 'sync', *args], cwd=workspace_dir,
                                     on_output=processor, keep_stdout=keep_stdout)

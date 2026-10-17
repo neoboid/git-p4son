@@ -3,6 +3,7 @@
 import os
 import re
 import tomllib
+from collections.abc import Callable
 
 from . import CONFIG_DIR
 from .common import CommandError
@@ -133,7 +134,7 @@ def _write_alias(name: str, changelist: str, workspace_dir: str) -> None:
     _remove_old_alias(old_path, workspace_dir)
 
 
-def _listed(directory: str, suffix: str, read) -> dict[str, str]:
+def _listed(directory: str, suffix: str, read: Callable[[str, str], str]) -> dict[str, str]:
     """The readable aliases in a store directory, by name; files that hold none are left out."""
     if not os.path.isdir(directory):
         return {}

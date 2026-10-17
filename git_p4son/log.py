@@ -4,6 +4,7 @@ import shutil
 import sys
 import threading
 from datetime import timedelta
+from typing import TextIO
 
 _HEADING_PREFIX = '#'
 
@@ -30,19 +31,19 @@ class Color:
     UNTRACKED = _ORANGE
 
 
-def _is_tty(stream) -> bool:
+def _is_tty(stream: TextIO) -> bool:
     """Return True if the stream is an interactive terminal."""
     return hasattr(stream, 'isatty') and stream.isatty()
 
 
-def _color(text: str, color: str, stream) -> str:
+def _color(text: str, color: str, stream: TextIO) -> str:
     """Wrap text in ANSI color codes if the stream supports color."""
     if _is_tty(stream):
         return f'{color}{text}{_RESET}'
     return text
 
 
-def _color_status(status: str, color: str, stream) -> str:
+def _color_status(status: str, color: str, stream: TextIO) -> str:
     """Format status, colored if the stream supports color."""
     colored_status = _color(status, color, stream)
     return f'[{colored_status}]'

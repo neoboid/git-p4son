@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .git import (
@@ -88,7 +89,7 @@ def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
                        is_binary=is_binary, added_both=meta.added_both)
 
 
-def _log_file_group(log_fn, files: list[str], singular: str, plural_noun: str,
+def _log_file_group(log_fn: Callable[[str], None], files: list[str], singular: str, plural_noun: str,
                     text: str, workspace_dir: str | None = None) -> None:
     """Log how many files are in a group, then list them if workspace_dir is given."""
     if not files:

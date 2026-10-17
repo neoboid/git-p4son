@@ -42,4 +42,4 @@ Changelog = "https://github.com/neoboid/git-p4son/blob/main/CHANGELOG.md"
 files = ["git_p4son"]
 # The oldest supported Python, so newer syntax is flagged.
 python_version = "3.11"
-warn_unused_ignores = true
+strict = true

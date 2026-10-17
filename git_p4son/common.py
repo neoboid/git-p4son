@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import IO, Callable, Generic, Literal, TypeVar, overload
+from typing import IO, Callable, Generic, Literal, Protocol, TypeVar, overload
 
 from .log import log
 
@@ -68,7 +68,19 @@ def prompt_menu(question: str, options: list[tuple[str, str]],
     return _ask(f'Choice [{letters}]: ', names, default)
 
 
-def _path_module_for(*paths: str):
+class _PathModule(Protocol):
+    """The parts of ntpath and posixpath that normalize_workspace_path uses."""
+
+    sep: str
+
+    def normpath(self, path: str) -> str: ...
+    def normcase(self, s: str) -> str: ...
+    def isabs(self, s: str) -> bool: ...
+    def commonpath(self, paths: list[str]) -> str: ...
+    def relpath(self, path: str, start: str) -> str: ...
+
+
+def _path_module_for(*paths: str) -> _PathModule:
     """Choose a path module that matches the given path strings."""
     if any('\\' in path or re.match(r'^[A-Za-z]:', path) for path in paths):
         return ntpath
@@ -218,7 +230,7 @@ def _read_lines(pipe: IO[str], index: int,
     output_queue.put((index, None))
 
 
-def _terminate(process: subprocess.Popen) -> None:
+def _terminate(process: subprocess.Popen[str]) -> None:
     """Terminate a subprocess, killing it if it does not exit in time."""
     process.terminate()
     try:

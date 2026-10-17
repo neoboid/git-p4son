@@ -72,15 +72,53 @@ def _validate_workspace(workspace_dir: str) -> None:
                 'A git operation is in progress. Finish it first, or use --backend git.')
 
 
+# The first jj with working-copy locking.
+_MIN_VERSION = (0, 41)
+# Runs git-p4son from jj, as jj p4son sync; util exec neither locks nor snapshots.
+_P4SON_ALIAS = '["util", "exec", "--", "git-p4son"]'
+
+
+def _supported(workspace_dir: str) -> bool:
+    """Whether the installed jj is _MIN_VERSION or newer; raise OSError if jj cannot be run."""
+    version = run(['jj', '--version'], cwd=workspace_dir).stdout[0]
+    match = re.search(r'jj (\d+)\.(\d+)', version)
+    return match is not None and tuple(map(int, match.groups())) >= _MIN_VERSION
+
+
+def is_supported(workspace_dir: str) -> bool:
+    """Whether jj is installed and 0.41 or newer."""
+    try:
+        return _supported(workspace_dir)
+    except (OSError, CommandError):
+        return False
+
+
+def has_p4son_alias(workspace_dir: str) -> bool:
+    """Whether jj's config defines the jj p4son alias, or any alias of that name."""
+    result = run([*_JJ, '--ignore-working-copy', 'config', 'get', 'aliases.p4son'],
+                 cwd=workspace_dir, fail_on_returncode=False)
+    return result.returncode == 0
+
+
+def add_p4son_alias(workspace_dir: str) -> None:
+    """Add the jj p4son alias to jj's user config."""
+    run([*_JJ, '--ignore-working-copy', 'config', 'set', '--user', 'aliases.p4son', _P4SON_ALIAS],
+        cwd=workspace_dir)
+
+
+def colocate(workspace_dir: str) -> None:
+    """Make the git repository at workspace_dir a colocated jj workspace too."""
+    run([*_JJ, 'git', 'init', '--colocate'], cwd=workspace_dir)
+
+
 def _validate_version(workspace_dir: str) -> None:
     """Raise CommandError unless jj is installed and 0.41 or newer, with a local working copy."""
     try:
-        version = run(['jj', '--version'], cwd=workspace_dir).stdout[0]
+        supported = _supported(workspace_dir)
     except OSError as error:
         raise CommandError(
             f'This is a jj workspace, but jj could not be run: {error}. {USE_GIT_HINT}') from error
-    match = re.search(r'jj (\d+)\.(\d+)', version)
-    if not match or tuple(map(int, match.groups())) < (0, 41):
+    if not supported:
         raise CommandError(
             f'jj support needs jj 0.41 or newer, for its working-copy locking. {USE_GIT_HINT}')
     kind = Path(workspace_dir) / '.jj' / 'working_copy' / 'type'
@@ -254,7 +292,7 @@ class Workspace:
         run(['git', 'update-ref', '--no-deref', 'HEAD', commit], cwd=self.directory)
 
     def restore_working(self, head: str) -> None:
-        """Undo checkout: git's HEAD and index back at head, as jj keeps them, and the working change's files on disk."""
+        """Undo checkout: git's HEAD and index back at head, as jj keeps them, and the working change's files back."""
         for command in self._restore_commands(head):
             run(command, cwd=self.directory)
 

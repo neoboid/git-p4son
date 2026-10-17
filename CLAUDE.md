@@ -99,9 +99,10 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
-  mode, split users and the Claude Code skill. It sets up `.gitignore` (from `.p4ignore` if present), creates the git
-  repo with a first commit, records `[sync] branch` (in a new repo the branch `HEAD` is on; in an existing one `main`
-  first, then `HEAD`'s branch, then a menu), and checks for a git editor.
+  mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It
+  sets up `.gitignore` (from `.p4ignore` if present), creates the git repo with a first commit, records `[sync]
+  branch` (in a new repo the branch `HEAD` is on; in an existing one `main` first, then `HEAD`'s branch, then a
+  menu), runs `jj git init --colocate` last if asked to, and checks for a git editor.
 
 - **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
   (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,

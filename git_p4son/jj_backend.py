@@ -75,7 +75,7 @@ class JjBackend:
         return lines[0]
 
     def check_clean(self) -> None:
-        """Raise CommandError, after listing them, if jj left files out of its snapshot; a step's checkout leaves none."""
+        """Raise CommandError, listing them, if jj left files out of its snapshot; a step's checkout leaves none."""
         if self._checked_out is None:
             self.workspace.check_snapshot()
 

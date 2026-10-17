@@ -8,15 +8,18 @@ import unittest
 from unittest import mock
 
 from git_p4son import jj
-from git_p4son.common import CommandError
+from git_p4son.common import CommandError, RunError, run
+from git_p4son.perforce import P4SyncAbortError
 from git_p4son.backend import completion_backend, open_backend
 from git_p4son.git_backend import GitBackend
 from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
 from git_p4son.cli import create_parser, run_command
+from git_p4son.log import log
 from tests.helpers import (
-    captured_output, isolate_jj, JjTestCase, make_run_result, P4RepoTestCase, requires_jj, run_jj, WorkspaceTestCase,
+    captured_output, isolate_jj, JjTestCase, make_run_result, P4RepoTestCase, requires_jj, run_jj, start_patch,
+    WorkspaceTestCase,
 )
 
 
@@ -335,7 +338,8 @@ class TestJjSync(JjP4RepoTestCase):
     def test_sync_moves_the_bookmark_to_each_sync_commit(self):
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.p4.submit(102, {'c.txt': 'c1\n'})
-        self.p4son('sync', '101', '102')
+        out = self.p4son('sync', '101', '102')
+        self.assertNotIn('Rebasing', out)
         self.assertEqual(self.describe('main'),
                          'git-p4son: p4 sync //myclient/...@102')
         self.assertEqual(self.describe('main-'),
@@ -344,13 +348,23 @@ class TestJjSync(JjP4RepoTestCase):
                          self.describe('main', 'commit_id'))
         self.assertEqual(self.read('c.txt'), 'c1\n')
 
-    def test_stray_file_stops_the_sync(self):
-        """jj snapshots a stray file into the working change, which sync refuses before anything else."""
+    def test_verbose_logs_the_pinned_operation(self):
+        with mock.patch.object(log, 'verbose_mode', True):
+            out = self.p4son('list-changes', '-b', 'main')
+        self.assertRegex(out, r'Pinned jj operation [0-9a-f]{20,}')
+
+    def test_a_stray_file_becomes_a_change_sync_rebases(self):
+        """jj snapshots a stray file into the working change, which sync then rebases onto the new sync commit."""
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.write_file('stray.txt', 'x')
-        self.p4son_fails(
-            'sync', '101', message='needs an empty working change')
-        self.assertEqual(self.p4.synced(), [])
+        self.p4son('sync', '101')
+        self.assertEqual(self.describe(
+            '@-'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.read('stray.txt'), 'x')
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+        # jj marks a file its change adds as intent-to-add in git's index, which keeps it out of the sync commit.
+        self.assertNotIn('stray.txt', self.git(
+            'ls-tree', '--name-only', 'main').split())
 
     def test_sync_after_jj_rewrote_a_file_git_indexed_with_crlf(self):
         """git's index may record a file's size from a CRLF copy jj has since rewritten as LF without telling git.
@@ -373,10 +387,142 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.describe('main'),
                          'git-p4son: p4 sync //myclient/...@101')
 
-    def test_sync_needs_an_empty_working_change(self):
+    def test_a_described_working_change_is_rebased_and_returned_to(self):
         self.jj('describe', '-m', 'work in progress')
-        self.p4.submit(101, {'a.txt': 'a2\n'})
-        self.p4son_fails('sync', message='jj new')
+        self.edit('b.txt', 'b2\n')
+        self.p4.submit(101, {'c.txt': 'c1\n'})
+        self.p4son('sync')
+        self.assertEqual(self.describe('@'), 'work in progress')
+        self.assertEqual(self.describe(
+            '@-'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(
+            (self.read('b.txt'), self.read('c.txt')), ('b2\n', 'c1\n'))
+
+
+class TestJjSyncFromAnywhere(JjP4RepoTestCase):
+    """sync from a stack: Change a with bookmark feat on main, and an empty working change above it."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.jj('new', 'main', '-m', 'Change a')
+        self.edit('a.txt', 'a2\n')
+        self.jj('bookmark', 'create', 'feat', '-r', '@')
+        self.jj('new')
+
+    def test_the_stack_is_rebased_onto_the_sync_commit_and_returned_to(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.p4son('sync')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+        self.assertEqual(
+            (self.read('a.txt'), self.read('d.txt')), ('a2\n', 'd1\n'))
+        self.assertIn('main is now at CL 101', out)
+
+    def test_editing_a_change_returns_to_it(self):
+        self.jj('edit', 'feat')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4son('sync')
+        self.assertEqual(self.describe('@'), 'Change a')
+        self.assertEqual(self.describe(
+            '@-'), 'git-p4son: p4 sync //myclient/...@101')
+
+    def test_no_rebase_leaves_the_stack_where_it_was(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.p4son('sync', '--no-rebase')
+        self.assertRegex(
+            out, r'Run "jj rebase -b \w+ -d main" to bring your changes up to date')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('feat-'), 'Add config')
+        self.assertEqual(self.describe('@-'), 'Change a')
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'd.txt')))
+
+    def test_conflicts_from_the_rebase_are_listed(self):
+        self.p4.submit(101, {'a.txt': 'a-perforce\n'})
+        out = self.p4son('sync')
+        self.assertIn('jj recorded conflicts in the changes above', out)
+        self.assertIn('Change a', out.partition('Rebasing your changes')[2])
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+
+    def test_a_failing_rebase_returns_you_then_names_the_command(self):
+        real = run
+
+        def failing_rebase(command, *args, **kwargs):
+            if command[:4] == ['jj', '--no-pager', '--color', 'never'] and 'rebase' in command:
+                raise RunError(' '.join(command), 1, ['rebase failed'])
+            return real(command, *args, **kwargs)
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        with mock.patch('git_p4son.jj.run', side_effect=failing_rebase):
+            self.p4son_fails('sync', message=r'main reached CL 101, but jj could not rebase your changes.*'
+                             r'Run: jj rebase -b \w+ -d main')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+
+    def test_a_failure_partway_rebases_nothing(self):
+        for change in (101, 102):
+            self.p4.submit(change, {'d.txt': f'd{change}\n'})
+        real = self.p4.stream
+
+        def fail_second_sync(command, *args, **kwargs):
+            if command[-1].endswith('@102') and '-n' not in command:
+                raise P4SyncAbortError('cannot replace d.txt')
+            return real(command, *args, **kwargs)
+        start_patch(self, 'git_p4son.perforce.run_with_stream_output',
+                    side_effect=fail_second_sync)
+        with captured_output() as out, mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
+                self.assertRaisesRegex(CommandError, 'Aborting sync'):
+            run_command(create_parser().parse_args(['sync', '101', '102']))
+        self.assertIn('Staying on main', out.getvalue())
+        # The user's next jj command imports what the failed sync left, as this one does.
+        self.jj('status')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe(
+            '@-'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('feat-'), 'Add config')
+
+    def test_a_failing_pre_sync_hook_puts_the_working_change_back(self):
+        # Editing Change a, so git's view, HEAD and index at its parent, shows a.txt as an unstaged change.
+        self.jj('edit', 'feat')
+        working = self.describe('@', 'commit_id')
+        self.hook('pre-sync', 'raise SystemExit(1)\n')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4son_fails('sync', message='pre-sync hook failed')
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+        self.assertEqual(self.git('status', '--porcelain'), 'M a.txt')
+        self.jj('status')
+        self.assertEqual(self.describe('@', 'commit_id'), working)
+
+    def test_merged_back_changes_stay_on_the_sync_bookmark_and_the_stack_is_rebased(self):
+        self.jj('new', 'main', '-m', 'local change')
+        self.edit('b.txt', 'local\nb1\n')
+        self.jj('bookmark', 'set', 'main', '-r', '@')
+        self.jj('new', 'feat')
+        self.p4.submit(101, {'b.txt': 'b1\nupstream\n'})
+        out = self.p4son('sync')
+        self.assertIn(
+            'Staying on main, with the merged local changes in the working change', out)
+        self.assertEqual(self.describe(
+            '@-'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.read('b.txt'), 'local\nb1\nupstream\n')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+
+    def test_the_setting_names_the_sync_bookmark(self):
+        self.jj('bookmark', 'create', 'p4', '-r', 'main')
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n\n[sync]\nbranch = "p4"\n')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4son('sync')
+        self.assertEqual(self.describe(
+            'p4'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('main'), 'Add config')
 
 
 if __name__ == '__main__':

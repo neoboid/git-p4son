@@ -122,19 +122,11 @@ def _index_from(revision: str, workspace_dir: str) -> Iterator[dict[str, str]]:
         yield env
 
 
-# Characters of paths per git status call, well under Windows' 32,767-character command line.
-_PATHSPEC_BATCH_CHARS = 8000
-
-
-def _status(git: list[str], workspace_dir: str, env: dict[str, str] | None = None,
-            paths: list[str] | None = None) -> list[tuple[str, str]]:
-    """(path, change kind) for each entry git status reports, for paths if given."""
+def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
+    """Return list of (filename, change_type) tuples for dirty files."""
     # -z: paths verbatim, not C-quoted, as "XY <path>\0", followed by the old path for renames and copies.
-    command = [*git, 'status', '--porcelain', '-z']
-    if paths is not None:
-        command = [*git, '--literal-pathspecs',
-                   'status', '--porcelain', '-z', '--', *paths]
-    res = run(command, cwd=workspace_dir, env=env, text=False)
+    res = run(['git', 'status', '--porcelain', '-z'],
+              cwd=workspace_dir, text=False)
     files = []
     entries = iter(_nul_fields(res.stdout))
     for entry in entries:
@@ -146,37 +138,12 @@ def _status(git: list[str], workspace_dir: str, env: dict[str, str] | None = Non
     return files
 
 
-def _batches(paths: list[str]) -> Iterator[list[str]]:
-    """paths in consecutive batches of at most _PATHSPEC_BATCH_CHARS characters, each holding at least one path."""
-    batch: list[str] = []
-    length = 0
-    for path in paths:
-        if batch and length + len(path) > _PATHSPEC_BATCH_CHARS:
-            yield batch
-            batch, length = [], 0
-        batch.append(path)
-        length += len(path)
-    if batch:
-        yield batch
-
-
-def get_dirty_files(workspace_dir: str, eol_conversion: str | None = None) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for dirty files.
-
-    eol_conversion, jj's working-copy.eol-conversion, reads the files as jj wrote them: git's line endings match jj's,
-    and the files git's index calls changed are compared with HEAD through a fresh index, since jj rewrites files
-    without updating git's index, which can leave a stale size there."""
-    git = _git_for(eol_conversion)
-    files = _status(git, workspace_dir)
-    flagged = [path for path, kind in files if kind != 'untracked']
-    if eol_conversion is None or not flagged:
-        return files
-    untracked = [entry for entry in files if entry[1] == 'untracked']
-    rechecked = []
-    with _index_from('HEAD', workspace_dir) as env:
-        for batch in _batches(flagged):
-            rechecked += _status(git, workspace_dir, env, batch)
-    return sorted(untracked + rechecked)
+def get_changed_files(revision: str, workspace_dir: str, eol_conversion: str | None = None) -> list[str]:
+    """The tracked files whose working contents differ from revision, read with jj's eol_conversion if given."""
+    # git diff re-reads files whose stat data the index no longer matches, as jj leaves it, so contents decide.
+    res = run([*_git_for(eol_conversion), 'diff', '--name-only', '-z', revision, '--'],
+              cwd=workspace_dir, text=False)
+    return _nul_fields(res.stdout)
 
 
 def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
@@ -220,6 +187,19 @@ def _git_for(eol_conversion: str | None) -> list[str]:
     if eol_conversion is None:
         return ['git']
     return ['git', '-c', f'core.autocrlf={_AUTOCRLF[eol_conversion]}']
+
+
+def checkout_detached(commit: str, workspace_dir: str, eol_conversion: str | None = None) -> None:
+    """Put commit's files in the work tree, overwriting changes, and detach HEAD there, writing jj's line endings."""
+    run([*_git_for(eol_conversion), 'checkout', '--quiet',
+        '--force', '--detach', commit], cwd=workspace_dir)
+
+
+def reset_files_to(commit: str, index_commit: str, workspace_dir: str, eol_conversion: str | None = None) -> None:
+    """Put commit's files in the work tree, writing jj's line endings, and index_commit's in the index."""
+    run([*_git_for(eol_conversion), 'read-tree',
+        '-u', '--reset', commit], cwd=workspace_dir)
+    run(['git', 'read-tree', index_commit], cwd=workspace_dir)
 
 
 def add_all_files(workspace_dir: str, eol_conversion: str | None = None) -> None:

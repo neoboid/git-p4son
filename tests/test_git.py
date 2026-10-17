@@ -19,6 +19,7 @@ from git_p4son.git import (
     get_blob_oids,
     get_commits_since,
     get_commit_subjects_since,
+    get_changed_files,
     get_current_branch,
     get_dirty_files,
     get_files_at_commits,
@@ -732,8 +733,8 @@ class TestGetWorkspaceDir(unittest.TestCase):
             self.assertEqual(result, worktree)
 
 
-class TestGetDirtyFilesAsJjWroteThem(GitRepoTestCase):
-    """get_dirty_files with jj's eol-conversion, where a.txt has a stale CRLF size in git's index."""
+class TestGetChangedFiles(GitRepoTestCase):
+    """get_changed_files with jj's eol-conversion, where a.txt has a stale CRLF size in git's index."""
 
     def build_workspace(self):
         super().build_workspace()
@@ -757,39 +758,18 @@ class TestGetDirtyFilesAsJjWroteThem(GitRepoTestCase):
         with open(os.path.join(self.ws, name), 'wb') as f:
             f.write(content)
 
-    def status_calls(self, run_calls):
-        """The paths each git status run on a fresh index was given."""
-        return [call.args[0][call.args[0].index('--') + 1:] for call in run_calls
-                if 'status' in call.args[0] and 'GIT_INDEX_FILE' in (call.kwargs.get('env') or {})]
-
-    def test_reports_real_changes_not_stale_sizes(self):
+    def test_reports_real_changes_not_stale_sizes_or_untracked_files(self):
         self.write_bytes('b.txt', b'changed\n')
         self.write_bytes('c.txt', b'new\n')
-        self.assertEqual(get_dirty_files(self.ws, 'none'), [
-                         ('b.txt', 'modify'), ('c.txt', 'untracked')])
+        self.assertEqual(get_changed_files('HEAD', self.ws, 'none'), ['b.txt'])
 
-    def test_rechecks_only_what_the_real_index_flags(self):
+    def test_compares_with_the_revision_given_not_the_index(self):
         self.write_bytes('b.txt', b'changed\n')
-        with mock.patch('git_p4son.git.run', wraps=run) as spy:
-            get_dirty_files(self.ws, 'none')
-        self.assertEqual(self.status_calls(
-            spy.call_args_list), [['a.txt', 'b.txt']])
-
-    def test_no_fresh_index_when_the_real_one_is_clean(self):
-        self.git('add', 'a.txt')
-        self.git('commit', '-q', '--allow-empty', '-m', 'refresh')
-        with mock.patch('git_p4son.git._index_from') as fresh:
-            self.assertEqual(get_dirty_files(self.ws, 'none'), [])
-        fresh.assert_not_called()
-
-    def test_rechecks_in_batches(self):
-        self.write_bytes('b.txt', b'changed\n')
-        with mock.patch('git_p4son.git._PATHSPEC_BATCH_CHARS', 5), \
-                mock.patch('git_p4son.git.run', wraps=run) as spy:
-            self.assertEqual(get_dirty_files(
-                self.ws, 'none'), [('b.txt', 'modify')])
-        self.assertEqual(self.status_calls(
-            spy.call_args_list), [['a.txt'], ['b.txt']])
+        self.git('add', 'b.txt')
+        self.git('commit', '-q', '-m', 'change b')
+        self.assertEqual(get_changed_files('HEAD', self.ws, 'none'), [])
+        self.assertEqual(get_changed_files(
+            'HEAD~1', self.ws, 'none'), ['b.txt'])
 
 
 class TestGetDirtyFiles(unittest.TestCase):

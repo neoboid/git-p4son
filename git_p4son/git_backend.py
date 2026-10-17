@@ -6,22 +6,16 @@ from dataclasses import dataclass
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError
-from .config import get_setting
 from .git import (
     branch_exists, commit_all, get_current_branch, get_dirty_files, get_head_commit, get_head_subject, switch_branch,
     switch_detached,
 )
 from .lib import check_git_workspace_clean
+from .sync_branch import choose_sync_branch
 from .log import log
 from .words import Words
 
 DEFAULT_BASE = 'HEAD~1'
-DEFAULT_SYNC_BRANCH = 'main'
-
-
-def get_sync_branch_setting(workspace_dir: str) -> str | None:
-    """The [sync] branch setting, or None if unset; raise ConfigError if malformed."""
-    return get_setting(workspace_dir, 'sync', 'branch', str, None)
 
 
 @dataclass(frozen=True)
@@ -112,15 +106,9 @@ class GitBackend:
         start.restore(self.workspace_dir)
 
     def prepare_sync(self, branch: str | None) -> str:
-        """The sync branch: branch, else [sync] branch, else main if it exists; raise CommandError if none exists."""
-        name = branch or get_sync_branch_setting(self.workspace_dir)
-        if name is None:
-            if not branch_exists(DEFAULT_SYNC_BRANCH, self.workspace_dir):
-                raise CommandError('No sync branch. Set [sync] branch in .git-p4son/config.toml, '
-                                   'or run git p4son init.')
-            name = DEFAULT_SYNC_BRANCH
-        elif not branch_exists(name, self.workspace_dir):
-            raise CommandError(f'Sync branch "{name}" does not exist')
+        """The sync branch: branch, else [sync] branch, else main; raise CommandError if none exists."""
+        name = choose_sync_branch(self.workspace_dir, branch,
+                                  lambda name: branch_exists(name, self.workspace_dir), 'branch')
         self._sync = _Sync(name, _Position.current(self.workspace_dir))
         # In full, so a tag of the same name, which git would read first, is not read instead.
         return f'refs/heads/{name}'
@@ -156,7 +144,7 @@ class GitBackend:
             log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. '
                         f'Return to {sync.start.name} once it is sorted out.')
 
-    def finish_sync(self, changelist: int | None) -> None:
+    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
         """Return with the git rebase to run, as sync does not rebase; stay while merged local changes are left."""
         sync = self._prepared()
         if sync.on_sync_branch:
@@ -169,6 +157,9 @@ class GitBackend:
         at = f' is now at CL {changelist}' if changelist else ' is synced'
         log.info(
             f'{sync.branch}{at}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
+
+    def after_lock(self) -> None:
+        """Nothing to do: git's sync returns under the lock."""
 
     def _prepared(self) -> _Sync:
         assert self._sync is not None, 'prepare_sync comes first'

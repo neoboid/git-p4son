@@ -420,8 +420,8 @@ def sync_command(args: argparse.Namespace) -> int:
     except BaseException:
         backend.fail_sync()
         raise
-    backend.finish_sync(plan.targets[-1][0]
-                        if plan.targets else plan.last_synced)
+    synced_to = plan.targets[-1][0] if plan.targets else plan.last_synced
+    backend.finish_sync(synced_to, not args.no_rebase)
     return 0
 
 

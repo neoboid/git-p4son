@@ -616,6 +616,12 @@ class P4RepoTestCase(GitRepoTestCase):
         self.write_file('c.txt', 'c1\n')
         self.commit('Replace b with c')
 
+    def hook(self, name: str, body: str) -> None:
+        """Add a Python hook script under .git-p4son/hooks/<name>/."""
+        path = self.write_file(os.path.join('.git-p4son', 'hooks', name, 'hook.py'),
+                               f'#!{sys.executable}\n{body}')
+        os.chmod(path, stat.S_IRWXU)
+
     def read(self, path: str) -> str:
         with open(os.path.join(self.ws, path)) as f:
             return f.read()

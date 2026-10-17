@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- In a jj workspace, git-p4son warns when jj's `working-copy.eol-conversion` and git's `core.autocrlf` convert line
+  endings differently, as in Git for Windows with jj's defaults, and names the jj setting that matches git
 - Changelist aliases are stored as TOML files, `.git-p4son/aliases/<alias>.toml`. Aliases in the old
   `.git-p4son/changelists/` keep working and move to the new location when written, or all at once with `alias clean`
 - The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when

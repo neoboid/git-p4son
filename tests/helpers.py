@@ -21,7 +21,7 @@ from git_p4son import CONFIG_DIR
 from git_p4son.backend import open_backend
 from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.config import ensure_config_dir
-from git_p4son.git import format_sync_subject
+from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
 from git_p4son.perforce import P4Change, P4SyncPreviewFile
 
 
@@ -670,11 +670,8 @@ class JjTestCase(GitRepoTestCase):
         isolate_jj(self, self.ws)
         run_jj(self.ws, 'git', 'init', '--colocate')
         # Git for Windows sets core.autocrlf, so jj has to convert line endings as git does to agree with its commits.
-        autocrlf = subprocess.run(['git', 'config', '--get', 'core.autocrlf'], cwd=self.ws,
-                                  capture_output=True, text=True).stdout.strip().lower()
-        eol_conversion = {'true': 'input-output',
-                          'input': 'input'}.get(autocrlf)
-        if eol_conversion:
+        eol_conversion = EOL_FOR_AUTOCRLF[get_autocrlf(self.ws)]
+        if eol_conversion != 'none':
             run_jj(self.ws, 'config', 'set', '--repo',
                    'working-copy.eol-conversion', eol_conversion)
 

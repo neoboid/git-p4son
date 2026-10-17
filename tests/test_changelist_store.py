@@ -6,6 +6,8 @@ import unittest
 
 from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
+    alias_changes,
+    alias_for_change,
     branch_alias,
     branch_to_alias,
     check_alias_usable,
@@ -167,6 +169,33 @@ class TestAliasStoreLocations(WorkspaceTestCase):
         with open(self.path('aliases', 'notes.txt'), 'w') as f:
             f.write('changelist = 2\n')
         self.assertEqual(list_changelist_aliases(self.ws), [('feature', '1')])
+
+
+class TestAliasChanges(WorkspaceTestCase):
+    """An alias may record the jj change it was made for, as change = "<full change ID>"."""
+
+    def test_save_records_the_change(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz')
+        with open(os.path.join(self.ws, CONFIG_DIR, 'aliases', 'feat.toml'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), 'changelist = 101\nchange = "kxyz"\n')
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+
+    def test_the_alias_for_a_change_is_found(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz')
+        save_changelist_alias('other', '102', self.ws, force=False)
+        self.assertEqual(alias_for_change('kxyz', self.ws), 'feat')
+        self.assertIsNone(alias_for_change('lmno', self.ws))
+        self.assertEqual(alias_changes(self.ws), {'feat': 'kxyz'})
+
+    def test_saving_a_change_moves_its_record_and_keeps_the_changelist(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz')
+        save_changelist_alias('next', '102', self.ws,
+                              force=False, change='kxyz')
+        self.assertEqual(alias_changes(self.ws), {'next': 'kxyz'})
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
 
 
 class TestBranchToAlias(unittest.TestCase):

@@ -74,6 +74,12 @@ class GitBackend:
                                'HEAD. Name the alias or changelist explicitly.')
         return alias_for(branch)
 
+    def change_id(self) -> None:
+        return None
+
+    def existing_changes(self, change_ids: list[str]) -> set[str]:
+        return set(change_ids)
+
     def subject(self) -> str:
         """The HEAD commit's subject; raise CommandError if there is no commit."""
         subject = get_head_subject(self.workspace_dir)

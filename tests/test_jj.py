@@ -14,7 +14,7 @@ from git_p4son.backend import completion_backend, open_backend
 from git_p4son.git_backend import GitBackend
 from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
-from git_p4son.changelist_store import load_changelist_alias
+from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from git_p4son.cli import create_parser, run_command
 from git_p4son.log import log
 from tests.helpers import (
@@ -189,7 +189,7 @@ class TestWorkspace(JjRepoTestCase):
         with self.operation() as workspace:
             self.assertEqual(workspace.tip.commit, self.commit_of('feat'))
             self.assertEqual(workspace.tip.description.strip(), 'feature')
-            self.assertEqual(workspace.current_bookmark(), 'feat')
+            self.assertEqual(workspace.only_bookmark(), 'feat')
             self.assertEqual(JjBackend(workspace).revision,
                              self.commit_of('feat'))
 
@@ -197,8 +197,7 @@ class TestWorkspace(JjRepoTestCase):
         self.jj('describe', '-m', 'more')
         with self.operation() as workspace:
             self.assertEqual(workspace.tip.commit, self.commit_of('@'))
-            with self.assertRaisesRegex(CommandError, 'exactly one bookmark'):
-                workspace.current_bookmark()
+            self.assertIsNone(workspace.only_bookmark())
 
     def test_default_base_is_the_tip_parent(self):
         with self.operation() as workspace:
@@ -284,6 +283,58 @@ class TestJjNew(JjP4RepoTestCase):
         self.assertEqual(self.p4.opened, {'a.txt': ('101', 'edit')})
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
         self.assertEqual(self.read('a.txt'), 'a2\n')
+
+    def feat_change(self):
+        return self.describe('feat', 'change_id')
+
+    def test_new_records_the_change_which_branch_finds_after_rewrites(self):
+        self.p4son('new')
+        self.assertEqual(alias_changes(self.ws), {'feat': self.feat_change()})
+        # A new description, a bookmark rename and a second bookmark all leave the change ID as it was.
+        self.jj('describe', '-r', 'feat', '-m', 'Change a, reworded')
+        self.jj('bookmark', 'rename', 'feat', 'feature-a')
+        self.jj('bookmark', 'create', 'extra', '-r', 'feature-a')
+        self.assertEqual(self.p4son('alias', 'show'), '101\n')
+        out = self.p4son('update', '--no-edit')
+        self.assertIn('branch -> feat', out)
+
+    def test_a_change_without_a_bookmark_is_named_by_its_change_id(self):
+        self.jj('new', 'main', '-m', 'Change b')
+        self.edit('b.txt', 'b2\n')
+        change = self.describe('@', 'change_id')
+        self.p4son('new')
+        self.assertEqual(load_changelist_alias(change[:8], self.ws), '101')
+        self.assertEqual(alias_changes(self.ws), {change[:8]: change})
+
+    def test_one_alias_per_change(self):
+        self.p4son('new')
+        self.p4son_fails('new', 'other', '--no-edit',
+                         message='Alias "feat" already records this jj change, for CL 101')
+        self.p4son('new', 'other', '--no-edit', '--force')
+        self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+
+    def test_alias_new_records_no_change(self):
+        self.p4son('alias', 'new', '555', 'named')
+        self.assertEqual(alias_changes(self.ws), {})
+
+    def test_alias_list_shows_the_change_and_marks_it_gone(self):
+        self.p4son('new')
+        short = self.feat_change()[:8]
+        self.assertIn(
+            f'feat -> CL 101, jj change {short}\n', self.p4son('alias', 'list'))
+        self.jj('abandon', 'feat')
+        self.assertIn(
+            f'feat -> CL 101, jj change {short} (gone)\n', self.p4son('alias', 'list'))
+
+    def test_alias_list_ignores_a_change_that_is_no_change_id(self):
+        self.p4son('new')
+        self.write_file('.git-p4son/aliases/bad.toml',
+                        'changelist = 102\nchange = "foo bar"\n')
+        listing = self.p4son('alias', 'list')
+        self.assertIn('bad -> CL 102\n', listing)
+        self.assertIn(
+            f'feat -> CL 101, jj change {self.feat_change()[:8]}\n', listing)
 
     def test_new_takes_a_described_working_change_git_has_not_committed(self):
         self.jj('describe', '-m', 'Change b')

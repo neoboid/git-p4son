@@ -53,8 +53,16 @@ class JjBackend:
         return self.workspace.resolve_base(None if base == 'HEAD~1' else base)
 
     def suggested_alias(self) -> str:
-        """The alias the one bookmark at the tip suggests; raise CommandError without exactly one."""
-        return alias_for(self.workspace.current_bookmark())
+        """The alias the one bookmark at the tip suggests, else the first 8 letters of its change ID."""
+        bookmark = self.workspace.only_bookmark()
+        # Change IDs are letters k to z, so a prefix is always a valid alias.
+        return self.workspace.tip.change_id[:8] if bookmark is None else alias_for(bookmark)
+
+    def change_id(self) -> str:
+        return self.workspace.tip.change_id
+
+    def existing_changes(self, change_ids: list[str]) -> set[str]:
+        return self.workspace.existing_changes(change_ids)
 
     def subject(self) -> str:
         """The first line of the change's description; raise CommandError if it has none."""

@@ -37,3 +37,9 @@ Homepage = "https://github.com/neoboid/git-p4son"
 Repository = "https://github.com/neoboid/git-p4son"
 Issues = "https://github.com/neoboid/git-p4son/issues"
 Changelog = "https://github.com/neoboid/git-p4son/blob/main/CHANGELOG.md"
+
+[tool.mypy]
+files = ["git_p4son"]
+# The oldest supported Python, so newer syntax is flagged.
+python_version = "3.11"
+warn_unused_ignores = true

@@ -1,9 +1,11 @@
 """Git abstraction layer: all direct git CLI calls live here."""
 
+import contextlib
 import os
 import os.path
 import re
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from .common import (
@@ -111,11 +113,28 @@ def get_head_subject(workspace_dir: str) -> str | None:
 _PORCELAIN_KINDS = {'A': 'add', 'D': 'delete', '??': 'untracked'}
 
 
-def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
-    """Return list of (filename, change_type) tuples for dirty files."""
+@contextlib.contextmanager
+def _index_from(revision: str, workspace_dir: str) -> Iterator[dict[str, str]]:
+    """Yield the environment for git commands to use a fresh index read from revision, leaving the real one alone."""
+    with tempfile.TemporaryDirectory(prefix='git-p4son-index-') as directory:
+        env = {'GIT_INDEX_FILE': os.path.join(directory, 'index')}
+        run(['git', 'read-tree', revision], cwd=workspace_dir, env=env)
+        yield env
+
+
+# Characters of paths per git status call, well under Windows' 32,767-character command line.
+_PATHSPEC_BATCH_CHARS = 8000
+
+
+def _status(git: list[str], workspace_dir: str, env: dict[str, str] | None = None,
+            paths: list[str] | None = None) -> list[tuple[str, str]]:
+    """(path, change kind) for each entry git status reports, for paths if given."""
     # -z: paths verbatim, not C-quoted, as "XY <path>\0", followed by the old path for renames and copies.
-    res = run(['git', 'status', '--porcelain', '-z'], cwd=workspace_dir,
-              text=False)
+    command = [*git, 'status', '--porcelain', '-z']
+    if paths is not None:
+        command = [*git, '--literal-pathspecs',
+                   'status', '--porcelain', '-z', '--', *paths]
+    res = run(command, cwd=workspace_dir, env=env, text=False)
     files = []
     entries = iter(_nul_fields(res.stdout))
     for entry in entries:
@@ -127,14 +146,45 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
     return files
 
 
+def _batches(paths: list[str]) -> Iterator[list[str]]:
+    """paths in consecutive batches of at most _PATHSPEC_BATCH_CHARS characters, each holding at least one path."""
+    batch: list[str] = []
+    length = 0
+    for path in paths:
+        if batch and length + len(path) > _PATHSPEC_BATCH_CHARS:
+            yield batch
+            batch, length = [], 0
+        batch.append(path)
+        length += len(path)
+    if batch:
+        yield batch
+
+
+def get_dirty_files(workspace_dir: str, eol_conversion: str | None = None) -> list[tuple[str, str]]:
+    """Return list of (filename, change_type) tuples for dirty files.
+
+    eol_conversion, jj's working-copy.eol-conversion, reads the files as jj wrote them: git's line endings match jj's,
+    and the files git's index calls changed are compared with HEAD through a fresh index, since jj rewrites files
+    without updating git's index, which can leave a stale size there."""
+    git = _git_for(eol_conversion)
+    files = _status(git, workspace_dir)
+    flagged = [path for path, kind in files if kind != 'untracked']
+    if eol_conversion is None or not flagged:
+        return files
+    untracked = [entry for entry in files if entry[1] == 'untracked']
+    rechecked = []
+    with _index_from('HEAD', workspace_dir) as env:
+        for batch in _batches(flagged):
+            rechecked += _status(git, workspace_dir, env, batch)
+    return sorted(untracked + rechecked)
+
+
 def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
     """List the files git does not ignore that revision does not hold, leaving the real index alone."""
-    with tempfile.TemporaryDirectory(prefix='git-p4son-index-') as directory:
-        env = {'GIT_INDEX_FILE': os.path.join(directory, 'index')}
-        run(['git', 'read-tree', revision], cwd=workspace_dir, env=env)
+    with _index_from(revision, workspace_dir) as env:
         result = run(['git', 'ls-files', '--others', '--exclude-standard', '-z'],
                      cwd=workspace_dir, env=env, text=False)
-        return _nul_fields(result.stdout)
+    return _nul_fields(result.stdout)
 
 
 # --- staging and committing ---
@@ -143,12 +193,16 @@ def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
 _AUTOCRLF = {'none': 'false', 'input': 'input', 'input-output': 'true'}
 
 
+def _git_for(eol_conversion: str | None) -> list[str]:
+    """The git command, with core.autocrlf matching jj's working-copy.eol-conversion if given."""
+    if eol_conversion is None:
+        return ['git']
+    return ['git', '-c', f'core.autocrlf={_AUTOCRLF[eol_conversion]}']
+
+
 def add_all_files(workspace_dir: str, eol_conversion: str | None = None) -> None:
     """Stage every change in the workspace, untracked files included, converting line endings as jj would if given."""
-    command = ['git']
-    if eol_conversion is not None:
-        command += ['-c', f'core.autocrlf={_AUTOCRLF[eol_conversion]}']
-    run(command + ['add', '.'], cwd=workspace_dir)
+    run([*_git_for(eol_conversion), 'add', '.'], cwd=workspace_dir)
 
 
 def add_files(filepaths: list[str], workspace_dir: str) -> None:

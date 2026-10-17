@@ -38,10 +38,12 @@ from .writable import is_writable_mode, restore_writable
 DRY_RUN_CHANGELIST = '<changelist>'
 
 
-def check_git_workspace_clean(workspace_dir: str) -> None:
-    """Raise CommandError, after listing them, if the git workspace has uncommitted changes."""
+def check_git_workspace_clean(workspace_dir: str, eol_conversion: str | None = None) -> None:
+    """Raise CommandError, after listing them, if the git workspace has uncommitted changes.
+
+    eol_conversion, jj's working-copy.eol-conversion, makes git read line endings the way jj wrote the files."""
     log.heading('Checking git workspace')
-    dirty_files = get_dirty_files(workspace_dir)
+    dirty_files = get_dirty_files(workspace_dir, eol_conversion)
     if dirty_files:
         for filename, change in dirty_files:
             log.file_change(filename, change)

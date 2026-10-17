@@ -103,10 +103,12 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> None:
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   ignore_blocking_processes: bool) -> None:
-    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails."""
+                   ignore_blocking_processes: bool, eol_conversion: str | None = None) -> None:
+    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails.
+
+    eol_conversion is jj's working-copy.eol-conversion in a jj workspace, for the git clean check."""
     check_no_blocking_processes(workspace_dir, ignore_blocking_processes)
-    check_git_workspace_clean(workspace_dir)
+    check_git_workspace_clean(workspace_dir, eol_conversion)
     _check_p4_workspace_clean(depot_root, workspace_dir)
     _run_pre_sync_hooks(workspace_dir, invocation_dir)
 
@@ -408,8 +410,10 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # A dry run skips the checks and hooks, which run before the costly split queries.
     if not args.dry_run:
+        jj_workspace = args.jj_workspace
         sync_preflight(plan.depot_root, workspace_dir, args.invocation_dir,
-                       args.ignore_blocking_processes)
+                       args.ignore_blocking_processes,
+                       jj_workspace.eol_conversion if jj_workspace is not None else None)
 
     # _should_split only splits after a sync, so last_synced is set.
     if plan.split and plan.last_synced is not None:

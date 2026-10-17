@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import stat
 import subprocess
 import unittest
 from unittest import mock
@@ -269,6 +270,27 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.describe('@-', 'commit_id'),
                          self.describe('main', 'commit_id'))
         self.assertEqual(self.read('c.txt'), 'c1\n')
+
+    def test_sync_after_jj_rewrote_a_file_git_indexed_with_crlf(self):
+        """git's index may record a file's size from a CRLF copy jj has since rewritten as LF without telling git.
+
+        git then calls the file modified without comparing contents, as Git for Windows' core.autocrlf=true makes
+        likely; sync's clean check must compare the files with HEAD instead."""
+        path = os.path.join(self.ws, 'a.txt')
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        self.git('config', 'core.autocrlf', 'true')
+        with open(path, 'wb') as f:
+            f.write(b'a1\r\n')
+        self.git('add', 'a.txt')
+        with open(path, 'wb') as f:
+            f.write(b'a1\n')
+        # On Windows, b.txt can already be in the same state from the setup.
+        self.assertIn(['M', 'a.txt'], [line.split()
+                      for line in self.git('status', '--porcelain').splitlines()])
+        self.p4.submit(101, {'b.txt': 'b2\n'})
+        self.p4son('sync', '101')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
 
     def test_sync_needs_an_empty_working_change(self):
         self.jj('describe', '-m', 'work in progress')

@@ -63,15 +63,19 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 ### Commands
 
-- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist. `_plan_sync` resolves the
-  arguments (one or more strictly increasing CL numbers, `last-synced`, or a trailing `head`; none means the latest)
-  into a `_SyncPlan`, or None when already synced. `sync_preflight` refuses to start while a blocking process runs
-  (unless `--ignore-blocking-processes`), while either workspace is dirty, or when a pre-sync hook fails. `_run_sync`
+- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist, onto the sync branch from any
+  branch. `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers, `last-synced`, or a
+  trailing `head`; none means the latest) into a `_SyncPlan`, reading the last sync from the sync branch the
+  backend's `prepare_sync` chose, or None when already synced. `sync_preflight` refuses to start while a blocking
+  process runs (unless `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce one judged
+  by the sync branch's files. `sync_command` then has the backend check out the sync branch (`start_sync`), and
+  returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync`
   runs a catch-up pass to the last synced CL, syncs and commits each target, merges local changes back once at the
   end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments are numeric-only: aliases name pending
   CLs, which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each
   split user's submit, so each of their changelists gets a commit of its own; `-u` adds users for one run and
-  `--no-split` ignores the configured ones.
+  `--no-split` ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left
+  in the work tree, as merged-back local changes; after a failure partway, sync stays on the sync branch.
 
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
   `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command
@@ -96,7 +100,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users and the Claude Code skill. It sets up `.gitignore` (from `.p4ignore` if present), creates the git
-  repo with a first commit, and checks for a git editor.
+  repo with a first commit, records `[sync] branch` (in a new repo the branch `HEAD` is on; in an existing one `main`
+  first, then `HEAD`'s branch, then a menu), and checks for a git editor.
 
 - **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
   (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
@@ -158,7 +163,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   branches on jj outside the backend modules and `jj.py`.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
-  `checkouts` detaching at each commit and returning to the starting branch, and sync commits on that branch.
+  `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
+  `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
 
 - **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`: sync commits with jj's line
   endings that move the sync bookmark. Its `checkouts` raises, as `open_backend` refuses the per-commit commands
@@ -202,7 +208,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`),
-  `normalize_workspace_path`, and the interactive prompts `prompt_choice` and `prompt_menu`.
+  `normalize_workspace_path`, and the interactive prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
 
 - **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
   file changes, command echo with a spinner, child process output, and quiet and verbose modes, with

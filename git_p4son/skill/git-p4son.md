@@ -100,11 +100,12 @@ git checkout -b feature-b           # on top of feature-a, commit part B while A
 ## Syncing
 
 ```sh
-git checkout main
-git p4son sync              # sync to the latest CL
-git checkout my-feature
-git rebase main
+git p4son sync              # sync main to the latest CL, from any branch
+git rebase main             # then bring the current branch up to date
 ```
+
+`sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml` (usually `main`), and returns to
+the branch it started from, unless it merged local changes back: then it stays on the sync branch with them.
 
 - `sync 12345` syncs to a specific CL. Syncing backwards needs `--force`; only do that when the user asks.
 - Changelists submitted by the split users each get a sync commit of their own, so they stand apart on `main`

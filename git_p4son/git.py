@@ -64,15 +64,15 @@ def has_commits(workspace_dir: str) -> bool:
 
 def get_current_branch(workspace_dir: str) -> str | None:
     """Return the current branch name (the original one during a rebase), or None on detached HEAD."""
+    # The full ref, not rev-parse --abbrev-ref, which says heads/main when a tag is called main too.
     try:
-        result = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                     cwd=workspace_dir)
-        branch = result.stdout[0].strip() if result.stdout else None
-        if branch == 'HEAD':
-            return _get_rebase_branch(workspace_dir)
-        return branch
-    except (RunError, OSError):
+        result = run(['git', 'symbolic-ref', '-q', 'HEAD'],
+                     cwd=workspace_dir, fail_on_returncode=False)
+    except OSError:
         return None
+    if result.returncode == 0 and result.stdout:
+        return result.stdout[0].strip().removeprefix('refs/heads/')
+    return _get_rebase_branch(workspace_dir)
 
 
 def _get_rebase_branch(workspace_dir: str) -> str | None:
@@ -417,6 +417,19 @@ def switch_branch(branch: str, workspace_dir: str) -> None:
     run(['git', 'switch', '--quiet', branch], cwd=workspace_dir)
 
 
+def branch_exists(branch: str, workspace_dir: str) -> bool:
+    """Whether a local branch of that name exists."""
+    result = run(['git', 'rev-parse', '--verify', '--quiet', f'refs/heads/{branch}'],
+                 cwd=workspace_dir, fail_on_returncode=False)
+    return result.returncode == 0
+
+
+def list_branches(workspace_dir: str) -> list[str]:
+    """The local branches, by name."""
+    return run(['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads/'],
+               cwd=workspace_dir).stdout
+
+
 # --- sync commits ---
 
 _SYNC_SUBJECT_PREFIX = 'git-p4son: p4 sync '
@@ -435,11 +448,11 @@ def parse_sync_subject(subject: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def git_last_synced_changelist(workspace_dir: str) -> int | None:
-    """Get the changelist number of the most recent sync commit."""
+def git_last_synced_changelist(workspace_dir: str, revision: str = 'HEAD') -> int | None:
+    """Get the changelist number of the most recent sync commit in revision's history."""
     res = run(
         ['git', 'log', '-1', '--pretty=%s',
-         f'--grep=^{_SYNC_SUBJECT_PREFIX}'],
+         f'--grep=^{_SYNC_SUBJECT_PREFIX}', revision, '--'],
         cwd=workspace_dir)
     if not res.stdout:
         return None

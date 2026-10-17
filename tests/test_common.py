@@ -14,6 +14,7 @@ from git_p4son.common import (
     join_command_line,
     prompt_choice,
     prompt_menu,
+    prompt_numbered,
     run,
     run_with_stream_output,
     RunError,
@@ -343,6 +344,23 @@ class TestPromptMenu(unittest.TestCase):
             '  [c]urrent           //ws/sub/...\n'
             '  [q]uit\n'))
         mock_input.assert_called_once_with('Choice [E/c/q]: ')
+
+
+class TestPromptNumbered(unittest.TestCase):
+    def test_picks_by_number_or_name_among_shared_first_letters(self):
+        options = ['main', 'master', 'p4']
+        for answer, expected in (('2', 'master'), ('p4', 'p4')):
+            with self.subTest(answer=answer), mock.patch('builtins.input', return_value=answer) as mock_input, \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(prompt_numbered(
+                    'Pick one:', options), expected)
+            self.assertEqual(
+                out.getvalue(), 'Pick one:\n  [1] main\n  [2] master\n  [3] p4\n')
+            mock_input.assert_called_once_with('Choice [1-3]: ')
+
+    def test_eof_returns_none(self):
+        with mock.patch('builtins.input', side_effect=EOFError), contextlib.redirect_stdout(io.StringIO()):
+            self.assertIsNone(prompt_numbered('Pick one:', ['main']))
 
 
 if __name__ == '__main__':

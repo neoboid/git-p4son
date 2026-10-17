@@ -1,9 +1,10 @@
 """Tests for git_p4son.git_backend and git_p4son.backend."""
 
 import unittest
+from unittest import mock
 
 from git_p4son.backend import completion_backend, open_backend, selected_backend
-from git_p4son.common import CommandError
+from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError
 from git_p4son.git_backend import GitBackend
 from tests.helpers import captured_output, GitRepoTestCase
@@ -102,6 +103,17 @@ class TestGitBackendSync(GitRepoTestCase):
         super().build_workspace()
         self.commit('base')
 
+    def test_a_failed_return_after_abandoning_is_logged_not_raised(self):
+        self.git('switch', '-q', '-c', 'feature')
+        backend = GitBackend(self.ws)
+        backend.prepare_sync(None)
+        with captured_output():
+            backend.start_sync()
+        with mock.patch('git_p4son.git_backend.switch_branch', side_effect=RunError('git switch', 1, ['blocked'])), \
+                captured_output() as out:
+            backend.abandon_sync()
+        self.assertIn('Could not return to feature', out.getvalue())
+
     def test_commit_sync_commits_everything_on_the_branch(self):
         self.write_file('a.txt', 'a\n')
         backend = GitBackend(self.ws)
@@ -113,9 +125,17 @@ class TestGitBackendSync(GitRepoTestCase):
             self.git('log', '-1', '--format=%s', 'main'), 'sync subject')
         self.assertEqual(self.git('status', '--porcelain'), '')
 
-    def test_bookmark_is_refused(self):
-        with self.assertRaisesRegex(CommandError, '--bookmark names a jj bookmark'):
-            GitBackend(self.ws).prepare_sync('main')
+    def test_prepare_sync_chooses_the_sync_branch(self):
+        self.git('branch', 'p4')
+        self.assertEqual(GitBackend(self.ws).prepare_sync(
+            None), 'refs/heads/main')
+        self.assertEqual(GitBackend(
+            self.ws).prepare_sync('p4'), 'refs/heads/p4')
+        self.write_config('[sync]\nbranch = "p4"\n')
+        self.assertEqual(GitBackend(
+            self.ws).prepare_sync(None), 'refs/heads/p4')
+        with self.assertRaisesRegex(CommandError, 'Sync branch "nope" does not exist'):
+            GitBackend(self.ws).prepare_sync('nope')
 
 
 if __name__ == '__main__':

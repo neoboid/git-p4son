@@ -55,8 +55,10 @@ class JjBackend:
         raise CommandError(
             'Checking out commits one by one is not supported in a jj workspace yet.')
 
-    def prepare_sync(self, bookmark: str | None) -> None:
-        self.workspace.prepare_sync(bookmark)
+    def prepare_sync(self, branch: str | None) -> str:
+        """The bookmark to move: branch, else the tip's one bookmark; returns the tip's commit."""
+        self.workspace.prepare_sync(branch)
+        return self.workspace.tip.commit
 
     def check_sync_clean(self) -> None:
         """Read line endings as jj writes them."""
@@ -66,6 +68,15 @@ class JjBackend:
     def start_sync(self) -> None:
         """Detach git's HEAD, so its commits move no bookmark but the sync bookmark, which commit_sync moves."""
         self.workspace.detach_for_sync()
+
+    def abandon_sync(self) -> None:
+        """Nothing to do: git's HEAD stays detached at the tip, as jj keeps it."""
+
+    def fail_sync(self) -> None:
+        """Nothing to say: sync started on the sync bookmark."""
+
+    def finish_sync(self, changelist: int | None) -> None:
+        """Nothing to do yet: the sync bookmark has moved, and sync started on it."""
 
     def commit_sync(self, subject: str) -> int:
         """Stage with jj's line endings, and move the sync bookmark to the commit."""

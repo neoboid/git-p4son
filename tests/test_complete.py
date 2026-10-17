@@ -150,6 +150,10 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertIn('--version', names)
 
+    def test_sync_branch_flag_completes_branches(self, _ws, _aliases):
+        result = _complete(self.parser, ['sync', '--branch', ''])
+        self.assertEqual(self._names(result), ['__branch__'])
+
     def test_backend_flag_values(self, _ws, _aliases):
         result = _complete(self.parser, ['--backend', ''], workspace_dir='/ws')
         self.assertEqual(self._names(result), ['git', 'jj'])

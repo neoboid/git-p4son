@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Behaviour change:** `sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, from
+  whatever branch you are on, instead of onto the current branch. It checks the sync branch out, syncs, and returns
+  you to where you started with the `git rebase` to run. Without the setting it uses `main`, and refuses when there
+  is no `main`. `init` records the setting: the branch `HEAD` is on in a new repository, and `main` first in an
+  existing one. `sync --branch` overrides the setting, and replaces the unreleased jj-only `--bookmark`
 - In a jj workspace, git-p4son warns when jj's `working-copy.eol-conversion` and git's `core.autocrlf` convert line
   endings differently, as in Git for Windows with jj's defaults, and names the jj setting that matches git
 - Changelist aliases are stored as TOML files, `.git-p4son/aliases/<alias>.toml`. Aliases in the old

@@ -27,6 +27,7 @@ from tests.helpers import (
     make_changes,
     make_run_result,
     P4RepoTestCase,
+    start_patch,
 )
 
 
@@ -466,6 +467,140 @@ class TestSyncLocalChanges(SyncTestCase):
                         & stat.S_IWUSR)
 
 
+class TestSyncBranch(SyncTestCase):
+    """sync commits onto the sync branch from any branch, and returns to where it started."""
+
+    def branch(self):
+        return self.git('branch', '--show-current')
+
+    def config(self, extra):
+        self.write_config(f'[depot]\nroot = "//myclient"\n\n{extra}')
+
+    def test_on_the_sync_branch_it_stays_there(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.sync()
+        self.assertEqual(self.branch(), 'main')
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertNotIn('Returning to', out)
+
+    def test_from_another_branch_it_syncs_the_sync_branch_and_returns(self):
+        self.commit_feature()
+        feature = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.sync()
+        self.assert_at('feature', feature)
+        self.assertEqual(self.git('log', '-1', '--format=%s',
+                         'main'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'd.txt')))
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+        self.assertIn('main is now at CL 101. Run "git rebase main"', out)
+
+    def test_a_detached_start_is_returned_to(self):
+        self.git('switch', '-q', '--detach')
+        start = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync()
+        self.assert_at('', start)
+        self.assertEqual(self.git('log', '-1', '--format=%s',
+                         'main'), 'git-p4son: p4 sync //myclient/...@101')
+
+    def test_the_setting_names_the_sync_branch(self):
+        self.git('branch', 'p4')
+        self.config('[sync]\nbranch = "p4"\n')
+        main = self.git('rev-parse', 'main')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync()
+        self.assert_at('main', main)
+        self.assertEqual(self.git('log', '-1', '--format=%s', 'p4'),
+                         'git-p4son: p4 sync //myclient/...@101')
+
+    def test_the_flag_overrides_the_setting(self):
+        self.git('branch', 'p4')
+        self.config('[sync]\nbranch = "nope"\n')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync('--branch', 'p4')
+        self.assertEqual(self.git('log', '-1', '--format=%s', 'p4'),
+                         'git-p4son: p4 sync //myclient/...@101')
+
+    def test_without_the_setting_or_main_it_refuses(self):
+        self.git('branch', '-m', 'main', 'trunk')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync_fails(
+            message=r'Set \[sync\] branch in .git-p4son/config.toml, or run git p4son init')
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_a_missing_sync_branch_is_refused(self):
+        self.sync_fails('--branch', 'nope',
+                        message='Sync branch "nope" does not exist')
+
+    def test_merged_back_local_changes_keep_you_on_the_sync_branch(self):
+        self.edit('a.txt', 'local\na1\n')
+        self.commit('local change')
+        self.git('switch', '-q', '-c', 'other')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.branch(), 'main')
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertIn(
+            'Staying on main, with the local changes above to review and commit', out)
+
+    def test_a_failing_pre_sync_hook_returns_you(self):
+        self.commit_feature()
+        feature = self.git('rev-parse', 'HEAD')
+        self.hook('pre-sync', 'raise SystemExit(1)\n')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync_fails(message='pre-sync hook failed')
+        self.assert_at('feature', feature)
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_hooks_see_the_sync_branch(self):
+        self.commit_feature()
+        path, read_log = self.hook_log()
+        code = (f'import subprocess\nopen({path!r}, "a").write(subprocess.run(["git", "branch", "--show-current"], '
+                'capture_output=True, text=True).stdout)\n')
+        self.hook('pre-sync', code)
+        self.hook('post-sync', code)
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync()
+        self.assertEqual(read_log(), ['main', 'main'])
+
+    def test_a_tag_named_like_the_sync_branch_is_not_read(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync('101')
+        self.git('tag', 'main', 'HEAD~1')
+        self.p4.submit(102, {'d.txt': 'd2\n'})
+        self.sync()
+        self.assertEqual(self.synced_commits(), [101, 102])
+
+    def test_an_untracked_file_left_by_a_post_sync_hook_does_not_keep_you(self):
+        self.commit_feature()
+        self.hook(
+            'post-sync', f'open({os.path.join(self.ws, "left.txt")!r}, "w").write("x")\n')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.sync()
+        self.assertEqual(self.branch(), 'feature')
+
+    def test_a_failure_partway_leaves_you_on_the_sync_branch(self):
+        self.commit_feature()
+        for change in (101, 102):
+            self.p4.submit(change, {'d.txt': f'd{change}\n'})
+        real = self.p4.stream
+
+        def fail_second_sync(command, *args, **kwargs):
+            if command[-1].endswith('@102') and '-n' not in command:
+                raise P4SyncAbortError('cannot replace d.txt')
+            return real(command, *args, **kwargs)
+        start_patch(self, 'git_p4son.perforce.run_with_stream_output',
+                    side_effect=fail_second_sync)
+        with captured_output() as out, self.assertRaisesRegex(CommandError, 'Aborting sync'), \
+                self.command_args(['sync', '101', '102']) as args:
+            sync_command(args)
+        self.assertEqual(self.branch(), 'main')
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertIn(
+            'Staying on main, with the files as Perforce left them. Return to feature', out.getvalue())
+
+
 class TestSyncHooks(SyncTestCase):
     def test_pre_sync_hooks_run_once_for_a_sequence(self):
         path, read_log = self.hook_log()
@@ -587,80 +722,44 @@ class TestSyncSplitting(SyncTestCase):
 
 
 class TestSyncPreflight(unittest.TestCase):
-    """The preflight runs blocking processes, workspace checks, then hooks, in that order."""
+    """The preflight checks blocking processes, then the git and the Perforce workspaces, in that order."""
 
-    @mock.patch('git_p4son.sync.run_hooks')
+    def preflight(self, ignore_blocking_processes=False):
+        sync_preflight('//ws', '/ws', ignore_blocking_processes,
+                       GitBackend('/ws'), 'main')
+
     @mock.patch('git_p4son.sync.p4_get_opened_files')
     @mock.patch('git_p4son.lib.get_dirty_files')
     @mock.patch('git_p4son.sync.check_no_blocking_processes',
                 side_effect=CommandError('blocked'))
-    def test_blocking_process_stops_before_everything_else(
-            self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
+    def test_blocking_process_stops_before_everything_else(self, mock_blocking, mock_dirty, mock_opened):
         with self.assertRaisesRegex(CommandError, 'blocked'):
-            sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
-                backend=GitBackend('/ws'))
+            self.preflight()
         mock_blocking.assert_called_once_with('/ws', False)
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
-        mock_run_hooks.assert_not_called()
 
-    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
     @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     @mock.patch('git_p4son.sync.check_no_blocking_processes')
-    def test_ignore_blocking_processes_is_passed_on(
-            self, mock_blocking, _dirty, _opened, _hooks):
-        sync_preflight('//ws', '/ws', '/invoked',
-                       ignore_blocking_processes=True, backend=GitBackend('/ws'))
+    def test_ignore_blocking_processes_is_passed_on(self, mock_blocking, _dirty, _opened):
+        self.preflight(ignore_blocking_processes=True)
         mock_blocking.assert_called_once_with('/ws', True)
 
-    @mock.patch('git_p4son.sync.run_hooks', return_value=[])
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_clean_workspaces_run_the_hooks(
-            self, _dirty, _opened, mock_run_hooks):
-        sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
-            backend=GitBackend('/ws'))
-        mock_run_hooks.assert_called_once_with(
-            'pre-sync', '/ws', '/invoked', 'git')
-
-    @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
-    @mock.patch('git_p4son.lib.get_dirty_files',
-                return_value=[('a.txt', 'modify')])
-    def test_dirty_git_stops_before_p4_and_hooks(
-            self, _dirty, mock_opened, mock_run_hooks):
+    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[('a.txt', 'modify')])
+    def test_dirty_git_stops_before_p4(self, _dirty, mock_opened):
         with self.assertRaisesRegex(CommandError, 'not clean'):
-            sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
-                backend=GitBackend('/ws'))
+            self.preflight()
         mock_opened.assert_not_called()
-        mock_run_hooks.assert_not_called()
 
-    @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.get_tracked_files', return_value={'a.txt'})
-    @mock.patch('git_p4son.sync.p4_get_opened_files',
-                return_value=[('a.txt', 'modify')])
+    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[('a.txt', 'modify')])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_dirty_p4_stops_before_hooks(
-            self, _dirty, _opened, _tracked, mock_run_hooks):
+    def test_p4_opened_files_the_sync_branch_tracks_fail_it(self, _dirty, _opened, mock_tracked):
         with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):
-            sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
-                backend=GitBackend('/ws'))
-        mock_run_hooks.assert_not_called()
-
-    @mock.patch('git_p4son.sync.run_hooks',
-                return_value=[make_run_result(returncode=1)])
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
-    @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
-        with self.assertRaisesRegex(CommandError, 'pre-sync hook failed'):
-            sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
-                backend=GitBackend('/ws'))
+            self.preflight()
+        mock_tracked.assert_called_once_with(['a.txt'], '/ws', 'main')
 
 
 _STRAY_FILE = 'jj makes a stray file part of the working change, which sync refuses for another reason'

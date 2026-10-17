@@ -21,11 +21,15 @@ def _command_env(cwd: str, extra: dict[str, str] | None) -> dict[str, str]:
     return {**os.environ, 'PWD': os.path.abspath(cwd), **(extra or {})}
 
 
-def _ask(prompt: str, options: list[str], default: str | None) -> str | None:
-    """Ask until the response is an option or its first letter; empty picks default; None on EOF."""
-    shorthands = {option[0]: option for option in options}
-    if len(shorthands) != len(options):
-        raise ValueError(f'options need distinct first letters: {options}')
+def _ask(prompt: str, options: list[str], default: str | None,
+         shorthands: dict[str, str] | None = None) -> str | None:
+    """Ask until the response is an option or its shorthand, by default its first letter; empty picks default.
+
+    Returns None on EOF."""
+    if shorthands is None:
+        shorthands = {option[0]: option for option in options}
+        if len(shorthands) != len(options):
+            raise ValueError(f'options need distinct first letters: {options}')
     keys = list(shorthands)
     while True:
         try:
@@ -66,6 +70,15 @@ def prompt_menu(question: str, options: list[tuple[str, str]],
         print(f'  [{name[0]}]{name[1:]:<{width + 1}}{description}'.rstrip())
     letters = '/'.join(_shorthand(name, default) for name in names)
     return _ask(f'Choice [{letters}]: ', names, default)
+
+
+def prompt_numbered(question: str, options: list[str]) -> str | None:
+    """Like prompt_menu, but numbers the options, for names that may share a first letter."""
+    print(question)
+    for number, option in enumerate(options, 1):
+        print(f'  [{number}] {option}')
+    numbers = {str(number): option for number, option in enumerate(options, 1)}
+    return _ask(f'Choice [1-{len(options)}]: ', options, None, numbers)
 
 
 class _PathModule(Protocol):

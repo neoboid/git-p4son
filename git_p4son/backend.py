@@ -41,17 +41,26 @@ class Backend(Protocol):
     def checkouts(self) -> ContextManager[Callable[[str], None]]:
         """Yield a function that puts a commit's files in the work tree, returning to the start on exit."""
 
-    def prepare_sync(self, bookmark: str | None) -> None:
-        """Raise CommandError unless sync can commit onto the sync branch, named by bookmark in jj."""
+    def prepare_sync(self, branch: str | None) -> str:
+        """Choose the sync branch, branch if given; returns the revision holding it. Raise CommandError if none fits."""
 
     def check_sync_clean(self) -> None:
         """Raise CommandError, after listing them, if git sees changes in the files sync is about to commit over."""
 
     def start_sync(self) -> None:
-        """Get ready for sync's first commit."""
+        """Put the sync branch's files in the work tree, ready for the pre-sync hooks and sync's first commit."""
 
     def commit_sync(self, subject: str) -> int:
         """Commit everything in the workspace as a sync commit on the sync branch; returns how many files it staged."""
+
+    def abandon_sync(self) -> None:
+        """Return to where start_sync started, when sync stops before syncing anything."""
+
+    def fail_sync(self) -> None:
+        """Say where a sync that failed partway leaves the work tree: on the sync branch, as Perforce left it."""
+
+    def finish_sync(self, changelist: int | None) -> None:
+        """Return to where start_sync started, now that the sync branch is at changelist, unless changes are left."""
 
 
 def selected_backend(workspace_dir: str, choice: str | None) -> str:

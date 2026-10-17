@@ -2,15 +2,59 @@
 
 import contextlib
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError
-from .git import commit_all, get_current_branch, get_head_commit, get_head_subject, switch_branch, switch_detached
+from .config import get_setting
+from .git import (
+    branch_exists, commit_all, get_current_branch, get_dirty_files, get_head_commit, get_head_subject, switch_branch,
+    switch_detached,
+)
 from .lib import check_git_workspace_clean
 from .log import log
 from .words import Words
 
 DEFAULT_BASE = 'HEAD~1'
+DEFAULT_SYNC_BRANCH = 'main'
+
+
+def get_sync_branch_setting(workspace_dir: str) -> str | None:
+    """The [sync] branch setting, or None if unset; raise ConfigError if malformed."""
+    return get_setting(workspace_dir, 'sync', 'branch', str, None)
+
+
+@dataclass(frozen=True)
+class _Position:
+    """Where HEAD is: on branch, or detached at commit when branch is None."""
+    branch: str | None
+    commit: str
+
+    @classmethod
+    def current(cls, workspace_dir: str) -> '_Position':
+        return cls(get_current_branch(workspace_dir), get_head_commit(workspace_dir))
+
+    @property
+    def name(self) -> str:
+        return self.branch or self.commit
+
+    def restore(self, workspace_dir: str) -> None:
+        """Check the branch out again, or the commit detached."""
+        if self.branch:
+            switch_branch(self.branch, workspace_dir)
+        else:
+            switch_detached(self.commit, workspace_dir)
+
+
+@dataclass(frozen=True)
+class _Sync:
+    """A sync onto branch, started at start."""
+    branch: str
+    start: _Position
+
+    @property
+    def on_sync_branch(self) -> bool:
+        return self.start.branch == self.branch
 
 
 class GitBackend:
@@ -22,6 +66,7 @@ class GitBackend:
 
     def __init__(self, workspace_dir: str) -> None:
         self.workspace_dir = workspace_dir
+        self._sync: _Sync | None = None
 
     def resolve_base(self, base: str | None) -> str:
         """The base as given, or HEAD~1."""
@@ -55,36 +100,81 @@ class GitBackend:
         """Yield a function that checks out a commit detached, returning to the starting branch or commit on exit.
 
         A failure to return after the body raised is logged, so the body's exception propagates."""
-        branch = get_current_branch(self.workspace_dir)
-        start = get_head_commit(self.workspace_dir)
-
-        def back() -> None:
-            if branch:
-                switch_branch(branch, self.workspace_dir)
-            else:
-                switch_detached(start, self.workspace_dir)
-
+        start = _Position.current(self.workspace_dir)
         try:
             yield lambda commit: switch_detached(commit, self.workspace_dir)
         except BaseException:
             try:
-                back()
+                start.restore(self.workspace_dir)
             except RunError as error:
-                log.error(f'Could not return to {branch or start}: {error}')
+                log.error(f'Could not return to {start.name}: {error}')
             raise
-        back()
+        start.restore(self.workspace_dir)
 
-    def prepare_sync(self, bookmark: str | None) -> None:
-        """Sync onto the current branch; raise CommandError if a bookmark is named."""
-        if bookmark is not None:
-            raise CommandError(
-                '--bookmark names a jj bookmark, and this workspace uses the git backend')
+    def prepare_sync(self, branch: str | None) -> str:
+        """The sync branch: branch, else [sync] branch, else main if it exists; raise CommandError if none exists."""
+        name = branch or get_sync_branch_setting(self.workspace_dir)
+        if name is None:
+            if not branch_exists(DEFAULT_SYNC_BRANCH, self.workspace_dir):
+                raise CommandError('No sync branch. Set [sync] branch in .git-p4son/config.toml, '
+                                   'or run git p4son init.')
+            name = DEFAULT_SYNC_BRANCH
+        elif not branch_exists(name, self.workspace_dir):
+            raise CommandError(f'Sync branch "{name}" does not exist')
+        self._sync = _Sync(name, _Position.current(self.workspace_dir))
+        # In full, so a tag of the same name, which git would read first, is not read instead.
+        return f'refs/heads/{name}'
 
     def check_sync_clean(self) -> None:
         self.check_clean()
 
     def start_sync(self) -> None:
-        """Nothing to do: git's commits advance the current branch."""
+        """Check out the sync branch, unless sync started on it."""
+        sync = self._prepared()
+        if sync.on_sync_branch:
+            return
+        log.heading(f'Checking out sync branch {sync.branch}')
+        switch_branch(sync.branch, self.workspace_dir)
+        log.success(f'From {sync.start.name}')
 
     def commit_sync(self, subject: str) -> int:
         return commit_all(subject, self.workspace_dir)
+
+    def abandon_sync(self) -> None:
+        """A failure to return is logged, so the error that stopped the sync propagates."""
+        sync = self._prepared()
+        if sync.on_sync_branch:
+            return
+        try:
+            self._return(sync)
+        except RunError as error:
+            log.error(f'Could not return to {sync.start.name}: {error}')
+
+    def fail_sync(self) -> None:
+        sync = self._prepared()
+        if not sync.on_sync_branch:
+            log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. '
+                        f'Return to {sync.start.name} once it is sorted out.')
+
+    def finish_sync(self, changelist: int | None) -> None:
+        """Return with the git rebase to run, as sync does not rebase; stay while merged local changes are left."""
+        sync = self._prepared()
+        if sync.on_sync_branch:
+            return
+        if any(kind != 'untracked' for _, kind in get_dirty_files(self.workspace_dir)):
+            log.warning(f'Staying on {sync.branch}, with the local changes above to review and commit. '
+                        f'Then return to {sync.start.name}.')
+            return
+        self._return(sync)
+        at = f' is now at CL {changelist}' if changelist else ' is synced'
+        log.info(
+            f'{sync.branch}{at}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
+
+    def _prepared(self) -> _Sync:
+        assert self._sync is not None, 'prepare_sync comes first'
+        return self._sync
+
+    def _return(self, sync: _Sync) -> None:
+        log.heading(f'Returning to {sync.start.name}')
+        sync.start.restore(self.workspace_dir)
+        log.success(sync.start.name)

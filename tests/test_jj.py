@@ -1,6 +1,5 @@
 """Tests for git_p4son.jj and git_p4son.jj_lock modules."""
 
-import argparse
 import os
 import shutil
 import subprocess
@@ -9,6 +8,8 @@ from unittest import mock
 
 from git_p4son import jj
 from git_p4son.common import CommandError
+from git_p4son.backend import open_backend
+from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
 from git_p4son.cli import create_parser, run_command
@@ -50,10 +51,6 @@ class TestOperationOutsideJj(WorkspaceTestCase):
         with jj.operation(self.ws) as workspace:
             self.assertIsNone(workspace)
 
-    def test_change_revision_without_a_workspace(self):
-        self.assertIsNone(jj.change_revision(
-            argparse.Namespace(jj_workspace=None)))
-
 
 @unittest.skipUnless(shutil.which('jj'), 'jj is not installed')
 class JjRepoTestCase(WorkspaceTestCase):
@@ -93,13 +90,25 @@ class JjRepoTestCase(WorkspaceTestCase):
         return jj.operation(self.ws, **kwargs)
 
 
+class TestJjBackend(JjRepoTestCase):
+    """JjBackend over the workspace, whose tip is the feature change with bookmark feat on main."""
+
+    def test_checkouts_are_refused(self):
+        with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'not supported'):
+            JjBackend(workspace).checkouts()
+
+    def test_chosen_for_a_jj_workspace(self):
+        with self.operation() as workspace, open_backend(self.ws, workspace) as backend:
+            self.assertIsInstance(backend, JjBackend)
+
+
 class TestWorkspace(JjRepoTestCase):
     def test_tip_is_the_parent_of_an_empty_new_change(self):
         with self.operation() as workspace:
             self.assertEqual(workspace.tip.commit, self.commit_of('feat'))
             self.assertEqual(workspace.tip.description.strip(), 'feature')
             self.assertEqual(workspace.current_bookmark(), 'feat')
-            self.assertEqual(jj.change_revision(argparse.Namespace(jj_workspace=workspace)),
+            self.assertEqual(JjBackend(workspace).revision,
                              self.commit_of('feat'))
 
     def test_tip_is_the_working_change_once_it_has_a_description(self):

@@ -2,8 +2,7 @@
 
 import argparse
 from .changelist_store import load_changelist_alias
-from .jj import change_revision
-from .lib import check_workspace_clean, edit_and_shelve, update_changelist
+from .lib import edit_and_shelve, update_changelist
 from .log import log
 from .per_commit import SWARM_SHELF_DELAY, run_per_commit
 
@@ -40,11 +39,11 @@ def update_command(args: argparse.Namespace) -> int:
         _update_per_commit(changelist, args)
         return 0
 
-    revision = change_revision(args)
+    revision = args.backend.revision
 
     # Opening and reverting files relies on every tracked file matching the change.
     if not args.no_edit:
-        check_workspace_clean(workspace_dir, args.jj_workspace)
+        args.backend.check_clean()
 
     if args.message is not None or not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')

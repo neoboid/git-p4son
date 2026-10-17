@@ -10,7 +10,6 @@ from typing import Callable
 from .common import CommandError
 from .config import get_setting, save_config
 from .git import list_tracked_files
-from .jj import change_revision
 from .log import log, plural
 from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
 
@@ -132,7 +131,7 @@ def writable_command(args: argparse.Namespace) -> int:
         log.heading('Setting writable mode')
         set_writable_mode(workspace_dir, enabled)
         log.success('on' if enabled else 'off')
-    revision = change_revision(args)
+    revision = args.backend.revision
     if enabled:
         _apply_on(workspace_dir, revision)
     else:

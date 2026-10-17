@@ -2,19 +2,18 @@
 
 import argparse
 from .changelist_store import check_alias_usable, save_changelist_alias
-from .jj import change_revision
-from .lib import check_workspace_clean, create_changelist, edit_and_shelve
+from .lib import create_changelist, edit_and_shelve
 from .log import log
 
 
 def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
     workspace_dir = args.workspace_dir
-    revision = change_revision(args)
+    revision = args.backend.revision
 
     # Opening and reverting files relies on every tracked file matching the change.
     if not args.no_edit:
-        check_workspace_clean(workspace_dir, args.jj_workspace)
+        args.backend.check_clean()
 
     if args.alias:
         check_alias_usable(args.alias, workspace_dir, args.force)

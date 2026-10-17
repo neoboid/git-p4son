@@ -1,8 +1,9 @@
 """Shell completion for git-p4son, introspecting the argparse parser."""
 
 import argparse
+from typing import TypeAlias
 
-from .backend import completion_backend
+from .backend import Backend, completion_backend
 from .changelist_store import list_changelist_aliases
 from .common import CommandError
 from .git import get_workspace_dir
@@ -11,8 +12,13 @@ from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion'})
 
+# A completion candidate: (name, description).
+Candidates = list[tuple[str, str]]
+# Generic only to type checkers, so quoted.
+Subparsers: TypeAlias = 'argparse._SubParsersAction[argparse.ArgumentParser]'
 
-def _get_subparsers_action(parser):
+
+def _get_subparsers_action(parser: argparse.ArgumentParser) -> 'Subparsers | None':
     """Extract the _SubParsersAction from a parser, if any."""
     if parser._subparsers is None:
         return None
@@ -22,7 +28,7 @@ def _get_subparsers_action(parser):
     return None
 
 
-def _flag_takes_value(action):
+def _flag_takes_value(action: argparse.Action) -> bool:
     """Check if an argparse action consumes a value argument."""
     return not isinstance(action, (
         argparse._StoreTrueAction,
@@ -34,7 +40,7 @@ def _flag_takes_value(action):
     ))
 
 
-def _get_flags(parser):
+def _get_flags(parser: argparse.ArgumentParser) -> Candidates:
     """Get all optional flags from a parser as (flag, help) pairs."""
     flags = []
     for action in parser._actions:
@@ -50,7 +56,7 @@ def _get_flags(parser):
     return flags
 
 
-def _find_flag_action(parser, flag):
+def _find_flag_action(parser: argparse.ArgumentParser, flag: str) -> argparse.Action | None:
     """Find the action for a given flag string."""
     for action in parser._actions:
         if flag in action.option_strings:
@@ -58,7 +64,7 @@ def _find_flag_action(parser, flag):
     return None
 
 
-def _get_alias_names(workspace_dir):
+def _get_alias_names(workspace_dir: str | None) -> Candidates:
     """Get alias names for completion."""
     if not workspace_dir:
         return []
@@ -69,7 +75,7 @@ def _get_alias_names(workspace_dir):
         return []
 
 
-def _get_split_user_names(workspace_dir):
+def _get_split_user_names(workspace_dir: str | None) -> Candidates:
     """Get configured split users for completion, leaving out $(user) (the shell would run it)."""
     if not workspace_dir:
         return []
@@ -81,13 +87,13 @@ def _get_split_user_names(workspace_dir):
         return []
 
 
-def _filter(candidates, prefix):
+def _filter(candidates: Candidates, prefix: str) -> Candidates:
     """Filter candidates by prefix and return matches."""
     return [(name, description) for name, description in candidates
             if name.startswith(prefix)]
 
 
-def _backend(workspace_dir, ignore_jj):
+def _backend(workspace_dir: str | None, ignore_jj: bool) -> Backend | None:
     """The backend for workspace_dir, or None when there is none or jj cannot be read."""
     if not workspace_dir:
         return None
@@ -97,7 +103,8 @@ def _backend(workspace_dir, ignore_jj):
         return None
 
 
-def _complete_flag_value(flag, workspace_dir=None, ignore_jj=False):
+def _complete_flag_value(flag: str, workspace_dir: str | None = None,
+                         ignore_jj: bool = False) -> Candidates:
     """Complete the value for a flag."""
     if flag in ('-b', '--base-branch'):
         if not workspace_dir:
@@ -107,7 +114,8 @@ def _complete_flag_value(flag, workspace_dir=None, ignore_jj=False):
     return []
 
 
-def _get_branch_candidates(prefix, workspace_dir, ignore_jj=False):
+def _get_branch_candidates(prefix: str, workspace_dir: str | None,
+                           ignore_jj: bool = False) -> Candidates:
     """Get 'branch' completion candidates based on prefix."""
     keyword = 'branch'
     if not keyword.startswith(prefix):
@@ -125,9 +133,11 @@ def _get_branch_candidates(prefix, workspace_dir, ignore_jj=False):
     return [(keyword, f'Use current {branch} name')]
 
 
-def _complete_positional(command, subcommand, positional_count,
-                         prefix, workspace_dir, command_parser,
-                         subcommand_parser, actions, ignore_jj=False):
+def _complete_positional(command: str, subcommand: str | None, positional_count: int,
+                         prefix: str, workspace_dir: str | None,
+                         command_parser: argparse.ArgumentParser,
+                         subcommand_parser: argparse.ArgumentParser | None,
+                         actions: 'Subparsers | None', ignore_jj: bool = False) -> Candidates:
     """Complete a positional argument."""
     # Arguments added with the branch keyword name themselves in branch_keyword_arg.
     target = subcommand_parser or command_parser
@@ -162,7 +172,8 @@ def _complete_positional(command, subcommand, positional_count,
     return []
 
 
-def _complete(parser, words, workspace_dir=None):
+def _complete(parser: argparse.ArgumentParser, words: list[str],
+              workspace_dir: str | None = None) -> Candidates:
     """Return (name, description) completion candidates for the given words."""
     if not words:
         words = ['']
@@ -174,13 +185,13 @@ def _complete(parser, words, workspace_dir=None):
     if not subparsers_action:
         return []
 
-    command = None
-    command_parser = None
-    actions = None
-    subcommand = None
-    subcommand_parser = None
+    command: str | None = None
+    command_parser: argparse.ArgumentParser | None = None
+    actions: Subparsers | None = None
+    subcommand: str | None = None
+    subcommand_parser: argparse.ArgumentParser | None = None
     positional_count = 0
-    expecting_flag_name = None
+    expecting_flag_name: str | None = None
     current_parser = parser
 
     for word in preceding:
@@ -214,7 +225,7 @@ def _complete(parser, words, workspace_dir=None):
         return _complete_flag_value(expecting_flag_name, workspace_dir,
                                     '--ignore-jj' in preceding)
 
-    if command is None:
+    if command is None or command_parser is None:
         if prefix.startswith('-'):
             return _filter(_get_flags(parser), prefix)
         else:
@@ -232,7 +243,7 @@ def _complete(parser, words, workspace_dir=None):
                                 subcommand_parser, actions, '--ignore-jj' in preceding)
 
 
-def run_complete(words):
+def run_complete(words: list[str]) -> int:
     """Execute the complete command with the given word list."""
     from .cli import create_parser
     # stdout is reserved for completion candidates, so silence all logging.

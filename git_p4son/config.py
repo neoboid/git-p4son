@@ -2,6 +2,7 @@
 
 import os
 import tomllib
+from typing import Any, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
@@ -33,7 +34,7 @@ class ConfigError(CommandError):
     """config.toml is not valid TOML, or a value in it has the wrong type."""
 
 
-def load_config(workspace_dir: str) -> dict:
+def load_config(workspace_dir: str) -> dict[str, Any]:
     """Read and parse the config file. Returns empty dict if missing; raise ConfigError if invalid."""
     path = config_path(workspace_dir)
     if not os.path.exists(path):
@@ -53,13 +54,18 @@ _TYPE_DESCRIPTIONS = {
 }
 
 
-def _has_type(value, expected) -> bool:
+def _has_type(value: object, expected: type[Any]) -> bool:
     if expected == list[str]:
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
     return isinstance(value, expected)
 
 
-def get_setting(workspace_dir: str, section: str, key: str, expected, default):
+_Value = TypeVar('_Value')
+_Default = TypeVar('_Default')
+
+
+def get_setting(workspace_dir: str, section: str, key: str, expected: type[_Value],
+                default: _Default) -> _Value | _Default:
     """Return config[section][key], or default when unset; expected is a type or list[str].
 
     Raises ConfigError when the section or the value has the wrong type.
@@ -69,14 +75,14 @@ def get_setting(workspace_dir: str, section: str, key: str, expected, default):
         raise ConfigError(f'{section} in config.toml is not a table')
     if key not in table:
         return default
-    value = table[key]
+    value: _Value = table[key]
     if not _has_type(value, expected):
         raise ConfigError(f'{section}.{key} in config.toml must be '
                           f'{_TYPE_DESCRIPTIONS[expected]}')
     return value
 
 
-def save_config(workspace_dir: str, config: dict) -> None:
+def save_config(workspace_dir: str, config: dict[str, dict[str, Any]]) -> None:
     """Merge config into the config file, preserving sections and keys not named in config."""
     merged = load_config(workspace_dir)
     for section, values in config.items():

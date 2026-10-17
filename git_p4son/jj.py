@@ -4,10 +4,12 @@ import contextlib
 import json
 import os
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
-from .common import CommandError, run
+from .common import CommandError, RunResult, run
 from .git import get_head_commit, get_untracked_files
 from .jj_lock import working_copy_lock
 from .log import log
@@ -23,7 +25,7 @@ def is_workspace(workspace_dir: str) -> bool:
     return (Path(workspace_dir) / '.jj').exists()
 
 
-def _run(workspace_dir: str, *command: str, operation: str = '@'):
+def _run(workspace_dir: str, *command: str, operation: str = '@') -> RunResult[list[str]]:
     """Run jj at operation without snapshotting the working copy."""
     return run(['jj', '--no-pager', '--color', 'never',
                 '--ignore-working-copy', '--at-op', operation, *command],
@@ -82,7 +84,7 @@ class Revision:
     divergent: bool
 
     @classmethod
-    def parse(cls, line: str):
+    def parse(cls, line: str) -> Self:
         """Parse a line of _REVISION_TEMPLATE output."""
         data, empty, conflict, divergent = line.split('\t')
         data = json.loads(data)
@@ -122,7 +124,7 @@ class Workspace:
     sync_bookmark: str | None = None
 
     @classmethod
-    def load(cls, directory: str, operation: str):
+    def load(cls, directory: str, operation: str) -> Self:
         """Load the workspace at operation.
 
         tip is the working change, or its parent when the working change is empty and new."""
@@ -148,7 +150,7 @@ class Workspace:
             workspace.tip = workspace.resolve(working.parents[0])
         return workspace
 
-    def run(self, *command: str):
+    def run(self, *command: str) -> RunResult[list[str]]:
         """Run jj at this workspace's operation."""
         return _run(self.directory, *command, operation=self.operation)
 
@@ -227,7 +229,8 @@ class Workspace:
 
 
 @contextlib.contextmanager
-def operation(workspace_dir: str, *, ignore: bool = False, snapshot: bool = True):
+def operation(workspace_dir: str, *, ignore: bool = False,
+              snapshot: bool = True) -> Iterator[Workspace | None]:
     """Yield the jj workspace, holding jj's working-copy lock until the command finishes.
 
     Yields None outside a jj workspace, and with ignore, which only takes the lock."""

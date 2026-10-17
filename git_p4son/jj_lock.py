@@ -3,13 +3,14 @@
 import contextlib
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from .common import CommandError
 
 
 @contextlib.contextmanager
-def working_copy_lock(workspace_dir: str):
+def working_copy_lock(workspace_dir: str) -> Iterator[None]:
     """Hold jj's working-copy lock, raising CommandError if it is busy."""
     path = Path(workspace_dir) / '.jj' / 'working_copy' / 'working_copy.lock'
     with _lock(path):
@@ -19,7 +20,7 @@ def working_copy_lock(workspace_dir: str):
 # Defined per platform, so a type checker checks only the one it targets.
 if sys.platform == 'win32':
     @contextlib.contextmanager
-    def _lock(path: Path):
+    def _lock(path: Path) -> Iterator[None]:
         import ctypes
         from ctypes import wintypes
 
@@ -67,7 +68,7 @@ if sys.platform == 'win32':
                     pass
 else:
     @contextlib.contextmanager
-    def _lock(path: Path):
+    def _lock(path: Path) -> Iterator[None]:
         import fcntl
 
         while True:

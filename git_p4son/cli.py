@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 from importlib.resources import files
+from typing import cast
 from . import __version__, jj
 from .backend import open_backend
 from .sync import sync_command
@@ -550,7 +551,7 @@ def run_command(args: argparse.Namespace) -> int:
                            f'Use "git-p4son {args.command} -h" for help.')
 
     if not getattr(args, 'needs_workspace', True):
-        return args.func(args)
+        return _run_handler(args)
 
     log.heading('Finding workspace directory')
     args.workspace_dir = get_workspace_dir()
@@ -613,7 +614,13 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         args.message = backend.subject()
         log.success(args.message)
 
-    return args.func(args)
+    return _run_handler(args)
+
+
+def _run_handler(args: argparse.Namespace) -> int:
+    """Run the command's handler."""
+    # set_defaults(func=...) leaves the handler untyped; every handler returns an exit code.
+    return cast(int, args.func(args))
 
 
 def main() -> int:

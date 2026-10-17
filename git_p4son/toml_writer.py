@@ -1,11 +1,12 @@
 """A minimal TOML writer for git-p4son's own files; reading uses tomllib."""
 
 import re
+from typing import Any
 
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
-def format_toml(data: dict) -> str:
+def format_toml(data: dict[str, Any]) -> str:
     """Format data as TOML: top-level scalars first, then a [table] per dict."""
     return ''.join(_format_scalars(data)) + ''.join(
         _format_table(_format_key(key), value)
@@ -24,7 +25,7 @@ def _format_key(key: str) -> str:
     return _format_string(key)
 
 
-def _format_value(value) -> str:
+def _format_value(value: object) -> str:
     """Format a TOML value: strings, booleans, numbers, and lists."""
     if isinstance(value, str):
         return _format_string(value)
@@ -38,12 +39,12 @@ def _format_value(value) -> str:
         f'Unsupported TOML value type: {type(value).__name__}')
 
 
-def _format_scalars(table: dict) -> list[str]:
+def _format_scalars(table: dict[str, Any]) -> list[str]:
     return [f'{_format_key(key)} = {_format_value(value)}\n'
             for key, value in table.items() if not isinstance(value, dict)]
 
 
-def _format_table(name: str, table: dict) -> str:
+def _format_table(name: str, table: dict[str, Any]) -> str:
     """Format a [name] table; nested dicts become [name.sub] tables."""
     text = f'[{name}]\n' + ''.join(_format_scalars(table)) + '\n'
     for key, subtable in table.items():

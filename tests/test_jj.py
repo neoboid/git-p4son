@@ -206,10 +206,18 @@ class JjP4RepoTestCase(P4RepoTestCase):
         return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', template)
 
     def p4son(self, *argv):
-        """Run git-p4son with argv as the command line would; returns everything it printed."""
-        with captured_output() as out, \
-                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
-            self.assertEqual(run_command(create_parser().parse_args(argv)), 0)
+        """Run git-p4son with argv as the command line would; returns everything it printed.
+
+        If the command fails, what it printed is added to the failure."""
+        try:
+            with captured_output() as out, \
+                    mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
+                self.assertEqual(run_command(
+                    create_parser().parse_args(argv)), 0)
+        except Exception as error:
+            error.add_note(
+                f'git p4son {" ".join(argv)} printed:\n{out.getvalue()}')
+            raise
         return out.getvalue()
 
     def p4son_fails(self, *argv, message):

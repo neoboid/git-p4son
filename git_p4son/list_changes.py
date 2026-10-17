@@ -9,7 +9,7 @@ from .log import log
 def list_changes_command(args: argparse.Namespace) -> int:
     """Execute the list-changes command."""
     subjects = get_commit_subjects_since(args.base_branch, args.workspace_dir,
-                                         args.backend.revision or 'HEAD')
+                                         args.backend.revision)
     if subjects:
         log.info('\n'.join(number_commits(subjects)))
     else:

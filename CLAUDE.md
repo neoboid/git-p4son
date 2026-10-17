@@ -137,8 +137,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `args.jj_workspace`. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
   when the working change is empty and new), its bookmark and the default base; commands reach it through
   `JjBackend`. git still reads objects, diffs and makes the sync commits; `sync` moves the selected bookmark
-  itself. With a revision, `lib.py` keeps the working files around Perforce reverts instead of restoring git's
-  index version.
+  itself.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
@@ -161,8 +160,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
-  `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. On a dry run of `new` the
-  changelist is `DRY_RUN_CHANGELIST`.
+  `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. They read the change from the
+  backend's `revision` and keep the working files around Perforce reverts. On a dry run of `new` the changelist is
+  `DRY_RUN_CHANGELIST`.
 
 - **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`

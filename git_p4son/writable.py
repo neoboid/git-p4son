@@ -71,9 +71,9 @@ def restore_writable(paths: list[str], tracked: set[str], workspace_dir: str) ->
                           for path in paths if path in tracked])
 
 
-def _tracked_paths(workspace_dir: str, revision: str | None,
+def _tracked_paths(workspace_dir: str, revision: str,
                    skip: Callable[[str], object] = lambda rel: False) -> list[str]:
-    """Every file tracked by git, in the index or else in revision, that skip leaves in, as absolute paths."""
+    """Every file tracked in revision that skip leaves in, as absolute paths."""
     return [os.path.join(workspace_dir, rel)
             for rel in list_tracked_files(workspace_dir, revision) if not skip(rel)]
 
@@ -85,13 +85,13 @@ def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
     log.success(f'{changed} of {plural(len(paths), "tracked file")} changed')
 
 
-def _apply_on(workspace_dir: str, revision: str | None) -> None:
+def _apply_on(workspace_dir: str, revision: str) -> None:
     """Make every tracked file writable."""
     log.heading('Making git-tracked files writable')
     _change_modes(make_writable, _tracked_paths(workspace_dir, revision))
 
 
-def _apply_off(workspace_dir: str, revision: str | None) -> None:
+def _apply_off(workspace_dir: str, revision: str) -> None:
     """Make tracked files read-only, except those opened in Perforce."""
     log.heading('Checking Perforce workspace')
     spec = get_client_spec(workspace_dir)

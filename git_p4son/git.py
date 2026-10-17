@@ -211,13 +211,6 @@ def add_files(filepaths: list[str], workspace_dir: str) -> None:
         cwd=workspace_dir, input='\0'.join(filepaths))
 
 
-def restore_files(filepaths: list[str], workspace_dir: str,
-                  dry_run: bool) -> None:
-    """Restore the given files in the workspace from the index."""
-    run(['git', 'restore', '--pathspec-from-file=-', '--pathspec-file-nul'],
-        cwd=workspace_dir, input='\0'.join(filepaths), dry_run=dry_run)
-
-
 def get_staged_files(workspace_dir: str) -> list[str]:
     """Return the files staged for the next commit, as repo-relative slash paths."""
     # Compares the index with HEAD without scanning the worktree.

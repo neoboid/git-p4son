@@ -20,8 +20,8 @@ class TestGitBackend(GitRepoTestCase):
         super().setUp()
         self.backend = GitBackend(self.ws)
 
-    def test_reads_the_change_from_head_and_the_index(self):
-        self.assertIsNone(self.backend.revision)
+    def test_reads_the_change_from_head(self):
+        self.assertEqual(self.backend.revision, 'HEAD')
 
     def test_default_base_is_the_parent_commit(self):
         self.assertEqual(self.backend.resolve_base(None), 'HEAD~1')

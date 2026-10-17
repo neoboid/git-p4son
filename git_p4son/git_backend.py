@@ -17,7 +17,8 @@ class GitBackend:
     """The git backend."""
 
     words = Words(tool='git', branch='branch', message_source='HEAD commit')
-    revision: str | None = None
+    # HEAD, not its commit, so the per-commit loop's checkouts move it.
+    revision = 'HEAD'
 
     def __init__(self, workspace_dir: str) -> None:
         self.workspace_dir = workspace_dir

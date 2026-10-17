@@ -191,8 +191,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
   keyword. An alias may record a jj change (`change = "..."`), at most one alias per change, as saving moves the
-  record: `alias_for_change` and `alias_changes`. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
-  `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
+  record: `alias_for_change` and `alias_changes`. The old `.git-p4son/changelists/<name>` store is still read;
+  writes move an alias out of it, and `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
   `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.

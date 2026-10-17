@@ -464,7 +464,6 @@ class TestSyncLocalChanges(SyncTestCase):
                         & stat.S_IWUSR)
 
 
-@unittest.skipIf(os.name == 'nt', 'hooks run as executable scripts')
 class TestSyncHooks(SyncTestCase):
     def test_pre_sync_hooks_run_once_for_a_sequence(self):
         path, read_log = self.hook_log()
@@ -480,6 +479,17 @@ class TestSyncHooks(SyncTestCase):
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.sync_fails(message='pre-sync hook failed')
         self.assertEqual(self.p4.synced(), [])
+
+    @unittest.skipUnless(sys.platform == 'win32', 'PowerShell hooks run through the Windows .ps1 association')
+    def test_powershell_hook_runs(self):
+        path, read_log = self.hook_log()
+        # PowerShell escapes a quote inside single quotes by doubling it.
+        quoted = path.replace("'", "''")
+        self.write_file(os.path.join('.git-p4son', 'hooks', 'post-sync', 'hook.ps1'),
+                        f"Add-Content -Path '{quoted}' -Value 'ps1'\n")
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('101')
+        self.assertEqual(read_log(), ['ps1'])
 
 
 class TestSyncDryRun(SyncTestCase):

@@ -289,8 +289,8 @@ Initialize a git repository inside a Perforce workspace:
 git p4son init
 ```
 
-This command checks that it runs in a Perforce workspace, then asks for the depot root, writable mode, split users
-and the Claude Code skill. It then sets up `.gitignore`, runs `git init` and creates a first commit holding only
+This command checks that it runs in a Perforce workspace, then asks for the depot root, writable mode, split users,
+the Claude Code skill and jj. It then sets up `.gitignore`, runs `git init` and creates a first commit holding only
 `.gitignore`. It ends by listing the next steps, and warns when no git editor is configured.
 
 The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
@@ -323,6 +323,18 @@ the local branches. It keeps a branch already set.
 
 If Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
 already installed skill is refreshed without asking.
+
+With jj 0.41 or newer installed, `init` offers two things for [jj](#jujutsu-jj):
+
+- **Colocating jj**, when the workspace has no `.jj` folder: "Use jj in this workspace too (colocated)?", default
+  no. On yes, in an existing repository it runs `jj git init --colocate` as its last step, so jj imports the branch
+  as a bookmark. In a repository it creates, it lists `jj git init --colocate` as a next step after your initial
+  commit instead, since jj would otherwise snapshot every file before you have reviewed `.gitignore`.
+- **The `jj p4son` alias**, when the workspace has a `.jj` folder, or is to get one, and jj's config has no
+  `aliases.p4son`: default yes. It adds `p4son = ["util", "exec", "--", "git-p4son"]` to jj's user config, so
+  `jj p4son sync` runs `git p4son sync`.
+
+Running `init` again asks neither once they are done.
 
 ### Sync Command
 
@@ -911,12 +923,13 @@ With the jj backend in a jj workspace:
   lock, and refuse files jj left untracked. You do not need a separate committed change before opening files in
   Perforce. Before a Perforce revert overwrites a file, git-p4son saves the working file and puts it back
   afterwards, keeping its bytes, line endings and permissions instead of taking git's index version.
-- `init` holds jj's working-copy lock while it sets up the git repository.
+- `init` holds jj's working-copy lock while it sets up the git repository. It also offers to colocate jj and to
+  add the `jj p4son` alias, see [Init Command](#init-command).
 
 For example:
 
 ```sh
-jj git init --colocate       # Add jj to an existing git-p4son repository
+jj git init --colocate       # Add jj to an existing git-p4son repository, or answer yes in init
 git p4son sync               # From any change: syncs main, then rebases your changes onto it
 
 jj new main -m "Fix login"

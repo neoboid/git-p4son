@@ -99,9 +99,11 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
-  mode, split users and the Claude Code skill. It sets up `.gitignore` (from `.p4ignore` if present), creates the git
-  repo with a first commit, records `[sync] branch` (in a new repo the branch `HEAD` is on; in an existing one `main`
-  first, then `HEAD`'s branch, then a menu), and checks for a git editor.
+  mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
+  up `.gitignore` (from `.p4ignore` if present), creates the git repo with a first commit, records `[sync] branch` (in a
+  new repo the branch `HEAD` is on; in an existing one `main` first, then `HEAD`'s branch, then a menu), runs `jj git
+  init --colocate` last if asked to in an existing repo (a new one lists it as a next step, after the user's first
+  commit), and checks for a git editor.
 
 - **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
   (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
@@ -145,7 +147,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `JjBackend`. git still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and
   `restore_working` move the files on disk for sync under the lock; `rebase_branch`, `conflicted_since`,
   `working_is_empty` and `return_to` run jj on the live working copy, only after it. `operation` warns when git's
-  `core.autocrlf` (`git.get_autocrlf`) and jj's `working-copy.eol-conversion` disagree.
+  `core.autocrlf` (`git.get_autocrlf`) and jj's `working-copy.eol-conversion` disagree. For `init`: `is_supported`,
+  `colocate`, `has_p4son_alias` and `add_p4son_alias`.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
@@ -165,7 +168,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the
   alias recording the change, else the suggested name, unless the command (`new_alias=True` on its parser) names a
   new one. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
-  command branches on jj outside the backend modules and `jj.py`.
+  command branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
@@ -240,7 +243,7 @@ When bumping the minimum Python version, update all of these locations:
 CI runs the tests on the newest jj release and the oldest supported one, pinned as `JJ_LATEST` and `JJ_FLOOR` in
 `.github/workflows/test.yml`. Bump `JJ_LATEST` when jj releases. When raising the minimum jj version, update all of
 these together, with a CHANGELOG note:
-- `git_p4son/jj.py` (`_validate_version`)
+- `git_p4son/jj.py` (`_MIN_VERSION`)
 - `.github/workflows/test.yml` (`JJ_FLOOR`)
 - `README.md` (the Jujutsu section)
 

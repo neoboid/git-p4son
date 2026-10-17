@@ -1,5 +1,6 @@
 """Shared test helpers for git_p4son tests."""
 
+import argparse
 import atexit
 import contextlib
 import copy
@@ -8,9 +9,12 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
-from typing import Any
+from collections.abc import Callable, Iterable, Iterator
+from datetime import timedelta
+from typing import IO, Any, TypeVar, overload
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
@@ -21,34 +25,49 @@ from git_p4son.perforce import P4Change, P4SyncPreviewFile
 
 
 @contextlib.contextmanager
-def captured_output():
+def captured_output() -> Iterator[io.StringIO]:
     """Capture what is printed to stdout and stderr together; yields the StringIO it goes to."""
     with contextlib.redirect_stdout(io.StringIO()) as out, \
             contextlib.redirect_stderr(out):
         yield out
 
 
-def make_run_result(returncode=0, stdout=None, stderr=None, elapsed=None):
-    """Build a RunResult for mocking run()."""
+@overload
+def make_run_result(returncode: int = 0, stdout: list[str] | None = None,
+                    stderr: list[str] | None = None,
+                    elapsed: timedelta | None = None) -> RunResult[list[str]]: ...
+
+
+@overload
+def make_run_result(returncode: int = 0, *, stdout: bytes,
+                    stderr: bytes | None = None,
+                    elapsed: timedelta | None = None) -> RunResult[bytes]: ...
+
+
+def make_run_result(returncode: int = 0, stdout: list[str] | bytes | None = None,
+                    stderr: list[str] | bytes | None = None,
+                    elapsed: timedelta | None = None) -> RunResult[Any]:
+    """Build a RunResult for mocking run(), with lines or, like run(text=False), bytes."""
+    empty: list[str] | bytes = b'' if isinstance(stdout, bytes) else []
     return RunResult(
         returncode=returncode,
-        stdout=stdout if stdout is not None else [],
-        stderr=stderr if stderr is not None else [],
+        stdout=stdout if stdout is not None else empty,
+        stderr=stderr if stderr is not None else empty,
         elapsed=elapsed,
     )
 
 
-def preview_update(path):
+def preview_update(path: str) -> P4SyncPreviewFile:
     """Preview entry for a file p4 would update."""
     return P4SyncPreviewFile(mode='upd', filepath=path)
 
 
-def make_changes(*pairs):
+def make_changes(*pairs: tuple[int, str]) -> list[P4Change]:
     """Build a change list from (changelist, user) pairs."""
     return [P4Change(change=cl, user=user) for cl, user in pairs]
 
 
-def cli_args(argv, **overrides):
+def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
     """Parse argv with the real parser, then set the workspace and overrides as run_command would.
 
     An override the command has no argument for raises AttributeError, so tests follow renames."""
@@ -72,7 +91,7 @@ def cli_args(argv, **overrides):
     return args
 
 
-def start_patch(test, target, **kwargs):
+def start_patch(test: unittest.TestCase, target: str, **kwargs: Any) -> Any:
     """Patch target until test ends; returns the mock."""
     patcher = mock.patch(target, **kwargs)
     mocked = patcher.start()
@@ -80,7 +99,10 @@ def start_patch(test, target, **kwargs):
     return mocked
 
 
-def requires_jj(test_class):
+_TestClass = TypeVar('_TestClass', bound=type[unittest.TestCase])
+
+
+def requires_jj(test_class: _TestClass) -> _TestClass:
     """Skip test_class when jj is not installed, unless GIT_P4SON_REQUIRE_JJ is set, as CI sets it, to fail instead."""
     if shutil.which('jj') or os.environ.get('GIT_P4SON_REQUIRE_JJ'):
         return test_class
@@ -108,7 +130,7 @@ class WorkspaceTestCase(unittest.TestCase):
 
     A subclass fills it in build_workspace, which runs once per class; each test starts from a copy."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)
@@ -122,13 +144,13 @@ class WorkspaceTestCase(unittest.TestCase):
                 setattr(self, name, value)
             self.adopt_workspace()
 
-    def build_workspace(self):
+    def build_workspace(self) -> None:
         """Fill self.ws with what each test starts from; each test gets a copy of the attributes it sets."""
 
-    def adopt_workspace(self):
+    def adopt_workspace(self) -> None:
         """Point what build_workspace set up at this test's copy of the workspace."""
 
-    def _built_workspace(self):
+    def _built_workspace(self) -> tuple[str, dict[str, Any]] | None:
         owner = next(c for c in type(self).__mro__
                      if 'build_workspace' in vars(c))
         if owner is WorkspaceTestCase:
@@ -149,7 +171,7 @@ class WorkspaceTestCase(unittest.TestCase):
                 if name not in before})
         return _built_workspaces[owner]
 
-    def write_file(self, rel_path, content=''):
+    def write_file(self, rel_path: str, content: str = '') -> str:
         """Write a file under the workspace, creating its directories; returns its path."""
         path = os.path.join(self.ws, rel_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -157,19 +179,21 @@ class WorkspaceTestCase(unittest.TestCase):
             f.write(content)
         return path
 
-    def write_config(self, text):
+    def write_config(self, text: str) -> None:
         """Write the workspace's .git-p4son/config.toml, with the folder's .gitignore as git-p4son writes it."""
         ensure_config_dir(self.ws)
         self.write_file(os.path.join(CONFIG_DIR, 'config.toml'), text)
 
-    def run_command(self, command, argv, **overrides):
+    def run_command(self, command: Callable[[argparse.Namespace], int], argv: list[str],
+                    **overrides: Any) -> str:
         """Run command with cli_args(argv, **overrides); returns everything it printed."""
         with captured_output() as out:
             self.assertEqual(
                 command(cli_args(argv, workspace_dir=self.ws, **overrides)), 0)
         return out.getvalue()
 
-    def command_fails(self, command, argv, message):
+    def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
+                      message: str) -> None:
         """Run command with cli_args(argv), expecting a CommandError matching message."""
         with captured_output(), self.assertRaisesRegex(CommandError, message):
             command(cli_args(argv, workspace_dir=self.ws))
@@ -178,24 +202,24 @@ class WorkspaceTestCase(unittest.TestCase):
 class GitRepoTestCase(WorkspaceTestCase):
     """A temporary git repository on branch main for each test, at self.ws."""
 
-    def build_workspace(self):
+    def build_workspace(self) -> None:
         init_git_repo(self.ws)
 
-    def git(self, *args, check=True):
+    def git(self, *args: str, check: bool = True) -> str:
         """Run git in the repository and return its stripped stdout."""
         return subprocess.run(['git', *args], cwd=self.ws, capture_output=True,
                               text=True, check=check).stdout.strip()
 
-    def commit_history(self, *commits):
+    def commit_history(self, *commits: tuple[str, dict[str, str | None]]) -> list[str]:
         """Commit each (message, {path: content, or None to delete}) on top of HEAD; returns the new commits.
 
         One git fast-import writes them all, then the index and working tree are reset to the last."""
         with open(os.path.join(self.ws, '.git', 'HEAD')) as f:
             ref = f.read().split()[-1]
         parent = self.git('rev-parse', '-q', '--verify', 'HEAD', check=False)
-        stream = []
+        stream: list[bytes] = []
 
-        def data(text):
+        def data(text: str) -> None:
             encoded = text.encode()
             stream.append(b'data %d\n' % len(encoded) + encoded + b'\n')
 
@@ -223,12 +247,12 @@ class GitRepoTestCase(WorkspaceTestCase):
         self.git('reset', '-q', '--hard')
         return [commit_by_mark[f':{mark}'] for mark in range(1, len(commits) + 1)]
 
-    def commit(self, message='test commit'):
+    def commit(self, message: str = 'test commit') -> None:
         """Stage everything and commit it."""
         self.git('add', '-A')
         self.git('commit', '-q', '--allow-empty', '-m', message)
 
-    def assert_at(self, branch, commit):
+    def assert_at(self, branch: str, commit: str) -> None:
         """Assert HEAD is commit, on branch, or detached for an empty branch."""
         self.assertEqual(self.git('branch', '--show-current'), branch)
         self.assertEqual(self.git('rev-parse', 'HEAD'), commit)
@@ -242,31 +266,31 @@ class FakeP4:
     pending changelist numbers to their description lines and shelved changelist numbers to {path: content}.
     Like run(), it carries out nothing on a dry run."""
 
-    def __init__(self, workspace_dir, client='myclient', user='me',
-                 options='noallwrite noclobber'):
+    def __init__(self, workspace_dir: str, client: str = 'myclient', user: str = 'me',
+                 options: str = 'noallwrite noclobber') -> None:
         self.ws = workspace_dir
         self.client = client
         self.user = user
         self.options = options
-        self.changes = {}
+        self.changes: dict[int, tuple[str, dict[str, str | None]]] = {}
         self.have = 0
-        self.opened = {}
-        self.pending = {}
-        self.shelved = {}
-        self.binary = set()
+        self.opened: dict[str, tuple[str, str]] = {}
+        self.pending: dict[str, list[str]] = {}
+        self.shelved: dict[str, dict[str, str | None]] = {}
+        self.binary: set[str] = set()
         self.in_workspace = True
-        self.calls = []
+        self.calls: list[list[str]] = []
 
-    def install(self, test):
+    def install(self, test: unittest.TestCase) -> None:
         start_patch(test, 'git_p4son.perforce.run', side_effect=self.run)
         start_patch(test, 'git_p4son.perforce.run_with_stream_output',
                     side_effect=self.stream)
 
-    def submit(self, change, files, user='other'):
+    def submit(self, change: int, files: dict[str, str | None], user: str = 'other') -> None:
         """Submit files ({path: content, or None to delete}) as change."""
         self.changes[change] = (user, files)
 
-    def files_at(self, change):
+    def files_at(self, change: int) -> dict[str, str]:
         """The depot's {path: content} at change."""
         files: dict[str, str] = {}
         for number in sorted(c for c in self.changes if c <= change):
@@ -277,29 +301,30 @@ class FakeP4:
                     files[path] = content
         return files
 
-    def sync_to(self, change):
+    def sync_to(self, change: int) -> None:
         """Sync the workspace to change outside git-p4son, as the setup of a test."""
         self._apply(change, preview=False)
 
-    def synced(self):
+    def synced(self) -> list[int]:
         """The changelists synced for real, in order."""
         return [int(args[-1].rsplit('@', 1)[1]) for args in self.calls
                 if args[0] == 'sync' and '-n' not in args]
 
-    def _local(self, path):
+    def _local(self, path: str) -> str:
         return os.path.join(self.ws, *path.split('/'))
 
-    def _depot(self, path):
+    def _depot(self, path: str) -> str:
         return f'//{self.client}/{path}'
 
-    def run(self, command, cwd='.', dry_run=False, input=None, env=None,
-            text=True, fail_on_returncode=True):
+    def run(self, command: list[str], cwd: str = '.', dry_run: bool = False,
+            input: str | None = None, env: dict[str, str] | None = None,
+            text: bool = True, fail_on_returncode: bool = True) -> RunResult[list[str]]:
         args = command[3:]
         if dry_run:
             return RunResult(0, [], [])
         self.calls.append(args)
         files = [self._rel(line) for line in (input or '').splitlines()]
-        stderr = []
+        stderr: list[str] = []
         if args[:3] == ['-ztag', 'client', '-o']:
             out = [f'... Client {self.client}', f'... Root {self.ws}',
                    f'... Options {self.options}', '... LineEnd local']
@@ -324,7 +349,7 @@ class FakeP4:
         elif args[:2] == ['change', '-o']:
             out = self._spec(args[2])
         elif args[:2] == ['change', '-i']:
-            out = [self._save_spec(input)]
+            out = [self._save_spec(input or '')]
         elif args[:4] == ['-ztag', 'fstat', '-Ro', '-e']:
             out = self._fstat_opened(
                 p for p, (change, _) in self.opened.items() if change == args[4])
@@ -360,18 +385,18 @@ class FakeP4:
             raise AssertionError(f'unscripted p4 command: {args}')
         return RunResult(0, out, stderr)
 
-    def _rel(self, path):
+    def _rel(self, path: str) -> str:
         return os.path.relpath(os.path.join(self.ws, path),
                                self.ws).replace(os.sep, '/')
 
-    def _content(self, path):
+    def _content(self, path: str) -> str | None:
         local = self._local(path)
         if not os.path.exists(local):
             return None
         with open(local) as f:
             return f.read()
 
-    def _fstat_opened(self, paths):
+    def _fstat_opened(self, paths: Iterable[str]) -> list[str]:
         out = []
         for path in paths:
             change, action = self.opened[path]
@@ -379,7 +404,7 @@ class FakeP4:
                     f'... change {change}', '']
         return out
 
-    def _spec(self, change):
+    def _spec(self, change: str) -> list[str]:
         """A pending changelist's spec, as p4 change -o prints it."""
         return ([f'Change:\t{change}', '', f'Client:\t{self.client}', '',
                  f'User:\t{self.user}', '', 'Status:\tpending', '',
@@ -389,7 +414,7 @@ class FakeP4:
                 + [f'\t{self._depot(p)}\t# {a}' for p, (c, a) in self.opened.items()
                    if c == change])
 
-    def _save_spec(self, spec):
+    def _save_spec(self, spec: str) -> str:
         """Create or update a pending changelist from a spec; returns p4's message."""
         lines = spec.splitlines()
         change = next(line.split()[-1] for line in lines
@@ -407,9 +432,10 @@ class FakeP4:
         self.pending[change] = description
         return f'Change {change} updated.'
 
-    def _open(self, paths, action, change):
+    def _open(self, paths: list[str], action: str, change: str) -> tuple[list[str], list[str]]:
         """Open paths for action in change; returns (stdout, stderr) as p4 prints them."""
-        out, stderr = [], []
+        out: list[str] = []
+        stderr: list[str] = []
         in_depot = self.files_at(self.have)
         for path in paths:
             if (action == 'add') == (path in in_depot):
@@ -426,7 +452,7 @@ class FakeP4:
             out.append(f'{self._depot(path)}#1 - opened for {action}')
         return out, stderr
 
-    def _revert(self, paths):
+    def _revert(self, paths: list[str]) -> list[str]:
         """Revert paths, writing the have revision to disk for the ones in the depot."""
         out = []
         in_depot = self.files_at(self.have)
@@ -442,7 +468,7 @@ class FakeP4:
             out.append(f'{self._depot(path)}#1 - was {action}, reverted')
         return out
 
-    def _revert_unchanged(self, paths, change, preview):
+    def _revert_unchanged(self, paths: list[str], change: str, preview: bool) -> list[str]:
         """Revert the edits matching the depot and the adds missing on disk, as revert -a does."""
         in_depot = self.files_at(self.have)
         unchanged = []
@@ -458,23 +484,28 @@ class FakeP4:
                     for p in unchanged]
         return self._revert(unchanged)
 
-    def stream(self, command, on_output, cwd='.', keep_stdout=True):
+    def stream(self, command: list[str], on_output: Callable[[str, IO[str]], None],
+               cwd: str = '.', keep_stdout: bool = True) -> RunResult[list[str]]:
         args = command[3:]
         self.calls.append(args)
         if args[0] != 'sync':
             raise AssertionError(f'unscripted streamed p4 command: {args}')
         change = int(args[-1].rsplit('@', 1)[1])
         lines, refused = self._apply(change, preview='-n' in args)
-        for line in lines + refused:
-            on_output(line, None)
+        # As p4 prints them: progress on stdout, clobber refusals on stderr.
+        for line in lines:
+            on_output(line, sys.stdout)
+        for line in refused:
+            on_output(line, sys.stderr)
         if refused:
             raise RunError(' '.join(command), returncode=1, stderr=refused)
         return RunResult(0, lines if keep_stdout else [], [])
 
-    def _apply(self, change, preview):
+    def _apply(self, change: int, preview: bool) -> tuple[list[str], list[str]]:
         """Sync the workspace from the have-list to change; returns (output lines, clobber refusals)."""
         before, after = self.files_at(self.have), self.files_at(change)
-        lines, refused = [], []
+        lines: list[str] = []
+        refused: list[str] = []
         for path in sorted(set(before) | set(after)):
             if before.get(path) == after.get(path):
                 continue
@@ -518,29 +549,29 @@ class P4RepoTestCase(GitRepoTestCase):
 
     The depot has CL 100 (a.txt, b.txt), which the workspace is synced to and main has committed."""
 
-    def build_workspace(self):
+    def build_workspace(self) -> None:
         super().build_workspace()
         self.p4 = FakeP4(self.ws)
         self.p4.install(self)
         self.commit_sync(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
 
-    def commit_sync(self, change, files):
+    def commit_sync(self, change: int, files: dict[str, str | None]) -> None:
         """Submit files as change, sync the workspace to it and commit the sync, as sync would."""
         self.p4.submit(change, files)
         self.p4.sync_to(change)
         self.commit(format_sync_subject('//myclient', change))
 
-    def shelves(self):
+    def shelves(self) -> list[list[str]]:
         """The p4 shelve calls made so far."""
         return [call for call in self.p4.calls if call[0] == 'shelve']
 
-    def adopt_workspace(self):
+    def adopt_workspace(self) -> None:
         super().adopt_workspace()
         self.p4.ws = self.ws
         self.p4.calls.clear()
         self.p4.install(self)
 
-    def commit_feature(self):
+    def commit_feature(self) -> None:
         """On branch feature, commit an edit of a.txt, then the delete of b.txt and the add of c.txt."""
         self.git('switch', '-q', '-c', 'feature')
         self.edit('a.txt', 'a2\n')
@@ -551,11 +582,11 @@ class P4RepoTestCase(GitRepoTestCase):
         self.write_file('c.txt', 'c1\n')
         self.commit('Replace b with c')
 
-    def read(self, path):
+    def read(self, path: str) -> str:
         with open(os.path.join(self.ws, path)) as f:
             return f.read()
 
-    def edit(self, path, content):
+    def edit(self, path: str, content: str) -> None:
         """Change a file as the user would, making it writable first."""
         local = os.path.join(self.ws, path)
         if os.path.exists(local):

@@ -42,7 +42,7 @@ autopep8 -i -r git_p4son/ tests/
 project must stay PEP 8 compliant at all times.
 
 Type-check `git_p4son/` and `tests/` with mypy in strict mode, once for Linux and once for Windows. Test functions may
-leave out annotations, but their bodies are still checked:
+leave out annotations, but their bodies are still checked, and the shared `tests/helpers.py` is held to full strict:
 ```bash
 scripts/typecheck.sh
 ```

@@ -93,10 +93,6 @@ class TestChoosingTheBackend(GitRepoTestCase):
         with self.assertRaisesRegex(ConfigError, 'one of auto, git, jj'):
             selected_backend(self.ws, None)
 
-    def test_per_commit_commands_open_git(self):
-        with open_backend(self.ws, None, checkouts=True) as backend:
-            self.assertIsInstance(backend, GitBackend)
-
 
 class TestGitBackendSync(GitRepoTestCase):
     def build_workspace(self):

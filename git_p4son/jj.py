@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import re
+import shlex
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Self
 
 from .common import CommandError, RunResult, run
 from .git import (
-    EOL_FOR_AUTOCRLF, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files, reset_files_to,
+    EOL_FOR_AUTOCRLF, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
 from .log import log
@@ -232,6 +233,10 @@ class Workspace:
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if files changed since jj's snapshot, or jj left any out of it."""
         self.check_snapshot()
+        self.check_unchanged()
+
+    def check_unchanged(self) -> None:
+        """Raise CommandError, after listing them, if tracked files changed since jj's snapshot."""
         changed = get_changed_files(
             self.working.commit, self.directory, self.eol_conversion)
         if changed:
@@ -250,9 +255,16 @@ class Workspace:
 
     def restore_working(self, head: str) -> None:
         """Undo checkout: git's HEAD and index back at head, as jj keeps them, and the working change's files on disk."""
-        self.detach_head(head)
-        reset_files_to(self.working.commit, head,
-                       self.directory, self.eol_conversion)
+        for command in self._restore_commands(head):
+            run(command, cwd=self.directory)
+
+    def restore_hint(self, head: str) -> list[str]:
+        """The commands restore_working runs, for the user to run when it failed."""
+        return [shlex.join(command) for command in self._restore_commands(head)]
+
+    def _restore_commands(self, head: str) -> list[list[str]]:
+        return [['git', 'update-ref', '--no-deref', 'HEAD', head],
+                *reset_files_commands(self.working.commit, head, self.eol_conversion)]
 
     def move_bookmark(self, name: str, commit: str, old: str) -> None:
         """Move bookmark name from old to commit through git, which jj imports once the lock is released."""

@@ -251,7 +251,6 @@ Ask before deleting a branch or alias if you are not sure the CL was submitted.
   not git: a git commit leaves the jj change behind. `sync` there rebases your changes onto the sync bookmark and
   returns you, so don't `git rebase` after it; resolve any conflicts it lists with jj. On the git backend, use git
   as in any other workspace.
-  `review` and `update --per-commit` refuse on the jj backend; don't add `--backend git` yourself, ask the user.
   "The jj working copy is busy" means a jj command is running; try again once it finishes.
 - **Something else fails.** `git p4son -v <command>` prints every git and p4 command it runs and their output, the
   fastest way to see why.

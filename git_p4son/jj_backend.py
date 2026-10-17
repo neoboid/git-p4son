@@ -1,11 +1,11 @@
 """The jj adapter for the backend interface, delegating to a jj.Workspace."""
 
-from collections.abc import Callable
+import contextlib
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import ContextManager
 
 from .changelist_store import alias_for
-from .common import CommandError, RunError
+from .common import CommandError, RunError, restoring
 from .git import commit_all, get_head_commit
 from .jj import Workspace
 from .log import log
@@ -41,11 +41,13 @@ class JjBackend:
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self._sync: _Sync | None = None
+        # For a per-commit step; change_id, the alias and the subject stay the tip's.
+        self._checked_out: str | None = None
 
     @property
     def revision(self) -> str:
-        """The commit holding the change: the working change, or its parent when that is empty and new."""
-        return self.workspace.tip.commit
+        """The commit a per-commit step checked out, else the tip."""
+        return self._checked_out or self.workspace.tip.commit
 
     def resolve_base(self, base: str | None) -> str:
         """The base resolved to a commit, None for the tip's parent; raise CommandError on conflicts."""
@@ -73,17 +75,40 @@ class JjBackend:
         return lines[0]
 
     def check_clean(self) -> None:
-        """Raise CommandError, after listing them, if jj left files out of its snapshot."""
-        self.workspace.check_snapshot()
+        """Raise CommandError, after listing them, if jj left files out of its snapshot; a step's checkout leaves none."""
+        if self._checked_out is None:
+            self.workspace.check_snapshot()
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""
         return [(name, 'jj bookmark') for name in self.workspace.bookmarks]
 
-    def checkouts(self) -> ContextManager[Callable[[str], None]]:
-        """Not supported yet; open_backend refuses the per-commit commands in a jj workspace first."""
-        raise CommandError(
-            'Checking out commits one by one is not supported in a jj workspace yet.')
+    @contextlib.contextmanager
+    def checkouts(self) -> Iterator[Callable[[str], None]]:
+        """Yield a function that puts a commit's files on disk with git, putting the working change's back on exit.
+
+        Raises CommandError if tracked files changed since jj's snapshot, which the checkouts would overwrite."""
+        workspace = self.workspace
+        workspace.check_unchanged()
+        head = get_head_commit(workspace.directory)
+
+        def checkout(commit: str) -> None:
+            workspace.checkout(commit)
+            self._checked_out = commit
+
+        def restore() -> None:
+            self._checked_out = None
+            workspace.restore_working(head)
+
+        def report(error: RunError) -> None:
+            log.error(
+                f"Could not put the working change's files back: {error}")
+            log.info(
+                'Run these before any jj command, so jj does not snapshot the files of another commit:')
+            for command in workspace.restore_hint(head):
+                log.info(command)
+        with restoring(restore, report):
+            yield checkout
 
     def prepare_sync(self, branch: str | None) -> str:
         """The sync bookmark: branch, else [sync] branch, else main; returns its commit.

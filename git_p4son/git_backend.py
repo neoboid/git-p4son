@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 from .changelist_store import alias_for
-from .common import CommandError, RunError
+from .common import CommandError, RunError, restoring
 from .git import (
     branch_exists, commit_all, get_current_branch, get_dirty_files, get_head_commit, get_head_subject, switch_branch,
     switch_detached,
@@ -97,19 +97,11 @@ class GitBackend:
 
     @contextlib.contextmanager
     def checkouts(self) -> Iterator[Callable[[str], None]]:
-        """Yield a function that checks out a commit detached, returning to the starting branch or commit on exit.
-
-        A failure to return after the body raised is logged, so the body's exception propagates."""
+        """Yield a function that checks out a commit detached, returning to the starting branch or commit on exit."""
         start = _Position.current(self.workspace_dir)
-        try:
+        with restoring(lambda: start.restore(self.workspace_dir),
+                       lambda error: log.error(f'Could not return to {start.name}: {error}')):
             yield lambda commit: switch_detached(commit, self.workspace_dir)
-        except BaseException:
-            try:
-                start.restore(self.workspace_dir)
-            except RunError as error:
-                log.error(f'Could not return to {start.name}: {error}')
-            raise
-        start.restore(self.workspace_dir)
 
     def prepare_sync(self, branch: str | None) -> str:
         """The sync branch: branch, else [sync] branch, else main; raise CommandError if none exists."""

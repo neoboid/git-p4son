@@ -266,6 +266,7 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
 
 
 TestUpdateOnJj = on_jj(TestUpdate)
+TestUpdatePerCommitOnJj = on_jj(TestUpdatePerCommit)
 
 if __name__ == '__main__':
     unittest.main()

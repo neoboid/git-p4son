@@ -1,5 +1,6 @@
 """Common utilities shared between git-p4son commands."""
 
+import contextlib
 import ntpath
 import os
 import posixpath
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import IO, Callable, Generic, Literal, Protocol, TypeVar, overload
@@ -143,6 +145,26 @@ class RunError(CommandError):
     def __init__(self, message: str, returncode: int = 1, stderr: list[str] | None = None) -> None:
         super().__init__(message, returncode)
         self.stderr = stderr or []
+
+
+@contextlib.contextmanager
+def restoring(restore: Callable[[], None], report: Callable[['RunError'], None]) -> Iterator[None]:
+    """Run restore after the body, handing a RunError from it to report, which logs it.
+
+    The body's exception propagates; after a body that succeeded, the RunError does."""
+    try:
+        yield
+    except BaseException:
+        try:
+            restore()
+        except RunError as error:
+            report(error)
+        raise
+    try:
+        restore()
+    except RunError as error:
+        report(error)
+        raise
 
 
 Output = TypeVar('Output', list[str], bytes)

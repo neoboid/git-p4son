@@ -986,17 +986,18 @@ Hooks must not run ordinary jj commands, which would wait for the lock their cal
 as `jj --at-op=@ log` avoid snapshotting and the git import. A hook that runs git-p4son itself needs
 `--backend git`, which reuses the caller's lock.
 
-`review` and `update --per-commit` check out each commit with git, so the jj backend refuses them for now. To use
-the git workflow on purpose, put `--backend git` **before** the command:
+`review` and `update --per-commit` run once per commit since the base, up to the jj change, as they do in git.
+Under jj's lock, each step puts its commit's files on disk with git, and the working change's files go back at the
+end, also when a step fails, so jj sees no change. No jj command runs, and untracked and ignored files are left
+alone. They refuse to start if files changed after jj's snapshot, as the checkouts would overwrite them:
 
 ```sh
-git switch fix-login
-git p4son --backend git review -b main
-git p4son --backend git update --per-commit --shelve -b main
+git p4son review -b main
+git p4son update --per-commit --shelve -b main
 ```
 
-This uses git branches, `HEAD` and git's clean-workspace check, and holds jj's lock until every step has run and
-git-p4son has returned to where it started.
+To use the git workflow on purpose, put `--backend git` **before** the command. This uses git branches, `HEAD` and
+git's clean-workspace check.
 
 ## Claude Code Skill
 

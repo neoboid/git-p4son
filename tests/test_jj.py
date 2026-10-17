@@ -109,10 +109,6 @@ class TestJjBackend(JjRepoTestCase):
         with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'no description'):
             JjBackend(workspace).subject()
 
-    def test_checkouts_are_refused(self):
-        with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'not supported'):
-            JjBackend(workspace).checkouts()
-
     def test_chosen_for_a_jj_workspace(self):
         with open_backend(self.ws, None) as backend:
             self.assertIsInstance(backend, JjBackend)
@@ -146,11 +142,6 @@ class TestJjBackend(JjRepoTestCase):
         with mock.patch('git_p4son.jj.run', return_value=make_run_result(stdout=['jj 0.40.0'])), \
                 self.assertRaisesRegex(CommandError, '0.41 or newer.*--backend git'):
             with open_backend(self.ws, None):
-                pass
-
-    def test_per_commit_commands_are_refused(self):
-        with self.assertRaisesRegex(CommandError, 'Put --backend git'):
-            with open_backend(self.ws, None, checkouts=True):
                 pass
 
 
@@ -262,10 +253,17 @@ class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
         return out.getvalue()
 
     def p4son_fails(self, *argv, message):
-        with captured_output(), \
+        """Run git-p4son with argv, expecting a CommandError matching message; returns everything it printed."""
+        with captured_output() as out, \
                 mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
                 self.assertRaisesRegex(CommandError, message):
             run_command(create_parser().parse_args(argv))
+        return out.getvalue()
+
+    def working(self):
+        """The working change's commit, after jj snapshots the files on disk."""
+        self.jj('status')
+        return self.describe('@', 'commit_id')
 
 
 class TestJjNew(JjP4RepoTestCase):
@@ -373,12 +371,96 @@ class TestJjNew(JjP4RepoTestCase):
             '[depot]\nroot = "//myclient"\n\n[core]\nbackend = "git"\n')
         self.p4son_fails('alias', 'show', 'branch', message='detached HEAD')
 
-    def test_review_needs_the_git_backend(self):
-        self.p4son_fails('review', 'feat', message='--backend git')
 
-    def test_update_per_commit_needs_the_git_backend(self):
-        self.p4son_fails('update', '101', '--per-commit',
-                         message='--backend git')
+class TestJjPerCommit(JjP4RepoTestCase):
+    """review over Change a and Replace b with c, with bookmark feat on the second; TestReviewOnJj covers the rest."""
+
+    FILES = {'a.txt': 'a2\n', 'b.txt': None, 'c.txt': 'c1\n'}
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.jj('new', 'main', '-m', 'Change a')
+        self.edit('a.txt', 'a2\n')
+        self.jj('new', '-m', 'Replace b with c')
+        self.replace_b_with_c()
+        self.jj('bookmark', 'create', 'feat', '-r', '@')
+        self.jj('new')
+
+    def setUp(self):
+        super().setUp()
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+
+    def add_d(self):
+        """Describe the working change as Add d, adding d.txt; returns its commit."""
+        self.jj('describe', '-m', 'Add d')
+        self.write_file('d.txt', 'd1\n')
+        return self.working()
+
+    def assert_restored(self, working, files):
+        """Assert jj sees the working change unchanged, with files on disk, None for an absent one."""
+        self.assertEqual(self.working(), working)
+        for path, content in files.items():
+            self.assertEqual(os.path.exists(os.path.join(
+                self.ws, path)), content is not None, path)
+            if content is not None:
+                self.assertEqual(self.read(path), content)
+
+    def test_review_records_the_change_it_started_from(self):
+        working = self.working()
+        self.p4son('review', 'branch', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(len(self.shelves()), 2)
+        self.assertEqual(self.p4son('alias', 'list').splitlines()[-1],
+                         f'feat -> CL 101, jj change {self.describe("feat", "change_id")[:8]}')
+        self.assert_restored(working, self.FILES)
+
+    def test_review_takes_the_working_change_and_puts_its_files_back(self):
+        working = self.add_d()
+        self.p4son('review', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(self.p4.pending['101'][3:6],
+                         ['1. Change a', '2. Replace b with c', '3. Add d'])
+        self.assertEqual(self.p4.shelved['101']['d.txt'], 'd1\n')
+        self.assertEqual(len(self.shelves()), 3)
+        self.assert_restored(working, {**self.FILES, 'd.txt': 'd1\n'})
+
+    def test_a_failing_step_puts_the_working_change_back(self):
+        working = self.add_d()
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=CommandError('p4 said no'))
+        self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                         message=r'Step 2 of 3 failed at \w+ Replace b with c: p4 said no')
+        self.assert_restored(working, {**self.FILES, 'd.txt': 'd1\n'})
+
+    def test_a_failing_restore_keeps_the_step_error_and_names_the_fix(self):
+        working = self.working()
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=CommandError('p4 said no'))
+        start_patch(self, 'git_p4son.jj.Workspace.restore_working',
+                    side_effect=RunError('git read-tree failed'))
+        head = self.describe('@-', 'commit_id')
+        out = self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                               message='Step 2 of 2 failed at .*: p4 said no')
+        self.assertIn('git read-tree failed', out)
+        self.assertRegex(out, rf'git update-ref --no-deref HEAD {head}\n'
+                         rf'git( -c core\.autocrlf=\w+)? read-tree -u --reset {working}\n'
+                         rf'git read-tree {head}\n')
+
+    def test_a_failing_restore_after_the_steps_names_the_fix(self):
+        start_patch(self, 'git_p4son.jj.Workspace.restore_working',
+                    side_effect=RunError('git read-tree failed'))
+        head = self.describe('@-', 'commit_id')
+        out = self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                               message='git read-tree failed')
+        self.assertEqual(len(self.shelves()), 2)
+        self.assertIn(f'git update-ref --no-deref HEAD {head}\n', out)
+
+    def test_a_file_the_working_change_deletes_stays_deleted(self):
+        self.jj('describe', '-m', 'Drop a')
+        os.chmod(os.path.join(self.ws, 'a.txt'), stat.S_IRUSR | stat.S_IWUSR)
+        os.remove(os.path.join(self.ws, 'a.txt'))
+        working = self.working()
+        self.p4son('review', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(self.p4.shelved['101']['a.txt'], None)
+        self.assert_restored(working, {**self.FILES, 'a.txt': None})
 
 
 class TestJjSync(JjP4RepoTestCase):
@@ -525,10 +607,8 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
             return real(command, *args, **kwargs)
         start_patch(self, 'git_p4son.perforce.run_with_stream_output',
                     side_effect=fail_second_sync)
-        with captured_output() as out, mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
-                self.assertRaisesRegex(CommandError, 'Aborting sync'):
-            run_command(create_parser().parse_args(['sync', '101', '102']))
-        self.assertIn('Staying on main', out.getvalue())
+        out = self.p4son_fails('sync', '101', '102', message='Aborting sync')
+        self.assertIn('Staying on main', out)
         # The user's next jj command imports what the failed sync left, as this one does.
         self.jj('status')
         self.assertEqual(self.describe('main'),
@@ -547,8 +627,7 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.assertEqual(self.p4.synced(), [])
         self.assertEqual(self.read('a.txt'), 'a2\n')
         self.assertEqual(self.git('status', '--porcelain'), 'M a.txt')
-        self.jj('status')
-        self.assertEqual(self.describe('@', 'commit_id'), working)
+        self.assertEqual(self.working(), working)
 
     def test_merged_back_changes_stay_on_the_sync_bookmark_and_the_stack_is_rebased(self):
         self.jj('new', 'main', '-m', 'local change')

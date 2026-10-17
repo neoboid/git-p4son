@@ -195,11 +195,10 @@ def checkout_detached(commit: str, workspace_dir: str, eol_conversion: str | Non
         '--force', '--detach', commit], cwd=workspace_dir)
 
 
-def reset_files_to(commit: str, index_commit: str, workspace_dir: str, eol_conversion: str | None = None) -> None:
-    """Put commit's files in the work tree, writing jj's line endings, and index_commit's in the index."""
-    run([*_git_for(eol_conversion), 'read-tree',
-        '-u', '--reset', commit], cwd=workspace_dir)
-    run(['git', 'read-tree', index_commit], cwd=workspace_dir)
+def reset_files_commands(commit: str, index_commit: str, eol_conversion: str | None = None) -> list[list[str]]:
+    """The git commands that put commit's files on disk, with jj's line endings, and index_commit in the index."""
+    return [[*_git_for(eol_conversion), 'read-tree', '-u', '--reset', commit],
+            ['git', 'read-tree', index_commit]]
 
 
 def add_all_files(workspace_dir: str, eol_conversion: str | None = None) -> None:

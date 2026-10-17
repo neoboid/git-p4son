@@ -195,7 +195,7 @@ When bumping the minimum Python version, update all of these locations:
 - `pyproject.toml` (`requires-python`, classifiers and `[tool.mypy] python_version`)
 - `README.md` (install requirements)
 - `CLAUDE.md` (this file, development commands section)
-- `.github/workflows/publish.yml` (CI test matrix)
+- `.github/workflows/test.yml` (CI test matrix, which `publish.yml` runs before releasing)
 
 ## Code Style
 

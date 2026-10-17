@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # publish.yml runs these jobs before publishing, so a release tests what pull requests test.
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A newer push to a pull request replaces its run in progress; runs on main all finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e . && pip install pytest pytest-xdist
+      - run: python -m pytest tests/ -n auto --maxprocesses 8
+
+  # One Python is enough: python_version in pyproject.toml makes the result the same on every Python.
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install mypy==2.4.0
+      - run: scripts/typecheck.sh

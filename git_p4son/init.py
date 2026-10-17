@@ -4,6 +4,7 @@ import argparse
 import os
 import shutil
 
+from . import jj
 from .backend import workspace_lock
 from .common import CommandError, prompt_choice, prompt_menu, prompt_numbered
 from .config import save_config
@@ -170,6 +171,33 @@ def _configure_claude_skill() -> None:
         log.success('Not installed')
 
 
+def _configure_jj(cwd: str) -> bool:
+    """Offer to colocate jj and to add the jj p4son alias, with jj 0.41 or newer; returns whether to colocate."""
+    log.heading('Configuring jj')
+    if not jj.is_supported(cwd):
+        log.success('jj 0.41 or newer not found, skipping')
+        return False
+    colocate = False
+    if jj.is_workspace(cwd):
+        log.success('Colocated jj workspace')
+    else:
+        log.info('')
+        log.info('jj can work in this git repository alongside git, colocated.')
+        colocate = bool(_ask_yes_no(
+            'Use jj in this workspace too (colocated)?', False))
+        log.success('Colocating at the end' if colocate else 'Not colocated')
+    if not colocate and not jj.is_workspace(cwd):
+        return False
+    if jj.has_p4son_alias(cwd):
+        log.success('jj p4son alias found')
+    elif _ask_yes_no('Add the jj p4son alias to your jj config, to run git-p4son as jj p4son?', True):
+        jj.add_p4son_alias(cwd)
+        log.success('Added the jj p4son alias')
+    else:
+        log.success('jj p4son alias not added')
+    return colocate
+
+
 def _setup_gitignore(cwd: str) -> str:
     """Set up .gitignore file. Returns a description of what was done."""
     gitignore_path = os.path.join(cwd, '.gitignore')
@@ -211,6 +239,8 @@ def _init_workspace(cwd: str) -> int:
 
     _configure_claude_skill()
 
+    colocate = _configure_jj(cwd)
+
     log.heading('Checking .gitignore')
     log.success(_setup_gitignore(cwd))
 
@@ -231,6 +261,12 @@ def _init_workspace(cwd: str) -> int:
 
     # After the first commit, so HEAD is on a branch.
     _configure_sync_branch(cwd, created)
+
+    if colocate:
+        # Last, after the first commit, so jj imports the branch as a bookmark.
+        log.heading('Colocating jj')
+        jj.colocate(cwd)
+        log.success('jj git init --colocate')
 
     if created:
         log.heading('Next steps')

@@ -11,10 +11,10 @@ local development.
 ## Development Commands
 
 ```bash
-# Install in development mode, with the test and format tools
-pip install -e . pytest pytest-xdist autopep8
+# Install in development mode, with the test, format and type-check tools
+pip install -e . pytest pytest-xdist autopep8 mypy==2.4.0
 
-# Point git at the repo's hooks: pre-commit checks autopep8, pre-push runs the tests
+# Point git at the repo's hooks: pre-commit checks autopep8, pre-push runs the tests and the type check
 scripts/setup-hooks.sh
 
 # Run the tool
@@ -39,6 +39,15 @@ autopep8 -i -r git_p4son/ tests/
 
 **Important:** Before committing, always run `autopep8 -i -r git_p4son/ tests/` to format all changed code. The
 project must stay PEP 8 compliant at all times.
+
+Type-check `git_p4son/` with mypy, once for Linux and once for Windows:
+```bash
+scripts/typecheck.sh
+```
+
+The settings are under `[tool.mypy]` in `pyproject.toml`. mypy is pinned to 2.4.0; bump it in a commit of its own.
+Code that only type-checks on one platform, such as platform-only imports, goes under `sys.platform == 'win32'`
+checks, which mypy narrows on; it does not narrow on `os.name`.
 
 ## Architecture
 
@@ -183,7 +192,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 ## Python Version
 
 When bumping the minimum Python version, update all of these locations:
-- `pyproject.toml` (`requires-python` and classifiers)
+- `pyproject.toml` (`requires-python`, classifiers and `[tool.mypy] python_version`)
 - `README.md` (install requirements)
 - `CLAUDE.md` (this file, development commands section)
 - `.github/workflows/publish.yml` (CI test matrix)

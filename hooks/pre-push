@@ -5,4 +5,6 @@ parallel=
 if python -c 'import xdist' 2>/dev/null; then
     parallel='-n auto --maxprocesses 8'
 fi
-python -m pytest tests/ -q $parallel
+python -m pytest tests/ -q $parallel || exit 1
+
+scripts/typecheck.sh

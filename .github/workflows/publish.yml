@@ -22,6 +22,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e . && pip install pytest pytest-xdist
       - run: python -m pytest tests/ -n auto
+      # python_version in pyproject.toml makes the result the same on every Python.
+      - if: matrix.python-version == '3.13'
+        run: pip install mypy==2.4.0 && scripts/typecheck.sh
 
   publish:
     needs: test

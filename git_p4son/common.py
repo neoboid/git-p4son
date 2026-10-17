@@ -280,8 +280,9 @@ def run_with_stream_output(command: list[str],
                 if line is None:
                     open_pipes -= 1
                     continue
-                if collected[index] is not None:
-                    collected[index].append(line)
+                lines = collected[index]
+                if lines is not None:
+                    lines.append(line)
                 on_output(line, streams[index])
 
             returncode = process.wait()

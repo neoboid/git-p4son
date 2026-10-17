@@ -6,6 +6,7 @@ from typing import ContextManager, Protocol
 
 from . import jj
 from .common import CommandError
+from .changelist_store import alias_for_change
 from .config import ConfigError, get_setting
 from .git_backend import GitBackend
 from .jj_backend import JjBackend
@@ -28,6 +29,12 @@ class Backend(Protocol):
 
     def suggested_alias(self) -> str:
         """The alias the current branch or bookmark suggests; raise CommandError if there is none."""
+
+    def change_id(self) -> str | None:
+        """The jj change the command works on, or None for git."""
+
+    def existing_changes(self, change_ids: list[str]) -> set[str]:
+        """The change_ids that still exist; all of them for git."""
 
     def subject(self) -> str:
         """The change's default message; raise CommandError if there is none."""
@@ -107,6 +114,16 @@ def completion_backend(workspace_dir: str, choice: str | None) -> Backend:
     if selected_backend(workspace_dir, choice) == 'jj':
         return JjBackend(jj.Workspace.load(workspace_dir, '@'))
     return GitBackend(workspace_dir)
+
+
+def alias_for_branch(backend: Backend, workspace_dir: str, new_alias: bool) -> str:
+    """The alias the branch keyword names: the one recording the jj change, unless new_alias, else the suggested one."""
+    change = backend.change_id()
+    if change is not None and not new_alias:
+        found = alias_for_change(change, workspace_dir)
+        if found is not None:
+            return found
+    return backend.suggested_alias()
 
 
 @contextlib.contextmanager

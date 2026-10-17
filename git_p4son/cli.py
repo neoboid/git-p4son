@@ -6,7 +6,7 @@ import sys
 from importlib.resources import files
 from typing import cast
 from . import __version__
-from .backend import BACKENDS, open_backend
+from .backend import BACKENDS, alias_for_branch, open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
@@ -41,7 +41,8 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
     """Add an optional positional that defaults to the branch keyword, which run_command resolves."""
     (group or parser).add_argument(
         dest, nargs='?', default='branch',
-        help=f'{help}. Defaults to the current branch name, or with the jj backend its bookmark')
+        help=f'{help}. Defaults to the current branch name, or with the jj backend the alias recorded for the jj '
+        'change, else its bookmark or the start of its change ID')
     parser.set_defaults(branch_keyword_arg=dest)
 
 
@@ -251,7 +252,7 @@ Examples:
         'under an alias. By default also opens the changed files for edit in '
         'the changelist.'
     )
-    new_parser.set_defaults(func=new_command)
+    new_parser.set_defaults(func=new_command, new_alias=True)
     _add_message_args(
         new_parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
@@ -380,7 +381,7 @@ Examples:
         description='Save a changelist number under a named alias in '
         '.git-p4son/aliases/<alias>.toml.'
     )
-    alias_new_parser.set_defaults(func=alias_new_command)
+    alias_new_parser.set_defaults(func=alias_new_command, new_alias=True)
     alias_new_parser.add_argument(
         'changelist',
         help='Changelist number to save'
@@ -423,7 +424,7 @@ Examples:
         '--review on it, then check out each later one and run git p4son '
         'update --shelve, before returning to where you started.'
     )
-    review_parser.set_defaults(func=review_command)
+    review_parser.set_defaults(func=review_command, new_alias=True)
     _add_branch_keyword_arg(review_parser, 'alias',
                             'Alias name for the new changelist')
     _add_message_args(
@@ -603,7 +604,8 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         words = backend.words
         log.heading(
             f'Resolving alias from current {words.tool} {words.branch}')
-        resolved = backend.suggested_alias()
+        resolved = alias_for_branch(
+            backend, args.workspace_dir, getattr(args, 'new_alias', False))
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 

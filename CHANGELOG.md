@@ -18,7 +18,9 @@
   change, taking the alias from its bookmark and the message from its description, and keep the working files as
   they are around Perforce reverts. `sync` works from any change: it moves the sync bookmark to each sync commit,
   then rebases the changes you started from onto it and returns you, listing changes that got conflicts;
-  `--no-rebase` skips the rebase. git-p4son holds jj's working-copy lock while it runs. `core.backend` and the global
+  `--no-rebase` skips the rebase. An alias `new` saves records the jj change, so the `branch` keyword finds it by
+  change after rewrites and bookmark renames; a change without a bookmark names its alias after its change ID.
+  git-p4son holds jj's working-copy lock while it runs. `core.backend` and the global
   `--backend` flag choose git or jj; `--backend git` uses the git workflow in a jj workspace, which `review` and
   `update --per-commit` need. Hooks are told the backend in `GIT_P4SON_BACKEND`
 - `new` and `update` keep the working files as they are around Perforce reverts in git workspaces too, instead of

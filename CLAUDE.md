@@ -155,15 +155,17 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
   interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
-  the alias the branch or bookmark suggests, the default message, the clean check, `-b` completions, `checkouts`
+  the alias the branch or bookmark suggests, the jj change aliases record (`change_id`, `existing_changes`), the
+  default message, the clean check, `-b` completions, `checkouts`
   for the per-commit loop, sync's clean check and commits (`prepare_sync`, `check_sync_clean`, `start_sync`,
   `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`.
   `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
   `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
   `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once
-  the lock is released, it calls the backend's `after_lock`.
-  `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command
-  branches on jj outside the backend modules and `jj.py`.
+  the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the
+  alias recording the change, else the suggested name, unless the command (`new_alias=True` on its parser) names a
+  new one. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
+  command branches on jj outside the backend modules and `jj.py`.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
@@ -187,7 +189,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
-  keyword. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
+  keyword. An alias may record a jj change (`change = "..."`), at most one alias per change, as saving moves the
+  record: `alias_for_change` and `alias_changes`. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
   `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and

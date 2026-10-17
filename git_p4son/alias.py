@@ -1,7 +1,9 @@
 """Alias command implementation for git-p4son."""
 
 import argparse
+from .backend import Backend
 from .changelist_store import (
+    alias_changes,
     load_changelist_alias,
     save_changelist_alias,
     list_changelist_aliases,
@@ -12,10 +14,18 @@ from .common import CommandError, prompt_choice
 from .log import log, plural
 
 
-def _print_aliases(aliases: list[tuple[str, str]]) -> None:
+def _print_aliases(aliases: list[tuple[str, str]], workspace_dir: str, backend: Backend) -> None:
+    """List the aliases, each with the jj change it records, marked gone when jj no longer has it."""
+    changes = alias_changes(workspace_dir)
+    existing = backend.existing_changes(list(changes.values()))
     log.info(f'Found {plural(len(aliases), "alias", "aliases")}')
     for name, changelist in aliases:
-        log.info(f'{name} -> CL {changelist}')
+        line = f'{name} -> CL {changelist}'
+        change = changes.get(name)
+        if change is not None:
+            line += f', jj change {change[:8]}' + \
+                ('' if change in existing else ' (gone)')
+        log.info(line)
 
 
 def alias_list_command(args: argparse.Namespace) -> int:
@@ -24,7 +34,7 @@ def alias_list_command(args: argparse.Namespace) -> int:
     if not aliases:
         log.info('No aliases defined')
         return 0
-    _print_aliases(aliases)
+    _print_aliases(aliases, args.workspace_dir, args.backend)
     return 0
 
 
@@ -117,7 +127,7 @@ def alias_clean_command(args: argparse.Namespace) -> int:
         log.success('No changelist aliases to clean')
         return 0
 
-    _print_aliases(aliases)
+    _print_aliases(aliases, workspace_dir, args.backend)
 
     mode = prompt_choice('Delete?', ['all', 'interactive', 'quit'])
     if mode is None or mode == 'quit':

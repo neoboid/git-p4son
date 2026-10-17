@@ -654,7 +654,8 @@ numbered sequentially.
 
 ### Alias Command
 
-Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`). Aliases
+Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`, and
+with the jj backend `change = "<change ID>"`, the [jj change](#jujutsu-jj) it was made for). Aliases
 saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when written,
 or all at once with `alias clean`.
 
@@ -897,8 +898,12 @@ With the jj backend in a jj workspace:
 - `new`, `update` and `list-changes` work on the jj working change `@`. When `@` is empty, has no description or
   bookmark and has one parent, they work on that parent instead, so a fresh working change above a feature still
   refers to the feature.
-- The default alias comes from the one local bookmark at that change, with `/` replaced by `-`. With no bookmark,
-  or several, name the alias or changelist explicitly.
+- `new` records the change's ID in the alias it saves, so later commands find the alias by change, whatever the
+  change's bookmarks or description have become since. A new alias is named after the one local bookmark at the
+  change, with `/` replaced by `-`, or, with no bookmark or several, after the first 8 letters of its change ID.
+- An alias records one change, and a change one alias: `new` refuses a change another alias records, naming it, and
+  `--force` moves the record to the new alias. `alias new` records no change. `alias list` shows each recorded change,
+  marked `(gone)` once jj no longer has it.
 - The default message is the first line of the change's description. Use `jj describe`, `-m` or `-F`.
 - `-b/--base-branch` takes a jj revision that resolves to one change, such as a bookmark, change ID or commit ID.
   It defaults to the change's parent rather than git's `HEAD~1`.

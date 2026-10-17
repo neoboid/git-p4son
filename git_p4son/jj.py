@@ -177,13 +177,20 @@ class Workspace:
         return [name for name, targets in self.bookmarks.items()
                 if commit in targets]
 
-    def current_bookmark(self) -> str:
-        """Require one unconflicted local bookmark at the selected tip."""
+    def only_bookmark(self) -> str | None:
+        """The one unconflicted local bookmark at the tip, or None for none or several."""
         names = self.bookmarks_at(self.tip.commit)
         if len(names) != 1 or len(self.bookmarks[names[0]]) != 1:
-            raise CommandError('The selected jj change does not have exactly one bookmark. '
-                               'Name the alias explicitly, or set a bookmark there.')
+            return None
         return names[0]
+
+    def existing_changes(self, change_ids: list[str]) -> set[str]:
+        """The change_ids jj still has."""
+        if not change_ids:
+            return set()
+        revset = ' | '.join(
+            f'present({change})' for change in change_ids)
+        return set(self.run('log', '-r', revset, '--no-graph', '-T', 'change_id ++ "\\n"').stdout)
 
     def resolve_base(self, base: str | None) -> str:
         """Resolve the base, None for the tip's parent, and reject conflicted changes in the selected range."""

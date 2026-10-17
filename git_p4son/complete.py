@@ -3,7 +3,7 @@
 import argparse
 from typing import TypeAlias
 
-from .backend import BACKENDS, Backend, completion_backend
+from .backend import BACKENDS, Backend, alias_for_branch, completion_backend
 from .changelist_store import list_changelist_aliases
 from .common import CommandError
 from .git import get_workspace_dir
@@ -117,7 +117,7 @@ def _complete_flag_value(flag: str, workspace_dir: str | None = None,
 
 
 def _get_branch_candidates(prefix: str, workspace_dir: str | None,
-                           backend_choice: str | None = None) -> Candidates:
+                           backend_choice: str | None = None, new_alias: bool = False) -> Candidates:
     """Get 'branch' completion candidates based on prefix."""
     keyword = 'branch'
     if not keyword.startswith(prefix):
@@ -126,7 +126,7 @@ def _get_branch_candidates(prefix: str, workspace_dir: str | None,
     if backend is None:
         return []
     try:
-        alias = backend.suggested_alias()
+        alias = alias_for_branch(backend, str(workspace_dir), new_alias)
     except (CommandError, OSError):
         return []
     branch = backend.words.branch
@@ -148,7 +148,8 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
                    and not isinstance(a, argparse._SubParsersAction)]
     if dest and positional_count < len(positionals) \
             and positionals[positional_count].dest == dest:
-        return (_get_branch_candidates(prefix, workspace_dir, backend_choice)
+        new_alias = bool(target.get_default('new_alias'))
+        return (_get_branch_candidates(prefix, workspace_dir, backend_choice, new_alias)
                 + _filter(_get_alias_names(workspace_dir), prefix))
 
     if command == 'sync':

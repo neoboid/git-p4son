@@ -4,6 +4,7 @@ import os
 import re
 import tomllib
 from collections.abc import Callable
+from typing import TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
@@ -11,11 +12,16 @@ from .config import ensure_config_dir
 from .log import log
 from .toml_writer import format_toml
 
+_Read = TypeVar('_Read')
+
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
 
 # ASCII letters, digits, hyphen, underscore and dot, not starting or ending with a dot.
 _ALIAS_NAME_RE = re.compile(r'^[A-Za-z0-9_-]([A-Za-z0-9._-]*[A-Za-z0-9_-])?$')
+
+# jj change IDs are written with the letters k to z.
+_CHANGE_ID_RE = re.compile(r'[k-z]+')
 
 # Windows device names: opening one hits the device instead of creating a file.
 _WINDOWS_RESERVED_NAMES = frozenset(
@@ -87,8 +93,8 @@ def _no_alias(name: str) -> CommandError:
                         'See "git p4son alias list".')
 
 
-def _read_alias(path: str, name: str) -> str:
-    """The changelist number in an alias file; raise CommandError if it holds none."""
+def _read_alias_file(path: str, name: str) -> tuple[str, str | None]:
+    """The changelist and the jj change an alias file records; raise CommandError if it has no changelist."""
     with open(path, 'rb') as f:
         try:
             data = tomllib.load(f)
@@ -98,7 +104,9 @@ def _read_alias(path: str, name: str) -> str:
     if type(changelist) is not int:
         raise CommandError(
             f'Changelist alias "{name}" has no changelist number')
-    return str(changelist)
+    change = data.get('change')
+    valid = isinstance(change, str) and _CHANGE_ID_RE.fullmatch(change)
+    return str(changelist), change if valid else None
 
 
 def _read_old_alias(path: str, name: str) -> str:
@@ -120,7 +128,7 @@ def _remove_old_alias(old_path: str, workspace_dir: str) -> None:
         pass
 
 
-def _write_alias(name: str, changelist: str, workspace_dir: str) -> None:
+def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | None = None) -> None:
     path, old_path = _alias_paths(name, workspace_dir)
     if not changelist.isdigit():
         raise CommandError(f'Invalid changelist number: {changelist}')
@@ -129,12 +137,15 @@ def _write_alias(name: str, changelist: str, workspace_dir: str) -> None:
     if not os.path.isdir(aliases_dir):
         log.info(f'Creating {aliases_dir}')
         os.makedirs(aliases_dir, exist_ok=True)
+    data: dict[str, int | str] = {'changelist': int(changelist)}
+    if change is not None:
+        data['change'] = change
     with open(path, 'w', encoding='utf-8') as f:
-        f.write(format_toml({'changelist': int(changelist)}))
+        f.write(format_toml(data))
     _remove_old_alias(old_path, workspace_dir)
 
 
-def _listed(directory: str, suffix: str, read: Callable[[str, str], str]) -> dict[str, str]:
+def _listed(directory: str, suffix: str, read: Callable[[str, str], _Read]) -> dict[str, _Read]:
     """The readable aliases in a store directory, by name; files that hold none are left out."""
     if not os.path.isdir(directory):
         return {}
@@ -152,8 +163,12 @@ def _listed(directory: str, suffix: str, read: Callable[[str, str], str]) -> dic
     return aliases
 
 
+def _records(workspace_dir: str) -> dict[str, tuple[str, str | None]]:
+    return _listed(_aliases_dir(workspace_dir), '.toml', _read_alias_file)
+
+
 def _listed_new(workspace_dir: str) -> dict[str, str]:
-    return _listed(_aliases_dir(workspace_dir), '.toml', _read_alias)
+    return {name: changelist for name, (changelist, _) in _records(workspace_dir).items()}
 
 
 def _listed_old(workspace_dir: str) -> dict[str, str]:
@@ -168,17 +183,33 @@ def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
 
 
-def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> None:
-    """Save a changelist number under a named alias; raise CommandError if the alias is not usable."""
+def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool,
+                          change: str | None = None) -> None:
+    """Save a changelist under an alias, moving the record of change to it; raise CommandError if not usable."""
     check_alias_usable(name, workspace_dir, force)
-    _write_alias(name, changelist, workspace_dir)
+    if change is not None:
+        for other, (other_changelist, recorded) in _records(workspace_dir).items():
+            if recorded == change and other != name:
+                _write_alias(other, other_changelist, workspace_dir)
+    _write_alias(name, changelist, workspace_dir, change)
+
+
+def alias_changes(workspace_dir: str) -> dict[str, str]:
+    """The jj change each alias records, by alias name, for the aliases that record one."""
+    return {name: change for name, (_, change) in _records(workspace_dir).items() if change is not None}
+
+
+def alias_for_change(change: str, workspace_dir: str) -> str | None:
+    """The alias that records change, or None."""
+    return next((name for name, recorded in sorted(alias_changes(workspace_dir).items())
+                 if recorded == change), None)
 
 
 def load_changelist_alias(name: str, workspace_dir: str) -> str:
     """Load a changelist number from a named alias; raise CommandError if there is none."""
     path, old_path = _alias_paths(name, workspace_dir)
     if os.path.exists(path):
-        return _read_alias(path, name)
+        return _read_alias_file(path, name)[0]
     if os.path.exists(old_path):
         return _read_old_alias(old_path, name)
     raise _no_alias(name)

@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import IO, Callable
+from typing import IO, Callable, Generic, Literal, TypeVar, overload
 
 from .log import log
 
@@ -120,13 +120,16 @@ class RunError(CommandError):
         self.stderr = stderr or []
 
 
+Output = TypeVar('Output', list[str], bytes)
+
+
 @dataclass
-class RunResult:
-    """A finished command's exit code and output; elapsed is set by run_with_stream_output."""
+class RunResult(Generic[Output]):
+    """A finished command's exit code and output, lines or bytes; elapsed is set by run_with_stream_output."""
 
     returncode: int
-    stdout: list[str] | bytes
-    stderr: list[str] | bytes
+    stdout: Output
+    stderr: Output
     elapsed: timedelta | None = None
 
 
@@ -134,12 +137,26 @@ def join_command_line(command: list[str]) -> str:
     return ''.join(f' "{c}"' if ' ' in c else f' {c}' for c in command)
 
 
+@overload
+def run(command: list[str], cwd: str = '.', dry_run: bool = False,
+        input: str | None = None, env: dict[str, str] | None = None,
+        text: Literal[True] = True, fail_on_returncode: bool = True
+        ) -> RunResult[list[str]]: ...
+
+
+@overload
+def run(command: list[str], cwd: str = '.', dry_run: bool = False,
+        input: str | None = None, env: dict[str, str] | None = None, *,
+        text: Literal[False], fail_on_returncode: bool = True
+        ) -> RunResult[bytes]: ...
+
+
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
         input: str | None = None,
         env: dict[str, str] | None = None,
         text: bool = True,
         fail_on_returncode: bool = True
-        ) -> RunResult:
+        ) -> RunResult[list[str]] | RunResult[bytes]:
     """Run a command and return a RunResult, raising on failure unless fail_on_returncode is False."""
     use_spinner = input is None and not dry_run
     log.command(join_command_line(command),
@@ -147,7 +164,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     if dry_run:
         log.end_command()
-        return RunResult(0, [] if text else b'', [] if text else b'')
+        return RunResult(0, [], []) if text else RunResult(0, b'', b'')
 
     if input is not None:
         log.end_command()
@@ -214,7 +231,7 @@ def _terminate(process: subprocess.Popen) -> None:
 def run_with_stream_output(command: list[str],
                            on_output: Callable[[str, IO[str]], None],
                            cwd: str = '.',
-                           keep_stdout: bool = True) -> RunResult:
+                           keep_stdout: bool = True) -> RunResult[list[str]]:
     """Run a command, passing each output line and its stream to on_output as it is written.
 
     An exception raised from on_output terminates the command and propagates. Without keep_stdout,

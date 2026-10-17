@@ -67,7 +67,7 @@ def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
 
 
 def run_hooks(hook_name: str, workspace_dir: str,
-              invocation_dir: str) -> list[RunResult]:
+              invocation_dir: str) -> list[RunResult[list[str]]]:
     """Run all executable files for a named hook."""
     hook_dir = _hook_dir(workspace_dir, hook_name)
     if not hook_dir.is_dir():
@@ -80,7 +80,7 @@ def run_hooks(hook_name: str, workspace_dir: str,
 
     log.heading(f'Running {hook_name} hooks')
 
-    results: list[RunResult] = []
+    results: list[RunResult[list[str]]] = []
     repo_root = os.path.abspath(workspace_dir)
     cwd = os.path.abspath(invocation_dir)
     env = {'GIT_P4SON_REPO_ROOT_DIR': repo_root}

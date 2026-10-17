@@ -135,11 +135,6 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertNotIn('complete', names)
 
-    def test_hidden_sequence_editor_not_completed(self, _ws, _aliases):
-        result = _complete(self.parser, [''], workspace_dir='/ws')
-        names = self._names(result)
-        self.assertNotIn('_sequence-editor', names)
-
     def test_prefix_filters_commands(self, _ws, _aliases):
         result = _complete(self.parser, ['sy'], workspace_dir='/ws')
         names = self._names(result)

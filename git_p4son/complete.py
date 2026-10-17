@@ -9,8 +9,7 @@ from .log import log
 from . import jj
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
-_HIDDEN_COMMANDS = frozenset(
-    {'complete', 'completion', '_sequence-editor'})
+_HIDDEN_COMMANDS = frozenset({'complete', 'completion'})
 
 
 def _get_subparsers_action(parser):

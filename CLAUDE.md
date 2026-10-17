@@ -141,14 +141,15 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `completions/` call `git p4son complete`.
 
 - **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
-  command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and
-  which needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
-  when the working change is empty and new), its bookmark and the default base; commands reach it only through
-  `JjBackend`. git still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and
-  `restore_working` move the files on disk for sync under the lock; `rebase_branch`, `conflicted_since`,
-  `working_is_empty` and `return_to` run jj on the live working copy, only after it. `operation` warns when git's
-  `core.autocrlf` (`git.get_autocrlf`) and jj's `working-copy.eol-conversion` disagree. For `init`: `is_supported`,
-  `colocate`, `has_p4son_alias` and `add_p4son_alias`.
+  command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and which
+  needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent when the
+  working change is empty and new), its bookmark and the default base; commands reach it only through `JjBackend`. git
+  still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and `restore_working` move the files
+  on disk for sync under the lock; `rebase_branch`, `conflicted_since`, `working_is_empty` and `return_to` run jj on the
+  live working copy, only after it. `operation` warns when git's `core.autocrlf` (`git.get_autocrlf`) and jj's
+  `working-copy.eol-conversion` disagree. `check_invoked_inside_workspace`, which `run_command` calls first, refuses `jj
+  -R` naming another workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit it. For
+  `init`: `is_supported`, `colocate`, `has_p4son_alias` and `add_p4son_alias`.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and

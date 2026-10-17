@@ -39,6 +39,37 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   `alias delete` covers cleaning up. Never use `alias delete --all`, which deletes every alias without asking,
   unless the user asks for it.
 
+## jj workspaces
+
+Before running commands in a workspace, check for a `.jj` folder at its root, next to `.git`, in each workspace you
+work in. Without `.jj`, follow the skill as written.
+
+With `.jj`, git-p4son works on the jj change, unless `.git-p4son/config.toml` sets `backend = "git"` under `[core]`;
+check it first. On the git backend, use git as in any other workspace. On the jj backend, read the rest of the skill
+with these translations:
+
+- **Commands stay `git p4son ...`**, as do the commands in git-p4son's messages. The user may run them as
+  `jj p4son ...` through a jj alias; it is the same command.
+- **A branch is a bookmark, and a commit is a change.** Where the skill says to commit, describe the change with
+  `jj describe` and start the next one with `jj new`. A git commit leaves the jj change behind, so don't run one.
+- **The change git-p4son works on** is the working change `@`, or its parent when `@` is empty, undescribed and new.
+  jj snapshots files by itself, so there is nothing to stage or stash. Files jj leaves untracked, usually ones over
+  its `snapshot.max-new-file-size`, make commands refuse: tell the user, who either ignores them in `.gitignore` or
+  has jj track them. Don't use `git stash`, which moves files behind jj's back.
+- **Aliases follow the change.** `new` names the alias after the change's one bookmark, or the first 8 letters of
+  its change ID, and records the change, so `update` finds it after rewording or moving bookmarks.
+- **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent.
+- **Branching off `main`** is `jj new main -m "..."` and `jj bookmark create <name>`. **Switching to a change**, as
+  `git checkout feature-a` does in the stacks walkthrough, is `jj edit <bookmark>` to amend that change, or
+  `jj new <bookmark>` to add a change on top.
+- **`sync`** works from any change: it rebases your changes onto the sync bookmark and returns you, so don't rebase
+  after it. Resolve any conflicts it lists with jj.
+- **Stacks:** jj rebases the changes above one you edit, so `--update-refs` is not needed.
+- **After a submit,** abandon the submitted changes with `jj abandon` and delete the bookmark with
+  `jj bookmark delete`, then `git p4son alias delete` as usual. Ask first, as with git.
+- **Don't add `--backend` yourself.** It switches between the git and jj workflows; ask the user if a command seems
+  to need it.
+
 ## Where things stand
 
 - `git log --oneline main` shows the sync history. A sync commit has a subject like
@@ -246,11 +277,8 @@ Ask before deleting a branch or alias if you are not sure the CL was submitted.
   `git p4son writable apply` restores the mode for all tracked files.
 - **`.git-p4son/config.toml` is invalid** ("... in config.toml must be ..." or "... is not valid TOML"). Report
   the message to the user; don't edit the file yourself.
-- **In a jj workspace** (a `.jj` folder next to `.git`), git-p4son works on the jj change, unless
-  `.git-p4son/config.toml` sets `backend = "git"` under `[core]`; check it first. On the jj backend, commit with jj,
-  not git: a git commit leaves the jj change behind. `sync` there rebases your changes onto the sync bookmark and
-  returns you, so don't `git rebase` after it; resolve any conflicts it lists with jj. On the git backend, use git
-  as in any other workspace.
-  "The jj working copy is busy" means a jj command is running; try again once it finishes.
+- **In a jj workspace**, "The jj working copy is busy" means a jj command is running; try again once it finishes.
+  "Run jj p4son from inside the workspace; -R is not supported" means `jj -R` named another workspace: `cd` into it
+  instead. See "jj workspaces" for the rest.
 - **Something else fails.** `git p4son -v <command>` prints every git and p4 command it runs and their output, the
   fastest way to see why.

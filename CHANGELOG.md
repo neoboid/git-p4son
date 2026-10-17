@@ -22,7 +22,8 @@
   change after rewrites and bookmark renames; a change without a bookmark names its alias after its change ID.
   `review` and `update --per-commit` run on each commit of the change's stack and put the working change's files
   back after, so jj sees no change. `init` offers to colocate jj and to add a `jj p4son` alias to jj's user
-  config. git-p4son holds jj's working-copy lock while it runs. `core.backend` and the global `--backend` flag
+  config; `jj -R` naming another workspace is refused. The Claude Code skill tells agents how to work in a jj
+  workspace. git-p4son holds jj's working-copy lock while it runs. `core.backend` and the global `--backend` flag
   choose git or jj; `--backend git` uses the git workflow in a jj workspace. Hooks are told the backend in
   `GIT_P4SON_BACKEND`
 - `new` and `update` keep the working files as they are around Perforce reverts in git workspaces too, instead of

@@ -241,6 +241,14 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
+    def test_jj_r_naming_another_workspace_is_refused(self, mock_sync, _ws):
+        with tempfile.TemporaryDirectory() as other, \
+                mock.patch.dict(os.environ, {'JJ_WORKSPACE_ROOT': other}), \
+                self.assertRaisesRegex(CommandError, '-R is not supported'):
+            run_command(create_parser().parse_args(['sync']))
+        mock_sync.assert_not_called()
+
+    @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_dry_run_ends_with_one_final_line(self, _sync, _ws):
         with captured_output() as out:
             run_command(create_parser().parse_args(['sync', '-n']))

@@ -4,7 +4,8 @@ import argparse
 import shlex
 from .changelist_store import check_alias_usable
 from .log import log
-from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
+from .per_commit import SWARM_SHELF_DELAY
+from .rebase_todo import rebase_per_commit
 
 
 def _step_commands(alias: str, force: bool, no_commit_list: bool,

@@ -10,6 +10,10 @@
   they are around Perforce reverts. `sync` moves its bookmark to each sync commit; `--bookmark` picks one when the
   parent has several. git-p4son holds jj's working-copy lock while it runs. The global `--ignore-jj` flag uses the
   git workflow instead, which `review` and `update --per-commit` need
+- `update --per-commit` no longer runs `git rebase -i`. It checks out each commit since the base branch in turn,
+  updates the changelist on it, and returns to where you started, also when a step fails; the error names the step
+  and commit, and gives the command that resumes after the last commit that worked. A relative base like `HEAD~2`
+  is resolved once, so it means the same commit for every step. `--dry-run` prints one line per commit
 
 ## 0.6.0
 

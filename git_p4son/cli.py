@@ -329,8 +329,8 @@ Examples:
         '--per-commit',
         action='store_true',
         help='Update the changelist once per commit since the base branch, '
-             'oldest first, through an interactive rebase. With --shelve each '
-             'commit gets a shelf of its own'
+             'oldest first, with each commit checked out in turn. With --shelve '
+             'each commit gets a shelf of its own'
     )
     _add_sleep(update_parser)
 
@@ -611,8 +611,8 @@ def run_command(args: argparse.Namespace) -> int:
     ignore_jj = args.ignore_jj or args.command == '_sequence-editor'
     if (not ignore_jj and jj.is_workspace(args.workspace_dir)
             and (args.command == 'review' or getattr(args, 'per_commit', False))):
-        raise CommandError('review and update --per-commit rebase with git, which a jj workspace does not '
-                           'support. Put --ignore-jj before the command to run it with git.')
+        raise CommandError('review and update --per-commit check out each commit with git, which a jj workspace '
+                           'does not support yet. Put --ignore-jj before the command to run it with git.')
     snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
     with (jj.operation(args.workspace_dir, ignore=ignore_jj, snapshot=snapshot) as jj_workspace,
           open_backend(args.workspace_dir) as backend):

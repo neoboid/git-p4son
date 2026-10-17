@@ -234,11 +234,22 @@ def get_commit_lines_since(base_branch: str, workspace_dir: str,
     return res.stdout
 
 
+def get_commits_since(base: str, workspace_dir: str,
+                      revision: str = 'HEAD') -> list[tuple[str, str]]:
+    """Return (sha, subject) for the non-merge commits since base, oldest first."""
+    # Not --oneline: log.decorate config would prepend "(HEAD -> branch)" to subjects.
+    res = run(['git', 'log', '--format=%H %s', '--no-decorate',
+               '--reverse', '--no-merges', f'{base}..{revision}'],
+              cwd=workspace_dir)
+    return [(sha, subject) for sha, _, subject
+            in (line.partition(' ') for line in res.stdout)]
+
+
 def get_commit_subjects_since(base_branch: str, workspace_dir: str,
                               revision: str = 'HEAD') -> list[str]:
-    """Return the subjects of the non-merge commits since base_branch, oldest first."""
-    return [line.split(' ', 1)[-1]
-            for line in get_commit_lines_since(base_branch, workspace_dir, revision)]
+    """Return the subjects of the non-merge commits since base_branch, oldest first, or a short SHA for none."""
+    return [subject or sha[:7]
+            for sha, subject in get_commits_since(base_branch, workspace_dir, revision)]
 
 
 # --- tracking ---
@@ -317,6 +328,15 @@ def get_blob_oids(items: list[tuple[str, str]],
 def get_head_commit(workspace_dir: str) -> str:
     """Return the SHA of HEAD."""
     result = run(['git', 'rev-parse', 'HEAD'], cwd=workspace_dir)
+    return result.stdout[0].strip()
+
+
+def resolve_commit(revision: str, workspace_dir: str) -> str:
+    """Return the SHA of the commit revision names; raise CommandError if it names none."""
+    result = run(['git', 'rev-parse', '--verify', '--quiet', f'{revision}^{{commit}}'],
+                 cwd=workspace_dir, fail_on_returncode=False)
+    if result.returncode != 0 or not result.stdout:
+        raise CommandError(f'"{revision}" is not a commit')
     return result.stdout[0].strip()
 
 

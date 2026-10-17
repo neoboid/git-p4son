@@ -1,15 +1,18 @@
 """Tests for git_p4son.update module."""
 
+import shlex
 import unittest
 
 from git_p4son.changelist_store import save_changelist_alias
+from git_p4son.common import CommandError
 from git_p4son.new import new_command
-from git_p4son.update import _step_command, update_command
+from git_p4son.update import _step, update_command
 from tests.helpers import (
+    captured_output,
     cli_args,
-    fake_rebase,
     GitRepoTestCase,
     P4RepoTestCase,
+    start_patch,
 )
 
 
@@ -135,80 +138,126 @@ class TestUpdateCleanWorkspace(UpdateTestCase):
                          {'a.txt', 'b.txt', 'c.txt'})
 
 
-class TestStepCommand(unittest.TestCase):
-    def test_plain_update(self):
-        self.assertEqual(_step_command('100', _args()), 'update 100')
+class TestSteps(unittest.TestCase):
+    def commands(self, **overrides):
+        return shlex.join(_step('100', _args(**overrides)))
 
-    def test_ignore_jj_carries_to_each_step(self):
-        self.assertEqual(_step_command('100', _args(ignore_jj=True)),
-                         '--ignore-jj update 100')
+    def test_plain_update(self):
+        self.assertEqual(self.commands(), 'update 100')
 
     def test_flags(self):
-        self.assertEqual(
-            _step_command('100', _args(no_commit_list=True, no_edit=True,
-                                       shelve=True)),
-            'update 100 --no-commit-list --no-edit --shelve')
+        self.assertEqual(self.commands(no_commit_list=True, no_edit=True, shelve=True),
+                         'update 100 --no-commit-list --no-edit --shelve')
 
 
-class TestUpdatePerCommit(GitRepoTestCase):
-    """update --per-commit of the two commits on branch feature, which needs no Perforce until the rebase runs."""
-
-    def build_workspace(self):
-        super().build_workspace()
-        self.commit('Base')
-        self.git('switch', '-q', '-c', 'feature')
-        self.commit('First commit')
-        self.commit('Second commit')
+class TestUpdatePerCommit(UpdateTestCase):
+    """update --per-commit of CL 101 over the two commits on branch feature."""
 
     def setUp(self):
         super().setUp()
-        self.rebases = fake_rebase(self)
+        self.sleep = start_patch(self, 'git_p4son.per_commit.time.sleep')
+        self.feature_head = self.git('rev-parse', 'HEAD')
+        self.p4.calls.clear()
 
     def update(self, *argv):
-        return self.run_command(
-            update_command, ['update', '100', '--per-commit', '-b', 'main', *argv])
+        return super().update('--per-commit', *argv)
 
-    def exec_lines(self):
-        return [line for line in self.rebases[0][2].splitlines()
-                if line.startswith('exec')]
-
-    def test_runs_the_rebase_without_an_editor(self):
+    def test_updates_once_per_commit_and_returns(self):
+        self.p4.pending['101'] = ['Feature']
         self.update('--shelve')
-        command, editor, _, message = self.rebases[0]
-        self.assertEqual(command, ['git', 'rebase', '-i', 'main'])
-        self.assertEqual(editor, 'git-p4son _sequence-editor --no-edit')
-        self.assertIsNone(message)
-        self.assertEqual(self.exec_lines(),
-                         ['exec git p4son update 100 --shelve --sleep 5',
-                          'exec git p4son update 100 --shelve'])
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.opened, FEATURE_OPENED)
+        self.assertEqual(len(self.shelves()), 2)
+        self.sleep.assert_called_once_with(5)
+        self.assert_at('feature', self.feature_head)
 
-    def test_sleeps_between_steps_only_when_shelving(self):
+    def test_sleeps_only_when_shelving(self):
         self.update()
-        self.assertEqual(self.exec_lines(), ['exec git p4son update 100'] * 2)
+        self.assertEqual(self.shelves(), [])
+        self.sleep.assert_not_called()
 
-    def test_alias_resolved_to_changelist(self):
-        save_changelist_alias('feat', '200', self.ws, force=False)
+    def test_message_goes_to_the_first_step_only(self):
+        messages = []
+        real = update_command
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=lambda args: messages.append(args.message) or real(args))
+        self.update('-m', 'One\nTwo')
+        self.assertEqual(messages, ['One\nTwo', None])
+        self.assertEqual(self.p4.pending['101'][:2], ['One', 'Two'])
+
+    def test_alias_resolved_once(self):
         self.run_command(update_command, [
                          'update', 'feat', '--per-commit', '-b', 'main'])
-        self.assertEqual(self.exec_lines(), ['exec git p4son update 200'] * 2)
-
-    def test_message_goes_to_the_first_step(self):
-        self.update('-m', 'One\nTwo')
-        self.assertEqual(self.rebases[0][3], 'One\nTwo')
-        self.assertEqual(self.exec_lines(),
-                         ['exec git p4son update 100 -F .git-p4son/reviews/message',
-                          'exec git p4son update 100'])
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
 
     def test_no_commits(self):
-        self.command_fails(update_command,
-                           ['update', '100', '--per-commit', '-b', 'feature'],
+        self.command_fails(update_command, ['update', '101', '--per-commit', '-b', 'feature'],
                            message='No commits found')
-        self.assertEqual(self.rebases, [])
 
-    def test_dry_run_prints_the_todo(self):
+    def test_failure_says_how_to_resume(self):
+        """The hint resumes after the last commit that worked, with the same flags."""
+        calls = []
+        real = update_command
+
+        def fail_second(args):
+            calls.append(args)
+            if len(calls) == 2:
+                raise CommandError('p4 said no')
+            return real(args)
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=fail_second)
+        first_commit = self.git('rev-parse', 'HEAD~1')
+        self.command_fails(update_command, ['update', '101', '--per-commit', '--shelve', '-b', 'main'],
+                           message=r'Step 2 of 2 failed at \w+ Replace b with c: p4 said no\n'
+                                   r'After fixing the problem, resume with: '
+                                   rf'git p4son update 101 --shelve --per-commit -b {first_commit}$')
+
+    def fail_first_step(self, argv, **overrides):
+        """Run update with argv and the first step failing; returns the error message."""
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=CommandError('p4 said no'))
+        with captured_output(), self.assertRaises(CommandError) as raised:
+            update_command(cli_args(argv, workspace_dir=self.ws, **overrides))
+        return str(raised.exception)
+
+    def test_failed_first_step_resumes_with_the_message(self):
+        """The description may not have been saved, so the hint passes the message on."""
+        main = self.git('rev-parse', 'main')
+        error = self.fail_first_step(
+            ['update', '101', '--per-commit', '-b', 'main', '-m', '-WIP title'])
+        self.assertTrue(error.endswith(
+            f"resume with: git p4son update 101 --per-commit '--message=-WIP title' -b {main}"), error)
+
+    def test_failed_first_step_resumes_with_the_message_file(self):
+        main = self.git('rev-parse', 'main')
+        error = self.fail_first_step(['update', '101', '--per-commit', '-b', 'main', '-F', '/tmp/msg.txt'],
+                                     message='From the file')
+        self.assertTrue(error.endswith(
+            f'resume with: git p4son update 101 --per-commit -F /tmp/msg.txt -b {main}'), error)
+
+    def test_dry_run_prints_the_steps(self):
         out = self.update('--dry-run')
-        self.assertEqual(self.rebases, [])
-        self.assertIn('exec git p4son update 100', out)
+        self.assertIn('Change a: git p4son update 101', out)
+        self.assertIn('Replace b with c: git p4son update 101', out)
+        self.assertEqual(self.p4.calls, [])
+
+
+class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
+    """update --per-commit with a relative base, on a feature branch above two sync commits on main."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_sync(110, {'d.txt': 'd1\n'})
+        self.commit_feature()
+        self.run_command(
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit'])
+
+    def test_relative_base_is_resolved_where_the_command_starts(self):
+        """HEAD~2 is main for every step, not the commit two before each step's commit."""
+        self.run_command(update_command, [
+                         'update', 'feat', '--per-commit', '-b', 'HEAD~2'])
+        self.assertEqual(self.p4.pending['111'], FEATURE_DESCRIPTION)
+        self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
 
 if __name__ == '__main__':

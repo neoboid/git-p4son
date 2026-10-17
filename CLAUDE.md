@@ -72,7 +72,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`update.py`** - Updates an existing changelist, named by number or alias: merges the commits into its
   description (`update_changelist`), then calls `edit_and_shelve`. `--per-commit` instead updates once per commit
-  through `rebase_per_commit`. Requires a clean git workspace unless `--no-edit` is given.
+  through `run_per_commit`. Requires a clean git workspace unless `--no-edit` is given.
 
 - **`review.py`** - The `review` command: one Swarm review built commit by commit through `rebase_per_commit`,
   running `new <alias> --review` after the first commit and `update <alias> --shelve` after the others.
@@ -103,8 +103,14 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
   writable files p4 refused or overwrote.
 
+- **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process,
+  with that commit checked out through the backend, for `update --per-commit`. A step's arguments are parsed with
+  the real parser just before it runs, with the base resolved once to a SHA. It returns to where it started, also
+  when a step fails, ends the error with the command that resumes after the last commit that worked, and sleeps
+  `SWARM_SHELF_DELAY` between shelving steps.
+
 - **`rebase_todo.py`** - `rebase_per_commit` runs `git rebase -i` with a generated todo that adds an
-  `exec git p4son ...` line after each pick, for `review` and `update --per-commit`. The todo and any message are
+  `exec git p4son ...` line after each pick, for `review`. The todo and any message are
   saved under `.git-p4son/reviews/`, and `sequence_editor_command` is the hidden `_sequence-editor` command git calls
   to swap in that todo.
 

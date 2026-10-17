@@ -218,6 +218,11 @@ class GitRepoTestCase(WorkspaceTestCase):
         self.git('add', '-A')
         self.git('commit', '-q', '--allow-empty', '-m', message)
 
+    def assert_at(self, branch, commit):
+        """Assert HEAD is commit, on branch, or detached for an empty branch."""
+        self.assertEqual(self.git('branch', '--show-current'), branch)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), commit)
+
 
 class FakeP4:
     """A scripted Perforce server for the p4 commands git-p4son runs.
@@ -507,9 +512,17 @@ class P4RepoTestCase(GitRepoTestCase):
         super().build_workspace()
         self.p4 = FakeP4(self.ws)
         self.p4.install(self)
-        self.p4.submit(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
-        self.p4.sync_to(100)
-        self.commit(format_sync_subject('//myclient', 100))
+        self.commit_sync(100, {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
+
+    def commit_sync(self, change, files):
+        """Submit files as change, sync the workspace to it and commit the sync, as sync would."""
+        self.p4.submit(change, files)
+        self.p4.sync_to(change)
+        self.commit(format_sync_subject('//myclient', change))
+
+    def shelves(self):
+        """The p4 shelve calls made so far."""
+        return [call for call in self.p4.calls if call[0] == 'shelve']
 
     def adopt_workspace(self):
         super().adopt_workspace()

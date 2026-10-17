@@ -17,9 +17,6 @@ REVIEWS_DIR = f'{CONFIG_DIR}/reviews'
 MESSAGE_FILE = f'{REVIEWS_DIR}/message'
 TODO_FILE = f'{REVIEWS_DIR}/todo'
 
-# Seconds to give Swarm to process a shelf before the next step shelves again.
-SWARM_SHELF_DELAY = 5
-
 
 def _find_commits(base_branch: str, workspace_dir: str) -> list[str]:
     """Return the commit lines since base_branch; raise CommandError if there are none."""

@@ -292,8 +292,8 @@ class TestUpdateChangelist(unittest.TestCase):
 class TestUpdateChangelistReviewKeyword(unittest.TestCase):
     """The Swarm review keyword stays at the end of the description."""
 
-    def _update(self, mock_get_spec, mock_subjects, mock_run, spec,
-                subjects, **kwargs):
+    def _update(self, mocks, spec, subjects, **kwargs):
+        mock_get_spec, mock_subjects, mock_run = mocks
         mock_get_spec.return_value = spec
         mock_subjects.return_value = subjects
         mock_run.return_value = make_run_result(
@@ -306,26 +306,26 @@ class TestUpdateChangelistReviewKeyword(unittest.TestCase):
         return spec_input[start:spec_input.index('\n\nFiles:')]
 
     def test_message_without_list_keeps_keyword(self, *mocks):
-        description = self._update(*mocks, SPEC_NO_LIST_WITH_KEYWORD, [],
+        description = self._update(mocks, SPEC_NO_LIST_WITH_KEYWORD, [],
                                    message='New title', commit_list=False)
         self.assertEqual(description, '\tNew title\n\t\n\t#review-678')
 
     def test_list_added_above_keyword(self, *mocks):
-        description = self._update(*mocks, SPEC_NO_LIST_WITH_KEYWORD,
+        description = self._update(mocks, SPEC_NO_LIST_WITH_KEYWORD,
                                    ['First commit'])
         self.assertEqual(description, (
             '\tOld title\n\t\n\tChanges included:\n\t1. First commit\n'
             '\t\n\t#review-678'))
 
     def test_message_with_list_keeps_keyword_once(self, *mocks):
-        description = self._update(*mocks, SPEC_LIST_WITH_KEYWORD,
+        description = self._update(mocks, SPEC_LIST_WITH_KEYWORD,
                                    ['Second commit'], message='New title')
         self.assertEqual(description, (
             '\tNew title\n\t\n\tChanges included:\n\t1. Add validation\n'
             '\t2. Second commit\n\t\n\t#review-678'))
 
     def test_keyword_in_new_message_not_duplicated(self, *mocks):
-        description = self._update(*mocks, SPEC_NO_LIST_WITH_KEYWORD, [],
+        description = self._update(mocks, SPEC_NO_LIST_WITH_KEYWORD, [],
                                    message='New title\n\n#review-678',
                                    commit_list=False)
         self.assertEqual(description.count('#review-678'), 1)
@@ -334,7 +334,7 @@ class TestUpdateChangelistReviewKeyword(unittest.TestCase):
         """Only a keyword on a line of its own is Swarm's."""
         spec = SPEC_NO_LIST_WITH_KEYWORD.replace(
             '\tOld title', '\tSee #review notes')
-        description = self._update(*mocks, spec, [], commit_list=False)
+        description = self._update(mocks, spec, [], commit_list=False)
         self.assertTrue(description.startswith('\tSee #review notes\n'))
 
 

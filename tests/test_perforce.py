@@ -301,7 +301,7 @@ class TestGetClientSpec(unittest.TestCase):
             '... Stream //projects/main',
         ])
         spec = get_client_spec('/ws')
-        self.assertIsNotNone(spec)
+        assert spec is not None
         self.assertEqual(spec.name, 'my-ws')
         self.assertEqual(spec.root, '/home/user/workspace')
         self.assertIs(spec.clobber_mode, ClobberMode.CLOBBER)

@@ -179,8 +179,12 @@ class TestUpdatePerCommit(UpdateTestCase):
     def test_message_goes_to_the_first_step_only(self):
         messages = []
         real = update_command
+
+        def record_message(args):
+            messages.append(args.message)
+            return real(args)
         start_patch(self, 'git_p4son.cli.update_command',
-                    side_effect=lambda args: messages.append(args.message) or real(args))
+                    side_effect=record_message)
         self.update('-m', 'One\nTwo')
         self.assertEqual(messages, ['One\nTwo', None])
         self.assertEqual(self.p4.pending['101'][:2], ['One', 'Two'])

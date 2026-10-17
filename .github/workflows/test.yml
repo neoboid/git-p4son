@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# The jj versions the tests run against: the newest release, and the oldest git-p4son supports.
+env:
+  JJ_LATEST: 0.46.0
+  JJ_FLOOR: 0.41.0
+
 # A newer push to a pull request replaces its run in progress; runs on main all finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,22 +22,38 @@ concurrency:
 
 jobs:
   test:
-    # Ubuntu jobs keep the names required checks know them by, e.g. "test (3.11)".
-    name: test (${{ matrix.python-version }}${{ matrix.os == 'windows-latest' && ', windows' || '' }})
+    # Latest-jj Ubuntu jobs keep the names required checks know them by, e.g. "test (3.11)".
+    name: >-
+      test (${{ matrix.python-version }}${{ matrix.os == 'windows-latest' && ', windows' || '' }}${{
+      matrix.jj == 'floor' && ', jj floor' || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ['3.11', '3.12', '3.13']
+        jj: [latest]
         include:
           - os: windows-latest
             python-version: '3.13'
+            jj: latest
+          - os: ubuntu-latest
+            python-version: '3.11'
+            jj: floor
+    # Without jj the jj tests would be skipped; here they fail instead.
+    env:
+      GIT_P4SON_REQUIRE_JJ: 1
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install jj ${{ matrix.jj == 'floor' && env.JJ_FLOOR || env.JJ_LATEST }}
+        shell: bash
+        run: |
+          python scripts/install-jj.py "${{ matrix.jj == 'floor' && env.JJ_FLOOR || env.JJ_LATEST }}" "$RUNNER_TEMP/jj"
+          echo "$RUNNER_TEMP/jj" >> "$GITHUB_PATH"
+      - run: jj --version
       - run: pip install -e . && pip install pytest pytest-xdist
       - run: python -m pytest tests/ -n auto --maxprocesses 8
 

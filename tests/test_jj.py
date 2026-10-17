@@ -1,7 +1,6 @@
 """Tests for git_p4son.jj and git_p4son.jj_lock modules."""
 
 import os
-import shutil
 import stat
 import subprocess
 import unittest
@@ -15,7 +14,7 @@ from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
 from git_p4son.cli import create_parser, run_command
-from tests.helpers import captured_output, P4RepoTestCase, WorkspaceTestCase
+from tests.helpers import captured_output, P4RepoTestCase, WorkspaceTestCase, requires_jj
 
 
 def isolate_jj(test):
@@ -54,7 +53,7 @@ class TestOperationOutsideJj(WorkspaceTestCase):
             self.assertIsNone(workspace)
 
 
-@unittest.skipUnless(shutil.which('jj'), 'jj is not installed')
+@requires_jj
 class JjRepoTestCase(WorkspaceTestCase):
     """A colocated jj repo: main at "base", feat at "feature" on top, and an empty working change above feat."""
 
@@ -182,7 +181,7 @@ class TestWorkspace(JjRepoTestCase):
                 pass
 
 
-@unittest.skipUnless(shutil.which('jj'), 'jj is not installed')
+@requires_jj
 class JjP4RepoTestCase(P4RepoTestCase):
     """git-p4son commands in a colocated jj repo on top of the synced workspace, whose main jj tracks as a bookmark."""
 

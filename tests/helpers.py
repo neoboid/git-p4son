@@ -79,6 +79,13 @@ def start_patch(test, target, **kwargs):
     return mocked
 
 
+def requires_jj(test_class):
+    """Skip test_class when jj is not installed, unless GIT_P4SON_REQUIRE_JJ is set, as CI sets it, to fail instead."""
+    if shutil.which('jj') or os.environ.get('GIT_P4SON_REQUIRE_JJ'):
+        return test_class
+    return unittest.skip('jj is not installed')(test_class)
+
+
 def init_git_repo(path: str) -> None:
     """Make path a git repository on branch main, with a committer configured and no automatic maintenance."""
     # No background maintenance after commits: it races with copying a built workspace.

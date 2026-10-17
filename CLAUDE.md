@@ -30,7 +30,8 @@ python -m pytest tests/ -n auto --maxprocesses 8
 ```
 
 The tests are isolated in temporary directories, so they run in parallel with `pytest-xdist`; without it, drop the
-`-n` options.
+`-n` options. The jj tests are skipped when `jj` is not on `PATH`, unless `GIT_P4SON_REQUIRE_JJ` is set, as CI sets
+it, to make them fail instead. `scripts/install-jj.py VERSION DEST` downloads jj's official binary, as CI does.
 
 Format code with `autopep8`:
 ```bash
@@ -203,6 +204,15 @@ When bumping the minimum Python version, update all of these locations:
 - `README.md` (install requirements)
 - `CLAUDE.md` (this file, development commands section)
 - `.github/workflows/test.yml` (CI test matrix, which `publish.yml` runs before releasing)
+
+## jj Version
+
+CI runs the tests on the newest jj release and the oldest supported one, pinned as `JJ_LATEST` and `JJ_FLOOR` in
+`.github/workflows/test.yml`. Bump `JJ_LATEST` when jj releases. When raising the minimum jj version, update all of
+these together, with a CHANGELOG note:
+- `git_p4son/jj.py` (`_validate_version`)
+- `.github/workflows/test.yml` (`JJ_FLOOR`)
+- `README.md` (the Jujutsu section)
 
 ## Code Style
 

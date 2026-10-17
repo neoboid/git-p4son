@@ -169,9 +169,9 @@ class Workspace:
                                'Name the alias explicitly, or set a bookmark there.')
         return names[0]
 
-    def resolve_base(self, base: str) -> str:
-        """Resolve the base and reject conflicted changes in the selected range."""
-        if base == 'HEAD~1':
+    def resolve_base(self, base: str | None) -> str:
+        """Resolve the base, None for the tip's parent, and reject conflicted changes in the selected range."""
+        if base is None:
             if len(self.tip.parents) != 1:
                 raise CommandError(
                     'The selected jj change has several parents. Name the base with -b.')

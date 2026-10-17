@@ -93,6 +93,27 @@ class JjRepoTestCase(WorkspaceTestCase):
 class TestJjBackend(JjRepoTestCase):
     """JjBackend over the workspace, whose tip is the feature change with bookmark feat on main."""
 
+    def test_answers_from_the_tip(self):
+        with self.operation() as workspace:
+            backend = JjBackend(workspace)
+            self.assertEqual(backend.resolve_base(
+                None), self.commit_of('main'))
+            self.assertEqual(backend.suggested_alias(), 'feat')
+            self.assertEqual(backend.subject(), 'feature')
+            self.assertEqual(
+                (backend.words.tool, backend.words.branch), ('jj', 'bookmark'))
+
+    def test_explicit_head_parent_base_is_the_tip_parent(self):
+        """-b HEAD~1, the documented default, means the tip's parent here too, as it did before -b defaulted to None."""
+        with self.operation() as workspace:
+            self.assertEqual(JjBackend(workspace).resolve_base(
+                'HEAD~1'), self.commit_of('main'))
+
+    def test_no_subject_without_a_description(self):
+        self.jj('describe', '-m', '', '-r', 'feat')
+        with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'no description'):
+            JjBackend(workspace).subject()
+
     def test_checkouts_are_refused(self):
         with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'not supported'):
             JjBackend(workspace).checkouts()
@@ -121,7 +142,7 @@ class TestWorkspace(JjRepoTestCase):
     def test_default_base_is_the_tip_parent(self):
         with self.operation() as workspace:
             self.assertEqual(workspace.resolve_base(
-                'HEAD~1'), self.commit_of('main'))
+                None), self.commit_of('main'))
 
     def test_named_base_is_resolved_to_its_commit(self):
         with self.operation() as workspace:

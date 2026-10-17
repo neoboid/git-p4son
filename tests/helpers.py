@@ -66,6 +66,8 @@ def cli_args(argv, **overrides):
         args.invocation_dir = args.workspace_dir
     if args.backend is None:
         args.backend = GitBackend(args.workspace_dir)
+    if hasattr(args, 'base_branch'):
+        args.base_branch = args.backend.resolve_base(args.base_branch)
     return args
 
 

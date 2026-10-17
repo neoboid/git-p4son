@@ -133,10 +133,10 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
   command runs, yielding a `Workspace` (or None outside jj, or with `--ignore-jj`) that `run_command` stores as
   `args.jj_workspace`. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
-  when the working change is empty and new), its bookmark and the default base, and `change_revision` gives the
-  commit the git functions read the change from. git still reads objects, diffs and makes the sync commits; `sync`
-  moves the selected bookmark itself. With a revision, `lib.py` keeps the working files around Perforce reverts
-  instead of restoring git's index version.
+  when the working change is empty and new), its bookmark and the default base; commands reach it through
+  `JjBackend`. git still reads objects, diffs and makes the sync commits; `sync` moves the selected bookmark
+  itself. With a revision, `lib.py` keeps the working files around Perforce reverts instead of restoring git's
+  index version.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
@@ -145,10 +145,17 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 ### Shared modules
 
 - **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
-  interface. `open_backend` yields it in `run_command` as `args.backend`; so far always a `GitBackend`.
+  interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
+  the alias the branch or bookmark suggests, the default message, the clean check, `-b` completions, `checkouts`
+  for the per-commit loop, and the `Words` its messages use. `open_backend` yields it in `run_command` as
+  `args.backend`, a `JjBackend` when `jj.operation` yielded a workspace and a `GitBackend` otherwise;
+  `completion_backend` gives one without jj's lock.
 
-- **`git_backend.py`** - `GitBackend`, the git adapter: `checkouts` detaches at each commit and returns to the
-  starting branch.
+- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD` and the index, `HEAD~1` as the default base, the
+  current branch, and `checkouts` detaching at each commit and returning to the starting branch.
+
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its `checkouts` raises, as
+  `run_command` refuses the per-commit commands in a jj workspace.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),

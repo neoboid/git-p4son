@@ -2,7 +2,7 @@
 
 import unittest
 
-from git_p4son.backend import open_backend
+from git_p4son.backend import completion_backend, open_backend
 from git_p4son.common import CommandError
 from git_p4son.git_backend import GitBackend
 from tests.helpers import captured_output, GitRepoTestCase
@@ -53,6 +53,9 @@ class TestGitBackend(GitRepoTestCase):
             self.backend.check_clean()
         self.assertIn('stray.txt', out.getvalue())
 
+    def test_base_candidates_ask_the_shell_for_branches(self):
+        self.assertEqual(self.backend.base_candidates(), [('__branch__', '')])
+
     def test_words(self):
         self.assertEqual(
             (self.backend.words.tool, self.backend.words.branch), ('git', 'branch'))
@@ -68,6 +71,8 @@ class TestChoosingTheBackend(GitRepoTestCase):
     def test_git_without_a_jj_workspace(self):
         with open_backend(self.ws, None) as backend:
             self.assertIsInstance(backend, GitBackend)
+        self.assertIsInstance(completion_backend(
+            self.ws, ignore_jj=False), GitBackend)
 
 
 if __name__ == '__main__':

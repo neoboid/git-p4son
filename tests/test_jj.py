@@ -8,7 +8,8 @@ from unittest import mock
 
 from git_p4son import jj
 from git_p4son.common import CommandError
-from git_p4son.backend import open_backend
+from git_p4son.backend import completion_backend, open_backend
+from git_p4son.git_backend import GitBackend
 from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
@@ -100,6 +101,8 @@ class TestJjBackend(JjRepoTestCase):
                 None), self.commit_of('main'))
             self.assertEqual(backend.suggested_alias(), 'feat')
             self.assertEqual(backend.subject(), 'feature')
+            self.assertEqual(sorted(backend.base_candidates()),
+                             [('feat', 'jj bookmark'), ('main', 'jj bookmark')])
             self.assertEqual(
                 (backend.words.tool, backend.words.branch), ('jj', 'bookmark'))
 
@@ -121,6 +124,10 @@ class TestJjBackend(JjRepoTestCase):
     def test_chosen_for_a_jj_workspace(self):
         with self.operation() as workspace, open_backend(self.ws, workspace) as backend:
             self.assertIsInstance(backend, JjBackend)
+        self.assertIsInstance(completion_backend(
+            self.ws, ignore_jj=False), JjBackend)
+        self.assertIsInstance(completion_backend(
+            self.ws, ignore_jj=True), GitBackend)
 
 
 class TestWorkspace(JjRepoTestCase):

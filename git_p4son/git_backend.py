@@ -45,6 +45,10 @@ class GitBackend:
         """Raise CommandError, after listing them, if the workspace has uncommitted changes."""
         check_git_workspace_clean(self.workspace_dir)
 
+    def base_candidates(self) -> list[tuple[str, str]]:
+        """The __branch__ marker, which the completion scripts expand to git's branches."""
+        return [('__branch__', '')]
+
     @contextlib.contextmanager
     def checkouts(self) -> Iterator[Callable[[str], None]]:
         """Yield a function that checks out a commit detached, returning to the starting branch or commit on exit.

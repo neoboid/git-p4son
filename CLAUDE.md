@@ -41,7 +41,8 @@ autopep8 -i -r git_p4son/ tests/
 **Important:** Before committing, always run `autopep8 -i -r git_p4son/ tests/` to format all changed code. The
 project must stay PEP 8 compliant at all times.
 
-Type-check `git_p4son/` with mypy in strict mode, once for Linux and once for Windows:
+Type-check `git_p4son/` and `tests/` with mypy in strict mode, once for Linux and once for Windows. Test functions may
+leave out annotations, but their bodies are still checked:
 ```bash
 scripts/typecheck.sh
 ```

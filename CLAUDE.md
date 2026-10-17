@@ -134,6 +134,12 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 ### Shared modules
 
+- **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
+  interface. `open_backend` yields it in `run_command` as `args.backend`; so far always a `GitBackend`.
+
+- **`git_backend.py`** - `GitBackend`, the git adapter: `checkouts` detaches at each commit and returns to the
+  starting branch.
+
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
   `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. On a dry run of `new` the

@@ -227,6 +227,14 @@ def commit(message: str, workspace_dir: str, allow_empty: bool = False) -> None:
     run(command, cwd=workspace_dir)
 
 
+def commit_all(message: str, workspace_dir: str, eol_conversion: str | None = None) -> int:
+    """Stage everything as add_all_files does and commit it, even if nothing changed; returns how many files."""
+    add_all_files(workspace_dir, eol_conversion)
+    staged = get_staged_files(workspace_dir)
+    commit(message, workspace_dir, allow_empty=True)
+    return len(staged)
+
+
 # --- diff ---
 
 @dataclass

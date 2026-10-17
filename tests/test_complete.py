@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.cli import create_parser
+from git_p4son.common import CommandError
 from git_p4son.complete import (
     _complete,
     _filter,
@@ -151,6 +152,23 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['--'], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('--version', names)
+
+    def test_backend_flag_values(self, _ws, _aliases):
+        result = _complete(self.parser, ['--backend', ''], workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['git', 'jj'])
+
+    @mock.patch('git_p4son.complete.completion_backend', side_effect=CommandError('no jj'))
+    def test_typed_backend_is_followed(self, mock_backend, _ws, _aliases):
+        for words, choice in ((['new', 'br'], None),
+                              (['--backend', 'git', 'new', 'br'], 'git'),
+                              (['--backend=jj', 'new', 'br'], 'jj'),
+                              (['--backend', 'jj', '--backend',
+                               'git', 'new', 'br'], 'git'),
+                              (['--backend', 'jjj', 'new', 'br'], None),
+                              (['--backend=auto', 'new', 'br'], None)):
+            with self.subTest(words=words):
+                _complete(self.parser, words, workspace_dir='/ws')
+                mock_backend.assert_called_with('/ws', choice)
 
     # -- sync command --
 

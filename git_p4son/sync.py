@@ -4,14 +4,12 @@ import argparse
 import tempfile
 from dataclasses import dataclass
 
+from .backend import Backend
 from .common import CommandError
 from .git import (
-    add_all_files, commit, get_head_commit, get_staged_files, get_tracked_files,
-    format_sync_subject, git_last_synced_changelist,
+    get_head_commit, get_tracked_files, format_sync_subject, git_last_synced_changelist,
 )
-from . import jj
 from .hooks import run_hooks
-from .lib import check_git_workspace_clean
 from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
@@ -94,23 +92,21 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
         log.success('Clean')
 
 
-def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str) -> None:
+def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str, backend: str) -> None:
     """Run all pre-sync hooks; raise CommandError if any of them failed."""
-    results = run_hooks('pre-sync', workspace_dir, invocation_dir)
+    results = run_hooks('pre-sync', workspace_dir, invocation_dir, backend)
     if any(result.returncode != 0 for result in results):
         raise CommandError('Aborting sync because a pre-sync hook failed. '
                            'See its output above.')
 
 
 def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   ignore_blocking_processes: bool, eol_conversion: str | None = None) -> None:
-    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails.
-
-    eol_conversion is jj's working-copy.eol-conversion in a jj workspace, for the git clean check."""
+                   ignore_blocking_processes: bool, backend: Backend) -> None:
+    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails."""
     check_no_blocking_processes(workspace_dir, ignore_blocking_processes)
-    check_git_workspace_clean(workspace_dir, eol_conversion)
+    backend.check_sync_clean()
     _check_p4_workspace_clean(depot_root, workspace_dir)
-    _run_pre_sync_hooks(workspace_dir, invocation_dir)
+    _run_pre_sync_hooks(workspace_dir, invocation_dir, backend.words.tool)
 
 
 @dataclass(frozen=True)
@@ -353,13 +349,9 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
                       else ClobberMode.NOCLOBBER))
 
 
-def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str,
-              jj_workspace: jj.Workspace | None) -> None:
-    """Sync and commit each target, then merge local changes back and run the post-sync hooks.
-
-    In a jj workspace, the sync bookmark moves to each sync commit."""
-    if jj_workspace is not None:
-        jj_workspace.detach_for_sync()
+def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend: Backend) -> None:
+    """Sync and commit each target, then merge local changes back and run the post-sync hooks."""
+    backend.start_sync()
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
@@ -378,14 +370,9 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str,
             preps.append(_sync_pass(changelist, changelist_label, ctx))
 
             log.heading(f'Committing git changes for CL {changelist}')
-            add_all_files(workspace_dir, jj_workspace.eol_conversion
-                          if jj_workspace is not None else None)
-            staged = get_staged_files(workspace_dir)
-            commit(format_sync_subject(plan.depot_root, changelist),
-                   workspace_dir, allow_empty=True)
-            if jj_workspace is not None:
-                jj_workspace.advance_sync()
-            log.success(f'Committed {plural(len(staged), "file")}')
+            staged = backend.commit_sync(
+                format_sync_subject(plan.depot_root, changelist))
+            log.success(f'Committed {plural(staged, "file")}')
 
         # Dedup files that showed up in several sync passes.
         by_path = {cf.filepath: cf for p in preps for cf in p.changed}
@@ -397,12 +384,14 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str,
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
 
-        run_hooks('post-sync', workspace_dir, invocation_dir)
+        run_hooks('post-sync', workspace_dir,
+                  invocation_dir, backend.words.tool)
 
 
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
+    args.backend.prepare_sync(args.bookmark)
 
     plan = _plan_sync(args)
     if plan is None:
@@ -410,10 +399,8 @@ def sync_command(args: argparse.Namespace) -> int:
 
     # A dry run skips the checks and hooks, which run before the costly split queries.
     if not args.dry_run:
-        jj_workspace = args.jj_workspace
         sync_preflight(plan.depot_root, workspace_dir, args.invocation_dir,
-                       args.ignore_blocking_processes,
-                       jj_workspace.eol_conversion if jj_workspace is not None else None)
+                       args.ignore_blocking_processes, args.backend)
 
     # _should_split only splits after a sync, so last_synced is set.
     if plan.split and plan.last_synced is not None:
@@ -432,5 +419,5 @@ def sync_command(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
 
-    _run_sync(plan, workspace_dir, args.invocation_dir, args.jj_workspace)
+    _run_sync(plan, workspace_dir, args.invocation_dir, args.backend)
     return 0

@@ -2,8 +2,9 @@
 
 import unittest
 
-from git_p4son.backend import completion_backend, open_backend
+from git_p4son.backend import completion_backend, open_backend, selected_backend
 from git_p4son.common import CommandError
+from git_p4son.config import ConfigError
 from git_p4son.git_backend import GitBackend
 from tests.helpers import captured_output, GitRepoTestCase
 
@@ -71,8 +72,50 @@ class TestChoosingTheBackend(GitRepoTestCase):
     def test_git_without_a_jj_workspace(self):
         with open_backend(self.ws, None) as backend:
             self.assertIsInstance(backend, GitBackend)
-        self.assertIsInstance(completion_backend(
-            self.ws, ignore_jj=False), GitBackend)
+        self.assertIsInstance(completion_backend(self.ws, None), GitBackend)
+
+    def test_setting_and_flag(self):
+        self.assertEqual(selected_backend(self.ws, None), 'git')
+        self.write_config('[core]\nbackend = "git"\n')
+        self.assertEqual(selected_backend(self.ws, None), 'git')
+        self.assertEqual(selected_backend(self.ws, 'git'), 'git')
+
+    def test_jj_without_a_jj_workspace_is_refused(self):
+        with self.assertRaisesRegex(CommandError, 'no .jj directory'):
+            selected_backend(self.ws, 'jj')
+        self.write_config('[core]\nbackend = "jj"\n')
+        with self.assertRaisesRegex(CommandError, 'no .jj directory'):
+            selected_backend(self.ws, None)
+
+    def test_unknown_setting_is_refused(self):
+        self.write_config('[core]\nbackend = "hg"\n')
+        with self.assertRaisesRegex(ConfigError, 'one of auto, git, jj'):
+            selected_backend(self.ws, None)
+
+    def test_per_commit_commands_open_git(self):
+        with open_backend(self.ws, None, checkouts=True) as backend:
+            self.assertIsInstance(backend, GitBackend)
+
+
+class TestGitBackendSync(GitRepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('base')
+
+    def test_commit_sync_commits_everything_on_the_branch(self):
+        self.write_file('a.txt', 'a\n')
+        backend = GitBackend(self.ws)
+        backend.prepare_sync(None)
+        backend.start_sync()
+        with captured_output():
+            self.assertEqual(backend.commit_sync('sync subject'), 1)
+        self.assertEqual(
+            self.git('log', '-1', '--format=%s', 'main'), 'sync subject')
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_bookmark_is_refused(self):
+        with self.assertRaisesRegex(CommandError, '--bookmark names a jj bookmark'):
+            GitBackend(self.ws).prepare_sync('main')
 
 
 if __name__ == '__main__':

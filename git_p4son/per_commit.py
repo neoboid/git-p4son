@@ -27,7 +27,6 @@ def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
     args = create_parser().parse_args(argv)
     args.workspace_dir = workspace_dir
     args.invocation_dir = workspace_dir
-    args.jj_workspace = None
     args.backend = backend
     return args
 

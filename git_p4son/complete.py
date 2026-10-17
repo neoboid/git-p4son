@@ -3,7 +3,7 @@
 import argparse
 from typing import TypeAlias
 
-from .backend import Backend, completion_backend
+from .backend import BACKENDS, Backend, completion_backend
 from .changelist_store import list_changelist_aliases
 from .common import CommandError
 from .git import get_workspace_dir
@@ -93,34 +93,36 @@ def _filter(candidates: Candidates, prefix: str) -> Candidates:
             if name.startswith(prefix)]
 
 
-def _backend(workspace_dir: str | None, ignore_jj: bool) -> Backend | None:
+def _backend(workspace_dir: str | None, backend_choice: str | None) -> Backend | None:
     """The backend for workspace_dir, or None when there is none or jj cannot be read."""
     if not workspace_dir:
         return None
     try:
-        return completion_backend(workspace_dir, ignore_jj)
+        return completion_backend(workspace_dir, backend_choice)
     except (CommandError, OSError):
         return None
 
 
 def _complete_flag_value(flag: str, workspace_dir: str | None = None,
-                         ignore_jj: bool = False) -> Candidates:
+                         backend_choice: str | None = None) -> Candidates:
     """Complete the value for a flag."""
+    if flag == '--backend':
+        return [(name, f'Use the {name} backend') for name in BACKENDS]
     if flag in ('-b', '--base-branch'):
         if not workspace_dir:
             return [('__branch__', '')]
-        backend = _backend(workspace_dir, ignore_jj)
+        backend = _backend(workspace_dir, backend_choice)
         return backend.base_candidates() if backend else []
     return []
 
 
 def _get_branch_candidates(prefix: str, workspace_dir: str | None,
-                           ignore_jj: bool = False) -> Candidates:
+                           backend_choice: str | None = None) -> Candidates:
     """Get 'branch' completion candidates based on prefix."""
     keyword = 'branch'
     if not keyword.startswith(prefix):
         return []
-    backend = _backend(workspace_dir, ignore_jj)
+    backend = _backend(workspace_dir, backend_choice)
     if backend is None:
         return []
     try:
@@ -137,7 +139,7 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
                          prefix: str, workspace_dir: str | None,
                          command_parser: argparse.ArgumentParser,
                          subcommand_parser: argparse.ArgumentParser | None,
-                         actions: 'Subparsers | None', ignore_jj: bool = False) -> Candidates:
+                         actions: 'Subparsers | None', backend_choice: str | None = None) -> Candidates:
     """Complete a positional argument."""
     # Arguments added with the branch keyword name themselves in branch_keyword_arg.
     target = subcommand_parser or command_parser
@@ -146,7 +148,7 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
                    and not isinstance(a, argparse._SubParsersAction)]
     if dest and positional_count < len(positionals) \
             and positionals[positional_count].dest == dest:
-        return (_get_branch_candidates(prefix, workspace_dir, ignore_jj)
+        return (_get_branch_candidates(prefix, workspace_dir, backend_choice)
                 + _filter(_get_alias_names(workspace_dir), prefix))
 
     if command == 'sync':
@@ -192,11 +194,19 @@ def _complete(parser: argparse.ArgumentParser, words: list[str],
     subcommand_parser: argparse.ArgumentParser | None = None
     positional_count = 0
     expecting_flag_name: str | None = None
+    backend_choice: str | None = None
     current_parser = parser
 
     for word in preceding:
         if expecting_flag_name is not None:
+            if expecting_flag_name == '--backend' and word in BACKENDS:
+                backend_choice = word
             expecting_flag_name = None
+            continue
+
+        if word.startswith('--backend='):
+            value = word.removeprefix('--backend=')
+            backend_choice = value if value in BACKENDS else backend_choice
             continue
 
         if word.startswith('-'):
@@ -222,8 +232,7 @@ def _complete(parser: argparse.ArgumentParser, words: list[str],
         positional_count += 1
 
     if expecting_flag_name is not None:
-        return _complete_flag_value(expecting_flag_name, workspace_dir,
-                                    '--ignore-jj' in preceding)
+        return _complete_flag_value(expecting_flag_name, workspace_dir, backend_choice)
 
     if command is None or command_parser is None:
         if prefix.startswith('-'):
@@ -240,7 +249,7 @@ def _complete(parser: argparse.ArgumentParser, words: list[str],
 
     return _complete_positional(command, subcommand, positional_count,
                                 prefix, workspace_dir, command_parser,
-                                subcommand_parser, actions, '--ignore-jj' in preceding)
+                                subcommand_parser, actions, backend_choice)
 
 
 def run_complete(words: list[str]) -> int:

@@ -9,6 +9,7 @@ from unittest import mock
 
 from git_p4son.common import CommandError, RunError
 from git_p4son.git import format_sync_subject
+from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.sync import (
     build_sync_targets,
@@ -20,6 +21,7 @@ from git_p4son.sync import (
     sync_preflight,
 )
 from tests.helpers import (
+    on_jj,
     captured_output,
     cli_args,
     make_changes,
@@ -474,6 +476,16 @@ class TestSyncHooks(SyncTestCase):
         self.sync('101', '102')
         self.assertEqual(read_log(), ['pre', 'post'])
 
+    def test_hooks_are_told_the_backend(self):
+        path, read_log = self.hook_log()
+        code = f'import os\nopen({path!r}, "a").write(os.environ["GIT_P4SON_BACKEND"] + " ")\n'
+        self.hook('pre-sync', code)
+        self.hook('post-sync', code)
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('101')
+        backend = self.backend_name or 'git'
+        self.assertEqual(read_log(), [backend, backend])
+
     def test_failing_pre_sync_hook_aborts_before_syncing(self):
         self.hook('pre-sync', 'raise SystemExit(1)\n')
         self.p4.submit(101, {'a.txt': 'a2\n'})
@@ -586,7 +598,8 @@ class TestSyncPreflight(unittest.TestCase):
             self, mock_blocking, mock_dirty, mock_opened, mock_run_hooks):
         with self.assertRaisesRegex(CommandError, 'blocked'):
             sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
+                backend=GitBackend('/ws'))
         mock_blocking.assert_called_once_with('/ws', False)
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
@@ -599,7 +612,7 @@ class TestSyncPreflight(unittest.TestCase):
     def test_ignore_blocking_processes_is_passed_on(
             self, mock_blocking, _dirty, _opened, _hooks):
         sync_preflight('//ws', '/ws', '/invoked',
-                       ignore_blocking_processes=True)
+                       ignore_blocking_processes=True, backend=GitBackend('/ws'))
         mock_blocking.assert_called_once_with('/ws', True)
 
     @mock.patch('git_p4son.sync.run_hooks', return_value=[])
@@ -608,8 +621,10 @@ class TestSyncPreflight(unittest.TestCase):
     def test_clean_workspaces_run_the_hooks(
             self, _dirty, _opened, mock_run_hooks):
         sync_preflight(
-            '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
-        mock_run_hooks.assert_called_once_with('pre-sync', '/ws', '/invoked')
+            '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
+            backend=GitBackend('/ws'))
+        mock_run_hooks.assert_called_once_with(
+            'pre-sync', '/ws', '/invoked', 'git')
 
     @mock.patch('git_p4son.sync.run_hooks')
     @mock.patch('git_p4son.sync.p4_get_opened_files')
@@ -619,7 +634,8 @@ class TestSyncPreflight(unittest.TestCase):
             self, _dirty, mock_opened, mock_run_hooks):
         with self.assertRaisesRegex(CommandError, 'not clean'):
             sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
+                backend=GitBackend('/ws'))
         mock_opened.assert_not_called()
         mock_run_hooks.assert_not_called()
 
@@ -632,7 +648,8 @@ class TestSyncPreflight(unittest.TestCase):
             self, _dirty, _opened, _tracked, mock_run_hooks):
         with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):
             sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
+                backend=GitBackend('/ws'))
         mock_run_hooks.assert_not_called()
 
     @mock.patch('git_p4son.sync.run_hooks',
@@ -642,8 +659,18 @@ class TestSyncPreflight(unittest.TestCase):
     def test_failing_hook_fails_the_gate(self, _dirty, _opened, _hooks):
         with self.assertRaisesRegex(CommandError, 'pre-sync hook failed'):
             sync_preflight(
-                '//ws', '/ws', '/invoked', ignore_blocking_processes=False)
+                '//ws', '/ws', '/invoked', ignore_blocking_processes=False,
+                backend=GitBackend('/ws'))
 
+
+_STRAY_FILE = 'jj makes a stray file part of the working change, which sync refuses for another reason'
+TestSyncOnJj = on_jj(
+    TestSync, skip={'test_dirty_git_workspace_fails_before_syncing': _STRAY_FILE})
+TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
+TestSyncHooksOnJj = on_jj(TestSyncHooks)
+TestSyncDryRunOnJj = on_jj(TestSyncDryRun, skip={
+                           'test_prints_the_sequence_and_syncs_nothing': _STRAY_FILE})
+TestSyncSplittingOnJj = on_jj(TestSyncSplitting)
 
 if __name__ == '__main__':
     unittest.main()

@@ -8,6 +8,7 @@ from git_p4son.common import CommandError
 from git_p4son.new import new_command
 from git_p4son.update import _step, update_command
 from tests.helpers import (
+    on_jj,
     captured_output,
     cli_args,
     GitRepoTestCase,
@@ -263,6 +264,8 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
         self.assertEqual(self.p4.pending['111'], FEATURE_DESCRIPTION)
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
+
+TestUpdateOnJj = on_jj(TestUpdate)
 
 if __name__ == '__main__':
     unittest.main()

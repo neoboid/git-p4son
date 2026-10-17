@@ -411,7 +411,8 @@ def sync_command(args: argparse.Namespace) -> int:
         sync_preflight(plan.depot_root, workspace_dir, args.invocation_dir,
                        args.ignore_blocking_processes)
 
-    if plan.split:
+    # _should_split only splits after a sync, so last_synced is set.
+    if plan.split and plan.last_synced is not None:
         log.heading('Finding split users')
         users = resolve_split_users(plan.split_users, workspace_dir)
         log.success(', '.join(users))

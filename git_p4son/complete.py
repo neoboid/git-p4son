@@ -108,7 +108,7 @@ def _complete_flag_value(flag: str, workspace_dir: str | None = None,
     """Complete the value for a flag."""
     if flag == '--backend':
         return [(name, f'Use the {name} backend') for name in BACKENDS]
-    if flag in ('-b', '--base-branch'):
+    if flag in ('-b', '--base-branch', '--branch'):
         if not workspace_dir:
             return [('__branch__', '')]
         backend = _backend(workspace_dir, backend_choice)

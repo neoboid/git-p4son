@@ -12,6 +12,7 @@ from git_p4son.init import (
     _configure_claude_skill,
     _configure_depot_root,
     _configure_split_users,
+    _configure_sync_branch,
     _configure_writable_mode,
     init_command,
     _setup_gitignore,
@@ -19,7 +20,8 @@ from git_p4son.init import (
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-from tests.helpers import captured_output, start_patch, WorkspaceTestCase
+from git_p4son.git_backend import get_sync_branch_setting
+from tests.helpers import captured_output, GitRepoTestCase, start_patch, WorkspaceTestCase
 
 
 class TestSetupGitignore(unittest.TestCase):
@@ -234,6 +236,61 @@ class TestConfigureSplitUsers(WorkspaceTestCase):
         self.assertEqual(load_config(self.ws), {})
 
 
+class TestConfigureSyncBranch(GitRepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('base')
+
+    def configure(self, answers=(), new_repo=False):
+        with mock.patch('builtins.input', side_effect=list(answers) or EOFError), captured_output() as out:
+            _configure_sync_branch(self.ws, new_repo)
+        return out.getvalue()
+
+    def test_a_new_repo_records_the_branch_head_is_on(self):
+        self.git('branch', '-m', 'main', 'trunk')
+        out = self.configure(new_repo=True)
+        self.assertEqual(get_sync_branch_setting(self.ws), 'trunk')
+        self.assertIn('[sync] branch in .git-p4son/config.toml', out)
+
+    def test_an_existing_repo_prefers_main_to_head_s_branch(self):
+        self.git('switch', '-q', '-c', 'feature')
+        self.configure()
+        self.assertEqual(get_sync_branch_setting(self.ws), 'main')
+
+    def test_an_existing_repo_without_main_records_head_s_branch(self):
+        self.git('branch', '-m', 'main', 'trunk')
+        self.configure()
+        self.assertEqual(get_sync_branch_setting(self.ws), 'trunk')
+
+    def test_keeps_an_existing_setting(self):
+        self.write_config('[sync]\nbranch = "p4"\n')
+        self.configure()
+        self.assertEqual(get_sync_branch_setting(self.ws), 'p4')
+
+    def test_detached_head_falls_back_to_main(self):
+        self.git('switch', '-q', '--detach')
+        self.configure()
+        self.assertEqual(get_sync_branch_setting(self.ws), 'main')
+
+    def test_detached_head_without_main_asks(self):
+        self.git('branch', 'p4')
+        self.git('branch', 'trunk')
+        self.git('switch', '-q', '--detach')
+        self.git('branch', '-D', 'main')
+        out = self.configure(['5', '2'])
+        self.assertEqual(get_sync_branch_setting(self.ws), 'trunk')
+        self.assertIn('  [1] p4\n  [2] trunk\n', out)
+
+    def test_no_answer_leaves_it_unset(self):
+        self.git('branch', 'p4')
+        self.git('switch', '-q', '--detach')
+        self.git('branch', '-D', 'main')
+        out = self.configure()
+        self.assertIsNone(get_sync_branch_setting(self.ws))
+        self.assertIn(
+            'Set [sync] branch in .git-p4son/config.toml before syncing', out)
+
+
 class TestConfigureClaudeSkill(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -283,6 +340,8 @@ class TestInitCommand(unittest.TestCase):
             self, 'git_p4son.init._configure_split_users')
         self.mock_claude_skill = start_patch(
             self, 'git_p4son.init._configure_claude_skill')
+        self.mock_sync_branch = start_patch(
+            self, 'git_p4son.init._configure_sync_branch')
 
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
@@ -308,6 +367,10 @@ class TestInitCommand(unittest.TestCase):
     def test_configures_split_users(self):
         self._next_steps(has_commits=False)
         self.mock_split_users.assert_called_once_with('/ws')
+
+    def test_configures_the_sync_branch(self):
+        self._next_steps(has_commits=False)
+        self.mock_sync_branch.assert_called_once_with('/ws', True)
 
     def test_configures_claude_skill(self):
         self._next_steps(has_commits=False)

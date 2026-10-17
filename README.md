@@ -235,6 +235,8 @@ write most of them; the rest you edit by hand.
   git-tracked files writable
 - `[core] backend` (`"auto"`, `"git"` or `"jj"`, default `"auto"`): the tool git-p4son follows for the change, the
   base and the branch. `auto` means jj in a [jj workspace](#jujutsu-jj) and git otherwise
+- `[sync] branch` (string, set by `init`): the sync branch, which `sync` commits onto from whatever branch you are
+  on. Without it, `sync` uses `main`. See [Sync Command](#sync-command)
 - `[sync] split-users` (list of strings, default empty): the users whose changelists `sync` gives a commit each;
   `$(user)` stands for you. See [Split users](#split-users)
 - `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
@@ -315,6 +317,10 @@ saves the answer; run `git p4son writable apply` once your files are committed t
 The default is the current setting. Yes adds a `$(user)` entry to the split users and no removes it; other split
 users are left alone.
 
+`init` records the [sync branch](#sync-command) as `[sync] branch`. In a repository it creates, that's the branch
+`HEAD` is on. In an existing one, it's `main` if there is one, else the branch `HEAD` is on, else one you pick from
+the local branches. It keeps a branch already set.
+
 If Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
 already installed skill is refreshed without asking.
 
@@ -323,8 +329,20 @@ already installed skill is refreshed without asking.
 Sync local git repository with a Perforce workspace:
 
 ```sh
-git p4son sync [changelist ...] [--force] [--dry-run] [--split-user NAME ...] [--no-split] [--ignore-blocking-processes]
+git p4son sync [changelist ...] [--branch BRANCH] [--force] [--dry-run] [--split-user NAME ...] [--no-split]
+               [--ignore-blocking-processes]
 ```
+
+`sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, which `init` sets and which
+defaults to `main`. From another branch, it checks the sync branch out, syncs and commits, then returns you to
+where you started, telling you to `git rebase` your branch onto the sync branch; it doesn't rebase for you. The
+pre-sync and post-sync hooks run on the sync branch. You stay on the sync branch when:
+
+- local changes were [merged back](#how-sync-handles-writable-files) into the work tree, for you to review and
+  commit there
+- a sync fails partway, with the files as Perforce left them and the commits so far kept
+
+A failing pre-sync hook, or anything else that stops `sync` before it syncs, returns you to where you started.
 
 **Arguments:**
 - `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
@@ -337,6 +355,8 @@ git-tracked files opened in Perforce. It checks them after any [blocking process
 the [pre-sync hooks](#pre-sync-hook).
 
 **Options:**
+- `--branch BRANCH`: Commit onto this branch instead of `[sync] branch`. With the jj backend, the bookmark to move
+  to each sync commit
 - `-f, --force`: Allow syncing to changelists older than the current one
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
   real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
@@ -359,6 +379,7 @@ git p4son sync 12345 --force
 git p4son sync --dry-run    # show the changelists a sync to latest would visit
 git p4son sync -u alice     # also split out alice's changelists
 git p4son sync --no-split   # sync without splitting out the configured split users
+git p4son sync --branch p4  # commit onto the p4 branch this time
 ```
 
 #### Blocking processes
@@ -904,7 +925,8 @@ git p4son update -b main --shelve
 
 Run `jj new main` before syncing. `sync` needs an empty working change with no description or bookmark and one
 parent, and moves the bookmark at that parent to each sync commit. When several bookmarks point there, pick one
-with `git p4son sync --bookmark main`; the others stay where they are.
+with `git p4son sync --branch main`; the others stay where they are. The jj backend doesn't read `[sync] branch`
+yet.
 
 `sync` still stages and commits with git, including git attributes and filters, and sets `core.autocrlf` to match
 jj's line ending conversion. Local changes that `sync` merges back are left in the new working change for you to

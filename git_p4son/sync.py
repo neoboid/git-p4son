@@ -71,11 +71,12 @@ def _sync_changelist(changelist: int, label: str, depot_root: str,
             'files before syncing again.') from e
 
 
-def _check_p4_workspace_clean(depot_root: str, workspace_dir: str) -> None:
-    """Raise CommandError, after listing them, if git-tracked files are opened in Perforce."""
+def _check_p4_workspace_clean(depot_root: str, workspace_dir: str, sync_revision: str) -> None:
+    """Raise CommandError, after listing them, if files the sync branch tracks are opened in Perforce."""
     log.heading('Checking files opened in Perforce')
     opened_files = p4_get_opened_files(depot_root, workspace_dir)
-    tracked = get_tracked_files([f for f, _ in opened_files], workspace_dir)
+    tracked = get_tracked_files(
+        [f for f, _ in opened_files], workspace_dir, sync_revision)
     tracked_opened_files = [(f, change) for f, change in opened_files
                             if f in tracked]
     if tracked_opened_files:
@@ -100,13 +101,12 @@ def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str, backend: str) -
                            'See its output above.')
 
 
-def sync_preflight(depot_root: str, workspace_dir: str, invocation_dir: str,
-                   ignore_blocking_processes: bool, backend: Backend) -> None:
-    """Gate a sync on blocking processes, clean workspaces and pre-sync hooks; raise CommandError if one fails."""
+def sync_preflight(depot_root: str, workspace_dir: str, ignore_blocking_processes: bool,
+                   backend: Backend, sync_revision: str) -> None:
+    """Gate a sync on blocking processes and clean workspaces; raise CommandError if one fails."""
     check_no_blocking_processes(workspace_dir, ignore_blocking_processes)
     backend.check_sync_clean()
-    _check_p4_workspace_clean(depot_root, workspace_dir)
-    _run_pre_sync_hooks(workspace_dir, invocation_dir, backend.words.tool)
+    _check_p4_workspace_clean(depot_root, workspace_dir, sync_revision)
 
 
 @dataclass(frozen=True)
@@ -300,8 +300,8 @@ class _SyncPlan:
     clobber_mode: ClobberMode
 
 
-def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
-    """Resolve what to sync from the arguments and the workspace, or None when already synced.
+def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None:
+    """Resolve what to sync from the arguments and the sync branch at sync_revision, or None when already synced.
 
     Raises CommandError for an invalid argument.
     """
@@ -312,7 +312,7 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
     client_spec = resolved.client_spec
 
     log.heading(f'Finding {LAST_SYNCED_LABEL} changelist')
-    last_synced = git_last_synced_changelist(workspace_dir)
+    last_synced = git_last_synced_changelist(workspace_dir, sync_revision)
     if last_synced:
         log.success(f'CL {last_synced}')
     else:
@@ -351,7 +351,6 @@ def _plan_sync(args: argparse.Namespace) -> _SyncPlan | None:
 
 def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend: Backend) -> None:
     """Sync and commit each target, then merge local changes back and run the post-sync hooks."""
-    backend.start_sync()
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
@@ -391,17 +390,43 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend:
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
-    args.backend.prepare_sync(args.bookmark)
-
-    plan = _plan_sync(args)
+    backend = args.backend
+    sync_revision = backend.prepare_sync(args.branch)
+    plan = _plan_sync(args, sync_revision)
     if plan is None:
         return 0
 
-    # A dry run skips the checks and hooks, which run before the costly split queries.
-    if not args.dry_run:
-        sync_preflight(plan.depot_root, workspace_dir, args.invocation_dir,
-                       args.ignore_blocking_processes, args.backend)
+    if args.dry_run:
+        _add_split_targets(plan, workspace_dir)
+        _log_sequence(plan)
+        return 0
 
+    # The checks and hooks run before the costly split queries.
+    sync_preflight(plan.depot_root, workspace_dir,
+                   args.ignore_blocking_processes, backend, sync_revision)
+    backend.start_sync()
+    try:
+        _run_pre_sync_hooks(
+            workspace_dir, args.invocation_dir, backend.words.tool)
+        _add_split_targets(plan, workspace_dir)
+    except BaseException:
+        backend.abandon_sync()
+        raise
+    if plan.split:
+        _log_sequence(plan)
+
+    try:
+        _run_sync(plan, workspace_dir, args.invocation_dir, backend)
+    except BaseException:
+        backend.fail_sync()
+        raise
+    backend.finish_sync(plan.targets[-1][0]
+                        if plan.targets else plan.last_synced)
+    return 0
+
+
+def _add_split_targets(plan: _SyncPlan, workspace_dir: str) -> None:
+    """Add the targets that give each split user's changelist a commit of its own, when plan splits."""
     # _should_split only splits after a sync, so last_synced is set.
     if plan.split and plan.last_synced is not None:
         log.heading('Finding split users')
@@ -410,14 +435,10 @@ def sync_command(args: argparse.Namespace) -> int:
         plan.targets = _split_targets(plan.targets, users, plan.last_synced,
                                       plan.depot_root, workspace_dir)
 
-    if plan.split or args.dry_run:
-        log.heading('Sync sequence')
-        if plan.resync_last_synced:
-            log.success(f'{plan.last_synced} ({LAST_SYNCED_LABEL})')
-        else:
-            log.success(' '.join(str(cl) for cl, _ in plan.targets))
-    if args.dry_run:
-        return 0
 
-    _run_sync(plan, workspace_dir, args.invocation_dir, args.backend)
-    return 0
+def _log_sequence(plan: _SyncPlan) -> None:
+    log.heading('Sync sequence')
+    if plan.resync_last_synced:
+        log.success(f'{plan.last_synced} ({LAST_SYNCED_LABEL})')
+    else:
+        log.success(' '.join(str(cl) for cl, _ in plan.targets))

@@ -5,7 +5,7 @@ import os
 import shutil
 
 from .backend import workspace_lock
-from .common import CommandError, prompt_choice, prompt_menu
+from .common import CommandError, prompt_choice, prompt_menu, prompt_numbered
 from .config import save_config
 from .depot import (
     WORKSPACE_DEPOT_ROOT,
@@ -20,12 +20,16 @@ from .skill import install_skill, is_claude_code_installed, is_skill_installed
 from .git import (
     NO_EDITOR_MESSAGE,
     add_files,
+    branch_exists,
     commit,
+    get_current_branch,
     has_commits,
     init_repo,
     is_workspace_dir,
+    list_branches,
     resolve_editor,
 )
+from .git_backend import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
 from .sync_split_users import current_p4_user, is_self_split, set_self_split
 from .writable import is_writable_mode, set_writable_mode
 
@@ -119,6 +123,34 @@ def _configure_split_users(cwd: str) -> None:
              'git p4son sync-split-users add NAME')
 
 
+def _configure_sync_branch(cwd: str, new_repo: bool) -> None:
+    """Record [sync] branch, unless set: HEAD's branch in a new repo, else main, else HEAD's, else one picked."""
+    log.heading('Finding sync branch')
+    branch = get_sync_branch_setting(cwd)
+    if branch is not None:
+        log.success(branch)
+        return
+    head = get_current_branch(cwd)
+    # In an existing repo, HEAD may be on a feature branch, so main comes first there.
+    if new_repo and head is not None:
+        branch = head
+    elif branch_exists(DEFAULT_SYNC_BRANCH, cwd):
+        branch = DEFAULT_SYNC_BRANCH
+    else:
+        branch = head
+    if branch is None:
+        branches = list_branches(cwd)
+        branch = prompt_numbered(
+            'Select the branch sync commits onto:', branches) if branches else None
+    if branch is None:
+        log.warning(
+            'No sync branch chosen. Set [sync] branch in .git-p4son/config.toml before syncing.')
+        return
+    save_config(cwd, {'sync': {'branch': branch}})
+    log.success(
+        f'{branch}, saved as [sync] branch in .git-p4son/config.toml, where you can change it')
+
+
 def _configure_claude_skill() -> None:
     """Offer to install or refresh the Claude Code skill, if Claude Code is present."""
     log.heading('Configuring Claude Code skill')
@@ -190,12 +222,17 @@ def _init_workspace(cwd: str) -> int:
         log.success('Created a new git repository')
 
     # Also covers a repo left without commits by an init that failed to commit.
-    if not has_commits(cwd):
+    created = not has_commits(cwd)
+    if created:
         log.heading('Creating initial commit')
         add_files(['.gitignore'], cwd)
         commit('Initialize git-p4son repository', cwd)
         log.success('Committed .gitignore')
 
+    # After the first commit, so HEAD is on a branch.
+    _configure_sync_branch(cwd, created)
+
+    if created:
         log.heading('Next steps')
         log.info('* Review and edit .gitignore')
         log.info('* git add .')

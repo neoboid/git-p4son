@@ -81,6 +81,7 @@ Examples:
   git-p4son sync --dry-run      # Show the changelists a sync would visit
   git-p4son sync -u alice       # Also split alice's changelists into commits of their own
   git-p4son sync --no-split     # Sync without splitting out the configured split users
+  git-p4son sync --branch p4    # Commit onto the p4 branch instead of [sync] branch
   git-p4son sync-split-users    # List the users whose changelists sync splits out
   git-p4son sync-split-users add --me alice  # Split out your own and alice's changelists
   git-p4son new -m "Fix bug"    # Create changelist, alias defaults to branch name
@@ -132,13 +133,15 @@ Examples:
         'sync',
         help='Sync the git repository with Perforce',
         description='Sync the Perforce workspace to one or more changelists, '
-        'with a git commit for each. Local changes to synced files are merged '
-        'back afterwards.'
+        'with a git commit for each on the sync branch, [sync] branch in .git-p4son/config.toml or main. '
+        'From another branch, it checks the sync branch out and returns afterwards. Local changes to synced '
+        'files are merged back afterwards, staying on the sync branch.'
     )
     sync_parser.set_defaults(func=sync_command)
     sync_parser.add_argument(
-        '--bookmark',
-        help='jj bookmark to move to each sync commit, when the parent of the jj working change has several'
+        '--branch',
+        help='The sync branch to commit onto, overriding [sync] branch, which defaults to main. With the jj '
+        'backend, the bookmark to move to each sync commit, when the parent of the jj working change has several'
     )
     sync_parser.add_argument(
         'changelist',

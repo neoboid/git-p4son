@@ -571,41 +571,26 @@ class TestMergeFile(unittest.TestCase):
             self.assertIn(b'>>>>>>> local\n', merged)
 
 
-class TestGetCurrentBranch(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_returns_branch_name(self, mock_run):
-        mock_run.return_value = RunResult(0, ['feat/foo'], [])
-        result = get_current_branch('/ws')
-        mock_run.assert_called_once_with(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            cwd='/ws',
-        )
-        self.assertEqual(result, 'feat/foo')
+class TestGetCurrentBranch(GitRepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('base')
 
-    @mock.patch('git_p4son.git._get_rebase_branch', return_value=None)
-    @mock.patch('git_p4son.git.run')
-    def test_detached_head_returns_none(self, mock_run, mock_rebase):
-        mock_run.return_value = RunResult(0, ['HEAD'], [])
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
-        mock_rebase.assert_called_once_with('/ws')
+    def test_returns_branch_name(self):
+        self.git('switch', '-q', '-c', 'feat/foo')
+        self.assertEqual(get_current_branch(self.ws), 'feat/foo')
 
-    @mock.patch('git_p4son.git._get_rebase_branch', return_value='feat/my-branch')
-    @mock.patch('git_p4son.git.run')
-    def test_detached_head_during_rebase_returns_branch(self, mock_run, mock_rebase):
-        mock_run.return_value = RunResult(0, ['HEAD'], [])
-        result = get_current_branch('/ws')
-        self.assertEqual(result, 'feat/my-branch')
+    def test_a_tag_of_the_same_name_does_not_change_it(self):
+        self.git('tag', 'main')
+        self.assertEqual(get_current_branch(self.ws), 'main')
 
-    @mock.patch('git_p4son.git.run', side_effect=RunError('failed', returncode=128))
-    def test_command_failure_returns_none(self, mock_run):
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
+    def test_detached_head_returns_none(self):
+        self.git('switch', '-q', '--detach')
+        self.assertIsNone(get_current_branch(self.ws))
 
     @mock.patch('git_p4son.git.run', side_effect=OSError('git not found'))
     def test_missing_git_returns_none(self, mock_run):
-        result = get_current_branch('/ws')
-        self.assertIsNone(result)
+        self.assertIsNone(get_current_branch(self.ws))
 
 
 class TestGetHeadSubject(unittest.TestCase):

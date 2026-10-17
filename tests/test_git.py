@@ -15,7 +15,6 @@ from git_p4son.git import (
     find_base_commits,
     format_sync_subject,
     get_blob_oids,
-    get_commit_lines_since,
     get_commits_since,
     get_commit_subjects_since,
     get_current_branch,
@@ -820,29 +819,6 @@ class TestCommit(unittest.TestCase):
         commit('msg', '/ws', allow_empty=True)
         cmd = mock_run.call_args[0][0]
         self.assertIn('--allow-empty', cmd)
-
-
-class TestGetCommitLinesSince(unittest.TestCase):
-    @mock.patch('git_p4son.git.run')
-    def test_returns_lines(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[
-            'abc1234 First commit',
-            'def5678 Second commit',
-        ])
-        lines = get_commit_lines_since('main', '/workspace')
-        self.assertEqual(
-            lines, ['abc1234 First commit', 'def5678 Second commit'])
-        mock_run.assert_called_once_with(
-            ['git', 'log', '--format=%h %s', '--no-decorate',
-             '--reverse', '--no-merges', 'main..HEAD'],
-            cwd='/workspace',
-        )
-
-    @mock.patch('git_p4son.git.run')
-    def test_failure(self, mock_run):
-        mock_run.side_effect = RunError('git log failed')
-        with self.assertRaises(RunError):
-            get_commit_lines_since('main', '/workspace')
 
 
 class TestGetCommitsSince(unittest.TestCase):

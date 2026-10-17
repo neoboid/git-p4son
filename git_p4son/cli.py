@@ -3,7 +3,6 @@
 import argparse
 import os
 import sys
-import time
 from importlib.resources import files
 from . import __version__, jj
 from .backend import open_backend
@@ -20,7 +19,6 @@ from .alias import (
     alias_show_command,
 )
 from .init import init_command
-from .rebase_todo import sequence_editor_command
 from .review import review_command
 from .changelist_store import branch_alias, branch_to_alias
 from .common import CommandError, RunError
@@ -59,11 +57,6 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
     """Add --no-edit, which skips opening files for edit."""
     parser.add_argument('--no-edit', action='store_true',
                         help='Skip opening changed files for edit in Perforce')
-
-
-def _add_sleep(parser: argparse.ArgumentParser) -> None:
-    """Add -s/--sleep, which main honours after the command succeeds; hidden, as only the rebase todo uses it."""
-    parser.add_argument('-s', '--sleep', type=int, help=argparse.SUPPRESS)
 
 
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
@@ -290,7 +283,6 @@ Examples:
         action='store_true',
         help='Add #review keyword and shelve to create a Swarm review'
     )
-    _add_sleep(new_parser)
 
     update_parser = subparsers.add_parser(
         'update',
@@ -332,7 +324,6 @@ Examples:
              'oldest first, with each commit checked out in turn. With --shelve '
              'each commit gets a shelf of its own'
     )
-    _add_sleep(update_parser)
 
     list_changes_parser = subparsers.add_parser(
         'list-changes',
@@ -529,21 +520,6 @@ Examples:
         'overrides in .git-p4son/skill-override.md, if it has any.'
     ).set_defaults(func=skill_show_command)
 
-    # Hidden, used by review. No help, since argparse lists help=SUPPRESS as "==SUPPRESS==".
-    seq_editor_parser = subparsers.add_parser(
-        '_sequence-editor',
-    )
-    seq_editor_parser.set_defaults(func=sequence_editor_command)
-    seq_editor_parser.add_argument(
-        'filename',
-        help='The rebase todo file to edit'
-    )
-    seq_editor_parser.add_argument(
-        '--no-edit',
-        action='store_true',
-        help='Write the todo without opening an editor'
-    )
-
     return parser
 
 
@@ -603,14 +579,12 @@ def run_command(args: argparse.Namespace) -> int:
             'Run "git p4son init" first.')
     log.success(args.workspace_dir)
 
-    # The rebase todo's _sequence-editor runs under the lock review already holds.
-    ignore_jj = args.ignore_jj or args.command == '_sequence-editor'
-    if (not ignore_jj and jj.is_workspace(args.workspace_dir)
+    if (not args.ignore_jj and jj.is_workspace(args.workspace_dir)
             and (args.command == 'review' or getattr(args, 'per_commit', False))):
         raise CommandError('review and update --per-commit check out each commit with git, which a jj workspace '
                            'does not support yet. Put --ignore-jj before the command to run it with git.')
     snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
-    with (jj.operation(args.workspace_dir, ignore=ignore_jj, snapshot=snapshot) as jj_workspace,
+    with (jj.operation(args.workspace_dir, ignore=args.ignore_jj, snapshot=snapshot) as jj_workspace,
           open_backend(args.workspace_dir) as backend):
         args.jj_workspace = jj_workspace
         args.backend = backend
@@ -689,14 +663,7 @@ def main() -> int:
     try:
         log.verbose_mode = args.verbose
 
-        exit_code = run_command(args)
-
-        if exit_code == 0 and getattr(args, 'sleep', None) is not None:
-            log.heading(f'Sleeping for {args.sleep} seconds')
-            time.sleep(args.sleep)
-            log.success(f'Slept {args.sleep} seconds')
-
-        return exit_code
+        return run_command(args)
     except KeyboardInterrupt:
         log.error('\nOperation cancelled by user')
         return 1

@@ -551,32 +551,6 @@ class P4RepoTestCase(GitRepoTestCase):
         self.write_file(path, content)
 
 
-def fake_rebase(test, returncode=0):
-    """Stand in for git rebase -i in rebase_todo; returns the list each rebase adds (command, editor, todo, message) to.
-
-    The editor is the GIT_SEQUENCE_EDITOR, and the message None when the rebase has no message file."""
-    from git_p4son.rebase_todo import MESSAGE_FILE, TODO_FILE
-    rebases = []
-    real_run = subprocess.run
-
-    def rebase(command, *args, cwd=None, env=None, **kwargs):
-        # rebase_todo.subprocess is the subprocess module itself, so pass everything else through.
-        if command[:2] != ['git', 'rebase']:
-            return real_run(command, *args, cwd=cwd, env=env, **kwargs)
-        message_file = os.path.join(cwd, MESSAGE_FILE)
-        message = None
-        if os.path.exists(message_file):
-            with open(message_file) as f:
-                message = f.read()
-        with open(os.path.join(cwd, TODO_FILE)) as f:
-            rebases.append(
-                (command, env['GIT_SEQUENCE_EDITOR'], f.read(), message))
-        return subprocess.CompletedProcess(command, returncode)
-    start_patch(test, 'git_p4son.rebase_todo.subprocess.run',
-                side_effect=rebase)
-    return rebases
-
-
 # A pending changelist spec as p4 change -o prints it.
 SAMPLE_SPEC = """\
 # A Perforce Change Specification.

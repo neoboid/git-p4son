@@ -109,11 +109,6 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   started, also when a step fails, ends the error with the command that resumes after the last commit that worked,
   and sleeps `SWARM_SHELF_DELAY` between shelving steps.
 
-- **`rebase_todo.py`** - `rebase_per_commit` runs `git rebase -i` with a generated todo that adds an
-  `exec git p4son ...` line after each pick, for `review`. The todo and any message are
-  saved under `.git-p4son/reviews/`, and `sequence_editor_command` is the hidden `_sequence-editor` command git calls
-  to swap in that todo.
-
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
 
@@ -136,7 +131,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
-  nested rebase steps inherit their caller's lock.
+  a git-p4son run under its caller's lock needs `--ignore-jj`.
 
 ### Shared modules
 

@@ -206,36 +206,10 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['list-changes', '-b', 'main'])
         self.assertEqual(args.base_branch, 'main')
 
-    def test_sleep_option(self):
-        args = self.parser.parse_args(['update', '100', '-s', '5'])
-        self.assertEqual(args.sleep, 5)
-
-    def test_invalid_sleep_rejected_at_parse_time(self):
-        with self.assertRaises(SystemExit):
-            with contextlib.redirect_stderr(io.StringIO()):
-                self.parser.parse_args(['update', '100', '-s', 'abc'])
-
-    def test_sequence_editor_hidden_from_help(self):
-        help_text = self.parser.format_help()
-        self.assertNotIn('_sequence-editor', help_text)
-        self.assertNotIn('SUPPRESS', help_text)
-
     def test_version_flag(self):
         with self.assertRaises(SystemExit) as ctx:
             self.parser.parse_args(['--version'])
         self.assertEqual(ctx.exception.code, 0)
-
-
-class TestHiddenSleep(unittest.TestCase):
-    def test_sleep_is_parsed_but_not_listed_in_help(self):
-        for command in ('new', 'update'):
-            with self.subTest(command=command):
-                args = create_parser().parse_args([command, '--sleep', '5'])
-                self.assertEqual(args.sleep, 5)
-                with contextlib.redirect_stdout(io.StringIO()) as out, \
-                        self.assertRaises(SystemExit):
-                    create_parser().parse_args([command, '-h'])
-                self.assertNotIn('--sleep', out.getvalue())
 
 
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')

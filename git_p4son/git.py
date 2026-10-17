@@ -224,16 +224,6 @@ def get_local_changes(base_branch: str, workspace_dir: str,
 
 # --- log ---
 
-def get_commit_lines_since(base_branch: str, workspace_dir: str,
-                           revision: str = 'HEAD') -> list[str]:
-    """Return "<short sha> <subject>" lines for the non-merge commits since base_branch, oldest first."""
-    # Not --oneline: log.decorate config would prepend "(HEAD -> branch)" to subjects.
-    res = run(['git', 'log', '--format=%h %s', '--no-decorate',
-               '--reverse', '--no-merges',
-               f'{base_branch}..{revision}'], cwd=workspace_dir)
-    return res.stdout
-
-
 def get_commits_since(base: str, workspace_dir: str,
                       revision: str = 'HEAD') -> list[tuple[str, str]]:
     """Return (sha, subject) for the non-merge commits since base, oldest first."""

@@ -1,12 +1,14 @@
-"""Changelist aliases, stored in .git-p4son/changelists/<name>."""
+"""Changelist aliases, stored in .git-p4son/aliases/<name>.toml, still read from the old .git-p4son/changelists/."""
 
 import os
 import re
+import tomllib
 
 from . import CONFIG_DIR
 from .common import CommandError
 from .config import ensure_config_dir
 from .log import log
+from .toml_writer import format_toml
 
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
@@ -62,23 +64,105 @@ def validate_alias_name(name: str) -> str | None:
     return None
 
 
-def _changelists_dir(workspace_dir: str) -> str:
-    """Return the path to the changelists alias directory."""
+def _aliases_dir(workspace_dir: str) -> str:
+    return os.path.join(workspace_dir, CONFIG_DIR, 'aliases')
+
+
+def _old_aliases_dir(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, CONFIG_DIR, 'changelists')
 
 
-def _alias_path(name: str, workspace_dir: str) -> str:
-    """Validate name and return its store path; raise CommandError if invalid (e.g. one escaping the store)."""
+def _alias_paths(name: str, workspace_dir: str) -> tuple[str, str]:
+    """Validate name and return its path in the store and in the old one; raise CommandError if invalid."""
     error = validate_alias_name(name)
     if error:
         raise CommandError(error)
-    return os.path.join(_changelists_dir(workspace_dir), name)
+    return (os.path.join(_aliases_dir(workspace_dir), f'{name}.toml'),
+            os.path.join(_old_aliases_dir(workspace_dir), name))
+
+
+def _no_alias(name: str) -> CommandError:
+    return CommandError(f'No changelist alias found: {name}. '
+                        'See "git p4son alias list".')
+
+
+def _read_alias(path: str, name: str) -> str:
+    """The changelist number in an alias file; raise CommandError if it holds none."""
+    with open(path, 'rb') as f:
+        try:
+            data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as error:
+            raise CommandError(f'{path} is not valid TOML: {error}') from error
+    changelist = data.get('changelist')
+    if type(changelist) is not int:
+        raise CommandError(
+            f'Changelist alias "{name}" has no changelist number')
+    return str(changelist)
+
+
+def _read_old_alias(path: str, name: str) -> str:
+    """The changelist number in an old store's alias file; raise CommandError if it is empty."""
+    with open(path, 'r') as f:
+        content = f.read().strip()
+    if not content:
+        raise CommandError(f'Changelist alias "{name}" is empty')
+    return content
+
+
+def _remove_old_alias(old_path: str, workspace_dir: str) -> None:
+    """Remove an alias from the old store, and the old store once it is empty."""
+    if os.path.exists(old_path):
+        os.remove(old_path)
+    try:
+        os.rmdir(_old_aliases_dir(workspace_dir))
+    except OSError:
+        pass
+
+
+def _write_alias(name: str, changelist: str, workspace_dir: str) -> None:
+    path, old_path = _alias_paths(name, workspace_dir)
+    if not changelist.isdigit():
+        raise CommandError(f'Invalid changelist number: {changelist}')
+    ensure_config_dir(workspace_dir)
+    aliases_dir = _aliases_dir(workspace_dir)
+    if not os.path.isdir(aliases_dir):
+        log.info(f'Creating {aliases_dir}')
+        os.makedirs(aliases_dir, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(format_toml({'changelist': int(changelist)}))
+    _remove_old_alias(old_path, workspace_dir)
+
+
+def _listed(directory: str, suffix: str, read) -> dict[str, str]:
+    """The readable aliases in a store directory, by name; files that hold none are left out."""
+    if not os.path.isdir(directory):
+        return {}
+    aliases = {}
+    for entry in os.listdir(directory):
+        path = os.path.join(directory, entry)
+        name = entry.removesuffix(suffix)
+        if (not entry.endswith(suffix) or not os.path.isfile(path)
+                or validate_alias_name(name)):
+            continue
+        try:
+            aliases[name] = read(path, name)
+        except CommandError:
+            continue
+    return aliases
+
+
+def _listed_new(workspace_dir: str) -> dict[str, str]:
+    return _listed(_aliases_dir(workspace_dir), '.toml', _read_alias)
+
+
+def _listed_old(workspace_dir: str) -> dict[str, str]:
+    return _listed(_old_aliases_dir(workspace_dir), '', _read_old_alias)
 
 
 def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
     """Raise CommandError unless name is a valid alias that is free, or force is set."""
-    alias_path = _alias_path(name, workspace_dir)
-    if not force and os.path.exists(alias_path):
+    path, old_path = _alias_paths(name, workspace_dir)
+    if not force and (os.path.exists(path) or os.path.exists(old_path)):
         raise CommandError(
             f'Alias "{name}" already exists (use -f/--force to overwrite)')
 
@@ -86,54 +170,47 @@ def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool) -> None:
     """Save a changelist number under a named alias; raise CommandError if the alias is not usable."""
     check_alias_usable(name, workspace_dir, force)
-
-    changelists_dir = _changelists_dir(workspace_dir)
-    ensure_config_dir(workspace_dir)
-    if not os.path.isdir(changelists_dir):
-        log.info(f'Creating {changelists_dir}')
-        os.makedirs(changelists_dir, exist_ok=True)
-
-    with open(os.path.join(changelists_dir, name), 'w') as f:
-        f.write(changelist + '\n')
+    _write_alias(name, changelist, workspace_dir)
 
 
 def load_changelist_alias(name: str, workspace_dir: str) -> str:
     """Load a changelist number from a named alias; raise CommandError if there is none."""
-    alias_path = _alias_path(name, workspace_dir)
-    if not os.path.exists(alias_path):
-        raise CommandError(f'No changelist alias found: {name}. '
-                           'See "git p4son alias list".')
-
-    with open(alias_path, 'r') as f:
-        content = f.read().strip()
-    if not content:
-        raise CommandError(f'Changelist alias "{name}" is empty')
-    return content
+    path, old_path = _alias_paths(name, workspace_dir)
+    if os.path.exists(path):
+        return _read_alias(path, name)
+    if os.path.exists(old_path):
+        return _read_old_alias(old_path, name)
+    raise _no_alias(name)
 
 
 def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
     """Return all changelist aliases as sorted (name, changelist) tuples."""
-    changelists_dir = _changelists_dir(workspace_dir)
-
-    if not os.path.isdir(changelists_dir):
-        return []
-
-    aliases = []
-    for name in os.listdir(changelists_dir):
-        alias_path = os.path.join(changelists_dir, name)
-        if os.path.isfile(alias_path):
-            with open(alias_path, 'r') as f:
-                content = f.read().strip()
-            if content:
-                aliases.append((name, content))
-
-    return sorted(aliases, key=lambda x: x[0])
+    aliases = _listed_old(workspace_dir) | _listed_new(workspace_dir)
+    return sorted(aliases.items())
 
 
 def delete_changelist_alias(name: str, workspace_dir: str) -> None:
-    """Delete a changelist alias file; raise CommandError if there is none."""
-    alias_path = _alias_path(name, workspace_dir)
-    if not os.path.exists(alias_path):
-        raise CommandError(f'No changelist alias found: {name}. '
-                           'See "git p4son alias list".')
-    os.remove(alias_path)
+    """Delete a changelist alias from both stores; raise CommandError if there is none."""
+    path, old_path = _alias_paths(name, workspace_dir)
+    if not os.path.exists(path) and not os.path.exists(old_path):
+        raise _no_alias(name)
+    if os.path.exists(path):
+        os.remove(path)
+    _remove_old_alias(old_path, workspace_dir)
+
+
+def migrate_changelist_aliases(workspace_dir: str) -> int:
+    """Move the aliases in the old store to the new one, and return how many moved.
+
+    An alias in both stores keeps the new one, as reads do.
+    """
+    current = _listed_new(workspace_dir)
+    moved = 0
+    for name, changelist in _listed_old(workspace_dir).items():
+        if name in current:
+            _remove_old_alias(_alias_paths(
+                name, workspace_dir)[1], workspace_dir)
+        else:
+            _write_alias(name, changelist, workspace_dir)
+            moved += 1
+    return moved

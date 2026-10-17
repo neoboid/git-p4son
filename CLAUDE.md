@@ -167,9 +167,10 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`
   own the layout; `new` and `update` build descriptions through it.
 
-- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/changelists/<name>`: save, load, list and
+- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
-  keyword.
+  keyword. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
+  `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
 
 - **`depot.py`** - Owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and
   `resolve_depot_root`, which returns it with the client spec (`ResolvedDepot`) for `sync`. `check_depot_root` and

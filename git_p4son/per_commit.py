@@ -8,7 +8,6 @@ from collections.abc import Callable
 from .backend import Backend
 from .common import CommandError
 from .git import get_commits_since, resolve_commit
-from .lib import check_git_workspace_clean
 from .log import log, plural
 
 # Seconds to give Swarm to process a shelf before the next step shelves again.
@@ -55,11 +54,11 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
     A failing step raises CommandError naming it, ending with the rest command that resumes after the last commit that
     worked, unless resumable returns None; any text it returns goes before that command."""
     rest = rest or first
-    check_git_workspace_clean(workspace_dir)
+    backend.check_clean()
 
     log.heading('Finding commits')
     base = resolve_commit(base_branch, workspace_dir)
-    commits = get_commits_since(base, workspace_dir)
+    commits = get_commits_since(base, workspace_dir, backend.revision)
     if not commits:
         raise CommandError(f'No commits found since {base_branch}')
     log.success(f'{plural(len(commits), "commit")} since {base_branch}')

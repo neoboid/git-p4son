@@ -92,16 +92,11 @@ def selected_backend(workspace_dir: str, choice: str | None) -> str:
 
 
 @contextlib.contextmanager
-def open_backend(workspace_dir: str, choice: str | None, *, snapshot: bool = False,
-                 checkouts: bool = False) -> Iterator[Backend]:
+def open_backend(workspace_dir: str, choice: str | None, *, snapshot: bool = False) -> Iterator[Backend]:
     """Open the backend for one command, holding jj's working-copy lock and operation in a jj workspace.
 
-    snapshot has jj snapshot the working copy first and reconcile after. checkouts asks for a backend that can check
-    out commits one by one, and raises CommandError for jj, which cannot yet."""
+    snapshot has jj snapshot the working copy first and reconcile after."""
     name = selected_backend(workspace_dir, choice)
-    if name == 'jj' and checkouts:
-        raise CommandError('review and update --per-commit check out each commit with git, which a jj workspace '
-                           'does not support yet. Put --backend git before the command to run it with git.')
     with jj.operation(workspace_dir, lock_only=name == 'git', snapshot=snapshot) as workspace:
         backend: Backend = GitBackend(
             workspace_dir) if workspace is None else JjBackend(workspace)

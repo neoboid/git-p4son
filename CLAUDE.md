@@ -174,8 +174,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its sync checks out the sync
   bookmark, commits with jj's line endings and moves the bookmark; `after_lock`, which `open_backend` calls once
   jj's lock is released, runs `jj rebase -b <start> -d <bookmark>` (unless `--no-rebase`), lists conflicts, and
-  returns with `jj edit` or `jj new` unless merged-back changes are left. Its `checkouts` raises, as
-  `open_backend` refuses the per-commit commands on jj.
+  returns with `jj edit` or `jj new` unless merged-back changes are left. Its `checkouts` puts each commit's
+  files on disk with git under the lock, as the revision and clean check a step reads, and the working change's
+  files back at the end, so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
@@ -219,7 +220,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`),
-  `normalize_workspace_path`, and the interactive prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
+  `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
+  prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
 
 - **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
   file changes, command echo with a spinner, child process output, and quiet and verbose modes, with

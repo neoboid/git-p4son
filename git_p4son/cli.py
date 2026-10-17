@@ -579,9 +579,7 @@ def _run_command(args: argparse.Namespace) -> int:
     log.success(args.workspace_dir)
 
     snapshot = getattr(args, 'snapshot', True)
-    checkouts = args.command == 'review' or getattr(args, 'per_commit', False)
-    with open_backend(args.workspace_dir, args.backend_choice, snapshot=snapshot,
-                      checkouts=checkouts) as backend:
+    with open_backend(args.workspace_dir, args.backend_choice, snapshot=snapshot) as backend:
         args.backend = backend
         exit_code = _run_in_workspace(args)
     if exit_code == 0 and getattr(args, 'dry_run', False):

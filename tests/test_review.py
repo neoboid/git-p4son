@@ -6,7 +6,7 @@ import unittest
 from git_p4son.changelist_store import load_changelist_alias, save_changelist_alias
 from git_p4son.common import CommandError
 from git_p4son.review import review_command, _steps
-from tests.helpers import cli_args, P4RepoTestCase, start_patch
+from tests.helpers import cli_args, on_jj, P4RepoTestCase, start_patch
 
 
 class TestSteps(unittest.TestCase):
@@ -136,6 +136,9 @@ class TestReviewRelativeBase(P4RepoTestCase):
                           '', '#review'])
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
+
+_STRAY_FILE = 'jj makes a stray file part of the working change, which the loop then takes as a commit'
+TestReviewOnJj = on_jj(TestReview, skip={'test_dirty_workspace': _STRAY_FILE})
 
 if __name__ == '__main__':
     unittest.main()

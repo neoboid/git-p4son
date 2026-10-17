@@ -610,11 +610,15 @@ class P4RepoTestCase(GitRepoTestCase):
         self.git('switch', '-q', '-c', 'feature')
         self.edit('a.txt', 'a2\n')
         self.commit('Change a')
+        self.replace_b_with_c()
+        self.commit('Replace b with c')
+
+    def replace_b_with_c(self) -> None:
+        """Delete b.txt and add c.txt."""
         # Synced files are read-only, and Windows refuses to delete a read-only file.
         os.chmod(os.path.join(self.ws, 'b.txt'), stat.S_IRUSR | stat.S_IWUSR)
         os.remove(os.path.join(self.ws, 'b.txt'))
         self.write_file('c.txt', 'c1\n')
-        self.commit('Replace b with c')
 
     def hook(self, name: str, body: str) -> None:
         """Add a Python hook script under .git-p4son/hooks/<name>/."""
@@ -688,6 +692,12 @@ class JjTestCase(GitRepoTestCase):
     def jj(self, *args: str) -> str:
         """Run jj in the workspace and return its stripped stdout."""
         return run_jj(self.ws, *args)
+
+    def assert_at(self, branch: str, commit: str) -> None:
+        """Assert git's HEAD is commit, where jj keeps it detached at the working change's parent, as branch is."""
+        self.assertEqual(self.git('rev-parse', 'HEAD'), commit)
+        if branch:
+            self.assertEqual(self.git('rev-parse', branch), commit)
 
 
 def on_jj(test_class: type[_GitRepoTest], skip: dict[str, str] | None = None) -> type[_GitRepoTest]:

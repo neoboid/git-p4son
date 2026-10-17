@@ -256,10 +256,8 @@ def run_complete(words: list[str]) -> int:
     """Execute the complete command with the given word list."""
     from .cli import create_parser
     # stdout is reserved for completion candidates, so silence all logging.
-    log.quiet_mode = True
-    parser = create_parser()
-    workspace_dir = get_workspace_dir()
-    candidates = _complete(parser, words, workspace_dir)
+    with log.quiet():
+        candidates = _complete(create_parser(), words, get_workspace_dir())
     for name, description in candidates:
         if description:
             print(f'{name}\t{description}')

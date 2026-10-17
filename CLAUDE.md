@@ -204,8 +204,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `normalize_workspace_path`, and the interactive prompts `prompt_choice` and `prompt_menu`.
 
 - **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
-  file changes, command echo with a spinner, child process output, and quiet and verbose modes. `plural` formats
-  counts.
+  file changes, command echo with a spinner, child process output, and quiet and verbose modes, with
+  `log.quiet()` scoping quiet mode to a block. `plural` formats counts.
 
 ## Python Version
 

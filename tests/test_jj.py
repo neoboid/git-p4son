@@ -13,7 +13,6 @@ from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
 from git_p4son.cli import create_parser, run_command
-from git_p4son.log import log
 from tests.helpers import (
     captured_output, isolate_jj, JjTestCase, make_run_result, P4RepoTestCase, requires_jj, run_jj, WorkspaceTestCase,
 )
@@ -218,8 +217,7 @@ class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
 
         If the command fails, what it printed is added to the failure."""
         try:
-            # run_command turns on quiet mode for commands like alias show; keep it from leaking into later tests.
-            with captured_output() as out, mock.patch.object(log, 'quiet_mode', log.quiet_mode), \
+            with captured_output() as out, \
                     mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
                 self.assertEqual(run_command(
                     create_parser().parse_args(argv)), 0)
@@ -230,7 +228,7 @@ class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
         return out.getvalue()
 
     def p4son_fails(self, *argv, message):
-        with captured_output(), mock.patch.object(log, 'quiet_mode', log.quiet_mode), \
+        with captured_output(), \
                 mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
                 self.assertRaisesRegex(CommandError, message):
             run_command(create_parser().parse_args(argv))

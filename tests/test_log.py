@@ -61,12 +61,32 @@ class TestOutput(unittest.TestCase):
 
     def test_silent_in_quiet_mode(self):
         log = Log()
-        log.quiet_mode = True
         out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), log.quiet():
             log.output('line')
             log.output('line', stderr=True)
         self.assertEqual((out.getvalue(), err.getvalue()), ('', ''))
+
+
+class TestQuiet(unittest.TestCase):
+    def test_silences_the_block_then_restores_the_mode(self):
+        log = Log()
+        with log.quiet():
+            self.assertTrue(log.quiet_mode)
+        self.assertFalse(log.quiet_mode)
+
+    def test_restores_the_mode_when_the_block_raises(self):
+        log = Log()
+        with self.assertRaises(ValueError), log.quiet():
+            raise ValueError
+        self.assertFalse(log.quiet_mode)
+
+    def test_disabled_leaves_an_outer_quiet_on(self):
+        log = Log()
+        with log.quiet():
+            with log.quiet(False):
+                self.assertTrue(log.quiet_mode)
+            self.assertTrue(log.quiet_mode)
 
 
 class TestCommandTruncation(unittest.TestCase):

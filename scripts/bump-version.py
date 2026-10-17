@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Bump the version of git-p4son.
 
-Two-step workflow:
+Workflow, run from an up-to-date main:
   1. bump-version.py [patch|minor|major]: bump the version files and move the
      entries under "## Unreleased" in CHANGELOG.md under the new version
   2. (edit CHANGELOG.md if desired)
-  3. bump-version.py --finalize: commit, tag, push and create the GitHub
-     release
+  3. bump-version.py --finalize: commit on a release-vX.Y.Z branch, push it
+     and open a pull request
+  4. (merge the pull request once CI passes)
+  5. bump-version.py --publish: tag the merged release commit on main, push
+     the tag, which publishes to PyPI, and create the GitHub release
 """
 
 import argparse
@@ -96,9 +99,9 @@ def update_changelog(version):
     CHANGELOG.write_text(text)
 
 
-def changelog_section(version):
-    """Return the CHANGELOG.md section for a version, without its heading."""
-    text = CHANGELOG.read_text()
+def changelog_section(version, text=None):
+    """Return the CHANGELOG.md section for a version, without its heading, from text or else the file."""
+    text = CHANGELOG.read_text() if text is None else text
     m = re.search(rf'^## {re.escape(version)}\n(.*?)(?=^## |\Z)', text,
                   re.MULTILINE | re.DOTALL)
     if not m or not m.group(1).strip():
@@ -126,6 +129,9 @@ def prepare(args):
     old_str = pyproject_version
     new_str = f'{new[0]}.{new[1]}.{new[2]}'
     tag = f'v{new_str}'
+
+    # Safety: release from an up-to-date main, before changing any file
+    require_up_to_date_main()
 
     # Safety: working tree must be clean
     status = run(['git', 'status', '--porcelain'])
@@ -170,51 +176,8 @@ def prepare(args):
     print('  python scripts/bump-version.py --finalize')
 
 
-def finalize(args):
-    """Commit, tag, push and create the GitHub release."""
-    version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
-    tag = f'v{version}'
-
-    # Safety: tag must not exist (confirms prepare ran but finalize hasn't)
-    existing_tags = run(['git', 'tag', '--list', tag])
-    if existing_tags.stdout.strip():
-        print(f'Error: tag {tag} already exists.', file=sys.stderr)
-        sys.exit(1)
-
-    # Check everything the release needs before committing, so a failure
-    # cannot leave a half-done release behind
-    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).stdout.strip()
-    if branch == 'HEAD':
-        print('Error: detached HEAD. Check out the branch to release from.',
-              file=sys.stderr)
-        sys.exit(1)
-    if not shutil.which('gh'):
-        print('Error: the GitHub CLI (gh) is needed to create the release.',
-              file=sys.stderr)
-        sys.exit(1)
-    run(['gh', 'auth', 'status'])
-    notes = changelog_section(version)
-
-    # Commit and tag
-    commit_msg = f'Release git-p4son v{version}'
-    run(['git', 'add', str(PYPROJECT), str(INIT_PY), str(CHANGELOG)])
-    run(['git', 'commit', '-m', commit_msg])
-    run(['git', 'tag', tag])
-    print(f'Committed: {commit_msg}')
-    print(f'Tagged: {tag}')
-
-    # Push and release. Pushing the tag starts the PyPI publish workflow.
-    # Each step is (message when done, command, stdin, command to show if it
-    # has to be run by hand).
-    release_cmd = ['gh', 'release', 'create', tag, '--verify-tag', '--latest',
-                   '--title', f'git-p4son {tag}', '--notes-file']
-    steps = [
-        (f'Pushed {branch}', ['git', 'push', 'origin', branch], None, None),
-        (f'Pushed {tag}', ['git', 'push', 'origin', tag], None, None),
-        (f'Created GitHub release {tag}', release_cmd + ['-'], notes,
-         f'{shlex.join(release_cmd)} <the {version} section of '
-         'CHANGELOG.md>'),
-    ]
+def run_steps(steps):
+    """Run (message when done, command, stdin, command to show) steps; on a failure, list the rest to run by hand."""
     for i, (done, cmd, stdin, _) in enumerate(steps):
         result = subprocess.run(cmd, capture_output=True, text=True,
                                 input=stdin)
@@ -229,6 +192,135 @@ def finalize(args):
         print(done)
 
 
+def require_gh():
+    """Exit unless the GitHub CLI is installed and logged in."""
+    if not shutil.which('gh'):
+        print('Error: the GitHub CLI (gh) is needed for the release.',
+              file=sys.stderr)
+        sys.exit(1)
+    run(['gh', 'auth', 'status'])
+
+
+def require_no_tag(tag, hint=''):
+    """Exit, with hint after the error, if tag exists locally or on origin."""
+    local = run(['git', 'tag', '--list', tag]).stdout.strip()
+    remote = run(['git', 'ls-remote', '--tags', 'origin',
+                  f'refs/tags/{tag}']).stdout.strip()
+    if local or remote:
+        print(f'Error: tag {tag} already exists.{hint}', file=sys.stderr)
+        sys.exit(1)
+
+
+def require_up_to_date_main():
+    """Exit unless main is checked out at origin/main."""
+    run(['git', 'fetch', '--quiet', 'origin'])
+    current = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).stdout.strip()
+    if current != 'main':
+        print('Error: run this on main.', file=sys.stderr)
+        sys.exit(1)
+    head = run(['git', 'rev-parse', 'HEAD']).stdout.strip()
+    if head != run(['git', 'rev-parse', 'origin/main']).stdout.strip():
+        print('Error: main is not at origin/main. Pull first.',
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def release_names(version):
+    """The tag, release branch and release commit subject for a version."""
+    return (f'v{version}', f'release-v{version}',
+            f'Release git-p4son v{version}')
+
+
+def finalize(args):
+    """Commit the prepared release on a release branch, push it and open a pull request."""
+    version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
+    tag, branch, subject = release_names(version)
+
+    # Check everything before committing, so a failure leaves no half-done
+    # release behind
+    require_no_tag(tag)
+    require_gh()
+    require_up_to_date_main()
+    if (run(['git', 'branch', '--list', branch]).stdout.strip()
+            or run(['git', 'ls-remote', '--heads', 'origin',
+                    f'refs/heads/{branch}']).stdout.strip()):
+        print(f'Error: branch {branch} already exists.', file=sys.stderr)
+        sys.exit(1)
+    notes = changelog_section(version)
+
+    # Commit on the release branch; --no-track keeps a plain push off main
+    run(['git', 'switch', '--quiet', '--create', branch, '--no-track'])
+    run(['git', 'add', str(PYPROJECT), str(INIT_PY), str(CHANGELOG)])
+    run(['git', 'commit', '-m', subject])
+    print(f'Committed on {branch}: {subject}')
+
+    pr_cmd = ['gh', 'pr', 'create', '--base', 'main', '--head', branch,
+              '--title', subject, '--body-file']
+    run_steps([
+        (f'Pushed {branch}',
+         ['git', 'push', '--set-upstream', 'origin', f'{branch}:{branch}'],
+         None, None),
+        (f'Opened the pull request for {branch}', pr_cmd + ['-'], notes,
+         f'{shlex.join(pr_cmd)} <the {version} section of CHANGELOG.md>'),
+    ])
+    print()
+    print('Merge the pull request once CI passes, then run:')
+    print('  python scripts/bump-version.py --publish')
+
+
+def publish(args):
+    """Tag the merged release commit on main, push the tag and create the GitHub release."""
+    # --finalize leaves the release branch checked out, which has the version.
+    version = read_version(PYPROJECT, r'version\s*=\s*"([^"]+)"')
+    tag, branch, _ = release_names(version)
+
+    require_no_tag(tag, ' Check out the release branch, or pull main once '
+                   'the release pull request is merged. If a failed push left '
+                   f'the tag behind locally, delete it: git tag -d {tag}')
+    require_gh()
+    # GitHub's merge commit is the release commit as it is on main, whether
+    # the pull request was rebase-merged or squashed.
+    pr = run(['gh', 'pr', 'view', branch, '--json', 'state,mergeCommit',
+              '--jq', '.state + " " + (.mergeCommit.oid // "")'])
+    state, _, commit = pr.stdout.strip().partition(' ')
+    if state != 'MERGED' or not commit:
+        print(f'Error: the pull request for {branch} is {state.lower()}, '
+              'not merged.', file=sys.stderr)
+        sys.exit(1)
+    run(['git', 'fetch', '--quiet', 'origin'])
+    if subprocess.run(['git', 'merge-base', '--is-ancestor', commit,
+                       'origin/main']).returncode:
+        print(f'Error: merge commit {commit[:7]} of {branch} is not on '
+              'origin/main.', file=sys.stderr)
+        sys.exit(1)
+    notes = changelog_section(
+        version, run(['git', 'show', f'{commit}:CHANGELOG.md']).stdout)
+
+    run(['git', 'tag', tag, commit])
+    print(f'Tagged {commit[:7]}: {tag}')
+
+    # Pushing the tag starts the PyPI publish workflow.
+    release_cmd = ['gh', 'release', 'create', tag, '--verify-tag', '--latest',
+                   '--title', f'git-p4son {tag}', '--notes-file']
+    run_steps([
+        (f'Pushed {tag}', ['git', 'push', 'origin', f'refs/tags/{tag}'],
+         None, None),
+        (f'Created GitHub release {tag}', release_cmd + ['-'], notes,
+         f'{shlex.join(release_cmd)} <the {version} section of '
+         'CHANGELOG.md>'),
+    ])
+
+    # The merged commit has the release branch's content; drop the branch.
+    if (run(['git', 'branch', '--list', branch]).stdout.strip()
+            and not subprocess.run(['git', 'diff', '--quiet', branch, commit])
+            .returncode):
+        if run(['git', 'rev-parse', '--abbrev-ref',
+                'HEAD']).stdout.strip() == branch:
+            run(['git', 'switch', '--quiet', 'main'])
+        run(['git', 'branch', '--quiet', '-D', branch])
+        print(f'Deleted the merged branch {branch}')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Bump the git-p4son version.')
     parser.add_argument(
@@ -238,15 +330,25 @@ def main():
         choices=['major', 'minor', 'patch'],
         help='Which part to bump (default: patch)'
     )
-    parser.add_argument(
+    step = parser.add_mutually_exclusive_group()
+    step.add_argument(
         '--finalize',
         action='store_true',
-        help='Commit and tag the prepared release'
+        help='Commit the prepared release on a release branch and open a pull '
+             'request'
+    )
+    step.add_argument(
+        '--publish',
+        action='store_true',
+        help='Tag the merged release commit, push the tag and create the '
+             'GitHub release'
     )
     args = parser.parse_args()
 
     if args.finalize:
         finalize(args)
+    elif args.publish:
+        publish(args)
     else:
         prepare(args)
 

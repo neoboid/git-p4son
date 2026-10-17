@@ -248,7 +248,9 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
             rel = rel_paths[m.filepath]
             result.changed.append(_stage_changed_file(
                 m, rel, contents[(pre_sync_head_commit, rel)],
-                contents.get((m.base_commit, rel)), temp_root,
+                None if m.base_commit is None else contents.get(
+                    (m.base_commit, rel)),
+                temp_root,
                 m.filepath in binary, uses_crlf))
         log.success(f'{plural(len(metas), "file")} staged')
 

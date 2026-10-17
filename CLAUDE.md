@@ -179,6 +179,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
   depot root, `core.writable`, the split users, the blocking processes and the hook associations.
 
+- **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files; reading
+  uses `tomllib`.
+
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
   deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
   (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and

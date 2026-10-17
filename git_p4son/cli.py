@@ -5,7 +5,7 @@ import os
 import sys
 from importlib.resources import files
 from typing import cast
-from . import __version__
+from . import __version__, jj
 from .backend import BACKENDS, alias_for_branch, open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
@@ -561,6 +561,7 @@ def run_command(args: argparse.Namespace) -> int:
 def _run_command(args: argparse.Namespace) -> int:
     """run_command's body, inside its quiet scope: find the workspace, open the backend and run the command."""
     args.invocation_dir = os.getcwd()
+    jj.check_invoked_inside_workspace(args.invocation_dir)
 
     if not hasattr(args, 'func'):
         # Only a command whose actions name the handlers, given no action, gets here.

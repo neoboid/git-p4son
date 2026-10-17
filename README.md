@@ -330,9 +330,8 @@ With jj 0.41 or newer installed, `init` offers two things for [jj](#jujutsu-jj):
   no. On yes, in an existing repository it runs `jj git init --colocate` as its last step, so jj imports the branch
   as a bookmark. In a repository it creates, it lists `jj git init --colocate` as a next step after your initial
   commit instead, since jj would otherwise snapshot every file before you have reviewed `.gitignore`.
-- **The `jj p4son` alias**, when the workspace has a `.jj` folder, or is to get one, and jj's config has no
-  `aliases.p4son`: default yes. It adds `p4son = ["util", "exec", "--", "git-p4son"]` to jj's user config, so
-  `jj p4son sync` runs `git p4son sync`.
+- **The [`jj p4son` alias](#the-jj-p4son-alias)**, when the workspace has a `.jj` folder, or is to get one, and
+  jj's config has no `aliases.p4son`: default yes. It adds the alias to jj's user config.
 
 Running `init` again asks neither once they are done.
 
@@ -885,6 +884,20 @@ git-p4son detects a jj workspace colocated with the git repository, which needs 
 0.41 and the latest jj release, and the minimum only rises with a note in the CHANGELOG. Separate jj workspaces,
 sparse working copies, and conflicted or divergent changes are not supported. Without a `.jj` folder, nothing
 changes.
+
+### The jj p4son alias
+
+jj has no external subcommands, but an alias can run git-p4son, so `jj p4son sync` runs `git p4son sync`. Add it
+once per machine to jj's user config, or let `init` offer it:
+
+```sh
+jj config set --user aliases.p4son '["util", "exec", "--", "git-p4son"]'
+```
+
+`jj util exec` neither locks nor snapshots, so `jj p4son` behaves exactly as `git p4son`, and git-p4son's messages
+keep saying `git p4son`. Run it from inside the workspace: `jj -R other-workspace p4son` would still run in the
+current directory, so git-p4son refuses with "Run jj p4son from inside the workspace; -R is not supported." Shell
+completion covers `git p4son`, not `jj p4son`.
 
 ### Choosing the backend
 

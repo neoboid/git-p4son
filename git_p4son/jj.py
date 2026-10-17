@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from .common import CommandError, RunResult, run
+from .common import CommandError, RunResult, normalize_workspace_path, run
 from .git import (
     EOL_FOR_AUTOCRLF, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
 )
@@ -23,6 +23,16 @@ USE_GIT_HINT = ('Put --backend git before the command to use git instead, '
                 'or set backend = "git" under [core] in .git-p4son/config.toml.')
 _REVISION_TEMPLATE = ('json(self) ++ "\\t" ++ empty ++ "\\t" ++ conflict'
                       ' ++ "\\t" ++ divergent ++ "\\n"')
+
+
+def check_invoked_inside_workspace(cwd: str) -> None:
+    """Raise CommandError when jj -R named a workspace that cwd is outside, then drop the variable for hooks.
+
+    jj util exec, behind the jj p4son alias, sets JJ_WORKSPACE_ROOT and leaves the current directory as it was."""
+    root = os.environ.pop('JJ_WORKSPACE_ROOT', None)
+    if root is not None and normalize_workspace_path(os.path.realpath(cwd), os.path.realpath(root)) is None:
+        raise CommandError(
+            'Run jj p4son from inside the workspace; -R is not supported.')
 
 
 def is_workspace(workspace_dir: str) -> bool:

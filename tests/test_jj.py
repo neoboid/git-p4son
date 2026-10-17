@@ -23,6 +23,34 @@ from tests.helpers import (
 )
 
 
+class TestCheckInvokedInsideWorkspace(WorkspaceTestCase):
+    """jj util exec, behind the jj p4son alias, sets JJ_WORKSPACE_ROOT to the workspace jj -R names."""
+
+    def check(self, cwd, root):
+        """Run the check from cwd with JJ_WORKSPACE_ROOT set to root, or unset; returns it as the check left it."""
+        with mock.patch.dict(os.environ):
+            os.environ.pop('JJ_WORKSPACE_ROOT', None)
+            if root is not None:
+                os.environ['JJ_WORKSPACE_ROOT'] = root
+            jj.check_invoked_inside_workspace(cwd)
+            return os.environ.get('JJ_WORKSPACE_ROOT')
+
+    def test_unset_is_fine(self):
+        self.check(self.ws, None)
+
+    def test_inside_the_workspace_is_fine_and_hooks_do_not_inherit_it(self):
+        sub = os.path.join(self.ws, 'sub')
+        os.makedirs(sub)
+        self.assertIsNone(self.check(self.ws, self.ws))
+        self.assertIsNone(self.check(sub, self.ws))
+
+    def test_another_workspace_is_refused(self):
+        other = os.path.join(self.ws, 'other')
+        os.makedirs(other)
+        with self.assertRaisesRegex(CommandError, 'Run jj p4son from inside the workspace; -R is not supported'):
+            self.check(self.ws, other)
+
+
 class TestWorkingCopyLock(WorkspaceTestCase):
     def setUp(self):
         super().setUp()

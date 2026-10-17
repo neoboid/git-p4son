@@ -50,3 +50,10 @@ module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_calls = false
+
+# The helpers every test builds on are held to full strict.
+[[tool.mypy.overrides]]
+module = "tests.helpers"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true

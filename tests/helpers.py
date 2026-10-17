@@ -10,6 +10,7 @@ import stat
 import subprocess
 import tempfile
 import unittest
+from typing import Any
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
@@ -99,7 +100,7 @@ def init_git_repo(path: str) -> None:
 
 
 # The workspaces build_workspace built, by the class defining it: (directory, the attributes it set).
-_built_workspaces = {}
+_built_workspaces: dict[type, tuple[str, dict[str, Any]]] = {}
 
 
 class WorkspaceTestCase(unittest.TestCase):
@@ -267,7 +268,7 @@ class FakeP4:
 
     def files_at(self, change):
         """The depot's {path: content} at change."""
-        files = {}
+        files: dict[str, str] = {}
         for number in sorted(c for c in self.changes if c <= change):
             for path, content in self.changes[number][1].items():
                 if content is None:

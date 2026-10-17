@@ -523,7 +523,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
             mock_merge.return_value = (True, b'merged content')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(
                     filepath=filepath, base_commit='sync456',
@@ -544,7 +544,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             with open(filepath, 'wb') as f:
                 f.write(b'perforce binary content')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(
                     filepath=filepath, base_commit='sync456',
@@ -564,7 +564,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             # Emulates p4 removing the parent directory along with the file.
             filepath = os.path.join(workspace, 'gone', 'test.cpp')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(
                     filepath=filepath, base_commit='sync456',
@@ -580,7 +580,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             filepath = os.path.join(workspace, 'test.cpp')
             content = b'unchanged content'
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             # ours == base: file unchanged, just read-only flag cleared
             merge_changed_files(
                 [ChangedFile(
@@ -598,7 +598,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             with open(filepath, 'wb') as f:
                 f.write(b'p4 version\n')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(filepath=filepath, base_commit=None,
                              ours_path=self._stage(
@@ -620,7 +620,7 @@ class TestMergeChangedFiles(unittest.TestCase):
             with open(filepath, 'wb') as f:
                 f.write(b'same content\n')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(filepath=filepath, base_commit=None,
                              ours_path=self._stage(
@@ -644,7 +644,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
             mock_merge.return_value = (True, b'merged content')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [ChangedFile(filepath=filepath, base_commit='intro789',
                              ours_path=ours_path, base_path=base_path)],
@@ -665,7 +665,7 @@ class TestMergeChangedFiles(unittest.TestCase):
 
             mock_merge.return_value = (False, b'<<<<<<<\n')
 
-            from git_p4son.sync import merge_changed_files
+            from git_p4son.sync_merge import merge_changed_files
             merge_changed_files(
                 [
                     ChangedFile(filepath=filepath_a, base_commit=None,

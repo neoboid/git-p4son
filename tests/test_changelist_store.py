@@ -236,29 +236,20 @@ class TestValidateAliasName(unittest.TestCase):
         self.assertIsNone(validate_alias_name('-foo'))
 
     def test_empty_rejected(self):
-        error = validate_alias_name('')
-        self.assertIsNotNone(error)
-        self.assertIn('empty', error)
+        self.assertIn('empty', validate_alias_name('') or '')
 
     def test_reserved_branch_rejected(self):
-        error = validate_alias_name('branch')
-        self.assertIsNotNone(error)
-        self.assertIn('reserved', error)
+        self.assertIn('reserved', validate_alias_name('branch') or '')
 
     def test_reserved_last_synced_rejected(self):
-        error = validate_alias_name('last-synced')
-        self.assertIsNotNone(error)
-        self.assertIn('reserved', error)
+        self.assertIn('reserved', validate_alias_name('last-synced') or '')
 
     def test_reserved_head_rejected(self):
-        error = validate_alias_name('head')
-        self.assertIsNotNone(error)
-        self.assertIn('reserved', error)
+        self.assertIn('reserved', validate_alias_name('head') or '')
 
     def test_spaces_rejected(self):
-        error = validate_alias_name('Fix a couple of small bugs')
-        self.assertIsNotNone(error)
-        self.assertIn('Invalid alias name', error)
+        self.assertIn('Invalid alias name', validate_alias_name(
+            'Fix a couple of small bugs') or '')
 
     def test_slash_rejected(self):
         error = validate_alias_name('feat/foo')

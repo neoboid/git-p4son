@@ -179,7 +179,10 @@ class TestAliasNewAndList(WorkspaceTestCase):
 
     def test_empty_alias_files_are_left_out(self):
         self._new('100', 'feature-a')
-        open(os.path.join(self.ws, '.git-p4son', 'changelists', 'empty'),
+        open(os.path.join(self.ws, '.git-p4son', 'aliases', 'empty.toml'),
+             'w').close()
+        os.makedirs(os.path.join(self.ws, '.git-p4son', 'changelists'))
+        open(os.path.join(self.ws, '.git-p4son', 'changelists', 'old-empty'),
              'w').close()
         self.assertEqual(self._list(), ['Found 1 alias',
                                         'feature-a -> CL 100'])
@@ -189,6 +192,43 @@ class TestAliasNewAndList(WorkspaceTestCase):
                                     'Invalid changelist number: abc'):
             self._new('abc', 'feature-a')
         self.assertEqual(self._list(), ['No aliases defined'])
+
+
+class TestAliasCleanMigrates(WorkspaceTestCase):
+    """alias clean against a real alias store with aliases in the old one."""
+
+    def setUp(self):
+        super().setUp()
+        self.old_dir = os.path.join(self.ws, '.git-p4son', 'changelists')
+        os.makedirs(self.old_dir)
+        for name, changelist in (('feature-a', '100'), ('feature-b', '200')):
+            with open(os.path.join(self.old_dir, name), 'w') as f:
+                f.write(changelist + '\n')
+
+    def _clean(self, answers):
+        with mock.patch('builtins.input', side_effect=answers), \
+                captured_output() as out:
+            rc = alias_clean_command(
+                cli_args(['alias', 'clean'], workspace_dir=self.ws))
+        self.assertEqual(rc, 0)
+        return out.getvalue()
+
+    def _new_store(self):
+        return sorted(os.listdir(
+            os.path.join(self.ws, '.git-p4son', 'aliases')))
+
+    def test_clean_moves_the_old_aliases_before_asking(self):
+        out = self._clean(['q'])
+        self.assertIn('Moved 2 aliases to .git-p4son/aliases/', out)
+        self.assertLess(out.index('Moved 2 aliases'),
+                        out.index('Found 2 aliases'))
+        self.assertFalse(os.path.exists(self.old_dir))
+        self.assertEqual(self._new_store(),
+                         ['feature-a.toml', 'feature-b.toml'])
+
+    def test_clean_deletes_from_the_new_store(self):
+        self._clean(['i', 'y', 'n'])
+        self.assertEqual(self._new_store(), ['feature-b.toml'])
 
 
 if __name__ == '__main__':

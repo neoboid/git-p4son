@@ -629,7 +629,9 @@ numbered sequentially.
 
 ### Alias Command
 
-Manage changelist aliases stored in `.git-p4son/changelists/`.
+Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`). Aliases
+saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when written,
+or all at once with `alias clean`.
 
 #### alias list
 
@@ -717,7 +719,8 @@ Clean up changelist aliases:
 git p4son alias clean
 ```
 
-The command lists all aliases and asks how to proceed:
+It first moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`, then lists all aliases and
+asks how to proceed:
 - `a` (all): Delete all aliases
 - `i` (interactive): Review each alias one by one
 - `q` (quit): Exit without deleting anything

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changelist aliases are stored as TOML files, `.git-p4son/aliases/<alias>.toml`. Aliases in the old
+  `.git-p4son/changelists/` keep working and move to the new location when written, or all at once with `alias clean`
 - The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when
   drafting a CL description, so agents read the instructions before preparing a changelist. Run `skill install`
   again to update an installed skill

@@ -6,6 +6,7 @@ from .changelist_store import (
     save_changelist_alias,
     list_changelist_aliases,
     delete_changelist_alias,
+    migrate_changelist_aliases,
 )
 from .common import CommandError, prompt_choice
 from .log import log, plural
@@ -105,6 +106,11 @@ def _clean_interactive(aliases: list[tuple[str, str]],
 def alias_clean_command(args: argparse.Namespace) -> int:
     """Execute the 'alias clean' command."""
     workspace_dir = args.workspace_dir
+
+    moved = migrate_changelist_aliases(workspace_dir)
+    if moved:
+        log.success(f'Moved {plural(moved, "alias", "aliases")} '
+                    'to .git-p4son/aliases/')
 
     aliases = list_changelist_aliases(workspace_dir)
     if not aliases:

@@ -335,7 +335,7 @@ Examples:
         'alias',
         help='Manage changelist aliases',
         description='Manage changelist aliases: names for changelist numbers, '
-        'stored in .git-p4son/changelists/.'
+        'stored in .git-p4son/aliases/.'
     )
     alias_subparsers = alias_parser.add_subparsers(
         dest='alias_action',
@@ -365,7 +365,7 @@ Examples:
         'new',
         help='Save a changelist number under a named alias',
         description='Save a changelist number under a named alias in '
-        '.git-p4son/changelists/<alias>.'
+        '.git-p4son/aliases/<alias>.toml.'
     )
     alias_new_parser.set_defaults(func=alias_new_command)
     alias_new_parser.add_argument(

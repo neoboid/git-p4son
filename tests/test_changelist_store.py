@@ -10,7 +10,9 @@ from git_p4son.changelist_store import (
     branch_to_alias,
     check_alias_usable,
     delete_changelist_alias,
+    list_changelist_aliases,
     load_changelist_alias,
+    migrate_changelist_aliases,
     save_changelist_alias,
     validate_alias_name,
 )
@@ -54,6 +56,117 @@ class TestAliasStoreValidatesNames(WorkspaceTestCase):
         with self.assertRaisesRegex(CommandError, 'Invalid alias name'):
             delete_changelist_alias('../../precious.txt', self.ws)
         self.assertTrue(os.path.exists(outside))
+
+
+class TestAliasStoreLocations(WorkspaceTestCase):
+    """The store in .git-p4son/aliases/, with the old .git-p4son/changelists/ still read."""
+
+    def path(self, *parts):
+        return os.path.join(self.ws, CONFIG_DIR, *parts)
+
+    def write_old(self, name, content):
+        os.makedirs(self.path('changelists'), exist_ok=True)
+        with open(self.path('changelists', name), 'w') as f:
+            f.write(content)
+
+    def write_new(self, name, content):
+        os.makedirs(self.path('aliases'), exist_ok=True)
+        with open(self.path('aliases', f'{name}.toml'), 'w') as f:
+            f.write(content)
+
+    def test_save_writes_a_toml_file(self):
+        save_changelist_alias('feature', '123456', self.ws, force=False)
+        with open(self.path('aliases', 'feature.toml'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), 'changelist = 123456\n')
+
+    def test_save_refuses_a_non_numeric_changelist(self):
+        with self.assertRaisesRegex(CommandError, 'Invalid changelist number'):
+            save_changelist_alias('feature', 'abc', self.ws, force=False)
+
+    def test_reads_the_old_store(self):
+        self.write_old('feature', '100\n')
+        self.assertEqual(load_changelist_alias('feature', self.ws), '100')
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feature', '100')])
+
+    def test_reading_leaves_the_old_store_alone(self):
+        self.write_old('feature', '100\n')
+        load_changelist_alias('feature', self.ws)
+        list_changelist_aliases(self.ws)
+        self.assertTrue(os.path.exists(self.path('changelists', 'feature')))
+        self.assertFalse(os.path.exists(self.path('aliases')))
+
+    def test_the_new_store_wins_over_the_old(self):
+        self.write_old('feature', '100\n')
+        self.write_old('other', '300\n')
+        self.write_new('feature', 'changelist = 200\n')
+        self.assertEqual(load_changelist_alias('feature', self.ws), '200')
+        self.assertEqual(list_changelist_aliases(self.ws),
+                         [('feature', '200'), ('other', '300')])
+
+    def test_an_old_alias_is_not_free(self):
+        self.write_old('feature', '100\n')
+        with self.assertRaisesRegex(CommandError, 'already exists'):
+            check_alias_usable('feature', self.ws, force=False)
+
+    def test_save_removes_the_old_alias_and_the_empty_old_store(self):
+        self.write_old('feature', '100\n')
+        save_changelist_alias('feature', '200', self.ws, force=True)
+        self.assertFalse(os.path.exists(self.path('changelists')))
+        self.assertEqual(load_changelist_alias('feature', self.ws), '200')
+
+    def test_save_keeps_the_old_store_while_it_holds_other_aliases(self):
+        self.write_old('feature', '100\n')
+        self.write_old('other', '300\n')
+        save_changelist_alias('feature', '200', self.ws, force=True)
+        self.assertEqual(os.listdir(self.path('changelists')), ['other'])
+
+    def test_delete_removes_the_alias_from_both_stores(self):
+        self.write_old('feature', '100\n')
+        self.write_new('feature', 'changelist = 200\n')
+        delete_changelist_alias('feature', self.ws)
+        self.assertFalse(os.path.exists(self.path('changelists')))
+        self.assertEqual(os.listdir(self.path('aliases')), [])
+
+    def test_delete_an_alias_only_in_the_old_store(self):
+        self.write_old('feature', '100\n')
+        delete_changelist_alias('feature', self.ws)
+        with self.assertRaisesRegex(CommandError, 'No changelist alias found'):
+            load_changelist_alias('feature', self.ws)
+
+    def test_migrate_moves_the_old_aliases(self):
+        self.write_old('feature', '100\n')
+        self.write_old('other', '300\n')
+        self.write_new('other', 'changelist = 400\n')
+        self.assertEqual(migrate_changelist_aliases(self.ws), 1)
+        self.assertFalse(os.path.exists(self.path('changelists')))
+        self.assertEqual(list_changelist_aliases(self.ws),
+                         [('feature', '100'), ('other', '400')])
+
+    def test_alias_name_with_dots(self):
+        save_changelist_alias('feat.v1.0', '123', self.ws, force=False)
+        self.assertTrue(os.path.exists(self.path('aliases', 'feat.v1.0.toml')))
+        self.assertEqual(load_changelist_alias('feat.v1.0', self.ws), '123')
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feat.v1.0', '123')])
+
+    def test_invalid_toml_fails_to_load_and_is_not_listed(self):
+        self.write_new('feature', 'changelist = \n')
+        with self.assertRaisesRegex(CommandError, 'is not valid TOML'):
+            load_changelist_alias('feature', self.ws)
+        self.assertEqual(list_changelist_aliases(self.ws), [])
+
+    def test_a_file_without_a_changelist_number_fails_to_load(self):
+        self.write_new('feature', 'changelist = "123"\n')
+        with self.assertRaisesRegex(CommandError, 'has no changelist number'):
+            load_changelist_alias('feature', self.ws)
+
+    def test_files_that_are_not_aliases_are_not_listed(self):
+        self.write_new('feature', 'changelist = 1\n')
+        self.write_old('.DS_Store', 'junk')
+        with open(self.path('aliases', 'notes.txt'), 'w') as f:
+            f.write('changelist = 2\n')
+        self.assertEqual(list_changelist_aliases(self.ws), [('feature', '1')])
 
 
 class TestBranchToAlias(unittest.TestCase):

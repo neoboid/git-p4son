@@ -404,12 +404,20 @@ class TestBranchKeyword(unittest.TestCase):
             self, mock_load, _ws, _branch):
         """Resolves the branch and keeps all logging off stdout."""
         args = create_parser().parse_args(['alias', 'show'])
-        with mock.patch.object(log, 'quiet_mode', False):
-            with contextlib.redirect_stdout(io.StringIO()) as out:
-                result = run_command(args)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            result = run_command(args)
         self.assertEqual(result, 0)
         self.assertEqual(out.getvalue(), '100\n')
         mock_load.assert_called_once_with('feat-bar', '/ws')
+        self.assertFalse(log.quiet_mode)
+
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
+    @mock.patch('git_p4son.alias.load_changelist_alias', side_effect=CommandError('no alias'))
+    def test_quiet_command_that_fails_leaves_quiet_mode_off(self, _load, _ws, _branch):
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(CommandError):
+            run_command(create_parser().parse_args(['alias', 'show']))
+        self.assertFalse(log.quiet_mode)
 
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     def test_alias_without_action_asks_for_one(self, _ws):

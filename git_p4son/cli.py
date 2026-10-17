@@ -545,10 +545,13 @@ def completion_command(args: argparse.Namespace) -> int:
 
 
 def run_command(args: argparse.Namespace) -> int:
-    args.invocation_dir = os.getcwd()
+    with log.quiet(getattr(args, 'quiet', False)):
+        return _run_command(args)
 
-    if getattr(args, 'quiet', False):
-        log.quiet_mode = True
+
+def _run_command(args: argparse.Namespace) -> int:
+    """run_command's body, inside its quiet scope: find the workspace, open the backend and run the command."""
+    args.invocation_dir = os.getcwd()
 
     if not hasattr(args, 'func'):
         # Only a command whose actions name the handlers, given no action, gets here.

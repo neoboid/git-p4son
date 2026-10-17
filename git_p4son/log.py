@@ -1,8 +1,10 @@
 """Structured output: all user-facing output goes through the `log` singleton."""
 
+import contextlib
 import shutil
 import sys
 import threading
+from collections.abc import Iterator
 from datetime import timedelta
 from typing import TextIO
 
@@ -88,6 +90,16 @@ class Log:
         self._spinner_stop: threading.Event = threading.Event()
         self._spinner_line: str = ''
         self._spinner_final_line: str = ''
+
+    @contextlib.contextmanager
+    def quiet(self, enabled: bool = True) -> Iterator[None]:
+        """Silence the output in the block if enabled, then put back the mode it had."""
+        previous = self.quiet_mode
+        self.quiet_mode = previous or enabled
+        try:
+            yield
+        finally:
+            self.quiet_mode = previous
 
     def heading(self, text: str) -> None:
         """Print a section heading."""

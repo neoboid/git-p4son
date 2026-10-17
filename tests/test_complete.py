@@ -20,10 +20,6 @@ from tests.helpers import GitRepoTestCase
 
 
 class TestRunCompleteOutput(GitRepoTestCase):
-    def tearDown(self):
-        # run_complete enables quiet mode on the log singleton.
-        log.quiet_mode = False
-
     def test_emits_only_candidates(self):
         """Completion stdout holds nothing but candidates, no command echo or spinner."""
         self.commit('x')
@@ -34,6 +30,7 @@ class TestRunCompleteOutput(GitRepoTestCase):
             rc = run_complete(['update', 'b'])
 
         self.assertEqual(rc, 0)
+        self.assertFalse(log.quiet_mode)
         lines = buffer.getvalue().splitlines()
         self.assertIn('branch\tUse current branch name', lines)
         for line in lines:

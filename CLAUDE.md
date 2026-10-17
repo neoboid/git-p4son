@@ -219,7 +219,10 @@ When bumping the minimum Python version, update all of these locations:
 
 ## Git Conventions
 
-- Version bump commits should use the format: `Release git-p4son vX.Y.Z`. `scripts/bump-version.py`
-  (`patch|minor|major`, then `--finalize`) makes that commit, the tag and the GitHub release.
+- Version bump commits should use the format: `Release git-p4son vX.Y.Z`. Releases go through a pull request, as
+  `main` requires one. From an up-to-date `main`, `scripts/bump-version.py` (`patch|minor|major`) bumps the version
+  and the changelog; `--finalize` commits them on a `release-vX.Y.Z` branch and opens the pull request; once it is
+  merged, `--publish` tags the merged commit on `main`, which starts the PyPI publish, and creates the GitHub
+  release.
 - Never commit plan/analysis markdown files (e.g. `release-notes.md`, `default-message.md`) together with the
   implementation changes. These files are a communication tool between the user and Claude, not part of the codebase.

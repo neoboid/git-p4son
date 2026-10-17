@@ -33,7 +33,7 @@ class TestRunSetsPWD(unittest.TestCase):
         with mock.patch.dict(os.environ, {'PWD': '/some/other/dir'}):
             run(['p4', 'add', 'foo.txt'], cwd='/workspace')
         env = mock_subprocess_run.call_args.kwargs['env']
-        self.assertEqual(env['PWD'], '/workspace')
+        self.assertEqual(env['PWD'], os.path.abspath('/workspace'))
 
     @mock.patch('subprocess.run')
     def test_pwd_uses_absolute_path(self, mock_subprocess_run):
@@ -91,7 +91,7 @@ class TestRun(unittest.TestCase):
         self.assertEqual(call.kwargs['capture_output'], True)
         self.assertEqual(call.kwargs['text'], True)
         self.assertEqual(call.kwargs['input'], None)
-        self.assertEqual(call.kwargs['env']['PWD'], '/tmp')
+        self.assertEqual(call.kwargs['env']['PWD'], os.path.abspath('/tmp'))
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, ['line1', 'line2'])
         self.assertEqual(result.stderr, [])
@@ -134,7 +134,7 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(call.kwargs['stdout'], subprocess.PIPE)
         self.assertEqual(call.kwargs['stderr'], subprocess.PIPE)
         self.assertEqual(call.kwargs['text'], True)
-        self.assertEqual(call.kwargs['env']['PWD'], '/tmp')
+        self.assertEqual(call.kwargs['env']['PWD'], os.path.abspath('/tmp'))
         self.assertEqual(result.returncode, 0)
 
     def test_without_keep_stdout_lines_reach_only_the_callback(self):

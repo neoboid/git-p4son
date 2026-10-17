@@ -53,7 +53,8 @@ class TestEnsureConfigDir(WorkspaceTestCase):
 class TestConfigPath(unittest.TestCase):
     def test_returns_expected_path(self):
         result = config_path('/workspace')
-        self.assertEqual(result, f'/workspace/{CONFIG_DIR}/config.toml')
+        self.assertEqual(result, os.path.join(
+            '/workspace', CONFIG_DIR, 'config.toml'))
 
 
 class TestLoadConfig(unittest.TestCase):

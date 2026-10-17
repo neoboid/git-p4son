@@ -16,8 +16,8 @@ class Backend(Protocol):
     words: Words
 
     @property
-    def revision(self) -> str | None:
-        """The commit to read the change from, or None for git's HEAD and index."""
+    def revision(self) -> str:
+        """The commit to read the change from."""
 
     def resolve_base(self, base: str | None) -> str:
         """The base to find the change's commits since, None for the backend's default."""

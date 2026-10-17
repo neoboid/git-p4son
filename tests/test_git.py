@@ -35,7 +35,6 @@ from git_p4son.git import (
     list_tracked_files,
     merge_file,
     parse_sync_subject,
-    restore_files,
 )
 from tests.helpers import GitRepoTestCase, make_run_result
 
@@ -84,19 +83,6 @@ class TestRepoSetup(GitRepoTestCase):
         self.write_file('b.txt', 'b')
         add_files(['a.txt'], self.ws)
         self.assertEqual(get_staged_files(self.ws), ['a.txt'])
-
-
-class TestRestoreFiles(GitRepoTestCase):
-    def test_restore_files_from_the_index(self):
-        self.write_file('a.txt', 'git')
-        self.write_file('b c.txt', 'git')
-        self.commit()
-        self.write_file('a.txt', 'depot')
-        self.write_file('b c.txt', 'depot')
-        restore_files(['a.txt', 'b c.txt'], self.ws, dry_run=False)
-        for name in ('a.txt', 'b c.txt'):
-            with open(os.path.join(self.ws, name)) as f:
-                self.assertEqual(f.read(), 'git')
 
 
 class TestGetTrackedFiles(GitRepoTestCase):

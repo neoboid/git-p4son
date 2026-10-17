@@ -51,17 +51,21 @@ def cli_args(argv, **overrides):
     """Parse argv with the real parser, then set the workspace and overrides as run_command would.
 
     An override the command has no argument for raises AttributeError, so tests follow renames."""
+    from git_p4son.git_backend import GitBackend
     from git_p4son.cli import create_parser
     args = create_parser().parse_args(argv)
     args.workspace_dir = '/ws'
     args.invocation_dir = None
     args.jj_workspace = None
+    args.backend = None
     for name, value in overrides.items():
-        if name not in ('workspace_dir', 'invocation_dir', 'jj_workspace') and not hasattr(args, name):
+        if name not in ('workspace_dir', 'invocation_dir', 'jj_workspace', 'backend') and not hasattr(args, name):
             raise AttributeError(f'{argv[0]} has no argument {name!r}')
         setattr(args, name, value)
     if args.invocation_dir is None:
         args.invocation_dir = args.workspace_dir
+    if args.backend is None:
+        args.backend = GitBackend(args.workspace_dir)
     return args
 
 

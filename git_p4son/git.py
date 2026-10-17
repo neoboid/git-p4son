@@ -320,6 +320,16 @@ def get_head_commit(workspace_dir: str) -> str:
     return result.stdout[0].strip()
 
 
+def switch_detached(commit: str, workspace_dir: str) -> None:
+    """Check out commit with a detached HEAD."""
+    run(['git', 'switch', '--quiet', '--detach', commit], cwd=workspace_dir)
+
+
+def switch_branch(branch: str, workspace_dir: str) -> None:
+    """Check out branch."""
+    run(['git', 'switch', '--quiet', branch], cwd=workspace_dir)
+
+
 # --- sync commits ---
 
 _SYNC_SUBJECT_PREFIX = 'git-p4son: p4 sync '

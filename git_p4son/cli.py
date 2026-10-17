@@ -6,6 +6,7 @@ import sys
 import time
 from importlib.resources import files
 from . import __version__, jj
+from .backend import open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
@@ -613,9 +614,10 @@ def run_command(args: argparse.Namespace) -> int:
         raise CommandError('review and update --per-commit rebase with git, which a jj workspace does not '
                            'support. Put --ignore-jj before the command to run it with git.')
     snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
-    with jj.operation(args.workspace_dir, ignore=ignore_jj,
-                      snapshot=snapshot) as jj_workspace:
+    with (jj.operation(args.workspace_dir, ignore=ignore_jj, snapshot=snapshot) as jj_workspace,
+          open_backend(args.workspace_dir) as backend):
         args.jj_workspace = jj_workspace
+        args.backend = backend
         exit_code = _run_in_workspace(args)
     if exit_code == 0 and getattr(args, 'dry_run', False):
         log.info('Dry run, nothing changed')

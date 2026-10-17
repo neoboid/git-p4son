@@ -10,10 +10,10 @@ from unittest import mock
 from git_p4son.cli import (
     create_parser,
     main,
-    _resolve_branch_keyword,
     run_command,
 )
 from git_p4son.common import CommandError, RunError
+from git_p4son.git_backend import GitBackend
 from git_p4son.log import log
 from tests.helpers import captured_output
 
@@ -115,7 +115,7 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['new', '-m', 'Fix bug'])
         self.assertEqual(args.command, 'new')
         self.assertEqual(args.message, 'Fix bug')
-        self.assertEqual(args.base_branch, 'HEAD~1')
+        self.assertIsNone(args.base_branch)
         self.assertFalse(args.dry_run)
         self.assertFalse(args.no_edit)
         self.assertFalse(args.shelve)
@@ -179,7 +179,7 @@ class TestCreateParser(unittest.TestCase):
         args = self.parser.parse_args(['update', '12345'])
         self.assertEqual(args.command, 'update')
         self.assertEqual(args.changelist, '12345')
-        self.assertEqual(args.base_branch, 'HEAD~1')
+        self.assertIsNone(args.base_branch)
         self.assertFalse(args.dry_run)
         self.assertFalse(args.no_edit)
         self.assertFalse(args.shelve)
@@ -200,7 +200,7 @@ class TestCreateParser(unittest.TestCase):
     def test_list_changes(self):
         args = self.parser.parse_args(['list-changes'])
         self.assertEqual(args.command, 'list-changes')
-        self.assertEqual(args.base_branch, 'HEAD~1')
+        self.assertIsNone(args.base_branch)
 
     def test_list_changes_with_base_branch(self):
         args = self.parser.parse_args(['list-changes', '-b', 'main'])
@@ -247,7 +247,7 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(run_command(args), 0)
         mock_split_users.assert_called_once_with(args)
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_dispatches_new(self, mock_new, _branch, _ws):
         parser = create_parser()
@@ -256,8 +256,8 @@ class TestRunCommand(unittest.TestCase):
         mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_new_defaults_message_from_head(self, mock_new, _branch, _head, _ws):
         parser = create_parser()
@@ -267,8 +267,8 @@ class TestRunCommand(unittest.TestCase):
         mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_new_explicit_message_takes_precedence(self, mock_new, _branch, _head, _ws):
         parser = create_parser()
@@ -278,16 +278,16 @@ class TestRunCommand(unittest.TestCase):
         _head.assert_not_called()
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value=None)
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value=None)
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     def test_new_no_commits_returns_error(self, _branch, _head, _ws):
         parser = create_parser()
         args = parser.parse_args(['new'])
         with self.assertRaisesRegex(CommandError, 'No commits found'):
             run_command(args)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value='Review change')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Review change')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_review_defaults_message_from_head(self, mock_review, _branch, _head, _ws):
         parser = create_parser()
@@ -297,8 +297,8 @@ class TestRunCommand(unittest.TestCase):
         mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.update_command', return_value=0)
     def test_update_keeps_message_unset(self, mock_update, _branch, _head, _ws):
         args = create_parser().parse_args(['update'])
@@ -307,8 +307,8 @@ class TestRunCommand(unittest.TestCase):
         _head.assert_not_called()
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_head_subject', return_value='Add feature')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Add feature')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_message_read_from_file(self, mock_new, _branch, _head, _ws):
         with tempfile.TemporaryDirectory() as tmp:
@@ -322,7 +322,7 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(args.file, os.path.join(tmp, 'msg.txt'))
         _head.assert_not_called()
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_missing_message_file_returns_error(self, mock_new, _branch, _ws):
         with tempfile.TemporaryDirectory() as tmp:
@@ -333,7 +333,7 @@ class TestRunCommand(unittest.TestCase):
                 run_command(args)
         mock_new.assert_not_called()
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/x')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_empty_message_file_returns_error(self, mock_new, _branch, _ws):
         with tempfile.TemporaryDirectory() as tmp:
@@ -362,13 +362,13 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(result, 0)
 
 
-class TestResolveBranchKeyword(unittest.TestCase):
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/foo')
+class TestBranchKeyword(unittest.TestCase):
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')
     def test_resolves_branch_to_alias(self, _branch):
-        result = _resolve_branch_keyword('/ws')
+        result = GitBackend('/ws').suggested_alias()
         self.assertEqual(result, 'feat-foo')
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_run_command_resolves_at_branch_for_review(
@@ -379,7 +379,7 @@ class TestResolveBranchKeyword(unittest.TestCase):
         mock_review.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/bar')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     @mock.patch('git_p4son.alias.load_changelist_alias', return_value='100')
     def test_alias_show_prints_only_the_changelist(
@@ -401,7 +401,7 @@ class TestResolveBranchKeyword(unittest.TestCase):
                 '^No alias action specified. Use "git-p4son alias -h" for help.$'):
             run_command(args)
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value=None)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     @mock.patch('git_p4son.cli.alias_delete_command', return_value=0)
     def test_alias_delete_all_skips_resolution(
@@ -412,14 +412,14 @@ class TestResolveBranchKeyword(unittest.TestCase):
         mock_branch.assert_not_called()
         mock_alias.assert_called_once_with(args)
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value=None)
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value=None)
     def test_detached_head_raises(self, _branch):
         with self.assertRaisesRegex(CommandError, 'detached HEAD'):
-            _resolve_branch_keyword('/ws')
+            GitBackend('/ws').suggested_alias()
 
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='main')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='main')
     def test_main_branch_resolves_to_main(self, _branch):
-        result = _resolve_branch_keyword('/ws')
+        result = GitBackend('/ws').suggested_alias()
         self.assertEqual(result, 'main')
 
     def test_new_defaults_to_branch(self):
@@ -428,7 +428,7 @@ class TestResolveBranchKeyword(unittest.TestCase):
 
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
-    @mock.patch('git_p4son.cli.get_current_branch', return_value='feat/xyz')
+    @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/xyz')
     def test_no_alias_skips_resolution(self, _branch, _ws, mock_new):
         args = create_parser().parse_args(['new', '-m', 'msg', '--no-alias'])
         result = run_command(args)

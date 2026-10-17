@@ -23,6 +23,28 @@ class TestGitBackend(GitRepoTestCase):
     def test_reads_the_change_from_head_and_the_index(self):
         self.assertIsNone(self.backend.revision)
 
+    def test_default_base_is_the_parent_commit(self):
+        self.assertEqual(self.backend.resolve_base(None), 'HEAD~1')
+
+    def test_named_base_is_kept_as_given(self):
+        self.assertEqual(self.backend.resolve_base('main'), 'main')
+
+    def test_suggested_alias_is_the_branch_with_slashes_replaced(self):
+        self.assertEqual(self.backend.suggested_alias(), 'feat-x')
+
+    def test_detached_head_has_no_suggested_alias(self):
+        self.git('switch', '-q', '--detach')
+        with self.assertRaisesRegex(CommandError, 'detached HEAD'):
+            self.backend.suggested_alias()
+
+    def test_reserved_branch_name_has_no_suggested_alias(self):
+        self.git('switch', '-q', '-c', 'last-synced')
+        with self.assertRaisesRegex(CommandError, 'reserved keyword "last-synced"'):
+            self.backend.suggested_alias()
+
+    def test_subject_is_the_head_commit_subject(self):
+        self.assertEqual(self.backend.subject(), 'Add feature')
+
     def test_clean_check_lists_uncommitted_files(self):
         with captured_output():
             self.backend.check_clean()
@@ -30,6 +52,16 @@ class TestGitBackend(GitRepoTestCase):
         with captured_output() as out, self.assertRaisesRegex(CommandError, 'not clean'):
             self.backend.check_clean()
         self.assertIn('stray.txt', out.getvalue())
+
+    def test_words(self):
+        self.assertEqual(
+            (self.backend.words.tool, self.backend.words.branch), ('git', 'branch'))
+
+
+class TestGitBackendWithoutCommits(GitRepoTestCase):
+    def test_no_subject_without_a_commit(self):
+        with self.assertRaisesRegex(CommandError, 'No commits found'):
+            GitBackend(self.ws).subject()
 
 
 class TestChoosingTheBackend(GitRepoTestCase):

@@ -32,6 +32,15 @@ def branch_alias(branch_name: str) -> str | None:
     return None if alias in RESERVED_KEYWORDS else alias
 
 
+def alias_for(name: str) -> str:
+    """The alias a branch or bookmark name suggests; raise CommandError if that is a reserved keyword."""
+    alias = branch_alias(name)
+    if alias is None:
+        raise CommandError(
+            f'Branch "{name}" resolves to reserved keyword "{branch_to_alias(name)}"')
+    return alias
+
+
 def validate_alias_name(name: str) -> str | None:
     """Return an error message if alias name is invalid, else None."""
     if not name:

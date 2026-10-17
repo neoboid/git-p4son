@@ -20,22 +20,18 @@ from .alias import (
 )
 from .init import init_command
 from .review import review_command
-from .changelist_store import branch_alias, branch_to_alias
 from .common import CommandError, RunError
-from .git import get_current_branch, get_head_subject, get_workspace_dir
+from .git import get_workspace_dir
 from .log import log
 from .complete import run_complete
 from .skill import skill_install_command, skill_show_command
 from .writable import writable_command
 
 
-DEFAULT_BASE_BRANCH = 'HEAD~1'
-
-
 def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
-    """Add -b/--base-branch, defaulting to DEFAULT_BASE_BRANCH."""
-    parser.add_argument('-b', '--base-branch', default=DEFAULT_BASE_BRANCH,
-                        help=f'{help}. Defaults to {DEFAULT_BASE_BRANCH}, '
+    """Add -b/--base-branch, defaulting to None, which run_command resolves to the backend's default."""
+    parser.add_argument('-b', '--base-branch',
+                        help=f'{help}. Defaults to HEAD~1, '
                         'or in a jj workspace the parent of the jj change')
 
 
@@ -523,21 +519,6 @@ Examples:
     return parser
 
 
-def _resolve_branch_keyword(workspace_dir: str,
-                            jj_workspace: jj.Workspace | None = None) -> str:
-    """Resolve the current git branch, or jj bookmark, to an alias name; raise CommandError if it has none."""
-    branch = (jj_workspace.current_bookmark() if jj_workspace
-              else get_current_branch(workspace_dir))
-    if not branch:
-        raise CommandError('Cannot resolve the branch keyword on a detached '
-                           'HEAD. Name the alias or changelist explicitly.')
-    alias = branch_alias(branch)
-    if alias is None:
-        raise CommandError(f'Branch "{branch}" resolves to reserved keyword '
-                           f'"{branch_to_alias(branch)}"')
-    return alias
-
-
 _COMPLETION_FILES = {
     'bash': 'git-p4son.bash',
     'zsh': '_git-p4son',
@@ -596,12 +577,11 @@ def run_command(args: argparse.Namespace) -> int:
 
 def _run_in_workspace(args: argparse.Namespace) -> int:
     """Resolve the arguments that depend on the workspace, then run the command."""
-    jj_workspace = args.jj_workspace
-    if jj_workspace is not None:
-        if hasattr(args, 'base_branch'):
-            args.base_branch = jj_workspace.resolve_base(args.base_branch)
-        if args.command == 'sync':
-            jj_workspace.prepare_sync(args.bookmark)
+    backend = args.backend
+    if hasattr(args, 'base_branch'):
+        args.base_branch = backend.resolve_base(args.base_branch)
+    if args.jj_workspace is not None and args.command == 'sync':
+        args.jj_workspace.prepare_sync(args.bookmark)
 
     if getattr(args, 'no_alias', False):
         args.alias = None
@@ -609,9 +589,10 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
     branch_attr = getattr(args, 'branch_keyword_arg', None)
     if (branch_attr and getattr(args, branch_attr) == 'branch'
             and not getattr(args, 'all', False)):
-        log.heading('Resolving alias from current jj bookmark' if jj_workspace
-                    else 'Resolving alias from current git branch')
-        resolved = _resolve_branch_keyword(args.workspace_dir, jj_workspace)
+        words = backend.words
+        log.heading(
+            f'Resolving alias from current {words.tool} {words.branch}')
+        resolved = backend.suggested_alias()
         setattr(args, branch_attr, resolved)
         log.success(f'branch -> {resolved}')
 
@@ -628,18 +609,8 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         log.success(args.file)
 
     if getattr(args, 'message_from_head', False) and args.message is None:
-        if jj_workspace:
-            log.heading('Resolving message from jj change description')
-            lines = jj_workspace.tip.description.splitlines()
-            args.message = lines[0] if lines else None
-            if args.message is None:
-                raise CommandError('The jj change has no description. '
-                                   'Describe it with "jj describe", or pass -m or -F.')
-        else:
-            log.heading('Resolving message from HEAD commit')
-            args.message = get_head_subject(args.workspace_dir)
-            if args.message is None:
-                raise CommandError('No commits found to derive message from')
+        log.heading(f'Resolving message from {backend.words.message_source}')
+        args.message = backend.subject()
         log.success(args.message)
 
     return args.func(args)

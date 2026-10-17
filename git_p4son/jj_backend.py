@@ -3,12 +3,17 @@
 from collections.abc import Callable
 from typing import ContextManager
 
+from .changelist_store import alias_for
 from .common import CommandError
 from .jj import Workspace
+from .words import Words
 
 
 class JjBackend:
     """The jj backend, over a workspace loaded at one jj operation."""
+
+    words = Words(tool='jj', branch='bookmark',
+                  message_source='jj change description')
 
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
@@ -17,6 +22,23 @@ class JjBackend:
     def revision(self) -> str:
         """The commit holding the change: the working change, or its parent when that is empty and new."""
         return self.workspace.tip.commit
+
+    def resolve_base(self, base: str | None) -> str:
+        """The base resolved to a commit, None for the tip's parent; raise CommandError on conflicts."""
+        # -b's documented default is git's HEAD~1, which users type; jj has no HEAD, so it means the default here.
+        return self.workspace.resolve_base(None if base == 'HEAD~1' else base)
+
+    def suggested_alias(self) -> str:
+        """The alias the one bookmark at the tip suggests; raise CommandError without exactly one."""
+        return alias_for(self.workspace.current_bookmark())
+
+    def subject(self) -> str:
+        """The first line of the change's description; raise CommandError if it has none."""
+        lines = self.workspace.tip.description.splitlines()
+        if not lines:
+            raise CommandError('The jj change has no description. '
+                               'Describe it with "jj describe", or pass -m or -F.')
+        return lines[0]
 
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if jj left files out of its snapshot."""

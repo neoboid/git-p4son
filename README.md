@@ -488,13 +488,15 @@ clean git workspace, untracked files included; `update` refuses to run otherwise
 `--no-edit`.
 
 With `--per-commit`, `update` runs once per commit since the base branch instead of once for the whole range, the
-way `review` does after creating the changelist. It replays the commits with an interactive rebase, without opening
-an editor, and runs `git p4son update` after each one. With `--shelve`, every commit gets a shelf of its own and so
-shows up as its own patch in the Swarm review. Use it after making several commits since the last update:
+way `review` does after creating the changelist. It checks out each commit in turn, oldest first, runs the update
+on it, and returns to where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as
+its own patch in the Swarm review. Use it after making several commits since the last update:
 `update -b HEAD~2 --per-commit --shelve` updates the changelist with the last two commits, one at a time. The
-changelist is resolved before the rebase starts, and `-m`/`-F` is applied on the first step only. The rebase needs a
-clean git workspace, also with `--no-edit`. If a step fails, the rebase stops; fix the problem and run
-`git rebase --continue`.
+changelist and the base are resolved once, before the first step, so a relative base like `HEAD~2` means the same
+commit for every step, and `-m`/`-F` is applied on the first step only. It needs a clean git workspace, also with
+`--no-edit`. If a step fails, `update` returns to where you started and names the step and commit that failed. The
+error ends with the command that resumes after the last commit that worked, so earlier commits get no second
+shelf.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
@@ -515,11 +517,9 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   touched at all
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--shelve`: Re-shelve the changelist after updating
-- `--per-commit`: Update the changelist once per commit since the base branch, oldest first, through an
-  interactive rebase. With `--shelve`, steps sleep 5 seconds between them to give Perforce/Swarm time to process
-  each shelf.
-  `--dry-run` prints the generated rebase todo. A message from `-m` or `-F` is saved to
-  `.git-p4son/reviews/message` for the first step
+- `--per-commit`: Update the changelist once per commit since the base branch, oldest first, with each commit
+  checked out in turn. With `--shelve`, steps sleep 5 seconds between them to give Perforce/Swarm time to process
+  each shelf. `--dry-run` prints the steps, one per commit
 
 **Examples:**
 ```sh

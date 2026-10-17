@@ -5,28 +5,24 @@ from .changelist_store import load_changelist_alias
 from .jj import change_revision
 from .lib import check_workspace_clean, edit_and_shelve, update_changelist
 from .log import log
-from .rebase_todo import SWARM_SHELF_DELAY, rebase_per_commit
+from .per_commit import SWARM_SHELF_DELAY, run_per_commit
 
 
-def _step_command(changelist: str, args: argparse.Namespace) -> str:
-    """The update command each commit runs."""
-    flags = ''.join(f' {flag}' for flag, on in (
+def _step(changelist: str, args: argparse.Namespace) -> list[str]:
+    """The update step for every commit; run_per_commit gives the first one the message."""
+    flags = [flag for flag, on in (
         ('--no-commit-list', args.no_commit_list),
         ('--no-edit', args.no_edit),
-        ('--shelve', args.shelve)) if on)
-    # Each step runs under the lock this command holds.
-    ignore_jj = '--ignore-jj ' if args.ignore_jj else ''
-    return f'{ignore_jj}update {changelist}{flags}'
+        ('--shelve', args.shelve)) if on]
+    return ['update', changelist, *flags]
 
 
 def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
     """Update the changelist once per commit since the base branch."""
-    # Steps name the changelist by number: HEAD is detached during the rebase.
-    cmd = _step_command(changelist, args)
-    rebase_per_commit(cmd, cmd, args.base_branch, args.workspace_dir,
-                      message=args.message,
-                      sleep=SWARM_SHELF_DELAY if args.shelve else None,
-                      edit_todo=False, dry_run=args.dry_run)
+    # Steps name the changelist by number, as resolved once here.
+    run_per_commit(_step(changelist, args), None, args.base_branch, args.workspace_dir, args.backend,
+                   sleep=SWARM_SHELF_DELAY if args.shelve else None, dry_run=args.dry_run,
+                   message=args.message, message_file=args.file)
 
 
 def update_command(args: argparse.Namespace) -> int:

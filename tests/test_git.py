@@ -16,6 +16,7 @@ from git_p4son.git import (
     format_sync_subject,
     get_blob_oids,
     get_commit_lines_since,
+    get_commits_since,
     get_commit_subjects_since,
     get_current_branch,
     get_dirty_files,
@@ -844,17 +845,36 @@ class TestGetCommitLinesSince(unittest.TestCase):
             get_commit_lines_since('main', '/workspace')
 
 
+class TestGetCommitsSince(unittest.TestCase):
+    @mock.patch('git_p4son.git.run')
+    def test_returns_full_shas_and_subjects(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['a' * 40 + ' First commit', 'b' * 40])
+        self.assertEqual(get_commits_since('main', '/workspace'),
+                         [('a' * 40, 'First commit'), ('b' * 40, '')])
+        mock_run.assert_called_once_with(
+            ['git', 'log', '--format=%H %s', '--no-decorate',
+             '--reverse', '--no-merges', 'main..HEAD'],
+            cwd='/workspace')
+
+    @mock.patch('git_p4son.git.run')
+    def test_failure(self, mock_run):
+        mock_run.side_effect = RunError('git log failed')
+        with self.assertRaises(RunError):
+            get_commits_since('main', '/workspace')
+
+
 class TestGetCommitSubjectsSince(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_extracts_subjects(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            'abc1234 First commit',
-            'def5678 Second commit',
+            'a' * 40 + ' First commit',
+            'b' * 40 + ' Second commit',
         ])
         subjects = get_commit_subjects_since('HEAD~1', '/workspace')
         self.assertEqual(subjects, ['First commit', 'Second commit'])
         mock_run.assert_called_once_with(
-            ['git', 'log', '--format=%h %s', '--no-decorate',
+            ['git', 'log', '--format=%H %s', '--no-decorate',
              '--reverse', '--no-merges', 'HEAD~1..HEAD'],
             cwd='/workspace',
         )
@@ -873,7 +893,8 @@ class TestGetCommitSubjectsSince(unittest.TestCase):
 
     @mock.patch('git_p4son.git.run')
     def test_hash_only_line_fallback(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=['abc1234'])
+        """A commit with an empty subject gets its short SHA."""
+        mock_run.return_value = make_run_result(stdout=['abc1234' + '0' * 33])
         subjects = get_commit_subjects_since('main', '/workspace')
         self.assertEqual(subjects, ['abc1234'])
 

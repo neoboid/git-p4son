@@ -176,8 +176,8 @@ This adds the last commit only (`update`'s base defaults to `HEAD~1`); with more
 to the commit list. `--shelve` replaces the shelf, which adds a new patch to the Swarm review.
 
 With several new commits since the last update, update once per commit so each one becomes its own patch, as
-`review` does. `--per-commit` does that through a rebase, without an editor; replace 2 with the number of new
-commits:
+`review` does. `--per-commit` checks out each commit in turn and updates the CL on it; replace 2 with the number
+of new commits:
 
 ```sh
 git p4son update -b HEAD~2 --per-commit --shelve --dry-run   # check the steps
@@ -185,8 +185,8 @@ git p4son update -b HEAD~2 --per-commit --shelve
 ```
 
 To find the number, compare the commit list in `p4 describe -s $(git p4son alias show)` with
-`git log --oneline main..`. If a step fails, the rebase stops: tell the user what failed; after fixing it, re-run
-the failed `git p4son ...` command, then `git rebase --continue`.
+`git log --oneline main..`. If a step fails, `update` returns to the branch and names the step that failed: tell the
+user what failed; after fixing it, run the resume command the error ends with, which skips the commits that worked.
 
 To reword the description, `-F FILE` or `-m MESSAGE` replaces everything above the commit list. Add `--no-edit` to
 change only the description and leave the files alone. `--no-commit-list` leaves the commit list as it is.

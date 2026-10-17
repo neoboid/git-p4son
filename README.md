@@ -839,9 +839,10 @@ After a successful `git-p4son sync` that actually performs sync work, git-p4son 
 
 ## Jujutsu (jj)
 
-git-p4son detects a jj workspace colocated with the git repository, which needs jj 0.41 or newer. Separate jj
-workspaces, sparse working copies, and conflicted or divergent changes are not supported. Without a `.jj` folder,
-nothing changes.
+git-p4son detects a jj workspace colocated with the git repository, which needs jj 0.41 or newer. CI tests both
+0.41 and the latest jj release, and the minimum only rises with a note in the CHANGELOG. Separate jj workspaces,
+sparse working copies, and conflicted or divergent changes are not supported. Without a `.jj` folder, nothing
+changes.
 
 In a jj workspace:
 

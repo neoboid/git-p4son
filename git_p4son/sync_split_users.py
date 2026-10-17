@@ -58,19 +58,20 @@ def resolve_split_users(users: list[str], workspace_dir: str) -> list[str]:
     """Substitute the current Perforce user for $(user) and drop repeats.
 
     Raises CommandError, after p4's own message if any, when $(user) cannot be resolved."""
+    if USER_PLACEHOLDER not in users:
+        return _unique(users)
     current = None
-    if USER_PLACEHOLDER in users:
-        try:
-            current = get_p4_user(workspace_dir)
-        except (CommandError, OSError) as error:
-            for line in getattr(error, 'stderr', None) or [str(error)]:
-                log.info(line)
-        if not current:
-            raise CommandError(
-                f'Cannot determine the current Perforce user for '
-                f'{USER_PLACEHOLDER} in the split users. Check the p4 '
-                'connection, or pass --no-split to sync without the '
-                'configured split users.')
+    try:
+        current = get_p4_user(workspace_dir)
+    except (CommandError, OSError) as error:
+        for line in getattr(error, 'stderr', None) or [str(error)]:
+            log.info(line)
+    if not current:
+        raise CommandError(
+            f'Cannot determine the current Perforce user for '
+            f'{USER_PLACEHOLDER} in the split users. Check the p4 '
+            'connection, or pass --no-split to sync without the '
+            'configured split users.')
     return _unique([current if user == USER_PLACEHOLDER else user
                     for user in users])
 

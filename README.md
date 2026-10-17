@@ -51,8 +51,8 @@ git add .
 git commit -m "Feature part2"
 
 # Create a Swarm review with all commits since main in one go.
-# This opens an interactive rebase with pre-filled exec lines updating
-# the changelist with git-p4son after each picked commit.
+# Each commit is checked out in turn and gets a shelf of its own in the
+# review, then you are back on your branch.
 # An alias called "my-fancy-feature" (derived from the branch name) is
 # saved so you can refer to this CL by name in follow-up commands.
 git p4son review -m "My fancy feature" -b main
@@ -138,8 +138,8 @@ cloning.
 
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
-1. **Set a git editor** if you don't have one already. The `review` command opens an interactive rebase in your
-   editor. If you haven't configured one, set it with:
+1. **Set a git editor** if you don't have one already, for git's commit messages. `init` warns when none is set.
+   Set one with:
    ```sh
    git config --global core.editor <editor>   # e.g. vim, nano, code --wait
    ```
@@ -554,14 +554,15 @@ are left out of it.
 
 ### Review Command
 
-Automate the interactive rebase workflow for creating Swarm reviews. This command generates a rebase todo with `exec`
-lines that run `git p4son new --review` on the first commit and `git p4son update --shelve` on each subsequent commit,
-then opens it in your editor for review before executing. Like `new`, it needs a clean git workspace, untracked
-files included, and checks it even with `--dry-run`.
+Create a Swarm review with one shelf per commit. `review` checks out the first commit since the base branch and runs
+`git p4son new --review` on it, then checks out each later commit and runs `git p4son update --shelve`, and finally
+returns to where you started. Every step but the last sleeps 5 seconds to give Perforce/Swarm time to process the
+shelf. The commits are reviewed where they are: to review them on top of the latest `main`, rebase first. Like
+`new`, it needs a clean git workspace, untracked files included, and checks it even with `--dry-run`.
 
 ```sh
 git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
-                 [--no-commit-list] [--no-edit-todo]
+                 [--no-commit-list]
 ```
 
 **Arguments:**
@@ -571,31 +572,25 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
   multiple lines
-- `-b, --base-branch BASE_BRANCH`: Base branch to rebase onto and find commits since. Default is `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Base branch to find commits since. Default is `HEAD~1`
 - `-f, --force`: Overwrite an existing alias file
-- `-n, --dry-run`: Print the generated rebase todo without executing. Ends with `Dry run, nothing changed`
+- `-n, --dry-run`: Print the steps, one per commit, without running them. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
-  each `update` in the rebase todo
-- `--no-edit-todo`: Accept the generated rebase todo as is and start the rebase without opening an editor. No
-  editor needs to be configured. Useful for scripts and AI agents, which can check the todo with `--dry-run` first
+  each `update` step
 
-When run, the command generates a todo like this and opens it in your editor:
+A dry run prints the plan like this, with the base resolved to the commit every step uses; the message, which only
+the first step gets, is printed below it:
 
 ```
-pick abc1234 First commit
-exec git p4son new my-feature --review -F .git-p4son/reviews/message --sleep 5
-pick def5678 Second commit
-exec git p4son update my-feature --shelve --sleep 5
-pick ghi9012 Third commit
-exec git p4son update my-feature --shelve
+abc1234 First commit: git p4son new my-feature --review -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+def5678 Second commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+ghi9012 Third commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
 ```
 
-You can edit the todo before saving (e.g. reorder commits, remove lines), or abort by clearing the file - just like a
-normal `git rebase -i`. The message is saved to `.git-p4son/reviews/message` for the first step, and every step but
-the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf.
-
-If the rebase fails mid-way, fix the issue, re-run the failed `git p4son` command (git does not re-run a failed
-`exec` line), and run `git rebase --continue`.
+If a step fails, `review` returns to where you started and names the step and commit that failed. Once the first
+step has created the changelist, the error also says how to finish: after fixing the problem, run the
+`git p4son update my-feature --shelve --per-commit -b <commit>` it prints, which resumes after the last commit that
+worked.
 
 **Examples:**
 ```sh
@@ -605,14 +600,11 @@ git p4son review -m "Add my feature" -b main
 # Review just the last commit (default base branch)
 git p4son review -m "Fix bug"
 
-# Preview the generated todo without executing
+# Preview the steps without running them
 git p4son review -m "Add my feature" -b main --dry-run
 
 # Take a multi-line description from a file
 git p4son review -F description.txt -b main
-
-# Run the rebase without reviewing the todo in an editor
-git p4son review -m "Add my feature" -b main --no-edit-todo
 ```
 
 ### List-Changes Command
@@ -906,8 +898,8 @@ lock is released, but Perforce operations that completed are not undone.
 Hooks must not run ordinary jj commands, which would wait for the lock their caller holds. Read-only queries such
 as `jj --at-op=@ log` avoid snapshotting and the git import.
 
-`review` and `update --per-commit` rebase with git, so a jj workspace refuses them. To use the git workflow on
-purpose, put the global `--ignore-jj` flag **before** the command:
+`review` and `update --per-commit` check out each commit with git, so a jj workspace refuses them for now. To use
+the git workflow on purpose, put the global `--ignore-jj` flag **before** the command:
 
 ```sh
 git switch fix-login
@@ -915,9 +907,8 @@ git p4son --ignore-jj review -b main
 git p4son --ignore-jj update --per-commit --shelve -b main
 ```
 
-This uses git branches, `HEAD` and git's clean-workspace check, and still holds jj's lock. The rebase steps pass
-`--ignore-jj` on and reuse their caller's lock. If the rebase stops, the lock is released: a later
-`git rebase --continue` is not protected as a whole, though each git-p4son step takes the lock again.
+This uses git branches, `HEAD` and git's clean-workspace check, and holds jj's lock until every step has run and
+git-p4son has returned to where it started.
 
 ## Claude Code Skill
 

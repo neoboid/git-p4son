@@ -14,6 +14,11 @@
   updates the changelist on it, and returns to where you started, also when a step fails; the error names the step
   and commit, and gives the command that resumes after the last commit that worked. A relative base like `HEAD~2`
   is resolved once, so it means the same commit for every step. `--dry-run` prints one line per commit
+- `review` works the same way: it checks out each commit in turn instead of running `git rebase -i`, and after a
+  failed step gives the `update --per-commit` command that finishes it once the changelist exists. Commits are
+  reviewed where they are instead of being replayed onto the base branch, so rebase first to review on the latest
+  `main`.
+  `review --no-edit-todo` is gone, along with the editable todo and the message file in `.git-p4son/reviews/`
 
 ## 0.6.0
 

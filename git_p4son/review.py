@@ -1,26 +1,17 @@
-"""Review command: creates or updates a changelist per commit through an interactive rebase."""
+"""Review command: creates a changelist and updates it once per commit, one shelf each."""
 
 import argparse
-import shlex
-from .changelist_store import check_alias_usable
+from .changelist_store import check_alias_usable, list_changelist_aliases
 from .log import log
-from .per_commit import SWARM_SHELF_DELAY
-from .rebase_todo import rebase_per_commit
+from .per_commit import SWARM_SHELF_DELAY, run_per_commit
 
 
-def _step_commands(alias: str, force: bool, no_commit_list: bool,
-                   ignore_jj: bool = False) -> tuple[str, str]:
-    """The new command for the first commit and the update command for the others."""
-    # With --ignore-jj, each step runs under the lock this command holds.
-    prefix = '--ignore-jj ' if ignore_jj else ''
-    new_cmd = f'{prefix}new {shlex.quote(alias)} --review'
-    if force:
-        new_cmd += ' --force'
-    update_cmd = f'{prefix}update {shlex.quote(alias)} --shelve'
-    if no_commit_list:
-        new_cmd += ' --no-commit-list'
-        update_cmd += ' --no-commit-list'
-    return new_cmd, update_cmd
+def _steps(args: argparse.Namespace) -> tuple[list[str], list[str]]:
+    """The new step for the first commit and the update step for the others."""
+    commit_list = ['--no-commit-list'] if args.no_commit_list else []
+    force = ['--force'] if args.force else []
+    return (['new', args.alias, '--review', *force, *commit_list],
+            ['update', args.alias, '--shelve', *commit_list])
 
 
 def review_command(args: argparse.Namespace) -> int:
@@ -31,9 +22,18 @@ def review_command(args: argparse.Namespace) -> int:
     check_alias_usable(args.alias, workspace_dir, args.force)
     log.success(f'Alias "{args.alias}" is usable')
 
-    new_cmd, update_cmd = _step_commands(args.alias, args.force,
-                                         args.no_commit_list, args.ignore_jj)
-    rebase_per_commit(new_cmd, update_cmd, args.base_branch, workspace_dir,
-                      message=args.message, sleep=SWARM_SHELF_DELAY,
-                      edit_todo=not args.no_edit_todo, dry_run=args.dry_run)
+    aliases_before = dict(list_changelist_aliases(workspace_dir))
+
+    def resumable() -> str | None:
+        # Once the first step has saved the alias, its changelist exists.
+        changelist = dict(list_changelist_aliases(
+            workspace_dir)).get(args.alias)
+        if changelist is None or changelist == aliases_before.get(args.alias):
+            return None
+        return f'CL {changelist} exists.'
+
+    first, rest = _steps(args)
+    run_per_commit(first, rest, args.base_branch, workspace_dir, args.backend,
+                   sleep=SWARM_SHELF_DELAY, dry_run=args.dry_run,
+                   message=args.message, message_file=args.file, resumable=resumable)
     return 0

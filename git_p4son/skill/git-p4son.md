@@ -74,7 +74,7 @@ while it waits, work continues on B locally.
 
 ```sh
 git checkout -b feature-a main      # commit part A
-git p4son review -F /tmp/a.txt -b main --no-edit-todo
+git p4son review -F /tmp/a.txt -b main
 git checkout -b feature-b           # on top of feature-a, commit part B while A is in review
 ```
 
@@ -94,7 +94,7 @@ git checkout -b feature-b           # on top of feature-a, commit part B while A
   ```sh
   git checkout feature-c && git rebase --update-refs --onto main feature-a
   git branch -D feature-a && git p4son alias delete feature-a
-  git checkout feature-b && git p4son review -F /tmp/b.txt -b main --no-edit-todo
+  git checkout feature-b && git p4son review -F /tmp/b.txt -b main
   ```
 
 ## Syncing
@@ -122,24 +122,24 @@ git rebase main
 
 ## Creating a review
 
-The usual way to put a branch up for review is `review`. It replays the branch's commits with an interactive rebase
-onto the base branch, and after each commit creates or updates the CL and shelves it. Each shelf becomes a patch in
+The usual way to put a branch up for review is `review`. It checks out the branch's commits one at a time, oldest
+first, creates or updates the CL on each and shelves it, then returns to the branch. Each shelf becomes a patch in
 the Swarm review, so every git commit shows up as its own patch and reviewers can step through the commits in order.
 
 1. Write the CL description to a file outside the workspace: the title on the first line, then a short description
    of the change. Everything above `Changes included:` is yours, and `update` keeps it; git-p4son writes the commit
    list below it. `git p4son list-changes -b main` prints the commit subjects, which helps when summarising the
    branch.
-2. Preview the full description and the files the CL would get, then the generated rebase todo:
+2. Preview the full description and the files the CL would get, then the steps, one per commit:
    ```sh
    git p4son new -F /tmp/my-feature.txt -b main --dry-run
-   git p4son review -F /tmp/my-feature.txt -b main --dry-run --no-edit-todo
+   git p4son review -F /tmp/my-feature.txt -b main --dry-run
    ```
    The `new` preview lacks the `#review` line the real review ends the description with, and fails if the branch's
    alias already exists.
-3. Run it, accepting the todo without an editor:
+3. Run it:
    ```sh
-   git p4son review -F /tmp/my-feature.txt -b main --no-edit-todo
+   git p4son review -F /tmp/my-feature.txt -b main
    ```
 4. Report the CL to the user: `git p4son alias show`. Within seconds Swarm replaces `#review` in the description
    with `#review-<id>`, so `p4 describe -s <CL>` shows the review id too.
@@ -151,9 +151,9 @@ Notes:
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
   for a single-commit change, where a one-entry list would just repeat the title.
-- If a step fails, the rebase stops, and git does not re-run a failed `exec` line. Tell the user what failed; after
-  fixing it, re-run the `git p4son ...` command from git's "Execution failed" line, then `git rebase --continue`.
-  When the first step (`new`) failed, the later `update` steps would fail too, as no alias exists yet.
+- If a step fails, `review` returns to the branch and names the step and commit that failed. Tell the user what
+  failed. Once the CL exists, the error gives the `git p4son update ... --per-commit --shelve` command that finishes
+  the review after the fix; when the first step (`new`) failed, there is no CL yet, so run `review` again.
 
 To create a CL without the per-commit steps, use `new`:
 

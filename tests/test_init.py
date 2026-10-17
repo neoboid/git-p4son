@@ -20,7 +20,7 @@ from git_p4son.init import (
 from git_p4son.perforce import P4ClientSpec
 from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
-from git_p4son.git_backend import get_sync_branch_setting
+from git_p4son.sync_branch import get_sync_branch_setting
 from tests.helpers import captured_output, GitRepoTestCase, start_patch, WorkspaceTestCase
 
 

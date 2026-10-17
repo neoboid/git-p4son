@@ -290,12 +290,6 @@ class SyncTestCase(P4RepoTestCase):
         return [int(s.rsplit('@', 1)[1]) for s in subjects[1:]
                 if s.startswith('git-p4son: p4 sync')]
 
-    def hook(self, name, body):
-        """Add a Python hook script under .git-p4son/hooks/<name>/."""
-        path = self.write_file(os.path.join('.git-p4son', 'hooks', name, 'hook.py'),
-                               f'#!{sys.executable}\n{body}')
-        os.chmod(path, stat.S_IRWXU)
-
     def hook_log(self):
         """A file outside the workspace for hooks to append to, and a reader for it."""
         tempdir = tempfile.TemporaryDirectory()
@@ -762,13 +756,12 @@ class TestSyncPreflight(unittest.TestCase):
         mock_tracked.assert_called_once_with(['a.txt'], '/ws', 'main')
 
 
-_STRAY_FILE = 'jj makes a stray file part of the working change, which sync refuses for another reason'
+_STRAY_FILE = 'jj makes a stray file part of the working change, which sync then rebases instead of refusing'
 TestSyncOnJj = on_jj(
     TestSync, skip={'test_dirty_git_workspace_fails_before_syncing': _STRAY_FILE})
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
-TestSyncDryRunOnJj = on_jj(TestSyncDryRun, skip={
-                           'test_prints_the_sequence_and_syncs_nothing': _STRAY_FILE})
+TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncSplittingOnJj = on_jj(TestSyncSplitting)
 
 if __name__ == '__main__':

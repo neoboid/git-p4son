@@ -59,8 +59,11 @@ class Backend(Protocol):
     def fail_sync(self) -> None:
         """Say where a sync that failed partway leaves the work tree: on the sync branch, as Perforce left it."""
 
-    def finish_sync(self, changelist: int | None) -> None:
-        """Return to where start_sync started, now that the sync branch is at changelist, unless changes are left."""
+    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
+        """Return to where start_sync started, now at changelist, unless changes are left; rebase applies to jj."""
+
+    def after_lock(self) -> None:
+        """Finish what the command left for after jj's working-copy lock is released, as jj's rebase."""
 
 
 def selected_backend(workspace_dir: str, choice: str | None) -> str:
@@ -93,7 +96,10 @@ def open_backend(workspace_dir: str, choice: str | None, *, snapshot: bool = Fal
         raise CommandError('review and update --per-commit check out each commit with git, which a jj workspace '
                            'does not support yet. Put --backend git before the command to run it with git.')
     with jj.operation(workspace_dir, lock_only=name == 'git', snapshot=snapshot) as workspace:
-        yield GitBackend(workspace_dir) if workspace is None else JjBackend(workspace)
+        backend: Backend = GitBackend(
+            workspace_dir) if workspace is None else JjBackend(workspace)
+        yield backend
+    backend.after_lock()
 
 
 def completion_backend(workspace_dir: str, choice: str | None) -> Backend:

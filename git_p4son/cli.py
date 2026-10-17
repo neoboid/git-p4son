@@ -141,7 +141,12 @@ Examples:
     sync_parser.add_argument(
         '--branch',
         help='The sync branch to commit onto, overriding [sync] branch, which defaults to main. With the jj '
-        'backend, the bookmark to move to each sync commit, when the parent of the jj working change has several'
+        'backend, the bookmark to move to each sync commit'
+    )
+    sync_parser.add_argument(
+        '--no-rebase', action='store_true',
+        help='With the jj backend, leave the changes you started from where they are, instead of rebasing them '
+        'onto the sync bookmark'
     )
     sync_parser.add_argument(
         'changelist',

@@ -29,7 +29,7 @@ from .git import (
     list_branches,
     resolve_editor,
 )
-from .git_backend import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
+from .sync_branch import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
 from .sync_split_users import current_p4_user, is_self_split, set_self_split
 from .writable import is_writable_mode, set_writable_mode
 

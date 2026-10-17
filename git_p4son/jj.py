@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Self
 
 from .common import CommandError, RunResult, run
-from .git import EOL_FOR_AUTOCRLF, get_autocrlf, get_head_commit, get_untracked_files
+from .git import (
+    EOL_FOR_AUTOCRLF, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files, reset_files_to,
+)
 from .jj_lock import working_copy_lock
 from .log import log
 
@@ -27,11 +29,17 @@ def is_workspace(workspace_dir: str) -> bool:
     return (Path(workspace_dir) / '.jj').exists()
 
 
+_JJ = ['jj', '--no-pager', '--color', 'never']
+
+
 def _run(workspace_dir: str, *command: str, operation: str = '@') -> RunResult[list[str]]:
     """Run jj at operation without snapshotting the working copy."""
-    return run(['jj', '--no-pager', '--color', 'never',
-                '--ignore-working-copy', '--at-op', operation, *command],
-               cwd=workspace_dir)
+    return run([*_JJ, '--ignore-working-copy', '--at-op', operation, *command], cwd=workspace_dir)
+
+
+def _run_live(workspace_dir: str, *command: str) -> RunResult[list[str]]:
+    """Run jj on the live working copy, snapshotting it, as only the steps outside the lock may."""
+    return run([*_JJ, *command], cwd=workspace_dir)
 
 
 def _operation_id(workspace_dir: str) -> str:
@@ -82,6 +90,7 @@ def _validate_version(workspace_dir: str) -> None:
 @dataclass
 class Revision:
     """A jj revision and the git commit it is."""
+    change_id: str
     commit: str
     parents: list[str]
     description: str
@@ -94,7 +103,7 @@ class Revision:
         """Parse a line of _REVISION_TEMPLATE output."""
         data, empty, conflict, divergent = line.split('\t')
         data = json.loads(data)
-        return cls(data['commit_id'], data['parents'], data['description'],
+        return cls(data['change_id'], data['commit_id'], data['parents'], data['description'],
                    empty == 'true', conflict == 'true', divergent == 'true')
 
 
@@ -127,7 +136,6 @@ class Workspace:
     tip: Revision
     bookmarks: dict[str, list[str | None]]
     eol_conversion: str
-    sync_bookmark: str | None = None
 
     @classmethod
     def load(cls, directory: str, operation: str) -> Self:
@@ -214,34 +222,53 @@ class Workspace:
                                'Track or ignore them first.')
         log.success('All files snapshotted')
 
-    def prepare_sync(self, bookmark: str | None) -> None:
-        """Require an empty working change above the sync bookmark."""
-        working = self.working
-        if (not working.empty or working.description or len(working.parents) != 1
-                or self.bookmarks_at(working.commit)):
-            raise CommandError('sync in a jj workspace needs an empty working change with no description or '
-                               'bookmark and one parent. Run "jj new <bookmark>" first.')
-        bookmark = bookmark or self.current_bookmark()
-        if self.bookmarks.get(bookmark) != [self.tip.commit]:
+    def check_clean(self) -> None:
+        """Raise CommandError, after listing them, if files changed since jj's snapshot, or jj left any out of it."""
+        self.check_snapshot()
+        changed = get_changed_files(
+            self.working.commit, self.directory, self.eol_conversion)
+        if changed:
+            for path in changed:
+                log.file_change(path, 'modify')
             raise CommandError(
-                f'jj bookmark "{bookmark}" must point at the working change\'s parent')
-        if get_head_commit(self.directory) != self.tip.commit:
-            raise CommandError(
-                'git HEAD is not the parent of the jj working change')
-        self.sync_bookmark = bookmark
+                'The files above changed after jj snapshotted the working copy. Run the command again.')
 
-    def detach_for_sync(self) -> None:
-        """Keep Git commits from advancing any bookmark other than the selected one."""
-        run(['git', 'update-ref', '--no-deref', 'HEAD',
-             self.tip.commit, self.tip.commit], cwd=self.directory)
+    def checkout(self, commit: str) -> None:
+        """Put commit's files on disk, as jj writes line endings; the working change keeps its content in jj."""
+        checkout_detached(commit, self.directory, self.eol_conversion)
 
-    def advance_sync(self) -> None:
-        """Advance the sync bookmark after a completed Git commit."""
-        head = get_head_commit(self.directory)
-        ref = f'refs/heads/{self.sync_bookmark}'
-        run(['git', 'update-ref', ref, head, self.tip.commit],
-            cwd=self.directory)
-        self.tip.commit = head
+    def detach_head(self, commit: str) -> None:
+        """Point git's HEAD at commit, detached, so git's commits move no bookmark; the files stay as they are."""
+        run(['git', 'update-ref', '--no-deref', 'HEAD', commit], cwd=self.directory)
+
+    def restore_working(self, head: str) -> None:
+        """Undo checkout: git's HEAD and index back at head, as jj keeps them, and the working change's files on disk."""
+        self.detach_head(head)
+        reset_files_to(self.working.commit, head,
+                       self.directory, self.eol_conversion)
+
+    def move_bookmark(self, name: str, commit: str, old: str) -> None:
+        """Move bookmark name from old to commit through git, which jj imports once the lock is released."""
+        run(['git', 'update-ref',
+            f'refs/heads/{name}', commit, old], cwd=self.directory)
+
+    # The steps below run jj on the live working copy, after git-p4son has released the lock.
+
+    def rebase_branch(self, start: str, destination: str) -> None:
+        """Rebase start's branch, its ancestors not in destination and their descendants, onto destination."""
+        _run_live(self.directory, 'rebase', '-b', start, '-d', destination)
+
+    def conflicted_since(self, commit: str) -> list[str]:
+        """The descendants of commit with conflicts, as "change ID, first line" lines."""
+        return _run_live(self.directory, 'log', '-r', f'{commit}:: & conflicts()', '--no-graph',
+                         '-T', 'change_id.short() ++ " " ++ description.first_line() ++ "\\n"').stdout
+
+    def working_is_empty(self) -> bool:
+        return _run_live(self.directory, 'log', '-r', '@', '--no-graph', '-T', 'empty').stdout == ['true']
+
+    def return_to(self, change: str, editing: bool) -> None:
+        """Make change the working change if editing, else start a new one above it."""
+        _run_live(self.directory, 'edit' if editing else 'new', change)
 
 
 @contextlib.contextmanager
@@ -285,14 +312,16 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
     with working_copy_lock(workspace_dir):
         pass
     if snapshot:
-        snapshot_commit = run(['jj', '--no-pager', '--color', 'never', 'log', '-r', '@',
-                               '--no-graph', '-T', 'commit_id'], cwd=workspace_dir).stdout[0]
+        snapshot_commit = _run_live(
+            workspace_dir, 'log', '-r', '@', '--no-graph', '-T', 'commit_id').stdout[0]
     before = _operation_id(workspace_dir)
     with working_copy_lock(workspace_dir):
         if before != _operation_id(workspace_dir):
             raise CommandError(
                 'jj changed while git-p4son took its lock. Run the command again.')
         workspace = Workspace.load(workspace_dir, before)
+        if log.verbose_mode:
+            log.info(f'Pinned jj operation {before}')
         workspace.check_line_endings()
         if snapshot and workspace.working.commit != snapshot_commit:
             raise CommandError(
@@ -301,5 +330,5 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
             yield workspace
     if snapshot:
         log.heading('Reconciling jj workspace')
-        run(['jj', '--no-pager', '--color', 'never', 'status'], cwd=workspace_dir)
+        _run_live(workspace_dir, 'status')
         log.success('jj snapshotted the working copy')

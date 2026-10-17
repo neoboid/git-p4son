@@ -1,14 +1,35 @@
 """The jj adapter for the backend interface, delegating to a jj.Workspace."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import ContextManager
 
 from .changelist_store import alias_for
-from .common import CommandError
-from .git import commit_all
+from .common import CommandError, RunError
+from .git import commit_all, get_head_commit
 from .jj import Workspace
-from .lib import check_git_workspace_clean
+from .log import log
+from .sync_branch import choose_sync_branch
 from .words import Words
+
+
+@dataclass
+class _Sync:
+    """A sync onto bookmark, from the change start, which editing says was the working change itself."""
+    bookmark: str
+    # The bookmark's commit, which each sync commit moves on.
+    commit: str
+    start: str
+    editing: bool
+    # git's HEAD before the checkout, which jj keeps at the working change's parent.
+    head: str
+    on_sync_branch: bool
+    # Set by finish_sync, for after_lock: the changelist synced to, and whether to rebase.
+    finished: tuple[int | None, bool] | None = None
+
+    @property
+    def return_command(self) -> str:
+        return f'jj {"edit" if self.editing else "new"} {self.start}'
 
 
 class JjBackend:
@@ -19,6 +40,7 @@ class JjBackend:
 
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
+        self._sync: _Sync | None = None
 
     @property
     def revision(self) -> str:
@@ -56,31 +78,108 @@ class JjBackend:
             'Checking out commits one by one is not supported in a jj workspace yet.')
 
     def prepare_sync(self, branch: str | None) -> str:
-        """The bookmark to move: branch, else the tip's one bookmark; returns the tip's commit."""
-        self.workspace.prepare_sync(branch)
-        return self.workspace.tip.commit
+        """The sync bookmark: branch, else [sync] branch, else main; returns its commit.
+
+        Raises CommandError when it does not exist, or is conflicted."""
+        workspace = self.workspace
+        name = choose_sync_branch(
+            workspace.directory, branch, lambda name: name in workspace.bookmarks, 'bookmark')
+        targets = workspace.bookmarks[name]
+        if len(targets) != 1 or targets[0] is None:
+            raise CommandError(
+                f'jj bookmark "{name}" is conflicted. Resolve it first.')
+        commit = targets[0]
+        self._sync = _Sync(name, commit, workspace.tip.change_id[:12], workspace.working is workspace.tip,
+                           get_head_commit(workspace.directory), workspace.tip.commit == commit)
+        return commit
 
     def check_sync_clean(self) -> None:
-        """Read line endings as jj writes them."""
-        check_git_workspace_clean(
-            self.workspace.directory, self.workspace.eol_conversion)
+        self.workspace.check_clean()
 
     def start_sync(self) -> None:
-        """Detach git's HEAD, so its commits move no bookmark but the sync bookmark, which commit_sync moves."""
-        self.workspace.detach_for_sync()
-
-    def abandon_sync(self) -> None:
-        """Nothing to do: git's HEAD stays detached at the tip, as jj keeps it."""
-
-    def fail_sync(self) -> None:
-        """Nothing to say: sync started on the sync bookmark."""
-
-    def finish_sync(self, changelist: int | None) -> None:
-        """Nothing to do yet: the sync bookmark has moved, and sync started on it."""
+        """Put the sync bookmark's files on disk; on the bookmark they are there already, and HEAD only detaches."""
+        sync = self._prepared()
+        if sync.on_sync_branch:
+            self.workspace.detach_head(sync.commit)
+            return
+        log.heading(f'Checking out sync bookmark {sync.bookmark}')
+        self.workspace.checkout(sync.commit)
+        log.success(f'From {sync.start}')
 
     def commit_sync(self, subject: str) -> int:
         """Stage with jj's line endings, and move the sync bookmark to the commit."""
+        sync = self._prepared()
         staged = commit_all(subject, self.workspace.directory,
                             self.workspace.eol_conversion)
-        self.workspace.advance_sync()
+        commit = get_head_commit(self.workspace.directory)
+        self.workspace.move_bookmark(sync.bookmark, commit, sync.commit)
+        sync.commit = commit
         return staged
+
+    def abandon_sync(self) -> None:
+        """Put the working change's files back, and git's HEAD at its parent, so jj sees no change."""
+        sync = self._prepared()
+        if sync.on_sync_branch:
+            return
+        log.heading(f'Returning to {sync.start}')
+        self.workspace.restore_working(sync.head)
+        log.success(sync.start)
+
+    def fail_sync(self) -> None:
+        sync = self._prepared()
+        if not sync.on_sync_branch:
+            log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
+                        f'Perforce left them, and nothing is rebased. Your changes are as they were; return with '
+                        f'"{sync.return_command}" once it is sorted out.')
+
+    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
+        """Leave the rebase and the return to after_lock, as jj commands cannot run under its lock."""
+        self._prepared().finished = (changelist, rebase)
+
+    def after_lock(self) -> None:
+        """After a sync, rebase the changes it started from onto the sync bookmark, then return to them.
+
+        Raises CommandError, after returning, if the rebase failed; the sync stays."""
+        sync = self._sync
+        if sync is None or sync.finished is None or sync.on_sync_branch:
+            return
+        changelist, rebase = sync.finished
+        workspace = self.workspace
+        rebase_command = f'jj rebase -b {sync.start} -d {sync.bookmark}'
+        failure = None
+        if rebase:
+            log.heading(f'Rebasing your changes onto {sync.bookmark}')
+            try:
+                workspace.rebase_branch(sync.start, sync.commit)
+            except RunError as error:
+                failure = error
+            else:
+                self._report_conflicts(sync)
+        at = f'CL {changelist}' if changelist else 'the synced changelist'
+        if not workspace.working_is_empty():
+            log.warning(f'Staying on {sync.bookmark}, with the merged local changes in the working change. Review '
+                        f'them, then return with "{sync.return_command}".')
+        else:
+            log.heading(f'Returning to {sync.start}')
+            workspace.return_to(sync.start, sync.editing)
+            log.success(sync.start)
+            hint = '' if rebase else f' Run "{rebase_command}" to bring your changes up to date.'
+            log.info(f'{sync.bookmark} is now at {at}.{hint}')
+        if failure is not None:
+            raise CommandError(f'{sync.bookmark} reached {at}, but jj could not rebase your changes: {failure}. '
+                               f'Run: {rebase_command}', failure.returncode) from failure
+
+    def _report_conflicts(self, sync: _Sync) -> None:
+        """List the changes the rebase recorded conflicts in."""
+        conflicted = self.workspace.conflicted_since(sync.commit)
+        if not conflicted:
+            log.success(f'Rebased onto {sync.bookmark}')
+            return
+        for line in conflicted:
+            log.info(line)
+        log.warning(
+            'jj recorded conflicts in the changes above. Resolve them with jj.')
+
+    def _prepared(self) -> _Sync:
+        assert self._sync is not None, 'prepare_sync comes first'
+        return self._sync

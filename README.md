@@ -357,6 +357,8 @@ the [pre-sync hooks](#pre-sync-hook).
 **Options:**
 - `--branch BRANCH`: Commit onto this branch instead of `[sync] branch`. With the jj backend, the bookmark to move
   to each sync commit
+- `--no-rebase`: With the jj backend, leave the changes you started from where they are, instead of rebasing them
+  onto the [sync bookmark](#syncing-a-bookmark)
 - `-f, --force`: Allow syncing to changelists older than the current one
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
   real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
@@ -910,8 +912,7 @@ For example:
 
 ```sh
 jj git init --colocate       # Add jj to an existing git-p4son repository
-jj new main
-git p4son sync
+git p4son sync               # From any change: syncs main, then rebases your changes onto it
 
 jj new main -m "Fix login"
 # Edit files
@@ -923,14 +924,30 @@ git p4son update -b main --shelve
 
 ### Syncing a bookmark
 
-Run `jj new main` before syncing. `sync` needs an empty working change with no description or bookmark and one
-parent, and moves the bookmark at that parent to each sync commit. When several bookmarks point there, pick one
-with `git p4son sync --branch main`; the others stay where they are. The jj backend doesn't read `[sync] branch`
-yet.
+`sync` works from any change, as with git. It moves the sync bookmark, `[sync] branch` or `--branch`, defaulting
+to `main`, to each sync commit:
+
+1. It puts the bookmark's files on disk. Your working change keeps its content in jj, which snapshotted it first.
+2. It syncs and commits, then releases jj's lock.
+3. It rebases the changes you started from onto the moved bookmark, as `jj rebase -b <your change> -d main`, and
+   lists any change that got conflicts, which jj records rather than stopping on.
+4. It returns you to where you started: `jj edit` on the change you were editing, or `jj new` above it.
+
+From the sync bookmark itself, nothing is rebased. `--no-rebase` skips the rebase and still returns you.
+
+You stay on the sync bookmark when:
+
+- local changes were merged back: they are in a new working change on it, for you to review, and your changes are
+  still rebased
+- a sync fails partway: jj's next command puts a new working change there, holding the files as Perforce left them,
+  and nothing is rebased
+- the rebase fails: sync reports it with the `jj rebase` command to run and a non-zero exit code, and the sync is
+  not undone
+
+A failing pre-sync hook, or anything else before the first sync, puts your working change's files back.
 
 `sync` still stages and commits with git, including git attributes and filters, and sets `core.autocrlf` to match
-jj's line ending conversion. Local changes that `sync` merges back are left in the new working change for you to
-review.
+jj's line ending conversion.
 
 ### Line endings
 
@@ -954,8 +971,9 @@ git-p4son holds jj's working-copy lock while commands run, including sync hooks 
 so other jj processes cannot snapshot files halfway through. A busy lock stops the command. Queries during the
 command use a pinned jj operation without snapshotting.
 
-jj's first snapshot and final reconciliation happen outside the lock, so another jj command can import the
-finished git changes before git-p4son does: this is not one atomic jj transaction. The lock does not keep out
+jj's first snapshot and final reconciliation happen outside the lock, and so do sync's rebase and return, so
+another jj command can import the finished git changes before git-p4son does: this is not one atomic jj
+transaction. `--verbose` logs the jj operation git-p4son pinned at the start. The lock does not keep out
 editors, git commands or other jj workspaces. If a command fails, look at the workspace before continuing: the
 lock is released, but Perforce operations that completed are not undone.
 

@@ -142,7 +142,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and
   which needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
   when the working change is empty and new), its bookmark and the default base; commands reach it only through
-  `JjBackend`. git still reads objects, diffs and makes the sync commits. `operation` warns when git's
+  `JjBackend`. git still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and
+  `restore_working` move the files on disk for sync under the lock; `rebase_branch`, `conflicted_since`,
+  `working_is_empty` and `return_to` run jj on the live working copy, only after it. `operation` warns when git's
   `core.autocrlf` (`git.get_autocrlf`) and jj's `working-copy.eol-conversion` disagree.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
@@ -158,7 +160,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`.
   `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
   `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
-  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`.
+  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once
+  the lock is released, it calls the backend's `after_lock`.
   `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command
   branches on jj outside the backend modules and `jj.py`.
 
@@ -166,9 +169,11 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
   `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
 
-- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`: sync commits with jj's line
-  endings that move the sync bookmark. Its `checkouts` raises, as `open_backend` refuses the per-commit commands
-  on jj.
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its sync checks out the sync
+  bookmark, commits with jj's line endings and moves the bookmark; `after_lock`, which `open_backend` calls once
+  jj's lock is released, runs `jj rebase -b <start> -d <bookmark>` (unless `--no-rebase`), lists conflicts, and
+  returns with `jj edit` or `jj new` unless merged-back changes are left. Its `checkouts` raises, as
+  `open_backend` refuses the per-commit commands on jj.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
@@ -184,6 +189,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
   keyword. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
   `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
+
+- **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
+  `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.
 
 - **`depot.py`** - Owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and
   `resolve_depot_root`, which returns it with the client spec (`ResolvedDepot`) for `sync`. `check_depot_root` and

@@ -44,6 +44,10 @@ class JjBackend:
         """Raise CommandError, after listing them, if jj left files out of its snapshot."""
         self.workspace.check_snapshot()
 
+    def base_candidates(self) -> list[tuple[str, str]]:
+        """The local bookmarks."""
+        return [(name, 'jj bookmark') for name in self.workspace.bookmarks]
+
     def checkouts(self) -> ContextManager[Callable[[str], None]]:
         """Not supported yet; run_command refuses the per-commit commands in a jj workspace first."""
         raise CommandError(

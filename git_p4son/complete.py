@@ -2,11 +2,11 @@
 
 import argparse
 
-from .changelist_store import branch_alias, list_changelist_aliases
+from .backend import completion_backend
+from .changelist_store import list_changelist_aliases
 from .common import CommandError
-from .git import get_current_branch, get_workspace_dir
+from .git import get_workspace_dir
 from .log import log
-from . import jj
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion'})
@@ -87,36 +87,42 @@ def _filter(candidates, prefix):
             if name.startswith(prefix)]
 
 
+def _backend(workspace_dir, ignore_jj):
+    """The backend for workspace_dir, or None when there is none or jj cannot be read."""
+    if not workspace_dir:
+        return None
+    try:
+        return completion_backend(workspace_dir, ignore_jj)
+    except (CommandError, OSError):
+        return None
+
+
 def _complete_flag_value(flag, workspace_dir=None, ignore_jj=False):
     """Complete the value for a flag."""
     if flag in ('-b', '--base-branch'):
-        if workspace_dir and not ignore_jj and jj.is_workspace(workspace_dir):
-            try:
-                workspace = jj.Workspace.load(workspace_dir, '@')
-            except (CommandError, OSError):
-                return []
-            return [(name, 'jj bookmark') for name in workspace.bookmarks]
-        return [('__branch__', '')]
+        if not workspace_dir:
+            return [('__branch__', '')]
+        backend = _backend(workspace_dir, ignore_jj)
+        return backend.base_candidates() if backend else []
     return []
 
 
 def _get_branch_candidates(prefix, workspace_dir, ignore_jj=False):
     """Get 'branch' completion candidates based on prefix."""
     keyword = 'branch'
-    if not workspace_dir or not keyword.startswith(prefix):
+    if not keyword.startswith(prefix):
         return []
-    use_jj = not ignore_jj and jj.is_workspace(workspace_dir)
+    backend = _backend(workspace_dir, ignore_jj)
+    if backend is None:
+        return []
     try:
-        branch = (jj.Workspace.load(workspace_dir, '@').current_bookmark()
-                  if use_jj else get_current_branch(workspace_dir))
+        alias = backend.suggested_alias()
     except (CommandError, OSError):
         return []
-    alias = branch_alias(branch) if branch else None
-    if alias is None:
-        return []
+    branch = backend.words.branch
     if prefix == keyword:
-        return [(alias, 'Current bookmark' if use_jj else 'Current branch')]
-    return [(keyword, 'Use current bookmark name' if use_jj else 'Use current branch name')]
+        return [(alias, f'Current {branch}')]
+    return [(keyword, f'Use current {branch} name')]
 
 
 def _complete_positional(command, subcommand, positional_count,

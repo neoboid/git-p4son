@@ -324,7 +324,7 @@ class TestComplete(unittest.TestCase):
         self.assertIn('--force', names)
 
 
-@mock.patch('git_p4son.complete.get_current_branch', return_value='feat/cool')
+@mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/cool')
 @mock.patch('git_p4son.complete.list_changelist_aliases',
             return_value=[('myalias', '999')])
 @mock.patch('git_p4son.complete.get_workspace_dir', return_value='/ws')
@@ -339,6 +339,12 @@ class TestCompleteBranchAlias(unittest.TestCase):
         result = _complete(self.parser, ['new', 'b'], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('branch', names)
+
+    def test_no_branch_candidates_when_git_cannot_start(self, _ws, _aliases, branch):
+        """A missing git gives no candidates rather than a traceback in the shell."""
+        branch.side_effect = FileNotFoundError('git')
+        result = _complete(self.parser, ['new', 'branch'], workspace_dir='/ws')
+        self.assertNotIn('feat-cool', self._names(result))
 
     def test_new_positional_branch_expand(self, _ws, _aliases, _branch):
         result = _complete(self.parser, ['new', 'branch'],
@@ -442,7 +448,7 @@ class TestCompleteBranchAlias(unittest.TestCase):
         self.assertIn('myalias', names)
 
 
-@mock.patch('git_p4son.complete.get_current_branch', return_value='feat/cool')
+@mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/cool')
 @mock.patch('git_p4son.complete.list_changelist_aliases',
             return_value=[('myalias', '999')])
 @mock.patch('git_p4son.complete.get_workspace_dir', return_value=None)
@@ -459,7 +465,7 @@ class TestCompleteBranchNoWorkspace(unittest.TestCase):
         self.assertNotIn('branch', names)
 
 
-@mock.patch('git_p4son.complete.get_current_branch', return_value='main')
+@mock.patch('git_p4son.git_backend.get_current_branch', return_value='main')
 @mock.patch('git_p4son.complete.list_changelist_aliases',
             return_value=[('myalias', '999')])
 @mock.patch('git_p4son.complete.get_workspace_dir', return_value='/ws')

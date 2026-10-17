@@ -31,6 +31,9 @@ class Backend(Protocol):
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if the change has uncommitted work."""
 
+    def base_candidates(self) -> list[tuple[str, str]]:
+        """Completion candidates for -b, as (name, description)."""
+
     def checkouts(self) -> ContextManager[Callable[[str], None]]:
         """Yield a function that puts a commit's files in the work tree, returning to the start on exit."""
 
@@ -39,3 +42,10 @@ class Backend(Protocol):
 def open_backend(workspace_dir: str, jj_workspace: jj.Workspace | None) -> Iterator[Backend]:
     """Open the backend for one command, jj when jj.operation yielded a workspace."""
     yield GitBackend(workspace_dir) if jj_workspace is None else JjBackend(jj_workspace)
+
+
+def completion_backend(workspace_dir: str, ignore_jj: bool) -> Backend:
+    """The backend for completing a command line, read without jj's lock; raise CommandError if jj fails."""
+    if not ignore_jj and jj.is_workspace(workspace_dir):
+        return JjBackend(jj.Workspace.load(workspace_dir, '@'))
+    return GitBackend(workspace_dir)

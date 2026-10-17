@@ -260,11 +260,12 @@ def operation(workspace_dir: str, *, ignore: bool = False, snapshot: bool = True
                                '--no-graph', '-T', 'commit_id'], cwd=workspace_dir).stdout[0]
     before = None if ignore else _operation_id(workspace_dir)
     with working_copy_lock(workspace_dir):
-        if not ignore and before != _operation_id(workspace_dir):
+        if before is not None and before != _operation_id(workspace_dir):
             raise CommandError(
                 'jj changed while git-p4son took its lock. Run the command again.')
-        workspace = None if ignore else Workspace.load(workspace_dir, before)
-        if snapshot and not ignore and workspace.working.commit != snapshot_commit:
+        workspace = None if before is None else Workspace.load(
+            workspace_dir, before)
+        if snapshot and workspace is not None and workspace.working.commit != snapshot_commit:
             raise CommandError(
                 'The jj working change changed while git-p4son took its lock. Run the command again.')
         os.environ[_LOCK_ENV] = root

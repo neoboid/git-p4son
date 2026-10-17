@@ -910,6 +910,22 @@ with `git p4son sync --bookmark main`; the others stay where they are.
 jj's line ending conversion. Local changes that `sync` merges back are left in the new working change for you to
 review.
 
+### Line endings
+
+jj writes the working files by its `working-copy.eol-conversion`, and git by its `core.autocrlf`. When the two
+disagree, jj and git see different line endings, and jj fills changes with line ending edits. Set them to go
+together:
+
+| git's `core.autocrlf` | jj's `working-copy.eol-conversion` |
+| --- | --- |
+| `false`, the default | `none`, the default |
+| `true`, the default in Git for Windows | `input-output` |
+| `input` | `input` |
+
+On the jj backend, git-p4son warns when they disagree, and names the jj setting that matches git, for example
+`jj config set --repo working-copy.eol-conversion input-output`. The check reads only `core.autocrlf`: `text` and
+`eol` attributes in a `.gitattributes` override it in git, and jj doesn't read them.
+
 ### Locking, and the git workflow
 
 git-p4son holds jj's working-copy lock while commands run, including sync hooks and temporary Perforce reverts,

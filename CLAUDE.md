@@ -137,7 +137,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and
   which needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
   when the working change is empty and new), its bookmark and the default base; commands reach it only through
-  `JjBackend`. git still reads objects, diffs and makes the sync commits.
+  `JjBackend`. git still reads objects, diffs and makes the sync commits. `operation` warns when git's
+  `core.autocrlf` (`git.get_autocrlf`) and jj's `working-copy.eol-conversion` disagree.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and

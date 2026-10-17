@@ -15,6 +15,7 @@ from git_p4son.git import (
     commit,
     find_base_commits,
     format_sync_subject,
+    get_autocrlf,
     get_blob_oids,
     get_commits_since,
     get_commit_subjects_since,
@@ -83,6 +84,27 @@ class TestRepoSetup(GitRepoTestCase):
         self.write_file('b.txt', 'b')
         add_files(['a.txt'], self.ws)
         self.assertEqual(get_staged_files(self.ws), ['a.txt'])
+
+
+class TestGetAutocrlf(GitRepoTestCase):
+    def test_reads_the_setting_in_git_s_spellings(self):
+        spellings = {'true': ('true', 'Yes', 'on', '1'),
+                     'false': ('false', 'No', 'off', '0'),
+                     'input': ('input',)}
+        for expected, values in spellings.items():
+            for value in values:
+                with self.subTest(value=value):
+                    self.git('config', 'core.autocrlf', value)
+                    self.assertEqual(get_autocrlf(self.ws), expected)
+
+    def test_a_bare_key_is_true_and_an_empty_value_false(self):
+        """As git reads them, though git config --get prints both as an empty line."""
+        for line, expected in (('autocrlf', 'true'), ('autocrlf =', 'false')):
+            with self.subTest(line=line):
+                self.git('config', '--replace-all', 'core.autocrlf', 'input')
+                with open(os.path.join(self.ws, '.git', 'config'), 'a') as f:
+                    f.write(f'[core]\n\t{line}\n')
+                self.assertEqual(get_autocrlf(self.ws), expected)
 
 
 class TestGetTrackedFiles(GitRepoTestCase):

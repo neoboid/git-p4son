@@ -191,6 +191,28 @@ def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
 
 # jj's working-copy.eol-conversion values, as git's core.autocrlf.
 _AUTOCRLF = {'none': 'false', 'input': 'input', 'input-output': 'true'}
+# And back: the eol-conversion that matches a core.autocrlf.
+EOL_FOR_AUTOCRLF = {value: eol for eol, value in _AUTOCRLF.items()}
+# The ways git spells a boolean, which core.autocrlf takes besides input.
+_GIT_BOOLEANS = {'true': 'true', 'yes': 'true', 'on': 'true', '1': 'true',
+                 'false': 'false', 'no': 'false', 'off': 'false', '0': 'false'}
+
+
+def get_autocrlf(workspace_dir: str) -> str:
+    """git's core.autocrlf for workspace_dir as true, false or input; unset means false."""
+    # Each entry is the key, then a newline and the value if it has one, then NUL; git uses the last entry.
+    result = run(['git', 'config', '-z', '--get-regexp', r'^core\.autocrlf$'],
+                 cwd=workspace_dir, text=False, fail_on_returncode=False)
+    entries = [entry for entry in result.stdout.split(b'\0') if entry]
+    if not entries:
+        return 'false'
+    _key, newline, value = entries[-1].decode(
+        'utf-8', 'replace').partition('\n')
+    # A bare key, autocrlf alone on its line, is true; an empty value, autocrlf =, is false.
+    if not newline:
+        return 'true'
+    value = value.strip().lower()
+    return 'input' if value == 'input' else _GIT_BOOLEANS.get(value, 'false')
 
 
 def _git_for(eol_conversion: str | None) -> list[str]:

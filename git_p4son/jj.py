@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Self
 
 from .common import CommandError, RunResult, run
-from .git import get_head_commit, get_untracked_files
+from .git import EOL_FOR_AUTOCRLF, get_autocrlf, get_head_commit, get_untracked_files
 from .jj_lock import working_copy_lock
 from .log import log
 
@@ -193,6 +193,16 @@ class Workspace:
                                'Resolve them first.')
         return resolved.commit
 
+    def check_line_endings(self) -> None:
+        """Warn, naming the fix, when git's core.autocrlf and jj's working-copy.eol-conversion disagree."""
+        autocrlf = get_autocrlf(self.directory)
+        matching = EOL_FOR_AUTOCRLF[autocrlf]
+        if matching == self.eol_conversion:
+            return
+        log.warning(f"jj's working-copy.eol-conversion is {self.eol_conversion}, but git's core.autocrlf is "
+                    f'{autocrlf}, so jj and git write line endings differently. To match git, run: '
+                    f'jj config set --repo working-copy.eol-conversion {matching}')
+
     def check_snapshot(self) -> None:
         """Raise CommandError, after listing them, if jj left files git does not ignore out of its snapshot."""
         log.heading('Checking jj workspace files')
@@ -283,6 +293,7 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
             raise CommandError(
                 'jj changed while git-p4son took its lock. Run the command again.')
         workspace = Workspace.load(workspace_dir, before)
+        workspace.check_line_endings()
         if snapshot and workspace.working.commit != snapshot_commit:
             raise CommandError(
                 'The jj working change changed while git-p4son took its lock. Run the command again.')

@@ -1,7 +1,9 @@
 """Tests for git_p4son.jj and git_p4son.jj_lock modules."""
 
+import dataclasses
 import os
 import stat
+import subprocess
 import unittest
 from unittest import mock
 
@@ -147,6 +149,36 @@ class TestJjBackend(JjRepoTestCase):
         with self.assertRaisesRegex(CommandError, 'Put --backend git'):
             with open_backend(self.ws, None, checkouts=True):
                 pass
+
+
+class TestLineEndingCheck(JjRepoTestCase):
+    def git(self, *args):
+        subprocess.run(['git', *args], cwd=self.ws, check=True)
+
+    def test_mismatch_is_reported_with_the_fix(self):
+        self.git('config', 'core.autocrlf', 'true')
+        with captured_output() as out, jj.operation(self.ws):
+            pass
+        self.assertIn(
+            "jj's working-copy.eol-conversion is none, but git's core.autocrlf is true", out.getvalue())
+        self.assertIn(
+            'jj config set --repo working-copy.eol-conversion input-output', out.getvalue())
+
+    def test_matching_settings_are_quiet(self):
+        with self.operation() as workspace:
+            for autocrlf, eol in (('false', 'none'), ('true', 'input-output'), ('input', 'input')):
+                with self.subTest(autocrlf=autocrlf), captured_output() as out:
+                    self.git('config', 'core.autocrlf', autocrlf)
+                    dataclasses.replace(
+                        workspace, eol_conversion=eol).check_line_endings()
+                self.assertNotIn(
+                    'write line endings differently', out.getvalue())
+
+    def test_the_git_backend_is_not_warned(self):
+        self.git('config', 'core.autocrlf', 'true')
+        with captured_output() as out, jj.operation(self.ws, lock_only=True):
+            pass
+        self.assertNotIn('write line endings differently', out.getvalue())
 
 
 class TestWorkspace(JjRepoTestCase):

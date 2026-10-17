@@ -4,6 +4,7 @@ import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
+from collections.abc import Mapping
 from typing import IO, Callable, TypeVar
 
 from .common import (
@@ -281,7 +282,7 @@ def get_opened_files(filenames: list[str],
 _State = TypeVar('_State')
 
 
-def opened_lookup(opened: dict[str, _State]) -> Callable[[str], _State | None]:
+def opened_lookup(opened: Mapping[str, _State]) -> Callable[[str], _State | None]:
     """Look files up in a map of opened files, ignoring case where there is no exact match."""
     # p4 may spell a path in the client's case on case-insensitive file systems.
     folded = {path.casefold(): state for path, state in opened.items()}

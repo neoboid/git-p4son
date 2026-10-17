@@ -417,10 +417,11 @@ Examples:
 
     review_parser = subparsers.add_parser(
         'review',
-        help='Create a Swarm review, one shelf per commit, through an interactive rebase',
-        description='Automate the interactive rebase workflow by generating '
-        'a rebase todo with exec lines that run git p4son new/update '
-        'for each commit since the base branch.'
+        help='Create a Swarm review, one shelf per commit',
+        description='Create a Swarm review from the commits since the base '
+        'branch, oldest first: check out the first and run git p4son new '
+        '--review on it, then check out each later one and run git p4son '
+        'update --shelve, before returning to where you started.'
     )
     review_parser.set_defaults(func=review_command)
     _add_branch_keyword_arg(review_parser, 'alias',
@@ -432,24 +433,19 @@ Examples:
         'Read the changelist description message from the given file',
         from_head=True)
     _add_base_branch(
-        review_parser, 'Base branch to rebase onto and find commits since')
+        review_parser, 'Base branch to find commits since')
     review_parser.add_argument(
         '-f', '--force',
         action='store_true',
         help='Overwrite an existing alias'
     )
     _add_dry_run(
-        review_parser, 'Print the generated rebase todo without executing')
+        review_parser, 'Print the steps, one per commit, without running them')
     review_parser.add_argument(
         '--no-commit-list',
         action='store_true',
         help='Leave the enumerated commit list out of the changelist description. '
-             'Passed on to new and each update in the rebase todo'
-    )
-    review_parser.add_argument(
-        '--no-edit-todo',
-        action='store_true',
-        help='Accept the generated rebase todo as is, without opening an editor'
+             'Passed on to new and each update step'
     )
 
     writable_parser = subparsers.add_parser(

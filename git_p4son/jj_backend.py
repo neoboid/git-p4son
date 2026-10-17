@@ -5,7 +5,9 @@ from typing import ContextManager
 
 from .changelist_store import alias_for
 from .common import CommandError
+from .git import commit_all
 from .jj import Workspace
+from .lib import check_git_workspace_clean
 from .words import Words
 
 
@@ -49,6 +51,25 @@ class JjBackend:
         return [(name, 'jj bookmark') for name in self.workspace.bookmarks]
 
     def checkouts(self) -> ContextManager[Callable[[str], None]]:
-        """Not supported yet; run_command refuses the per-commit commands in a jj workspace first."""
+        """Not supported yet; open_backend refuses the per-commit commands in a jj workspace first."""
         raise CommandError(
             'Checking out commits one by one is not supported in a jj workspace yet.')
+
+    def prepare_sync(self, bookmark: str | None) -> None:
+        self.workspace.prepare_sync(bookmark)
+
+    def check_sync_clean(self) -> None:
+        """Read line endings as jj writes them."""
+        check_git_workspace_clean(
+            self.workspace.directory, self.workspace.eol_conversion)
+
+    def start_sync(self) -> None:
+        """Detach git's HEAD, so its commits move no bookmark but the sync bookmark, which commit_sync moves."""
+        self.workspace.detach_for_sync()
+
+    def commit_sync(self, subject: str) -> int:
+        """Stage with jj's line endings, and move the sync bookmark to the commit."""
+        staged = commit_all(subject, self.workspace.directory,
+                            self.workspace.eol_conversion)
+        self.workspace.advance_sync()
+        return staged

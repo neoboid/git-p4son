@@ -212,6 +212,24 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 0)
 
 
+class TestSnapshotDefault(unittest.TestCase):
+    """jj snapshots the working copy first for every command, unless its parser says it does not read the change."""
+
+    def test_commands_that_read_the_change_snapshot(self):
+        parser = create_parser()
+        for argv in (['new'], ['update'], ['list-changes'], ['sync'], ['writable', 'apply'],
+                     ['writable', 'enable'], ['writable', 'disable']):
+            with self.subTest(argv=argv):
+                self.assertTrue(
+                    getattr(parser.parse_args(argv), 'snapshot', True))
+
+    def test_commands_that_do_not_read_the_change_skip_it(self):
+        parser = create_parser()
+        for argv in (['writable'], ['alias', 'list'], ['alias', 'show'], ['sync-split-users']):
+            with self.subTest(argv=argv):
+                self.assertFalse(parser.parse_args(argv).snapshot)
+
+
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.sync_command', return_value=0)

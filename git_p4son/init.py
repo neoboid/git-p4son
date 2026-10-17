@@ -4,7 +4,7 @@ import argparse
 import os
 import shutil
 
-from . import jj
+from .backend import workspace_lock
 from .common import CommandError, prompt_choice, prompt_menu
 from .config import save_config
 from .depot import (
@@ -157,8 +157,7 @@ def _setup_gitignore(cwd: str) -> str:
 def init_command(args: argparse.Namespace) -> int:
     """Execute the init command."""
     cwd = os.getcwd()
-    # Hold jj's lock, if this is a jj workspace, so jj does not snapshot halfway through.
-    with jj.operation(cwd, ignore=True, snapshot=False):
+    with workspace_lock(cwd):
         return _init_workspace(cwd)
 
 

@@ -66,9 +66,9 @@ def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
     return [str(path)]
 
 
-def run_hooks(hook_name: str, workspace_dir: str,
-              invocation_dir: str) -> list[RunResult[list[str]]]:
-    """Run all executable files for a named hook."""
+def run_hooks(hook_name: str, workspace_dir: str, invocation_dir: str,
+              backend: str) -> list[RunResult[list[str]]]:
+    """Run all executable files for a named hook, telling them the backend, git or jj, in GIT_P4SON_BACKEND."""
     hook_dir = _hook_dir(workspace_dir, hook_name)
     if not hook_dir.is_dir():
         return []
@@ -83,7 +83,7 @@ def run_hooks(hook_name: str, workspace_dir: str,
     results: list[RunResult[list[str]]] = []
     repo_root = os.path.abspath(workspace_dir)
     cwd = os.path.abspath(invocation_dir)
-    env = {'GIT_P4SON_REPO_ROOT_DIR': repo_root}
+    env = {'GIT_P4SON_REPO_ROOT_DIR': repo_root, 'GIT_P4SON_BACKEND': backend}
 
     for path in files:
         command = _hook_command(path, workspace_dir)

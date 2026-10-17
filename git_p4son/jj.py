@@ -16,6 +16,8 @@ from .log import log
 
 
 _LOCK_ENV = '_GIT_P4SON_JJ_LOCK'
+USE_GIT_HINT = ('Put --backend git before the command to use git instead, '
+                'or set backend = "git" under [core] in .git-p4son/config.toml.')
 _REVISION_TEMPLATE = ('json(self) ++ "\\t" ++ empty ++ "\\t" ++ conflict'
                       ' ++ "\\t" ++ divergent ++ "\\n"')
 
@@ -58,16 +60,20 @@ def _validate_workspace(workspace_dir: str) -> None:
     for state in ('rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD'):
         if (Path(git_dir) / state).exists():
             raise CommandError(
-                'A git operation is in progress. Finish it first, or use --ignore-jj.')
+                'A git operation is in progress. Finish it first, or use --backend git.')
 
 
 def _validate_version(workspace_dir: str) -> None:
-    """Raise CommandError unless jj is 0.41 or newer, with a local working copy."""
-    version = run(['jj', '--version'], cwd=workspace_dir).stdout[0]
+    """Raise CommandError unless jj is installed and 0.41 or newer, with a local working copy."""
+    try:
+        version = run(['jj', '--version'], cwd=workspace_dir).stdout[0]
+    except OSError as error:
+        raise CommandError(
+            f'This is a jj workspace, but jj could not be run: {error}. {USE_GIT_HINT}') from error
     match = re.search(r'jj (\d+)\.(\d+)', version)
     if not match or tuple(map(int, match.groups())) < (0, 41):
         raise CommandError(
-            'jj support needs jj 0.41 or newer, for its working-copy locking')
+            f'jj support needs jj 0.41 or newer, for its working-copy locking. {USE_GIT_HINT}')
     kind = Path(workspace_dir) / '.jj' / 'working_copy' / 'type'
     if not kind.is_file() or kind.read_text() != 'local':
         raise CommandError('Only local jj working copies are supported')
@@ -229,50 +235,60 @@ class Workspace:
 
 
 @contextlib.contextmanager
-def operation(workspace_dir: str, *, ignore: bool = False,
+def _marked_as_locked(root: str, inherited: str | None) -> Iterator[None]:
+    """Mark the workspace at root as under git-p4son's lock for the processes it starts, as hooks."""
+    os.environ[_LOCK_ENV] = root
+    try:
+        yield
+    finally:
+        if inherited is None:
+            os.environ.pop(_LOCK_ENV, None)
+        else:
+            os.environ[_LOCK_ENV] = inherited
+
+
+@contextlib.contextmanager
+def operation(workspace_dir: str, *, lock_only: bool = False,
               snapshot: bool = True) -> Iterator[Workspace | None]:
     """Yield the jj workspace, holding jj's working-copy lock until the command finishes.
 
-    Yields None outside a jj workspace, and with ignore, which only takes the lock."""
+    Yields None outside a jj workspace, and with lock_only, which only takes the lock and needs no jj. A run under
+    git-p4son's own lock, as from a hook, reuses it with lock_only and raises CommandError without."""
     if not is_workspace(workspace_dir):
         yield None
         return
     root = str(Path(workspace_dir).resolve())
     inherited = os.environ.get(_LOCK_ENV)
     if inherited == root:
-        if not ignore:
+        if not lock_only:
             raise CommandError(
-                'git-p4son run under its own jj lock needs --ignore-jj')
+                'git-p4son run under its own jj lock, as from a hook, needs --backend git')
         yield None
         return
+    if lock_only:
+        with working_copy_lock(workspace_dir), _marked_as_locked(root, inherited):
+            yield None
+        return
     _validate_version(workspace_dir)
-    if not ignore:
-        _validate_workspace(workspace_dir)
+    _validate_workspace(workspace_dir)
     # Check before snapshotting, so a busy workspace fails rather than waits.
     with working_copy_lock(workspace_dir):
         pass
-    if snapshot and not ignore:
+    if snapshot:
         snapshot_commit = run(['jj', '--no-pager', '--color', 'never', 'log', '-r', '@',
                                '--no-graph', '-T', 'commit_id'], cwd=workspace_dir).stdout[0]
-    before = None if ignore else _operation_id(workspace_dir)
+    before = _operation_id(workspace_dir)
     with working_copy_lock(workspace_dir):
-        if before is not None and before != _operation_id(workspace_dir):
+        if before != _operation_id(workspace_dir):
             raise CommandError(
                 'jj changed while git-p4son took its lock. Run the command again.')
-        workspace = None if before is None else Workspace.load(
-            workspace_dir, before)
-        if snapshot and workspace is not None and workspace.working.commit != snapshot_commit:
+        workspace = Workspace.load(workspace_dir, before)
+        if snapshot and workspace.working.commit != snapshot_commit:
             raise CommandError(
                 'The jj working change changed while git-p4son took its lock. Run the command again.')
-        os.environ[_LOCK_ENV] = root
-        try:
+        with _marked_as_locked(root, inherited):
             yield workspace
-        finally:
-            if inherited is None:
-                os.environ.pop(_LOCK_ENV, None)
-            else:
-                os.environ[_LOCK_ENV] = inherited
-    if snapshot and not ignore:
+    if snapshot:
         log.heading('Reconciling jj workspace')
         run(['jj', '--no-pager', '--color', 'never', 'status'], cwd=workspace_dir)
         log.success('jj snapshotted the working copy')

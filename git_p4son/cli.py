@@ -5,8 +5,8 @@ import os
 import sys
 from importlib.resources import files
 from typing import cast
-from . import __version__, jj
-from .backend import open_backend
+from . import __version__
+from .backend import BACKENDS, open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
@@ -33,7 +33,7 @@ def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
     """Add -b/--base-branch, defaulting to None, which run_command resolves to the backend's default."""
     parser.add_argument('-b', '--base-branch',
                         help=f'{help}. Defaults to HEAD~1, '
-                        'or in a jj workspace the parent of the jj change')
+                        'or with the jj backend the parent of the jj change')
 
 
 def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: str,
@@ -41,7 +41,7 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
     """Add an optional positional that defaults to the branch keyword, which run_command resolves."""
     (group or parser).add_argument(
         dest, nargs='?', default='branch',
-        help=f'{help}. Defaults to the current branch name, or jj bookmark')
+        help=f'{help}. Defaults to the current branch name, or with the jj backend its bookmark')
     parser.set_defaults(branch_keyword_arg=dest)
 
 
@@ -108,8 +108,9 @@ Examples:
         help='Show verbose output (commands, elapsed times, raw subprocess output)'
     )
     parser.add_argument(
-        '--ignore-jj', action='store_true',
-        help='Use git branches and HEAD in a jj workspace, still holding jj\'s working-copy lock'
+        '--backend', choices=BACKENDS, dest='backend_choice',
+        help='Follow git or jj for the change, the base and the branch, overriding core.backend; '
+        'git in a jj workspace still holds jj\'s working-copy lock'
     )
 
     subparsers = parser.add_subparsers(
@@ -183,7 +184,8 @@ Examples:
         'changelists sync gives a git commit each, holding nothing but that '
         'change. Without an action, lists them.'
     )
-    split_users_parser.set_defaults(func=sync_split_users_command)
+    split_users_parser.set_defaults(
+        func=sync_split_users_command, snapshot=False)
     split_users_subparsers = split_users_parser.add_subparsers(
         dest='split_users_action',
         help='Available split user actions',
@@ -245,7 +247,7 @@ Examples:
     _add_message_args(
         new_parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
-        'or in a jj workspace the jj change description',
+        'or with the jj backend the jj change description',
         'Read the changelist description message from the given file',
         from_head=True)
     new_parser.add_argument(
@@ -338,6 +340,8 @@ Examples:
         description='Manage changelist aliases: names for changelist numbers, '
         'stored in .git-p4son/aliases/.'
     )
+    # alias reads no file of the change, at most the tip's bookmark, so jj need not snapshot.
+    alias_parser.set_defaults(snapshot=False)
     alias_subparsers = alias_parser.add_subparsers(
         dest='alias_action',
         help='Available alias actions',
@@ -417,7 +421,7 @@ Examples:
     _add_message_args(
         review_parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
-        'or in a jj workspace the jj change description',
+        'or with the jj backend the jj change description',
         'Read the changelist description message from the given file',
         from_head=True)
     _add_base_branch(
@@ -443,7 +447,8 @@ Examples:
         'can be edited without a manual p4 edit. Git-ignored files are left '
         'to Perforce. Without an action, shows whether the mode is on.'
     )
-    writable_parser.set_defaults(func=writable_command)
+    # Without an action, writable only shows the setting; the actions read the change.
+    writable_parser.set_defaults(func=writable_command, snapshot=False)
     writable_subparsers = writable_parser.add_subparsers(
         dest='writable_action',
         help='Available writable actions',
@@ -454,13 +459,13 @@ Examples:
         help='Turn writable mode on and make git-tracked files writable',
         description='Turn writable mode on, then make every git-tracked file '
         'writable. Sync keeps the files it syncs writable from then on.'
-    )
+    ).set_defaults(snapshot=True)
     writable_subparsers.add_parser(
         'disable',
         help='Turn writable mode off and make git-tracked files read-only',
         description='Turn writable mode off, then make git-tracked files '
         'read-only, except files opened in Perforce.'
-    )
+    ).set_defaults(snapshot=True)
     writable_subparsers.add_parser(
         'apply',
         help='Make git-tracked files match the writable mode',
@@ -468,7 +473,7 @@ Examples:
         'writable. With it off, make them read-only, except files opened in '
         'Perforce. Use it to fix files made read-only outside git-p4son, '
         'for example by a submit.'
-    )
+    ).set_defaults(snapshot=True)
 
     completion_parser = subparsers.add_parser(
         'completion',
@@ -561,14 +566,10 @@ def run_command(args: argparse.Namespace) -> int:
             'Run "git p4son init" first.')
     log.success(args.workspace_dir)
 
-    if (not args.ignore_jj and jj.is_workspace(args.workspace_dir)
-            and (args.command == 'review' or getattr(args, 'per_commit', False))):
-        raise CommandError('review and update --per-commit check out each commit with git, which a jj workspace '
-                           'does not support yet. Put --ignore-jj before the command to run it with git.')
-    snapshot = args.command in ('sync', 'new', 'update', 'list-changes')
-    with (jj.operation(args.workspace_dir, ignore=args.ignore_jj, snapshot=snapshot) as jj_workspace,
-          open_backend(args.workspace_dir, jj_workspace) as backend):
-        args.jj_workspace = jj_workspace
+    snapshot = getattr(args, 'snapshot', True)
+    checkouts = args.command == 'review' or getattr(args, 'per_commit', False)
+    with open_backend(args.workspace_dir, args.backend_choice, snapshot=snapshot,
+                      checkouts=checkouts) as backend:
         args.backend = backend
         exit_code = _run_in_workspace(args)
     if exit_code == 0 and getattr(args, 'dry_run', False):
@@ -581,8 +582,6 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
     backend = args.backend
     if hasattr(args, 'base_branch'):
         args.base_branch = backend.resolve_base(args.base_branch)
-    if args.jj_workspace is not None and args.command == 'sync':
-        args.jj_workspace.prepare_sync(args.bookmark)
 
     if getattr(args, 'no_alias', False):
         args.alias = None

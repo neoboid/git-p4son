@@ -233,6 +233,8 @@ write most of them; the rest you edit by hand.
   `//$(workspace)/Engine`. See [Init Command](#init-command)
 - `[core] writable` (`true` or `false`, default `false`): [writable mode](#writable-command), which keeps
   git-tracked files writable
+- `[core] backend` (`"auto"`, `"git"` or `"jj"`, default `"auto"`): the tool git-p4son follows for the change, the
+  base and the branch. `auto` means jj in a [jj workspace](#jujutsu-jj) and git otherwise
 - `[sync] split-users` (list of strings, default empty): the users whose changelists `sync` gives a commit each;
   `$(user)` stands for you. See [Split users](#split-users)
 - `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
@@ -814,7 +816,8 @@ at defined times during git-p4son operations. Scripts get run in filename (lexic
 order.
 
 The hook process CWD is the directory where git-p4son was invoked, and `GIT_P4SON_REPO_ROOT_DIR` is
-set to the git-p4son repository root.
+set to the git-p4son repository root. `GIT_P4SON_BACKEND` is `git` or `jj`, the [backend](#choosing-the-backend)
+the command runs with.
 
 On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`, `nu.exe`, `bash.exe`, and `python.exe` respectively.
@@ -847,7 +850,26 @@ git-p4son detects a jj workspace colocated with the git repository, which needs 
 sparse working copies, and conflicted or divergent changes are not supported. Without a `.jj` folder, nothing
 changes.
 
-In a jj workspace:
+### Choosing the backend
+
+The backend is the tool git-p4son follows for the change, the base and the branch: git or jj. By default it is jj
+in a jj workspace and git otherwise. To choose, set `core.backend` in `.git-p4son/config.toml`, or put the global
+`--backend` flag before the command, which overrides the setting:
+
+```toml
+[core]
+backend = "git"   # "auto" (the default), "git" or "jj"
+```
+
+```sh
+git p4son --backend git new -b main
+```
+
+`jj` outside a jj workspace is an error. In a jj workspace, the jj backend refuses to run when jj is missing or
+older than 0.41, and points to `--backend git`. The git backend needs no jj, and still holds jj's working-copy
+lock, which jj 0.41 or newer honours, so jj cannot snapshot halfway through a command.
+
+With the jj backend in a jj workspace:
 
 - `new`, `update` and `list-changes` work on the jj working change `@`. When `@` is empty, has no description or
   bookmark and has one parent, they work on that parent instead, so a fresh working change above a feature still
@@ -900,15 +922,16 @@ editors, git commands or other jj workspaces. If a command fails, look at the wo
 lock is released, but Perforce operations that completed are not undone.
 
 Hooks must not run ordinary jj commands, which would wait for the lock their caller holds. Read-only queries such
-as `jj --at-op=@ log` avoid snapshotting and the git import.
+as `jj --at-op=@ log` avoid snapshotting and the git import. A hook that runs git-p4son itself needs
+`--backend git`, which reuses the caller's lock.
 
-`review` and `update --per-commit` check out each commit with git, so a jj workspace refuses them for now. To use
-the git workflow on purpose, put the global `--ignore-jj` flag **before** the command:
+`review` and `update --per-commit` check out each commit with git, so the jj backend refuses them for now. To use
+the git workflow on purpose, put `--backend git` **before** the command:
 
 ```sh
 git switch fix-login
-git p4son --ignore-jj review -b main
-git p4son --ignore-jj update --per-commit --shelve -b main
+git p4son --backend git review -b main
+git p4son --backend git update --per-commit --shelve -b main
 ```
 
 This uses git branches, `HEAD` and git's clean-workspace check, and holds jj's lock until every step has run and

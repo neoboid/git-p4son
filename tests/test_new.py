@@ -8,7 +8,7 @@ from git_p4son.changelist_store import (
     save_changelist_alias,
 )
 from git_p4son.new import new_command
-from tests.helpers import P4RepoTestCase
+from tests.helpers import on_jj, P4RepoTestCase
 
 
 FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
@@ -126,6 +126,9 @@ class TestNewAlias(NewTestCase):
         self.assertIn('Created CL 101\n', out)
         self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
 
+
+TestNewOnJj = on_jj(TestNew)
+TestNewAliasOnJj = on_jj(TestNewAlias)
 
 if __name__ == '__main__':
     unittest.main()

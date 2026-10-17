@@ -32,6 +32,7 @@ python -m pytest tests/ -n auto --maxprocesses 8
 The tests are isolated in temporary directories, so they run in parallel with `pytest-xdist`; without it, drop the
 `-n` options. The jj tests are skipped when `jj` is not on `PATH`, unless `GIT_P4SON_REQUIRE_JJ` is set, as CI sets
 it, to make them fail instead. `scripts/install-jj.py VERSION DEST` downloads jj's official binary, as CI does.
+`on_jj(TestClass)` in `tests/helpers.py` runs a command test class again on the jj backend, as a `JjTestCase`.
 
 Format code with `autopep8`:
 ```bash
@@ -124,39 +125,43 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
 
 - **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order,
-  from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` set, without stopping at a failure. On Windows,
-  scripts run through extension associations, overridable with `[hooks.extension-associations]`. `sync` runs the
-  `pre-sync` and `post-sync` hooks.
+  from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a
+  failure. On Windows, scripts run through extension associations, overridable with
+  `[hooks.extension-associations]`. `sync` runs the `pre-sync` and `post-sync` hooks.
 
 - **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
   aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
   `completions/` call `git p4son complete`.
 
 - **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
-  command runs, yielding a `Workspace` (or None outside jj, or with `--ignore-jj`) that `run_command` stores as
-  `args.jj_workspace`. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
-  when the working change is empty and new), its bookmark and the default base; commands reach it through
-  `JjBackend`. git still reads objects, diffs and makes the sync commits; `sync` moves the selected bookmark
-  itself.
+  command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and
+  which needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent
+  when the working change is empty and new), its bookmark and the default base; commands reach it only through
+  `JjBackend`. git still reads objects, diffs and makes the sync commits.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
-  a git-p4son run under its caller's lock needs `--ignore-jj`.
+  a git-p4son run under its caller's lock needs `--backend git`.
 
 ### Shared modules
 
 - **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
   interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
   the alias the branch or bookmark suggests, the default message, the clean check, `-b` completions, `checkouts`
-  for the per-commit loop, and the `Words` its messages use. `open_backend` yields it in `run_command` as
-  `args.backend`, a `JjBackend` when `jj.operation` yielded a workspace and a `GitBackend` otherwise;
-  `completion_backend` gives one without jj's lock.
+  for the per-commit loop, sync's clean check and commits (`prepare_sync`, `check_sync_clean`, `start_sync`,
+  `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`.
+  `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
+  `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
+  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`.
+  `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command
+  branches on jj outside the backend modules and `jj.py`.
 
-- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD` and the index, `HEAD~1` as the default base, the
-  current branch, and `checkouts` detaching at each commit and returning to the starting branch.
+- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
+  `checkouts` detaching at each commit and returning to the starting branch, and sync commits on that branch.
 
-- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its `checkouts` raises, as
-  `run_command` refuses the per-commit commands in a jj workspace.
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`: sync commits with jj's line
+  endings that move the sync bookmark. Its `checkouts` raises, as `open_backend` refuses the per-commit commands
+  on jj.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),

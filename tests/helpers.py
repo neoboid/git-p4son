@@ -14,10 +14,11 @@ import tempfile
 import unittest
 from collections.abc import Callable, Iterable, Iterator
 from datetime import timedelta
-from typing import IO, Any, TypeVar, overload
+from typing import IO, Any, TypeVar, cast, overload
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
+from git_p4son.backend import open_backend
 from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.config import ensure_config_dir
 from git_p4son.git import format_sync_subject
@@ -76,10 +77,9 @@ def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
     args = create_parser().parse_args(argv)
     args.workspace_dir = '/ws'
     args.invocation_dir = None
-    args.jj_workspace = None
     args.backend = None
     for name, value in overrides.items():
-        if name not in ('workspace_dir', 'invocation_dir', 'jj_workspace', 'backend') and not hasattr(args, name):
+        if name not in ('workspace_dir', 'invocation_dir', 'backend') and not hasattr(args, name):
             raise AttributeError(f'{argv[0]} has no argument {name!r}')
         setattr(args, name, value)
     if args.invocation_dir is None:
@@ -100,6 +100,7 @@ def start_patch(test: unittest.TestCase, target: str, **kwargs: Any) -> Any:
 
 
 _TestClass = TypeVar('_TestClass', bound=type[unittest.TestCase])
+_GitRepoTest = TypeVar('_GitRepoTest', bound='GitRepoTestCase')
 
 
 def requires_jj(test_class: _TestClass) -> _TestClass:
@@ -107,6 +108,24 @@ def requires_jj(test_class: _TestClass) -> _TestClass:
     if shutil.which('jj') or os.environ.get('GIT_P4SON_REQUIRE_JJ'):
         return test_class
     return unittest.skip('jj is not installed')(test_class)
+
+
+def isolate_jj(test: unittest.TestCase, workspace_dir: str) -> None:
+    """Give jj a fixed user and no user config for the rest of the test."""
+    config = os.path.join(
+        workspace_dir, '..', f'{os.path.basename(workspace_dir)}-jj.toml')
+    open(config, 'w').close()
+    test.addCleanup(os.remove, config)
+    patcher = mock.patch.dict(os.environ, {'JJ_USER': 'Test', 'JJ_EMAIL': 'test@example.com',
+                                           'JJ_CONFIG': config})
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
+def run_jj(workspace_dir: str, *args: str) -> str:
+    """Run jj in workspace_dir and return its stripped stdout."""
+    return subprocess.run(['jj', '--no-pager', '--color', 'never', *args], cwd=workspace_dir,
+                          capture_output=True, text=True, check=True).stdout.strip()
 
 
 def init_git_repo(path: str) -> None:
@@ -129,6 +148,9 @@ class WorkspaceTestCase(unittest.TestCase):
     """A temporary workspace directory for each test, at self.ws.
 
     A subclass fills it in build_workspace, which runs once per class; each test starts from a copy."""
+
+    # The backend run_command opens, as --backend would choose it; None follows core.backend.
+    backend_name: str | None = None
 
     def setUp(self) -> None:
         super().setUp()
@@ -184,25 +206,37 @@ class WorkspaceTestCase(unittest.TestCase):
         ensure_config_dir(self.ws)
         self.write_file(os.path.join(CONFIG_DIR, 'config.toml'), text)
 
+    @contextlib.contextmanager
+    def command_args(self, argv: list[str], **overrides: Any) -> Iterator[argparse.Namespace]:
+        """Yield cli_args(argv, **overrides) for this workspace, with the backend open as run_command opens it."""
+        from git_p4son.cli import create_parser
+        snapshot = getattr(create_parser().parse_args(argv), 'snapshot', True)
+        with open_backend(self.ws, self.backend_name, snapshot=snapshot) as backend:
+            yield cli_args(argv, workspace_dir=self.ws, backend=backend, **overrides)
+
     def run_command(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                     **overrides: Any) -> str:
-        """Run command with cli_args(argv, **overrides); returns everything it printed."""
-        with captured_output() as out:
-            self.assertEqual(
-                command(cli_args(argv, workspace_dir=self.ws, **overrides)), 0)
+        """Run command with command_args(argv, **overrides); returns everything it printed."""
+        with captured_output() as out, self.command_args(argv, **overrides) as args:
+            self.assertEqual(command(args), 0)
         return out.getvalue()
 
     def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                       message: str) -> None:
-        """Run command with cli_args(argv), expecting a CommandError matching message."""
-        with captured_output(), self.assertRaisesRegex(CommandError, message):
-            command(cli_args(argv, workspace_dir=self.ws))
+        """Run command with command_args(argv), expecting a CommandError matching message."""
+        with captured_output(), self.assertRaisesRegex(CommandError, message), \
+                self.command_args(argv) as args:
+            command(args)
 
 
 class GitRepoTestCase(WorkspaceTestCase):
     """A temporary git repository on branch main for each test, at self.ws."""
 
     def build_workspace(self) -> None:
+        self.init_repo()
+
+    def init_repo(self) -> None:
+        """Make self.ws a git repository."""
         init_git_repo(self.ws)
 
     def git(self, *args: str, check: bool = True) -> str:
@@ -622,3 +656,49 @@ Description:
 
 Files:
 """
+
+
+class JjTestCase(GitRepoTestCase):
+    """A git repository that is also a colocated jj workspace, with its commands run on jj; mixed in before tests.
+
+    Skipped without jj, once requires_jj or on_jj applies."""
+
+    backend_name = 'jj'
+
+    def init_repo(self) -> None:
+        super().init_repo()
+        isolate_jj(self, self.ws)
+        run_jj(self.ws, 'git', 'init', '--colocate')
+        # Git for Windows sets core.autocrlf, so jj has to convert line endings as git does to agree with its commits.
+        autocrlf = subprocess.run(['git', 'config', '--get', 'core.autocrlf'], cwd=self.ws,
+                                  capture_output=True, text=True).stdout.strip().lower()
+        eol_conversion = {'true': 'input-output',
+                          'input': 'input'}.get(autocrlf)
+        if eol_conversion:
+            run_jj(self.ws, 'config', 'set', '--repo',
+                   'working-copy.eol-conversion', eol_conversion)
+
+    def setUp(self) -> None:
+        super().setUp()
+        isolate_jj(self, self.ws)
+
+    def jj(self, *args: str) -> str:
+        """Run jj in the workspace and return its stripped stdout."""
+        return run_jj(self.ws, *args)
+
+
+def on_jj(test_class: type[_GitRepoTest], skip: dict[str, str] | None = None) -> type[_GitRepoTest]:
+    """A copy of test_class run as a JjTestCase, skipped without jj; skip maps git-only tests to the reason."""
+
+    def build_workspace(self: _GitRepoTest) -> None:
+        # Defined here, so the copy builds and caches a workspace of its own.
+        test_class.build_workspace(self)
+
+    def skipped(reason: str) -> Callable[[_GitRepoTest], None]:
+        return unittest.skip(reason)(lambda self: None)
+
+    # type() builds the class, as a class statement can't take test_class as its base for mypy.
+    copy = cast(type[_GitRepoTest], type(f'{test_class.__name__}OnJj', (JjTestCase, test_class), {
+        'build_workspace': build_workspace, '__module__': test_class.__module__,
+        **{name: skipped(reason) for name, reason in (skip or {}).items()}}))
+    return requires_jj(copy)

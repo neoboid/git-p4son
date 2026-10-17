@@ -2,7 +2,6 @@
 
 import os
 import stat
-import subprocess
 import unittest
 from unittest import mock
 
@@ -14,19 +13,10 @@ from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import load_changelist_alias
 from git_p4son.cli import create_parser, run_command
-from tests.helpers import captured_output, P4RepoTestCase, WorkspaceTestCase, requires_jj
-
-
-def isolate_jj(test):
-    """Give jj a fixed user and no user config for the rest of the test."""
-    config = os.path.join(
-        test.ws, '..', f'{os.path.basename(test.ws)}-jj.toml')
-    open(config, 'w').close()
-    test.addCleanup(os.remove, config)
-    patcher = mock.patch.dict(os.environ, {'JJ_USER': 'Test', 'JJ_EMAIL': 'test@example.com',
-                                           'JJ_CONFIG': config})
-    patcher.start()
-    test.addCleanup(patcher.stop)
+from git_p4son.log import log
+from tests.helpers import (
+    captured_output, isolate_jj, JjTestCase, make_run_result, P4RepoTestCase, requires_jj, run_jj, WorkspaceTestCase,
+)
 
 
 class TestWorkingCopyLock(WorkspaceTestCase):
@@ -58,7 +48,7 @@ class JjRepoTestCase(WorkspaceTestCase):
     """A colocated jj repo: main at "base", feat at "feature" on top, and an empty working change above feat."""
 
     def build_workspace(self):
-        isolate_jj(self)
+        isolate_jj(self, self.ws)
         for command in (['git', 'init', '--colocate'],
                         ['describe', '-m', 'base'], ['bookmark',
                                                      'create', 'main', '-r', '@'],
@@ -72,12 +62,10 @@ class JjRepoTestCase(WorkspaceTestCase):
 
     def setUp(self):
         super().setUp()
-        isolate_jj(self)
+        isolate_jj(self, self.ws)
 
     def jj(self, *args):
-        """Run jj in the workspace and return its stripped stdout."""
-        return subprocess.run(['jj', '--no-pager', '--color', 'never', *args], cwd=self.ws,
-                              capture_output=True, text=True, check=True).stdout.strip()
+        return run_jj(self.ws, *args)
 
     def commit_of(self, revision):
         # Without --ignore-working-copy, jj would wait for the lock a test may hold.
@@ -122,12 +110,44 @@ class TestJjBackend(JjRepoTestCase):
             JjBackend(workspace).checkouts()
 
     def test_chosen_for_a_jj_workspace(self):
-        with self.operation() as workspace, open_backend(self.ws, workspace) as backend:
+        with open_backend(self.ws, None) as backend:
             self.assertIsInstance(backend, JjBackend)
-        self.assertIsInstance(completion_backend(
-            self.ws, ignore_jj=False), JjBackend)
-        self.assertIsInstance(completion_backend(
-            self.ws, ignore_jj=True), GitBackend)
+        self.assertIsInstance(completion_backend(self.ws, None), JjBackend)
+        self.assertIsInstance(completion_backend(self.ws, 'git'), GitBackend)
+
+    def test_setting_chooses_git(self):
+        self.write_config('[core]\nbackend = "git"\n')
+        self.assertIsInstance(completion_backend(self.ws, None), GitBackend)
+        self.assertIsInstance(completion_backend(self.ws, 'jj'), JjBackend)
+
+    def test_git_backend_still_holds_the_lock(self):
+        with open_backend(self.ws, 'git') as backend:
+            self.assertIsInstance(backend, GitBackend)
+            with self.assertRaisesRegex(CommandError, 'busy'):
+                with working_copy_lock(self.ws):
+                    pass
+
+    def test_git_backend_needs_no_jj(self):
+        with mock.patch('git_p4son.jj.run', side_effect=FileNotFoundError('jj')), \
+                open_backend(self.ws, 'git') as backend:
+            self.assertIsInstance(backend, GitBackend)
+
+    def test_missing_jj_points_to_the_git_backend(self):
+        with mock.patch('git_p4son.jj.run', side_effect=FileNotFoundError('jj')), \
+                self.assertRaisesRegex(CommandError, 'jj could not be run.*--backend git'):
+            with open_backend(self.ws, None):
+                pass
+
+    def test_old_jj_points_to_the_git_backend(self):
+        with mock.patch('git_p4son.jj.run', return_value=make_run_result(stdout=['jj 0.40.0'])), \
+                self.assertRaisesRegex(CommandError, '0.41 or newer.*--backend git'):
+            with open_backend(self.ws, None):
+                pass
+
+    def test_per_commit_commands_are_refused(self):
+        with self.assertRaisesRegex(CommandError, 'Put --backend git'):
+            with open_backend(self.ws, None, checkouts=True):
+                pass
 
 
 class TestWorkspace(JjRepoTestCase):
@@ -160,13 +180,13 @@ class TestWorkspace(JjRepoTestCase):
         with self.operation() as workspace:
             workspace.check_snapshot()
 
-    def test_nested_operation_needs_ignore(self):
+    def test_nested_operation_needs_the_git_backend(self):
         with self.operation():
-            with self.assertRaisesRegex(CommandError, '--ignore-jj'):
+            with self.assertRaisesRegex(CommandError, '--backend git'):
                 with jj.operation(self.ws):
                     pass
-            with jj.operation(self.ws, ignore=True) as nested:
-                self.assertIsNone(nested)
+            with open_backend(self.ws, 'git') as nested:
+                self.assertIsInstance(nested, GitBackend)
 
     def test_busy_working_copy_fails_instead_of_waiting(self):
         with working_copy_lock(self.ws):
@@ -182,24 +202,13 @@ class TestWorkspace(JjRepoTestCase):
 
 
 @requires_jj
-class JjP4RepoTestCase(P4RepoTestCase):
+class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
     """git-p4son commands in a colocated jj repo on top of the synced workspace, whose main jj tracks as a bookmark."""
 
     def build_workspace(self):
         super().build_workspace()
-        isolate_jj(self)
         self.write_config('[depot]\nroot = "//myclient"\n')
         self.commit('Add config')
-        self.jj('git', 'init', '--colocate')
-
-    def setUp(self):
-        super().setUp()
-        isolate_jj(self)
-
-    def jj(self, *args):
-        """Run jj in the workspace and return its stripped stdout."""
-        return subprocess.run(['jj', '--no-pager', '--color', 'never', *args], cwd=self.ws,
-                              capture_output=True, text=True, check=True).stdout.strip()
 
     def describe(self, revision, template='description.first_line()'):
         return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', template)
@@ -209,7 +218,8 @@ class JjP4RepoTestCase(P4RepoTestCase):
 
         If the command fails, what it printed is added to the failure."""
         try:
-            with captured_output() as out, \
+            # run_command turns on quiet mode for commands like alias show; keep it from leaking into later tests.
+            with captured_output() as out, mock.patch.object(log, 'quiet_mode', log.quiet_mode), \
                     mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
                 self.assertEqual(run_command(
                     create_parser().parse_args(argv)), 0)
@@ -220,7 +230,7 @@ class JjP4RepoTestCase(P4RepoTestCase):
         return out.getvalue()
 
     def p4son_fails(self, *argv, message):
-        with captured_output(), \
+        with captured_output(), mock.patch.object(log, 'quiet_mode', log.quiet_mode), \
                 mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
                 self.assertRaisesRegex(CommandError, message):
             run_command(create_parser().parse_args(argv))
@@ -253,12 +263,38 @@ class TestJjNew(JjP4RepoTestCase):
             '101', 'edit'), 'b.txt': ('101', 'edit')})
         self.assertEqual(self.read('b.txt'), 'b2\n')
 
-    def test_review_needs_ignore_jj(self):
-        self.p4son_fails('review', 'feat', message='--ignore-jj')
+    def describe_change_b(self):
+        """Describe the working change, which git has not committed, as Change b adding d.txt."""
+        self.jj('describe', '-m', 'Change b')
+        self.write_file('d.txt', 'd1\n')
 
-    def test_update_per_commit_needs_ignore_jj(self):
+    def test_list_changes_reads_the_jj_change(self):
+        self.describe_change_b()
+        out = self.p4son('list-changes', '-b', 'main')
+        self.assertIn('1. Change a\n2. Change b\n', out)
+
+    def test_writable_apply_reads_the_jj_change(self):
+        self.describe_change_b()
+        self.p4son('writable', 'apply')
+        self.assertFalse(os.stat(os.path.join(
+            self.ws, 'd.txt')).st_mode & stat.S_IWUSR)
+
+    def test_git_backend_follows_git_in_a_jj_workspace(self):
+        self.p4son('new')
+        self.assertEqual(self.p4son('alias', 'show', 'branch'), '101\n')
+        # jj leaves git's HEAD detached, so git has no branch to name the alias.
+        self.p4son_fails('--backend', 'git', 'alias', 'show',
+                         'branch', message='detached HEAD')
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n\n[core]\nbackend = "git"\n')
+        self.p4son_fails('alias', 'show', 'branch', message='detached HEAD')
+
+    def test_review_needs_the_git_backend(self):
+        self.p4son_fails('review', 'feat', message='--backend git')
+
+    def test_update_per_commit_needs_the_git_backend(self):
         self.p4son_fails('update', '101', '--per-commit',
-                         message='--ignore-jj')
+                         message='--backend git')
 
 
 class TestJjSync(JjP4RepoTestCase):
@@ -277,6 +313,14 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.describe('@-', 'commit_id'),
                          self.describe('main', 'commit_id'))
         self.assertEqual(self.read('c.txt'), 'c1\n')
+
+    def test_stray_file_stops_the_sync(self):
+        """jj snapshots a stray file into the working change, which sync refuses before anything else."""
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.write_file('stray.txt', 'x')
+        self.p4son_fails(
+            'sync', '101', message='needs an empty working change')
+        self.assertEqual(self.p4.synced(), [])
 
     def test_sync_after_jj_rewrote_a_file_git_indexed_with_crlf(self):
         """git's index may record a file's size from a CRLF copy jj has since rewritten as LF without telling git.

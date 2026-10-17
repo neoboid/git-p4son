@@ -17,7 +17,7 @@ class TestRunHooks(unittest.TestCase):
     def test_missing_hook_dir_is_noop(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch('git_p4son.hooks.run') as mock_run:
-                result = run_hooks('post-sync', tmpdir, tmpdir)
+                result = run_hooks('post-sync', tmpdir, tmpdir, 'git')
         self.assertEqual(result, [])
         mock_run.assert_not_called()
 
@@ -38,15 +38,16 @@ class TestRunHooks(unittest.TestCase):
             os.chmod(executable, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
 
             with captured_output() as out:
-                run_hooks('post-sync', tmpdir, os.path.join(tmpdir, 'subdir'))
+                run_hooks('post-sync', tmpdir,
+                          os.path.join(tmpdir, 'subdir'), 'git')
 
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0], [executable])
         self.assertEqual(mock_run.call_args.kwargs['cwd'],
                          os.path.join(tmpdir, 'subdir'))
         self.assertEqual(
-            mock_run.call_args.kwargs['env']['GIT_P4SON_REPO_ROOT_DIR'],
-            os.path.abspath(tmpdir))
+            mock_run.call_args.kwargs['env'],
+            {'GIT_P4SON_REPO_ROOT_DIR': os.path.abspath(tmpdir), 'GIT_P4SON_BACKEND': 'git'})
         self.assertEqual(out.getvalue().count('[warn]'), 1)
         self.assertIn('skip-me', out.getvalue())
 
@@ -66,7 +67,7 @@ class TestRunHooks(unittest.TestCase):
                 with open(path, 'w') as f:
                     f.write('')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         self.assertEqual(commands, [
@@ -93,7 +94,7 @@ class TestRunHooks(unittest.TestCase):
                 f.write('[hooks.extension-associations]\n')
                 f.write('".ps1" = ["pwsh.exe", "-File"]\n')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0],
@@ -113,7 +114,7 @@ class TestRunHooks(unittest.TestCase):
                 f.write('[hooks]\nextension-associations = "pwsh.exe"\n')
 
             with self.assertRaises(ConfigError):
-                run_hooks('post-sync', tmpdir, tmpdir)
+                run_hooks('post-sync', tmpdir, tmpdir, 'git')
         mock_run.assert_not_called()
 
     @mock.patch('git_p4son.hooks._is_windows', return_value=True)
@@ -127,7 +128,7 @@ class TestRunHooks(unittest.TestCase):
                 f.write('')
 
             with captured_output() as out:
-                run_hooks('post-sync', tmpdir, tmpdir)
+                run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         mock_run.assert_not_called()
         self.assertEqual(out.getvalue().count('[warn]'), 1)
@@ -144,7 +145,7 @@ class TestRunHooks(unittest.TestCase):
                 f.write('')
 
             with captured_output() as out:
-                run_hooks('post-sync', tmpdir, tmpdir)
+                run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         mock_run.assert_called_once()
         self.assertIn('\nhook output\n', out.getvalue())
@@ -167,7 +168,7 @@ class TestRunHooks(unittest.TestCase):
                     f.write('')
 
             with captured_output() as out:
-                results = run_hooks('post-sync', tmpdir, tmpdir)
+                results = run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         self.assertEqual(mock_run.call_count, 2)
         self.assertEqual(len(results), 2)
@@ -185,7 +186,7 @@ class TestRunHooks(unittest.TestCase):
                 f.write('')
 
             with contextlib.redirect_stderr(io.StringIO()) as err:
-                run_hooks('post-sync', tmpdir, tmpdir)
+                run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         self.assertEqual(err.getvalue(), 'a warning\n')
 
@@ -202,7 +203,7 @@ class TestRunHooks(unittest.TestCase):
                 with open(path, 'w') as f:
                     f.write('')
 
-            run_hooks('post-sync', tmpdir, tmpdir)
+            run_hooks('post-sync', tmpdir, tmpdir, 'git')
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         self.assertEqual(commands, [

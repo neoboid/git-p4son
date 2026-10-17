@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError
-from .git import get_current_branch, get_head_commit, get_head_subject, switch_branch, switch_detached
+from .git import commit_all, get_current_branch, get_head_commit, get_head_subject, switch_branch, switch_detached
 from .lib import check_git_workspace_clean
 from .log import log
 from .words import Words
@@ -73,3 +73,18 @@ class GitBackend:
                 log.error(f'Could not return to {branch or start}: {error}')
             raise
         back()
+
+    def prepare_sync(self, bookmark: str | None) -> None:
+        """Sync onto the current branch; raise CommandError if a bookmark is named."""
+        if bookmark is not None:
+            raise CommandError(
+                '--bookmark names a jj bookmark, and this workspace uses the git backend')
+
+    def check_sync_clean(self) -> None:
+        self.check_clean()
+
+    def start_sync(self) -> None:
+        """Nothing to do: git's commits advance the current branch."""
+
+    def commit_sync(self, subject: str) -> int:
+        return commit_all(subject, self.workspace_dir)

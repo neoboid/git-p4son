@@ -15,8 +15,8 @@ SWARM_SHELF_DELAY = 5
 
 
 def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
-           backend: Backend) -> argparse.Namespace:
-    """Parse a step's arguments with base and message, set up as run_command would."""
+           backend: Backend, base_name: str | None) -> argparse.Namespace:
+    """Parse a step's arguments with base and message, set up as run_command would, base_name as the base given."""
     # Imported here: cli imports the commands that import this module.
     from .cli import create_parser
     argv = [*step, '-b', base]
@@ -27,6 +27,7 @@ def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
     args.workspace_dir = workspace_dir
     args.invocation_dir = workspace_dir
     args.backend = backend
+    args.base_given = base_name or base
     return args
 
 
@@ -48,11 +49,12 @@ def _resume_hint(rest: list[str], resume_after: str, message: str | None, messag
 def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, workspace_dir: str,
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
-                   resumable: Callable[[], str | None] | None = None) -> None:
+                   resumable: Callable[[], str | None] | None = None, base_name: str | None = None) -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one.
 
     A failing step raises CommandError naming it, ending with the rest command that resumes after the last commit that
-    worked, unless resumable returns None; any text it returns goes before that command."""
+    worked, unless resumable returns None; any text it returns goes before that command. base_name, the name of the
+    base, goes to every step, as the steps get the base as a commit."""
     rest = rest or first
     backend.check_clean()
 
@@ -83,7 +85,8 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
             checkout(commit)
             log.success(f'Checked out, running git p4son {shlex.join(step)}')
             step_message = message if number == 1 else None
-            args = _parse(step, base, step_message, workspace_dir, backend)
+            args = _parse(step, base, step_message,
+                          workspace_dir, backend, base_name)
             try:
                 args.func(args)
             except CommandError as error:

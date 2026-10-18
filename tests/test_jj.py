@@ -114,6 +114,19 @@ class JjRepoTestCase(WorkspaceTestCase):
 class TestJjBackend(JjRepoTestCase):
     """JjBackend over the workspace, whose tip is the feature change with bookmark feat on main."""
 
+    def test_a_bookmark_names_itself_and_its_commit(self):
+        with self.operation() as workspace:
+            backend = JjBackend(workspace)
+            self.assertEqual(backend.base_name('main'), 'main')
+            self.assertEqual(backend.base_name(self.commit_of('main')), 'main')
+            with self.assertRaisesRegex(CommandError, '@ names no bookmark'):
+                backend.base_name('@')
+
+    def test_a_commit_s_identity_is_its_change_id(self):
+        with self.operation() as workspace:
+            self.assertEqual(JjBackend(workspace).commit_identity(self.commit_of('feat')),
+                             self.jj('--ignore-working-copy', 'log', '-r', 'feat', '--no-graph', '-T', 'change_id'))
+
     def test_answers_from_the_tip(self):
         with self.operation() as workspace:
             backend = JjBackend(workspace)
@@ -303,7 +316,7 @@ class TestJjNew(JjP4RepoTestCase):
         self.jj('new')
 
     def test_new_takes_the_change_its_description_and_bookmark_from_jj(self):
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         self.assertEqual(self.p4.pending,
                          {'101': ['Change a', '', 'Changes included:', '1. Change a']})
         self.assertEqual(self.p4.opened, {'a.txt': ('101', 'edit')})
@@ -314,7 +327,7 @@ class TestJjNew(JjP4RepoTestCase):
         return self.describe('feat', 'change_id')
 
     def test_new_records_the_change_which_branch_finds_after_rewrites(self):
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         self.assertEqual(alias_changes(self.ws), {'feat': self.feat_change()})
         # A new description, a bookmark rename and a second bookmark all leave the change ID as it was.
         self.jj('describe', '-r', 'feat', '-m', 'Change a, reworded')
@@ -328,15 +341,15 @@ class TestJjNew(JjP4RepoTestCase):
         self.jj('new', 'main', '-m', 'Change b')
         self.edit('b.txt', 'b2\n')
         change = self.describe('@', 'change_id')
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         self.assertEqual(load_changelist_alias(change[:8], self.ws), '101')
         self.assertEqual(alias_changes(self.ws), {change[:8]: change})
 
     def test_one_alias_per_change(self):
-        self.p4son('new')
-        self.p4son_fails('new', 'other', '--no-edit',
+        self.p4son('new', '-b', 'main')
+        self.p4son_fails('new', 'other', '--no-edit', '-b', 'main',
                          message='Alias "feat" already records this jj change, for CL 101')
-        self.p4son('new', 'other', '--no-edit', '--force')
+        self.p4son('new', 'other', '--no-edit', '--force', '-b', 'main')
         self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
 
@@ -345,7 +358,7 @@ class TestJjNew(JjP4RepoTestCase):
         self.assertEqual(alias_changes(self.ws), {})
 
     def test_alias_list_shows_the_change_and_marks_it_gone(self):
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         short = self.feat_change()[:8]
         self.assertIn(
             f'feat -> CL 101, jj change {short}\n', self.p4son('alias', 'list'))
@@ -354,7 +367,7 @@ class TestJjNew(JjP4RepoTestCase):
             f'feat -> CL 101, jj change {short} (gone)\n', self.p4son('alias', 'list'))
 
     def test_alias_list_ignores_a_change_that_is_no_change_id(self):
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         self.write_file('.git-p4son/aliases/bad.toml',
                         'changelist = 102\nchange = "foo bar"\n')
         listing = self.p4son('alias', 'list')
@@ -390,7 +403,7 @@ class TestJjNew(JjP4RepoTestCase):
             self.ws, 'd.txt')).st_mode & stat.S_IWUSR)
 
     def test_git_backend_follows_git_in_a_jj_workspace(self):
-        self.p4son('new')
+        self.p4son('new', '-b', 'main')
         self.assertEqual(self.p4son('alias', 'show', 'branch'), '101\n')
         # jj leaves git's HEAD detached, so git has no branch to name the alias.
         self.p4son_fails('--backend', 'git', 'alias', 'show',
@@ -417,6 +430,12 @@ class TestJjPerCommit(JjP4RepoTestCase):
     def setUp(self):
         super().setUp()
         start_patch(self, 'git_p4son.per_commit.time.sleep')
+
+    def test_update_takes_a_jj_revision_as_its_base(self):
+        """-b is the backend's: a change ID resolves through jj, as it does without a record."""
+        self.p4son('new', '-b', 'main', '--no-edit')
+        self.p4son('update', 'feat', '-b', self.describe('main', 'change_id'))
+        self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
     def add_d(self):
         """Describe the working change as Add d, adding d.txt; returns its commit."""

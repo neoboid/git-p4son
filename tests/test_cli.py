@@ -107,32 +107,40 @@ class TestCreateParser(unittest.TestCase):
             .ignore_blocking_processes)
 
     def test_new_command_no_message(self):
-        args = self.parser.parse_args(['new'])
+        args = self.parser.parse_args(['new', '-b', 'main'])
         self.assertEqual(args.command, 'new')
         self.assertIsNone(args.message)
 
     def test_new_command(self):
-        args = self.parser.parse_args(['new', '-m', 'Fix bug'])
+        args = self.parser.parse_args(['new', '-b', 'main', '-m', 'Fix bug'])
         self.assertEqual(args.command, 'new')
         self.assertEqual(args.message, 'Fix bug')
-        self.assertIsNone(args.base_branch)
+        self.assertEqual(args.base_branch, 'main')
         self.assertFalse(args.dry_run)
         self.assertFalse(args.no_edit)
         self.assertFalse(args.shelve)
         self.assertFalse(args.review)
 
+    def test_new_and_review_need_a_base(self):
+        for command in ('new', 'review'):
+            with self.subTest(command=command), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                self.parser.parse_args([command, '-m', 'Fix bug'])
+        self.assertIsNone(self.parser.parse_args(['update']).base_branch)
+
     def test_message_file(self):
         for command in ('new', 'update', 'review'):
-            args = self.parser.parse_args([command, '-F', 'msg.txt'])
+            args = self.parser.parse_args(
+                [command, '-b', 'main', '-F', 'msg.txt'])
             self.assertEqual(args.file, 'msg.txt')
             self.assertIsNone(args.message)
 
     def test_no_commit_list(self):
         for command in ('new', 'update', 'review'):
             self.assertFalse(
-                self.parser.parse_args([command]).no_commit_list)
+                self.parser.parse_args([command, '-b', 'main']).no_commit_list)
             self.assertTrue(self.parser.parse_args(
-                [command, '--no-commit-list']).no_commit_list)
+                [command, '-b', 'main', '--no-commit-list']).no_commit_list)
 
     def test_alias_delete_all(self):
         args = self.parser.parse_args(['alias', 'delete', '--all'])
@@ -167,12 +175,13 @@ class TestCreateParser(unittest.TestCase):
         self.assertTrue(args.review)
 
     def test_new_command_with_alias(self):
-        args = self.parser.parse_args(['new', '-m', 'Fix bug', 'myalias'])
+        args = self.parser.parse_args(
+            ['new', '-b', 'main', '-m', 'Fix bug', 'myalias'])
         self.assertEqual(args.alias, 'myalias')
 
     def test_new_command_with_force(self):
         args = self.parser.parse_args(
-            ['new', '-m', 'Fix bug', 'myalias', '-f'])
+            ['new', '-m', 'Fix bug', 'myalias', '-f', '-b', 'main'])
         self.assertTrue(args.force)
 
     def test_update_command(self):
@@ -217,7 +226,7 @@ class TestSnapshotDefault(unittest.TestCase):
 
     def test_commands_that_read_the_change_snapshot(self):
         parser = create_parser()
-        for argv in (['new'], ['update'], ['list-changes'], ['sync'], ['writable', 'apply'],
+        for argv in (['new', '-b', 'main'], ['update'], ['list-changes'], ['sync'], ['writable', 'apply'],
                      ['writable', 'enable'], ['writable', 'disable']):
             with self.subTest(argv=argv):
                 self.assertTrue(
@@ -277,7 +286,7 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_dispatches_new(self, mock_new, _branch, _ws):
         parser = create_parser()
-        args = parser.parse_args(['new', '-m', 'msg'])
+        args = parser.parse_args(['new', '-b', 'main', '-m', 'msg'])
         result = run_command(args)
         mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
@@ -287,7 +296,7 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_new_defaults_message_from_head(self, mock_new, _branch, _head, _ws):
         parser = create_parser()
-        args = parser.parse_args(['new'])
+        args = parser.parse_args(['new', '-b', 'main'])
         result = run_command(args)
         self.assertEqual(args.message, 'Add feature')
         mock_new.assert_called_once_with(args)
@@ -298,7 +307,7 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_new_explicit_message_takes_precedence(self, mock_new, _branch, _head, _ws):
         parser = create_parser()
-        args = parser.parse_args(['new', '-m', 'Explicit msg'])
+        args = parser.parse_args(['new', '-b', 'main', '-m', 'Explicit msg'])
         result = run_command(args)
         self.assertEqual(args.message, 'Explicit msg')
         _head.assert_not_called()
@@ -308,7 +317,7 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/x')
     def test_new_no_commits_returns_error(self, _branch, _head, _ws):
         parser = create_parser()
-        args = parser.parse_args(['new'])
+        args = parser.parse_args(['new', '-b', 'main'])
         with self.assertRaisesRegex(CommandError, 'No commits found'):
             run_command(args)
 
@@ -317,7 +326,7 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_review_defaults_message_from_head(self, mock_review, _branch, _head, _ws):
         parser = create_parser()
-        args = parser.parse_args(['review'])
+        args = parser.parse_args(['review', '-b', 'main'])
         result = run_command(args)
         self.assertEqual(args.message, 'Review change')
         mock_review.assert_called_once_with(args)
@@ -340,7 +349,8 @@ class TestRunCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with open(os.path.join(tmp, 'msg.txt'), 'w') as f:
                 f.write('Title\n\nBody line\n\n')
-            args = create_parser().parse_args(['new', '-F', 'msg.txt'])
+            args = create_parser().parse_args(
+                ['new', '-b', 'main', '-F', 'msg.txt'])
             with mock.patch('os.getcwd', return_value=tmp):
                 result = run_command(args)
         self.assertEqual(result, 0)
@@ -352,7 +362,8 @@ class TestRunCommand(unittest.TestCase):
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_missing_message_file_returns_error(self, mock_new, _branch, _ws):
         with tempfile.TemporaryDirectory() as tmp:
-            args = create_parser().parse_args(['new', '-F', 'missing.txt'])
+            args = create_parser().parse_args(
+                ['new', '-b', 'main', '-F', 'missing.txt'])
             with mock.patch('os.getcwd', return_value=tmp), \
                     self.assertRaisesRegex(CommandError,
                                            'Failed to read message file'):
@@ -365,7 +376,8 @@ class TestRunCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with open(os.path.join(tmp, 'msg.txt'), 'w') as f:
                 f.write('\n  \n')
-            args = create_parser().parse_args(['new', '-F', 'msg.txt'])
+            args = create_parser().parse_args(
+                ['new', '-b', 'main', '-F', 'msg.txt'])
             with mock.patch('os.getcwd', return_value=tmp), \
                     self.assertRaisesRegex(CommandError, 'is empty'):
                 run_command(args)
@@ -399,7 +411,8 @@ class TestBranchKeyword(unittest.TestCase):
     @mock.patch('git_p4son.cli.review_command', return_value=0)
     def test_run_command_resolves_at_branch_for_review(
             self, mock_review, _ws, _branch):
-        args = create_parser().parse_args(['review', '-m', 'msg'])
+        args = create_parser().parse_args(
+            ['review', '-b', 'main', '-m', 'msg'])
         result = run_command(args)
         self.assertEqual(args.alias, 'feat-bar')
         mock_review.assert_called_once_with(args)
@@ -457,14 +470,15 @@ class TestBranchKeyword(unittest.TestCase):
         self.assertEqual(result, 'main')
 
     def test_new_defaults_to_branch(self):
-        args = create_parser().parse_args(['new', '-m', 'msg'])
+        args = create_parser().parse_args(['new', '-b', 'main', '-m', 'msg'])
         self.assertEqual(args.alias, 'branch')
 
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/xyz')
     def test_no_alias_skips_resolution(self, _branch, _ws, mock_new):
-        args = create_parser().parse_args(['new', '-m', 'msg', '--no-alias'])
+        args = create_parser().parse_args(
+            ['new', '-b', 'main', '-m', 'msg', '--no-alias'])
         result = run_command(args)
         self.assertIsNone(args.alias)
         self.assertEqual(result, 0)
@@ -472,7 +486,8 @@ class TestBranchKeyword(unittest.TestCase):
     @mock.patch('git_p4son.cli.new_command', return_value=0)
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
     def test_explicit_alias_unchanged(self, _ws, mock_new):
-        args = create_parser().parse_args(['new', '-m', 'msg', 'myalias'])
+        args = create_parser().parse_args(
+            ['new', '-b', 'main', '-m', 'msg', 'myalias'])
         result = run_command(args)
         self.assertEqual(args.alias, 'myalias')
         self.assertEqual(result, 0)

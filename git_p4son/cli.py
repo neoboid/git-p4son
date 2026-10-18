@@ -29,11 +29,15 @@ from .skill import skill_install_command, skill_show_command
 from .writable import writable_command
 
 
-def _add_base_branch(parser: argparse.ArgumentParser, help: str) -> None:
-    """Add -b/--base-branch, defaulting to None, which run_command resolves to the backend's default."""
-    parser.add_argument('-b', '--base-branch',
-                        help=f'{help}. Defaults to HEAD~1, '
-                        'or with the jj backend the parent of the jj change')
+def _add_base_branch(parser: argparse.ArgumentParser, help: str, default_help: str | None = None) -> None:
+    """Add -b/--base-branch, defaulting to None, which run_command resolves to the backend's default.
+
+    Without default_help to describe that default, -b is required."""
+    if default_help is None:
+        parser.add_argument('-b', '--base-branch', required=True,
+                            help=f'{help}: a branch or bookmark, or a commit one points at, which the alias records')
+        return
+    parser.add_argument('-b', '--base-branch', help=f'{help}. {default_help}')
 
 
 def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: str,
@@ -265,7 +269,7 @@ Examples:
         help='Leave the enumerated commit list out of the changelist description'
     )
     _add_base_branch(
-        new_parser, 'Base branch for enumerating commits and finding changed files')
+        new_parser, 'The base the change starts from, for enumerating commits and finding changed files')
     _add_branch_keyword_arg(new_parser, 'alias',
                             'Alias name to save the new changelist number under')
     new_parser.add_argument(
@@ -311,7 +315,9 @@ Examples:
         'Replace the changelist description message above the commit list '
         'with the contents of the given file')
     _add_base_branch(
-        update_parser, 'Base branch for enumerating commits and finding changed files')
+        update_parser, 'Where the commits to fold in start, for the commit list and the files to open',
+        'Defaults to after the last commit the CL includes, when its alias records that, '
+        'else to HEAD~1, or with the jj backend the parent of the jj change')
     _add_dry_run(
         update_parser, 'Pretend and print what would be done, but do not execute')
     update_parser.add_argument(
@@ -341,7 +347,8 @@ Examples:
         'description.'
     )
     list_changes_parser.set_defaults(func=list_changes_command)
-    _add_base_branch(list_changes_parser, 'Base branch to compare against')
+    _add_base_branch(list_changes_parser, 'Base branch to compare against',
+                     'Defaults to HEAD~1, or with the jj backend the parent of the jj change')
 
     alias_parser = subparsers.add_parser(
         'alias',
@@ -434,7 +441,7 @@ Examples:
         'Read the changelist description message from the given file',
         from_head=True)
     _add_base_branch(
-        review_parser, 'Base branch to find commits since')
+        review_parser, 'The base the change starts from, to find commits since')
     review_parser.add_argument(
         '-f', '--force',
         action='store_true',
@@ -598,6 +605,8 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
     """Resolve the arguments that depend on the workspace, then run the command."""
     backend = args.backend
     if hasattr(args, 'base_branch'):
+        # As given, as the jj backend resolves a bookmark to a commit: new records the name, update checks for one.
+        args.base_given = args.base_branch
         args.base_branch = backend.resolve_base(args.base_branch)
 
     if getattr(args, 'no_alias', False):

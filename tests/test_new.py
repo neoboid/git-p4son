@@ -3,12 +3,13 @@
 import unittest
 
 from git_p4son.changelist_store import (
+    find_record,
     list_changelist_aliases,
     load_changelist_alias,
     save_changelist_alias,
 )
 from git_p4son.new import new_command
-from tests.helpers import on_jj, P4RepoTestCase
+from tests.helpers import on_jj, P4RepoTestCase, recorded
 
 
 FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
@@ -116,8 +117,25 @@ class TestNewAlias(NewTestCase):
         self.new('-f')
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
 
+    def test_records_the_base_by_name_and_the_commits_since_it(self):
+        self.new('-b', self.git('rev-parse', 'main'))
+        record = recorded('101', self.ws)
+        self.assertEqual((record.base, record.base_commit, record.included),
+                         ('main', self.git('rev-parse', 'main'), 2))
+
+    def test_a_base_no_branch_names_is_refused_before_creating(self):
+        self.command_fails(new_command, ['new', 'feat', '-m', 'Feature', '-b', 'HEAD~1'],
+                           message='-b HEAD~1 names no (branch|bookmark)')
+        self.assertEqual(self.p4.pending, {})
+
+    def test_without_an_alias_any_base_will_do(self):
+        self.new('--no-alias', '-b', 'HEAD~1', alias=None)
+        self.assertEqual(self.p4.pending['101'], [
+                         'Feature', '', 'Changes included:', '1. Replace b with c'])
+        self.assertIsNone(find_record('101', self.ws))
+
     def test_invalid_alias_stops_before_creating(self):
-        self.command_fails(new_command, ['new', 'bad alias!', '-m', 'Feature'],
+        self.command_fails(new_command, ['new', 'bad alias!', '-m', 'Feature', '-b', 'main'],
                            message='Invalid alias name')
         self.assertEqual(self.p4.pending, {})
 

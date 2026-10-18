@@ -8,6 +8,8 @@ from git_p4son import CONFIG_DIR
 from git_p4son.changelist_store import (
     alias_changes,
     alias_for_change,
+    find_record,
+    Record,
     branch_alias,
     branch_to_alias,
     check_alias_usable,
@@ -16,6 +18,7 @@ from git_p4son.changelist_store import (
     load_changelist_alias,
     migrate_changelist_aliases,
     save_changelist_alias,
+    update_record,
     validate_alias_name,
 )
 from git_p4son.common import CommandError
@@ -196,6 +199,55 @@ class TestAliasChanges(WorkspaceTestCase):
                               force=False, change='kxyz')
         self.assertEqual(alias_changes(self.ws), {'next': 'kxyz'})
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+
+
+class TestRecord(WorkspaceTestCase):
+    """An alias made by new records its CL's base and how many commits since it the CL includes."""
+
+    RECORD = Record(base='main', base_commit='a' * 40,
+                    included=2, last='1760781234 +0200')
+
+    def read(self, name):
+        with open(os.path.join(self.ws, CONFIG_DIR, 'aliases', f'{name}.toml'), encoding='utf-8') as f:
+            return f.read()
+
+    def test_save_writes_the_record_beside_the_changelist(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz', record=self.RECORD)
+        self.assertEqual(self.read('feat'), 'changelist = 101\nchange = "kxyz"\nbase = "main"\n'
+                         f'base_commit = "{"a" * 40}"\nincluded = 2\nlast = "1760781234 +0200"\n')
+        self.assertEqual(find_record('101', self.ws), ('feat', self.RECORD))
+
+    def test_an_alias_without_one_records_none(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        self.assertIsNone(find_record('101', self.ws))
+        self.assertIsNone(find_record('102', self.ws))
+
+    def test_update_keeps_the_changelist_and_the_change(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz', record=self.RECORD)
+        moved = Record(base='main', base_commit='b' * 40,
+                       included=3, last='1760781299 +0200')
+        update_record('feat', moved, self.ws)
+        self.assertEqual(find_record('101', self.ws), ('feat', moved))
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+        self.assertEqual(alias_changes(self.ws), {'feat': 'kxyz'})
+
+    def test_moving_the_change_keeps_the_other_alias_s_record(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, change='kxyz', record=self.RECORD)
+        save_changelist_alias('next', '102', self.ws,
+                              force=False, change='kxyz')
+        self.assertEqual(find_record('101', self.ws), ('feat', self.RECORD))
+
+    def test_a_record_with_a_missing_or_wrong_key_is_none(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        for extra in ('base = "main"\nincluded = 2\n',
+                      'base = "main"\nbase_commit = "x"\nincluded = "2"\nlast = "y"\n'):
+            with self.subTest(extra=extra):
+                self.write_file(os.path.join(
+                    CONFIG_DIR, 'aliases', 'feat.toml'), 'changelist = 101\n' + extra)
+                self.assertIsNone(find_record('101', self.ws))
 
 
 class TestBranchToAlias(unittest.TestCase):

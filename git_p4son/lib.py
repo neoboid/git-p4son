@@ -73,13 +73,21 @@ def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_ru
 
 def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, dry_run: bool,
                       message: str | None, commit_list: bool,
-                      revision: str = 'HEAD') -> None:
-    """Update a changelist description, merging the commits since base_branch into its commit list."""
+                      revision: str = 'HEAD', new_commits: list[str] | None = None) -> None:
+    """Update a changelist description, merging the commits since base_branch into its commit list.
+
+    With new_commits, appends those instead, leaving the entries the list has as they are, and skipping the leading
+    ones the list already ends with."""
     spec_text = get_changelist_spec(changelist_nr, workspace_dir)
     description = Description.parse(extract_description_lines(spec_text))
     if message is not None:
         description.set_message(message)
-    if commit_list:
+    if commit_list and new_commits is not None:
+        # A retry after a failed open or shelve finds the first ones appended, as the record only advances after those.
+        appended = next((count for count in range(len(new_commits), 0, -1)
+                         if description.commits[-count:] == new_commits[:count]), 0)
+        description.commits += new_commits[appended:]
+    elif commit_list:
         description.merge_commits(
             get_commit_subjects_since(base_branch, workspace_dir, revision))
     new_description_lines = description.format()

@@ -115,7 +115,7 @@ git checkout -b feature-b           # on top of feature-a, commit part B while A
   `--update-refs` (git 2.38 or later) moves every branch in the stack in one go:
   ```sh
   git checkout feature-a              # commit the fixes
-  git p4son update --shelve
+  git p4son update --per-commit --shelve
   git checkout feature-c && git rebase --update-refs feature-a
   ```
 - After a sync, rebase the whole stack onto `main` the same way, from the top:
@@ -178,8 +178,8 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 Notes:
 
-- Always pass `-b main` (or the branch you started from). The default base is `HEAD~1`, which only covers the last
-  commit.
+- `-b` is required: pass `main`, or the branch you started from. The alias records it, with how many commits the CL
+  includes, so later updates know which commits are new.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
   for a single-commit change, where a one-entry list would just repeat the title.
@@ -196,29 +196,26 @@ git p4son new -F /tmp/my-feature.txt -b main --review   # same, plus shelve and 
 
 ## Updating a CL after feedback
 
-Commit the fixes as new commits on top of the branch, without rewriting the reviewed ones, then add the new commit
-to the CL and re-shelve:
+Commit the fixes as new commits on top of the branch, without rewriting the reviewed ones, then update the CL once
+per new commit, so each one becomes its own patch, as `review` does:
 
 ```sh
-git p4son update --shelve
+git p4son update --per-commit --shelve --dry-run   # check the steps
+git p4son update --per-commit --shelve
 ```
 
-This adds the last commit only (`update`'s base defaults to `HEAD~1`); with more, see `--per-commit` below.
-`update` opens the changed files in the CL, reverts files that are no longer part of the change, and adds the commit
-to the commit list. `--shelve` replaces the shelf, which adds a new patch to the Swarm review.
+The alias of a CL that `new` or `review` made records how many commits the CL includes, so `update` works out the
+new ones by itself; don't pass `-b`. Each step opens the changed files in the CL, reverts files that are no longer
+part of the change, and appends the commit to the commit list; `--shelve` replaces the shelf, which adds a new patch
+to the Swarm review. The entries the commit list already has are left as they are, so the user may reword them in
+the CL. If a step fails, `update` returns to the branch and names the step that failed: tell the user what failed;
+after fixing it, run the same command again, which skips the commits that worked.
 
-With several new commits since the last update, update once per commit so each one becomes its own patch, as
-`review` does. `--per-commit` checks out each commit in turn and updates the CL on it; replace 2 with the number
-of new commits:
-
-```sh
-git p4son update -b HEAD~2 --per-commit --shelve --dry-run   # check the steps
-git p4son update -b HEAD~2 --per-commit --shelve
-```
-
-To find the number, compare the commit list in `p4 describe -s $(git p4son alias show)` with
-`git log --oneline main..`. If a step fails, `update` returns to the branch and names the step that failed: tell the
-user what failed; after fixing it, run the resume command the error ends with, which skips the commits that worked.
+- **"The commits CL N includes changed since its last update"** means included commits were squashed, dropped or
+  reordered. Don't drop the record yourself: tell the user, who either puts them back or drops it.
+- **A CL whose alias records nothing**, made by `alias new` or an older git-p4son, needs the range: count the new
+  commits by comparing the commit list in `p4 describe -s <CL>` with `git log --oneline main..`, then run
+  `git p4son update -b HEAD~2 --per-commit --shelve`, replacing 2 with the number.
 
 To reword the description, `-F FILE` or `-m MESSAGE` replaces everything above the commit list. Add `--no-edit` to
 change only the description and leave the files alone. `--no-commit-list` leaves the commit list as it is.

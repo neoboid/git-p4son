@@ -82,13 +82,19 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   (`list`, `add`, `delete`).
 
 - **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
-  (the branch name by default; `--no-alias` skips it), then opens the changes and reverts the files no longer part of
-  them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves; `--shelve` only shelves. Requires a
-  clean git workspace unless `--no-edit` is given.
+  (the branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
+  reverts the files no longer part of them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves;
+  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given.
 
-- **`update.py`** - Updates an existing changelist, named by number or alias: merges the commits into its
-  description (`update_changelist`), then calls `edit_and_shelve`. `--per-commit` instead updates once per commit
-  through `run_per_commit`. Requires a clean git workspace unless `--no-edit` is given.
+- **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
+  in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
+  merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, and the
+  record's new count. `--per-commit` instead updates once per commit through `run_per_commit`. Requires a clean git
+  workspace unless `--no-edit` is given.
+
+- **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks
+  the last included commit's identity (`Backend.commit_identity`) and works out where `update` starts and what it
+  appends.
 
 - **`review.py`** - The `review` command: one Swarm review built commit by commit through `run_per_commit`,
   running `new <alias> --review` on the first commit and `update <alias> --shelve` on the others.
@@ -122,11 +128,12 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
   writable files p4 refused or overwrote.
 
-- **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process,
-  with that commit checked out through the backend, for `review` and `update --per-commit`. A step's arguments are
-  parsed with the real parser just before it runs, with the base resolved once to a SHA. It returns to where it
-  started, also when a step fails, ends the error with the command that resumes after the last commit that worked,
-  and sleeps `SWARM_SHELF_DELAY` between shelving steps.
+- **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
+  that commit checked out through the backend, for `review` and `update --per-commit`. A step's arguments are parsed
+  with the real parser just before it runs, with the base resolved once to a SHA. It returns to where it started, also
+  when a step fails, ends the error with the command that resumes after the last commit that worked, and sleeps
+  `SWARM_SHELF_DELAY` between shelving steps. `base_name`, the base's name, goes to every step, as the steps get the
+  base as a commit.
 
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
@@ -196,9 +203,11 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
-  keyword. An alias may record a jj change (`change = "..."`), at most one alias per change, as saving moves the
-  record: `alias_for_change` and `alias_changes`. The old `.git-p4son/changelists/<name>` store is still read;
-  writes move an alias out of it, and `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
+  keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and how many commits since it the CL
+  includes, with the last one's identity (`find_record`, `update_record`). An alias may record a jj change (`change =
+  "..."`), at most one alias per change, as saving moves the record: `alias_for_change` and `alias_changes`. The old
+  `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
+  which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
   `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.

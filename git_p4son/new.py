@@ -3,6 +3,8 @@
 import argparse
 from .changelist_store import alias_for_change, check_alias_usable, load_changelist_alias, save_changelist_alias
 from .common import CommandError
+from .git import resolve_commit
+from .included import new_record
 from .lib import create_changelist, edit_and_shelve
 from .log import log
 
@@ -17,10 +19,12 @@ def new_command(args: argparse.Namespace) -> int:
         args.backend.check_clean()
 
     change = args.backend.change_id()
+    base = None
     if args.alias:
         check_alias_usable(args.alias, workspace_dir, args.force)
         _check_one_alias_per_change(
             args.alias, change, workspace_dir, args.force)
+        base = args.backend.base_name(args.base_given)
 
     log.heading('Creating changelist')
     changelist = create_changelist(
@@ -33,9 +37,11 @@ def new_command(args: argparse.Namespace) -> int:
         log.success(
             f'Would create a changelist with this description{alias_note}')
     else:
-        if args.alias:
+        if args.alias and base is not None:
+            record = new_record(base, resolve_commit(args.base_branch, workspace_dir), revision,
+                                args.backend, workspace_dir)
             save_changelist_alias(args.alias, changelist, workspace_dir,
-                                  force=args.force, change=change)
+                                  force=args.force, change=change, record=record)
         log.success(f'Created CL {changelist}{alias_note}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,

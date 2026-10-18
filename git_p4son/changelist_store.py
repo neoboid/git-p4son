@@ -4,7 +4,8 @@ import os
 import re
 import tomllib
 from collections.abc import Callable
-from typing import TypeVar
+from dataclasses import dataclass
+from typing import Any, NamedTuple, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
@@ -13,6 +14,23 @@ from .log import log
 from .toml_writer import format_toml
 
 _Read = TypeVar('_Read')
+
+
+@dataclass(frozen=True)
+class Record:
+    """What an alias made by new records about its CL: the base, and how many commits since it the CL includes."""
+    base: str
+    # What base resolved to at the last new or update.
+    base_commit: str
+    included: int
+    # The identity of the last included commit: its jj change ID, or with git its author date.
+    last: str
+
+
+class _Alias(NamedTuple):
+    changelist: str
+    change: str | None
+    record: Record | None
 
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
@@ -93,8 +111,18 @@ def _no_alias(name: str) -> CommandError:
                         'See "git p4son alias list".')
 
 
-def _read_alias_file(path: str, name: str) -> tuple[str, str | None]:
-    """The changelist and the jj change an alias file records; raise CommandError if it has no changelist."""
+def _read_record(data: dict[str, Any]) -> Record | None:
+    """The record in an alias file's data, or None unless every key holds its type."""
+    base, base_commit, included, last = (
+        data.get(key) for key in ('base', 'base_commit', 'included', 'last'))
+    if (isinstance(base, str) and isinstance(base_commit, str) and type(included) is int
+            and isinstance(last, str)):
+        return Record(base, base_commit, included, last)
+    return None
+
+
+def _read_alias_file(path: str, name: str) -> _Alias:
+    """The changelist, jj change and record an alias file holds; raise CommandError if it has no changelist."""
     with open(path, 'rb') as f:
         try:
             data = tomllib.load(f)
@@ -106,7 +134,7 @@ def _read_alias_file(path: str, name: str) -> tuple[str, str | None]:
             f'Changelist alias "{name}" has no changelist number')
     change = data.get('change')
     valid = isinstance(change, str) and _CHANGE_ID_RE.fullmatch(change)
-    return str(changelist), change if valid else None
+    return _Alias(str(changelist), change if valid else None, _read_record(data))
 
 
 def _read_old_alias(path: str, name: str) -> str:
@@ -128,7 +156,8 @@ def _remove_old_alias(old_path: str, workspace_dir: str) -> None:
         pass
 
 
-def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | None = None) -> None:
+def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | None = None,
+                 record: Record | None = None) -> None:
     path, old_path = _alias_paths(name, workspace_dir)
     if not changelist.isdigit():
         raise CommandError(f'Invalid changelist number: {changelist}')
@@ -140,6 +169,9 @@ def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | N
     data: dict[str, int | str] = {'changelist': int(changelist)}
     if change is not None:
         data['change'] = change
+    if record is not None:
+        data |= {'base': record.base, 'base_commit': record.base_commit,
+                 'included': record.included, 'last': record.last}
     with open(path, 'w', encoding='utf-8') as f:
         f.write(format_toml(data))
     _remove_old_alias(old_path, workspace_dir)
@@ -163,12 +195,12 @@ def _listed(directory: str, suffix: str, read: Callable[[str, str], _Read]) -> d
     return aliases
 
 
-def _records(workspace_dir: str) -> dict[str, tuple[str, str | None]]:
+def _records(workspace_dir: str) -> dict[str, _Alias]:
     return _listed(_aliases_dir(workspace_dir), '.toml', _read_alias_file)
 
 
 def _listed_new(workspace_dir: str) -> dict[str, str]:
-    return {name: changelist for name, (changelist, _) in _records(workspace_dir).items()}
+    return {name: alias.changelist for name, alias in _records(workspace_dir).items()}
 
 
 def _listed_old(workspace_dir: str) -> dict[str, str]:
@@ -184,19 +216,35 @@ def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool,
-                          change: str | None = None) -> None:
+                          change: str | None = None, record: Record | None = None) -> None:
     """Save a changelist under an alias, moving the record of change to it; raise CommandError if not usable."""
     check_alias_usable(name, workspace_dir, force)
     if change is not None:
-        for other, (other_changelist, recorded) in _records(workspace_dir).items():
-            if recorded == change and other != name:
-                _write_alias(other, other_changelist, workspace_dir)
-    _write_alias(name, changelist, workspace_dir, change)
+        for other, alias in _records(workspace_dir).items():
+            if alias.change == change and other != name:
+                _write_alias(other, alias.changelist,
+                             workspace_dir, record=alias.record)
+    _write_alias(name, changelist, workspace_dir, change, record)
+
+
+def find_record(changelist: str, workspace_dir: str) -> tuple[str, Record] | None:
+    """The alias of changelist that holds a record, with the record, or None."""
+    return next(((name, alias.record) for name, alias in sorted(_records(workspace_dir).items())
+                 if alias.changelist == changelist and alias.record is not None), None)
+
+
+def update_record(name: str, record: Record, workspace_dir: str) -> None:
+    """Replace the record an alias holds, keeping its changelist and jj change; raise CommandError if there is none."""
+    path, _ = _alias_paths(name, workspace_dir)
+    if not os.path.exists(path):
+        raise _no_alias(name)
+    alias = _read_alias_file(path, name)
+    _write_alias(name, alias.changelist, workspace_dir, alias.change, record)
 
 
 def alias_changes(workspace_dir: str) -> dict[str, str]:
     """The jj change each alias records, by alias name, for the aliases that record one."""
-    return {name: change for name, (_, change) in _records(workspace_dir).items() if change is not None}
+    return {name: alias.change for name, alias in _records(workspace_dir).items() if alias.change is not None}
 
 
 def alias_for_change(change: str, workspace_dir: str) -> str | None:
@@ -209,7 +257,7 @@ def load_changelist_alias(name: str, workspace_dir: str) -> str:
     """Load a changelist number from a named alias; raise CommandError if there is none."""
     path, old_path = _alias_paths(name, workspace_dir)
     if os.path.exists(path):
-        return _read_alias_file(path, name)[0]
+        return _read_alias_file(path, name).changelist
     if os.path.exists(old_path):
         return _read_old_alias(old_path, name)
     raise _no_alias(name)

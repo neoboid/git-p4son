@@ -21,6 +21,7 @@ def review_command(args: argparse.Namespace) -> int:
     log.heading(f'Checking alias "{args.alias}"')
     check_alias_usable(args.alias, workspace_dir, args.force)
     log.success(f'Alias "{args.alias}" is usable')
+    base_name = args.backend.base_name(args.base_given)
 
     aliases_before = dict(list_changelist_aliases(workspace_dir))
 
@@ -35,5 +36,5 @@ def review_command(args: argparse.Namespace) -> int:
     first, rest = _steps(args)
     run_per_commit(first, rest, args.base_branch, workspace_dir, args.backend,
                    sleep=SWARM_SHELF_DELAY, dry_run=args.dry_run,
-                   message=args.message, message_file=args.file, resumable=resumable)
+                   message=args.message, message_file=args.file, resumable=resumable, base_name=base_name)
     return 0

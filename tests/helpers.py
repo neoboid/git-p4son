@@ -19,6 +19,7 @@ from unittest import mock
 
 from git_p4son import CONFIG_DIR
 from git_p4son.backend import open_backend
+from git_p4son.changelist_store import find_record, Record
 from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.config import ensure_config_dir
 from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
@@ -87,6 +88,7 @@ def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
     if args.backend is None:
         args.backend = GitBackend(args.workspace_dir)
     if hasattr(args, 'base_branch'):
+        args.base_given = args.base_branch
         args.base_branch = args.backend.resolve_base(args.base_branch)
     return args
 
@@ -120,6 +122,13 @@ def requires_jj(test_class: _TestClass) -> _TestClass:
 def requires_shell(name: str) -> Callable[[_TestClass], _TestClass]:
     """Skip a test class when the shell is not installed, unless GIT_P4SON_REQUIRE_SHELLS names it."""
     return _requires(name, name in os.environ.get('GIT_P4SON_REQUIRE_SHELLS', '').split())
+
+
+def recorded(changelist: str, workspace_dir: str) -> Record:
+    """The record an alias of changelist holds, failing the test if none does."""
+    found = find_record(changelist, workspace_dir)
+    assert found is not None, f'no alias of CL {changelist} holds a record'
+    return found[1]
 
 
 def isolate_jj(test: unittest.TestCase, workspace_dir: str) -> None:
@@ -293,10 +302,11 @@ class GitRepoTestCase(WorkspaceTestCase):
         self.git('reset', '-q', '--hard')
         return [commit_by_mark[f':{mark}'] for mark in range(1, len(commits) + 1)]
 
-    def commit(self, message: str = 'test commit') -> None:
-        """Stage everything and commit it."""
+    def commit(self, message: str = 'test commit', date: str | None = None) -> None:
+        """Stage everything and commit it, with date as the author date if given."""
         self.git('add', '-A')
-        self.git('commit', '-q', '--allow-empty', '-m', message)
+        self.git('commit', '-q', '--allow-empty', '-m',
+                 message, *([f'--date={date}'] if date else []))
 
     def assert_at(self, branch: str, commit: str) -> None:
         """Assert HEAD is commit, on branch, or detached for an empty branch."""

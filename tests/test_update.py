@@ -2,8 +2,9 @@
 
 import shlex
 import unittest
+from unittest import mock
 
-from git_p4son.changelist_store import save_changelist_alias
+from git_p4son.changelist_store import find_record, Record, save_changelist_alias
 from git_p4son.common import CommandError
 from git_p4son.new import new_command
 from git_p4son.update import _step, update_command
@@ -13,6 +14,7 @@ from tests.helpers import (
     cli_args,
     GitRepoTestCase,
     P4RepoTestCase,
+    recorded,
     start_patch,
 )
 
@@ -127,7 +129,8 @@ class TestUpdateCleanWorkspace(UpdateTestCase):
         self.commit('Add d')
         self.edit('a.txt', 'dirty\n')
         self.update('--no-edit')
-        self.assertEqual(self.p4.pending['101'][-1], '3. Add d')
+        # The alias records the CL's commits, so Add d waits for an update that opens its files.
+        self.assertEqual(self.p4.pending['101'][-1], '2. Replace b with c')
         self.assertNotIn('d.txt', self.p4.opened)
 
     def test_no_edit_shelves_without_reverting(self):
@@ -152,10 +155,11 @@ class TestSteps(unittest.TestCase):
 
 
 class TestUpdatePerCommit(UpdateTestCase):
-    """update --per-commit of CL 101 over the two commits on branch feature."""
+    """update --per-commit of CL 101 over the two commits on branch feature, its alias without a record."""
 
     def setUp(self):
         super().setUp()
+        save_changelist_alias('feat', '101', self.ws, force=True)
         self.sleep = start_patch(self, 'git_p4son.per_commit.time.sleep')
         self.feature_head = self.git('rev-parse', 'HEAD')
         self.p4.calls.clear()
@@ -257,6 +261,10 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
         self.run_command(
             new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit'])
 
+    def setUp(self):
+        super().setUp()
+        save_changelist_alias('feat', '111', self.ws, force=True)
+
     def test_relative_base_is_resolved_where_the_command_starts(self):
         """HEAD~2 is main for every step, not the commit two before each step's commit."""
         self.run_command(update_command, [
@@ -265,7 +273,127 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
 
+class TestUpdateIncluded(UpdateTestCase):
+    """update of CL 101, whose alias new made records main as the base and the two commits since it."""
+
+    def setUp(self):
+        super().setUp()
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+
+    def update(self, *argv):
+        return self.run_command(update_command, ['update', 'feat', *argv])
+
+    def update_fails(self, *argv, message):
+        self.command_fails(update_command, ['update', 'feat', *argv], message)
+
+    def reword_first_entry(self):
+        """Reword the first entry in the CL's commit list, as a user does in P4V."""
+        self.p4.pending['101'] = ['Feature', '', 'Changes included:',
+                                  '1. Change a, reworded', '2. Replace b with c']
+
+    def included(self):
+        return recorded('101', self.ws).included
+
+    def test_new_records_the_base_and_the_commits_since_it(self):
+        with self.command_args(['update', 'feat']) as args:
+            last = args.backend.commit_identity(self.git('rev-parse', 'HEAD'))
+        self.assertEqual(find_record('101', self.ws), ('feat', Record(
+            'main', self.git('rev-parse', 'main'), 2, last)))
+
+    def test_update_appends_only_the_new_commits_leaving_the_entries_as_they_are(self):
+        self.reword_first_entry()
+        self.commit_change_c()
+        self.update()
+        self.assertEqual(self.p4.pending['101'][3:], [
+                         '1. Change a, reworded', '2. Replace b with c', '3. Change c'])
+        self.assertIn('c.txt', self.p4.opened)
+        self.assertEqual(self.included(), 3)
+
+    def test_an_explicit_base_reopens_the_files_but_still_only_appends(self):
+        self.reword_first_entry()
+        self.commit_change_c()
+        self.update('-b', 'main')
+        self.assertEqual(self.p4.pending['101'][3:], [
+                         '1. Change a, reworded', '2. Replace b with c', '3. Change c'])
+        self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
+
+    def test_per_commit_shelves_only_the_new_commits(self):
+        self.commit_change_c()
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.update('--per-commit', '--shelve')
+        self.assertEqual(len(self.shelves()), 2)
+        self.assertEqual(self.p4.pending['101'][3:], [
+                         '1. Change a', '2. Replace b with c', '3. Change c', '4. Add d'])
+        self.assertEqual(self.included(), 4)
+
+    def test_per_commit_with_nothing_new_is_refused(self):
+        self.update_fails(
+            '--per-commit', message='CL 101 already includes the 2 commits since main')
+
+    def test_per_commit_with_a_base_is_refused(self):
+        self.commit_change_c()
+        self.update_fails('--per-commit', '-b', 'main', message='Leave out -b')
+
+    def test_a_base_above_the_last_included_commit_is_refused(self):
+        self.commit_change_c()
+        self.commit('Change d')
+        self.update_fails(
+            '-b', 'HEAD~1', message='-b HEAD~1 skips 1 commit CL 101 doesn\'t include yet')
+
+    def test_a_squash_of_included_commits_is_refused(self):
+        """The commit at position 2 is no longer the one included, so update can't trust the count."""
+        self.git('reset', '-q', '--soft', 'main')
+        self.commit('Change a and replace b with c', date='@946684800 +0000')
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c', date='@946684801 +0000')
+        self.update_fails(
+            message='commit 2 since main is not the one it included')
+
+    def test_a_dry_run_leaves_the_record(self):
+        self.commit_change_c()
+        self.update('--dry-run')
+        self.assertEqual(self.included(), 2)
+
+    def test_a_retry_after_a_failed_shelve_appends_the_new_commits_once(self):
+        """The description is written before the files are opened and shelved, and the record after."""
+        self.commit_change_c()
+        with mock.patch('git_p4son.update.edit_and_shelve', side_effect=CommandError('p4 said no')):
+            self.update_fails('--shelve', message='p4 said no')
+        self.update('--shelve')
+        self.assertEqual(self.p4.pending['101'][3:], [
+                         '1. Change a', '2. Replace b with c', '3. Change c'])
+        self.assertEqual(self.included(), 3)
+
+    def test_a_retry_after_a_new_commit_appends_only_that_one(self):
+        """The user carries on working while the failure is sorted out, then retries."""
+        self.commit_change_c()
+        with mock.patch('git_p4son.update.edit_and_shelve', side_effect=CommandError('p4 said no')):
+            self.update_fails('--shelve', message='p4 said no')
+        self.commit('Add d')
+        self.update('--shelve')
+        self.assertEqual(self.p4.pending['101'][3:],
+                         ['1. Change a', '2. Replace b with c', '3. Change c', '4. Add d'])
+
+    def test_no_edit_leaves_the_new_commits_for_the_next_update(self):
+        """Counting them without opening their files would leave them out of the CL for good."""
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.update('--no-edit', '-m', 'Reworded')
+        self.assertEqual(self.p4.pending['101'], [
+                         'Reworded'] + FEATURE_DESCRIPTION[1:])
+        self.assertEqual(self.included(), 2)
+        self.update()
+        self.assertEqual(self.p4.pending['101'][-1], '3. Add d')
+        self.assertIn('d.txt', self.p4.opened)
+
+    def test_per_commit_with_no_edit_is_refused(self):
+        self.commit_change_c()
+        self.update_fails('--per-commit', '--no-edit', message='--no-edit')
+
+
 TestUpdateOnJj = on_jj(TestUpdate)
+TestUpdateIncludedOnJj = on_jj(TestUpdateIncluded)
 TestUpdatePerCommitOnJj = on_jj(TestUpdatePerCommit)
 
 if __name__ == '__main__':

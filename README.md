@@ -901,7 +901,7 @@ whichever form the installed jj supports.
 `jj util exec` neither locks nor snapshots, so `jj p4son` behaves exactly as `git p4son`, and git-p4son's messages
 keep saying `git p4son`. Run it from inside the workspace: `jj -R other-workspace p4son` would still run in the
 current directory, so git-p4son refuses with "Run jj p4son from inside the workspace; -R is not supported." Shell
-completion covers `git p4son`, not `jj p4son`.
+completion for `jj p4son` needs [a hook of its own](#jj-p4son).
 
 ### Choosing the backend
 
@@ -1090,4 +1090,25 @@ Add the following to your PowerShell profile (`$PROFILE`):
 ```
 
 All three enable completion for `git p4son <TAB>` and `git-p4son <TAB>`.
+
+### jj p4son
+
+jj completes an alias's arguments as file paths, so `jj p4son <TAB>` needs a hook of its own. It completes the words
+after `p4son` as `git p4son` does, skipping jj's global options such as `-R` or `--color` before it, and hands every
+other `jj` completion to jj's own. Load it after jj's completion; the PowerShell hook needs PowerShell 7 (`pwsh`):
+
+```bash
+source $(git-p4son completion bash --jj)        # ~/.bashrc
+```
+
+```zsh
+source $(git-p4son completion zsh --jj)         # ~/.zshrc, after compinit
+```
+
+```powershell
+. $(git-p4son completion powershell --jj)       # $PROFILE
+```
+
+Each loads the `git p4son` completion for its shell too. If you named the alias something other than `p4son`, set
+`GIT_P4SON_JJ_ALIAS` to its name.
 

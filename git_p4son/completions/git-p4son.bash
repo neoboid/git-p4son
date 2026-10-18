@@ -11,8 +11,9 @@
 #   Add to ~/.bashrc:
 #     source /path/to/git-p4son/git_p4son/completions/git-p4son.bash
 
-_git_p4son_complete() {
-    local words=("${COMP_WORDS[@]:1}")
+# Fill COMPREPLY with the candidates for the git-p4son words given, the last being the one under the cursor.
+__git_p4son_complete_words() {
+    local words=("$@")
 
     local output
     output=$(git-p4son complete -- "${words[@]}" 2>/dev/null) || return
@@ -34,6 +35,10 @@ _git_p4son_complete() {
 
     local IFS=$'\n'
     COMPREPLY=($(compgen -W "${candidates[*]}" -- "${COMP_WORDS[COMP_CWORD]}"))
+}
+
+_git_p4son_complete() {
+    __git_p4son_complete_words "${COMP_WORDS[@]:1}"
 }
 
 # Register for standalone "git-p4son" invocation

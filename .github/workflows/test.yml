@@ -40,9 +40,10 @@ jobs:
           - os: ubuntu-latest
             python-version: '3.11'
             jj: floor
-    # Without jj the jj tests would be skipped; here they fail instead.
+    # Without jj, or a shell the completion hooks are tested in, those tests would be skipped; here they fail instead.
     env:
       GIT_P4SON_REQUIRE_JJ: 1
+      GIT_P4SON_REQUIRE_SHELLS: ${{ matrix.os == 'windows-latest' && 'pwsh' || 'bash zsh pwsh' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -54,6 +55,8 @@ jobs:
           python scripts/install-jj.py "${{ matrix.jj == 'floor' && env.JJ_FLOOR || env.JJ_LATEST }}" "$RUNNER_TEMP/jj"
           echo "$RUNNER_TEMP/jj" >> "$GITHUB_PATH"
       - run: jj --version
+      - if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y zsh
       - run: pip install -e . && pip install pytest pytest-xdist
       - run: python -m pytest tests/ -n auto --maxprocesses 8
 

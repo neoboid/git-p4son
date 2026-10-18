@@ -502,6 +502,11 @@ Examples:
         action='store_true',
         help='Print the directory instead of the full file path'
     )
+    completion_parser.add_argument(
+        '--jj',
+        action='store_true',
+        help='Print the script that completes jj p4son instead, to load after jj\'s own completion'
+    )
 
     skill_parser = subparsers.add_parser(
         'skill',
@@ -534,15 +539,16 @@ Examples:
     return parser
 
 
+# Each shell's git p4son completion script, then its jj p4son hook.
 _COMPLETION_FILES = {
-    'bash': 'git-p4son.bash',
-    'zsh': '_git-p4son',
-    'powershell': 'git-p4son.ps1',
+    'bash': ('git-p4son.bash', 'git-p4son-jj.bash'),
+    'zsh': ('_git-p4son', 'git-p4son-jj.zsh'),
+    'powershell': ('git-p4son.ps1', 'git-p4son-jj.ps1'),
 }
 
 
 def completion_command(args: argparse.Namespace) -> int:
-    filename = _COMPLETION_FILES[args.shell]
+    filename = _COMPLETION_FILES[args.shell][args.jj]
     completions_dir = files('git_p4son') / 'completions'
 
     if args.dirname:

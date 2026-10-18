@@ -103,11 +103,23 @@ _TestClass = TypeVar('_TestClass', bound=type[unittest.TestCase])
 _GitRepoTest = TypeVar('_GitRepoTest', bound='GitRepoTestCase')
 
 
+def _requires(name: str, required: bool) -> Callable[[_TestClass], _TestClass]:
+    """Skip a test class when the program name is not installed, unless required, as CI requires it, to fail instead."""
+    def decorate(test_class: _TestClass) -> _TestClass:
+        if shutil.which(name) or required:
+            return test_class
+        return unittest.skip(f'{name} is not installed')(test_class)
+    return decorate
+
+
 def requires_jj(test_class: _TestClass) -> _TestClass:
-    """Skip test_class when jj is not installed, unless GIT_P4SON_REQUIRE_JJ is set, as CI sets it, to fail instead."""
-    if shutil.which('jj') or os.environ.get('GIT_P4SON_REQUIRE_JJ'):
-        return test_class
-    return unittest.skip('jj is not installed')(test_class)
+    """Skip test_class when jj is not installed, unless GIT_P4SON_REQUIRE_JJ is set."""
+    return _requires('jj', bool(os.environ.get('GIT_P4SON_REQUIRE_JJ')))(test_class)
+
+
+def requires_shell(name: str) -> Callable[[_TestClass], _TestClass]:
+    """Skip a test class when the shell is not installed, unless GIT_P4SON_REQUIRE_SHELLS names it."""
+    return _requires(name, name in os.environ.get('GIT_P4SON_REQUIRE_SHELLS', '').split())
 
 
 def isolate_jj(test: unittest.TestCase, workspace_dir: str) -> None:

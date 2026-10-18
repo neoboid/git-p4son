@@ -120,7 +120,7 @@ class TestNewAlias(NewTestCase):
     def test_records_the_base_by_name_and_the_commits_since_it(self):
         self.new('-b', self.git('rev-parse', 'main'))
         record = recorded('101', self.ws)
-        self.assertEqual((record.base, record.base_commit, record.included),
+        self.assertEqual((record.base, record.base_commit, len(record.included)),
                          ('main', self.git('rev-parse', 'main'), 2))
 
     def test_a_base_no_branch_names_is_refused_before_creating(self):

@@ -416,9 +416,12 @@ def branches_at(commit: str, workspace_dir: str) -> list[str]:
     return [ref.removeprefix('refs/heads/') for ref in result.stdout]
 
 
-def author_date(commit: str, workspace_dir: str) -> str:
-    """The commit's author date as git stores it, seconds since the epoch and a time zone."""
-    return run(['git', 'log', '-1', '--format=%ad', '--date=raw', commit], cwd=workspace_dir).stdout[0]
+def author_dates(commits: list[str], workspace_dir: str) -> list[str]:
+    """The commits' author dates as git stores them, seconds since the epoch and a time zone, in their order."""
+    if not commits:
+        return []
+    return run(['git', 'log', '--no-walk=unsorted', '--format=%ad', '--date=raw', *commits],
+               cwd=workspace_dir).stdout
 
 
 def list_branches(workspace_dir: str) -> list[str]:

@@ -495,7 +495,7 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
   message
 - `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, for enumerating commits and finding
   changed files: a branch or bookmark, or a commit exactly one points at. The alias records it by name, as a commit
-  would go stale after a sync and rebase, along with how many commits since it the changelist includes, so `update`
+  would go stale after a sync and rebase, along with the commits since it the changelist includes, so `update`
   knows where the next ones start. With `--no-alias` any commit will do
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
@@ -521,18 +521,22 @@ longer part of the git change (see
 clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
 `--no-edit`.
 
-**Changelists made by `new` or `review`.** Their alias records the base, by name, and how many commits since it the
-changelist includes. `update` folds in the commits after those: it appends their subjects to the commit list,
-opens their files, and records the new count. The entries the list already has are left as they are, so an entry
-you reworded in the changelist stays as you wrote it. Every update counts, shelved or not.
+**Changelists made by `new` or `review`.** Their alias records the base, by name, and the commits since it the
+changelist includes, by their jj change IDs or, with git, their author dates, which survive rebases and amends.
+`update` folds in the commits it doesn't know: it appends their subjects to the commit list, opens their files, and
+records them. The entries the list already has are left as they are, so an entry you reworded in the changelist
+stays as you wrote it. Every update counts, shelved or not.
 
 - `-b` only chooses which files to open, from that commit on, for example `-b main` to open them all again after a
   manual `p4 revert`. The commit list is still only appended to. A `-b` above the last included commit is refused,
   as the commits it skips would be counted without being opened.
-- `update` checks that the last included commit is still where the count says, by its jj change ID or, with git,
-  its author date. If included commits were squashed, dropped or reordered since, it refuses instead of shelving
-  the wrong ones. Put them back, or drop the record with `git p4son alias new <changelist> <alias> --force` and pass
-  `-b`.
+- An included commit that is gone from the branch, dropped or squashed into another, gets a warning, and the update
+  goes on with the new commits. Its patch stays in the review: to undo a shelved commit, revert it in a new commit.
+- A new commit below included ones is refused, as its own patch would undo the included commits above it. Move it
+  after them, then update again.
+- An amend, or a squash into an included commit, keeps the commit's identity, so `update` sees no new commit. With
+  nothing new, `update` opens every file since the base, which takes in what the amend added. With new commits as
+  well, run `update -b main` to open them.
 
 **Other changelists**, whose alias records nothing (made by `alias new` or an older git-p4son), or named by a number
 no alias holds: the commits since the base branch, `HEAD~1` by default, replace their existing entries in the
@@ -690,10 +694,10 @@ numbered sequentially.
 
 Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`, and
 with the jj backend `change = "<change ID>"`, the [jj change](#jujutsu-jj) it was made for). An alias that `new` or
-`review` saved also records the changelist's base and how many commits since it it includes, which
-[`update`](#update-command) counts on from: `base`, `base_commit`, `included` and `last`. Aliases
-saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when written,
-or all at once with `alias clean`.
+`review` saved also records the changelist's base and the commits since it it includes, which
+[`update`](#update-command) goes on from: `base`, `base_commit` and `included`, a list of the commits' identities.
+Aliases saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when
+written, or all at once with `alias clean`.
 
 #### alias list
 

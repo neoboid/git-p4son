@@ -4,7 +4,7 @@ import argparse
 from .changelist_store import find_record, load_changelist_alias, update_record
 from .common import CommandError
 from .git import resolve_commit
-from .included import Plan, plan_update
+from .included import Plan, included_count, plan_update
 from .lib import edit_and_shelve, update_changelist
 from .log import log, plural
 from .per_commit import SWARM_SHELF_DELAY, run_per_commit
@@ -30,18 +30,30 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
 def _check_per_commit(plan: Plan, changelist: str, no_edit: bool, workspace_dir: str) -> None:
     """Raise CommandError unless the per-commit loop would run on exactly the commits the CL doesn't include yet."""
     current = plan.current
+    included = included_count(plan.kept)
     if no_edit:
         raise CommandError(f'--no-edit opens no files, so CL {changelist} can\'t include its new commits, and '
                            '--per-commit has nothing to do. Leave out --no-edit, or --per-commit to change only the '
                            'description.')
     if not plan.subjects:
-        raise CommandError(f'CL {changelist} already includes the {plural(current.included, "commit")} '
+        raise CommandError(f'CL {changelist} already includes the {plural(included, "commit")} '
                            f'since {current.base}.')
     # The resume hint after a failed step names the last commit that worked, which is where the loop starts.
     if resolve_commit(plan.start, workspace_dir) != plan.after:
         raise CommandError(f'--per-commit runs on the commits CL {changelist} doesn\'t include yet, the ones after '
-                           f'commit {current.included} since {current.base}, so -b would shelve included ones again. '
+                           f'commit {included} since {current.base}, so -b would shelve included ones again. '
                            'Leave out -b.')
+
+
+def _warn_dropped(plan: Plan, changelist: str) -> None:
+    """Warn about the commits the CL included that are gone from the branch, whose patches stay in the review."""
+    if not plan.dropped:
+        return
+    positions = ', '.join(str(position) for position in plan.dropped)
+    log.warning(f'Gone from the branch, dropped or squashed into another, of the '
+                f'{plural(included_count(plan.current), "commit")} CL {changelist} included: number {positions}. '
+                'The review keeps their patches. To undo a shelved commit, revert it in a new commit rather than '
+                'dropping it.')
 
 
 def _new_commits(plan: Plan | None, no_edit: bool) -> list[str] | None:
@@ -72,9 +84,13 @@ def update_command(args: argparse.Namespace) -> int:
         plan = plan_update(found[1], found[0], changelist,
                            given, args.backend, workspace_dir, revision)
         args.base_branch = plan.start
+        _warn_dropped(plan, changelist)
 
     if args.per_commit:
         if plan is not None:
+            # Recorded now, so neither the steps, each planning on its own, nor a refused run warns about them again.
+            if plan.dropped and not args.dry_run:
+                update_record(plan.alias, plan.kept, workspace_dir)
             _check_per_commit(plan, changelist, args.no_edit, workspace_dir)
         _update_per_commit(changelist, args)
         return 0

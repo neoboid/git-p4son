@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
-    author_date, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
+    author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
     get_head_subject, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
@@ -83,9 +83,9 @@ class GitBackend:
         return named_base(base, self.words, lambda name: branch_exists(name, workspace_dir),
                           lambda base: branches_at(resolve_commit(base, workspace_dir), workspace_dir))
 
-    def commit_identity(self, commit: str) -> str:
-        """The author date, which git keeps through rebases, amends and squashes."""
-        return author_date(commit, self.workspace_dir)
+    def commit_identities(self, commits: list[str]) -> list[str]:
+        """The author dates, which git keeps through rebases, amends and squashes."""
+        return author_dates(commits, self.workspace_dir)
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return set(change_ids)

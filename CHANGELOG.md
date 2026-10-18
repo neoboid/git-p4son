@@ -3,11 +3,11 @@
 ## Unreleased
 
 - **Behaviour change:** `new` and `review` require `-b`, naming a branch or bookmark, or a commit exactly one points
-  at. The alias records it by name, along with how many commits since it the changelist includes. `update` then
-  folds in only the commits after those by default, appending their subjects and leaving the entries the commit list
-  already has as they are, so entries reworded in the changelist survive. Plain `update --per-commit --shelve` shelves
-  exactly the new commits, and refuses `-b`. `update` refuses when included commits were squashed, dropped or
-  reordered since, checked by the last one's jj change ID or git author date. Changelists whose alias records
+  at. The alias records it by name, along with the commits since it the changelist includes, by jj change ID or git
+  author date. `update` then folds in only the commits it doesn't know by default, appending their subjects and
+  leaving the entries the commit list already has as they are, so entries reworded in the changelist survive. Plain
+  `update --per-commit --shelve` shelves exactly the new commits, and refuses `-b`. An included commit dropped from
+  the branch gets a warning, and a new commit below included ones is refused. Changelists whose alias records
   nothing, from `alias new` or older versions, update as before
 - `jj p4son <TAB>` completes like `git p4son <TAB>` in bash, zsh and PowerShell, through a hook loaded after jj's
   own completion: `git p4son completion <shell> --jj` prints its path

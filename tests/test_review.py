@@ -59,7 +59,7 @@ class TestReview(P4RepoTestCase):
         self.assertEqual(len(self.shelves()), 2)
         self.assertEqual(load_changelist_alias('my-feature', self.ws), '101')
         record = recorded('101', self.ws)
-        self.assertEqual((record.base, record.included), ('main', 2))
+        self.assertEqual((record.base, len(record.included)), ('main', 2))
         self.sleep.assert_called_once_with(5)
         self.assert_at('feature', self.feature_head)
 

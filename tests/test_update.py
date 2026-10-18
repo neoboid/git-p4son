@@ -6,6 +6,7 @@ from unittest import mock
 
 from git_p4son.changelist_store import find_record, Record, save_changelist_alias
 from git_p4son.common import CommandError
+from git_p4son.git import author_dates
 from git_p4son.new import new_command
 from git_p4son.update import _step, update_command
 from tests.helpers import (
@@ -273,7 +274,7 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
 
-class TestUpdateIncluded(UpdateTestCase):
+class IncludedTestCase(UpdateTestCase):
     """update of CL 101, whose alias new made records main as the base and the two commits since it."""
 
     def setUp(self):
@@ -292,13 +293,19 @@ class TestUpdateIncluded(UpdateTestCase):
                                   '1. Change a, reworded', '2. Replace b with c']
 
     def included(self):
-        return recorded('101', self.ws).included
+        """How many commits the record says CL 101 includes, leaving out the slots of dropped ones."""
+        return len([identity for identity in recorded('101', self.ws).included if identity])
+
+
+class TestUpdateIncluded(IncludedTestCase):
+    """update on a record, run on git and on jj."""
 
     def test_new_records_the_base_and_the_commits_since_it(self):
         with self.command_args(['update', 'feat']) as args:
-            last = args.backend.commit_identity(self.git('rev-parse', 'HEAD'))
+            identities = args.backend.commit_identities(
+                [self.git('rev-parse', 'HEAD~1'), self.git('rev-parse', 'HEAD')])
         self.assertEqual(find_record('101', self.ws), ('feat', Record(
-            'main', self.git('rev-parse', 'main'), 2, last)))
+            'main', self.git('rev-parse', 'main'), identities)))
 
     def test_update_appends_only_the_new_commits_leaving_the_entries_as_they_are(self):
         self.reword_first_entry()
@@ -340,15 +347,6 @@ class TestUpdateIncluded(UpdateTestCase):
         self.commit('Change d')
         self.update_fails(
             '-b', 'HEAD~1', message='-b HEAD~1 skips 1 commit CL 101 doesn\'t include yet')
-
-    def test_a_squash_of_included_commits_is_refused(self):
-        """The commit at position 2 is no longer the one included, so update can't trust the count."""
-        self.git('reset', '-q', '--soft', 'main')
-        self.commit('Change a and replace b with c', date='@946684800 +0000')
-        self.edit('c.txt', 'c2\n')
-        self.commit('Change c', date='@946684801 +0000')
-        self.update_fails(
-            message='commit 2 since main is not the one it included')
 
     def test_a_dry_run_leaves_the_record(self):
         self.commit_change_c()
@@ -393,6 +391,75 @@ class TestUpdateIncluded(UpdateTestCase):
 
 
 TestUpdateOnJj = on_jj(TestUpdate)
+
+
+class TestUpdateIncludedGitRewrites(IncludedTestCase):
+    """Rewrites made with git, which jj would see as new changes; TestJjPerCommit makes them with jj."""
+
+    def test_a_squash_of_included_commits_warns_and_still_includes_the_new_one(self):
+        """git keeps the first commit's author date, so the squashed commit counts as it, and the second is gone."""
+        first_date = author_dates(
+            [self.git('rev-parse', 'HEAD~1')], self.ws)[0]
+        self.git('reset', '-q', '--soft', 'main')
+        self.commit('Change a and replace b with c', date=first_date)
+        self.commit_change_c()
+        out = self.update()
+        self.assertIn(
+            'dropped or squashed into another, of the 2 commits CL 101 included: number 2.', out)
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+        self.assertEqual(self.included(), 2)
+
+    def test_a_dropped_commit_warns_and_still_includes_the_new_one(self):
+        """Dropping Change a would otherwise shift a count onto Change c, which would never be shelved."""
+        self.git('rebase', '-q', '--onto', 'main', 'HEAD~1')
+        self.commit_change_c()
+        out = self.update('--per-commit', '--shelve')
+        self.assertEqual(out.count('Gone from the branch'), 1)
+        self.assertIn('included: number 1.', out)
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+        self.assertEqual(len(self.shelves()), 1)
+        self.assertEqual(self.included(), 2)
+
+    def test_a_new_commit_below_included_ones_is_refused(self):
+        """Its own patch would undo every included commit above it."""
+        self.git('switch', '-q', '-c', 'below', 'main')
+        self.edit('x.txt', 'x1\n')
+        self.commit('Add x')
+        self.git('switch', '-q', 'feature')
+        self.git('rebase', '-q', 'below')
+        self.update_fails(
+            message='"Add x" sits below commits CL 101 already includes')
+
+    def test_a_second_drop_is_numbered_as_the_cl_lists_it(self):
+        """The record keeps a dropped commit's slot, as the CL keeps its entry."""
+        self.commit_change_c()
+        self.update()
+        self.git('rebase', '-q', '--onto', 'main', 'HEAD~2')
+        self.assertIn('included: number 1.', self.update())
+        self.git('reset', '-q', '--hard', 'HEAD~1')
+        self.assertIn(
+            'dropped or squashed into another, of the 2 commits CL 101 included: number 3.', self.update())
+        self.assertEqual(self.p4.pending['101'][3:], [
+                         '1. Change a', '2. Replace b with c', '3. Change c'])
+
+    def test_per_commit_with_a_drop_and_nothing_new_warns_once(self):
+        self.git('rebase', '-q', '--onto', 'main', 'HEAD~1')
+        self.command_fails(update_command, [
+                           'update', 'feat', '--per-commit'], message='already includes the 1 commit')
+        with captured_output() as out, self.assertRaisesRegex(CommandError, 'already includes'), \
+                self.command_args(['update', 'feat', '--per-commit']) as args:
+            update_command(args)
+        self.assertNotIn('Gone from the branch', out.getvalue())
+
+    def test_an_amend_that_adds_a_file_is_opened_by_the_next_update(self):
+        """An amend keeps the commit's identity, so with nothing new update opens every file since the base."""
+        self.edit('n.txt', 'n1\n')
+        self.git('add', '-A')
+        self.git('commit', '-q', '--amend', '--no-edit')
+        self.update()
+        self.assertIn('n.txt', self.p4.opened)
+
+
 TestUpdateIncludedOnJj = on_jj(TestUpdateIncluded)
 TestUpdatePerCommitOnJj = on_jj(TestUpdatePerCommit)
 

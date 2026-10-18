@@ -124,8 +124,12 @@ class TestJjBackend(JjRepoTestCase):
 
     def test_a_commit_s_identity_is_its_change_id(self):
         with self.operation() as workspace:
-            self.assertEqual(JjBackend(workspace).commit_identity(self.commit_of('feat')),
-                             self.jj('--ignore-working-copy', 'log', '-r', 'feat', '--no-graph', '-T', 'change_id'))
+            commits = [self.commit_of('feat'), self.commit_of('main')]
+            self.assertEqual(JjBackend(workspace).commit_identities(commits), [
+                self.jj('--ignore-working-copy', 'log', '-r',
+                        name, '--no-graph', '-T', 'change_id')
+                for name in ('feat', 'main')])
+            self.assertEqual(JjBackend(workspace).commit_identities([]), [])
 
     def test_answers_from_the_tip(self):
         with self.operation() as workspace:
@@ -430,6 +434,31 @@ class TestJjPerCommit(JjP4RepoTestCase):
     def setUp(self):
         super().setUp()
         start_patch(self, 'git_p4son.per_commit.time.sleep')
+
+    def test_a_squash_into_an_included_change_is_opened_by_the_next_update(self):
+        """jj squash keeps the change ID, so with nothing new update opens every file since the base."""
+        self.p4son('new', '-b', 'main', '--no-edit')
+        self.write_file('n.txt', 'n1\n')
+        self.jj('squash')
+        self.p4son('update', 'feat')
+        self.assertIn('n.txt', self.p4.opened)
+
+    def test_an_abandoned_change_warns_and_the_new_one_is_still_included(self):
+        self.p4son('new', '-b', 'main', '--no-edit')
+        self.jj('abandon', '-r', 'feat-')
+        self.add_d()
+        out = self.p4son('update', 'feat')
+        self.assertIn(
+            'dropped or squashed into another, of the 2 commits CL 101 included: number 1.', out)
+        self.assertEqual(self.p4.pending['101'][-1], '3. Add d')
+
+    def test_a_new_change_below_included_ones_is_refused(self):
+        self.p4son('new', '-b', 'main', '--no-edit')
+        self.jj('new', 'main', '-m', 'Add x')
+        self.jj('rebase', '-s', 'feat-', '-d', '@')
+        self.jj('new', 'feat')
+        self.p4son_fails(
+            'update', 'feat', message='"Add x" sits below commits CL 101 already includes')
 
     def test_update_takes_a_jj_revision_as_its_base(self):
         """-b is the backend's: a change ID resolves through jj, as it does without a record."""

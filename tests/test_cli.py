@@ -552,5 +552,23 @@ class TestMain(unittest.TestCase):
         self.assertIn('weird', err)
 
 
+class TestCompletionCommand(unittest.TestCase):
+    def path(self, *argv):
+        with captured_output() as out:
+            self.assertEqual(run_command(
+                create_parser().parse_args(['completion', *argv])), 0)
+        return out.getvalue().strip()
+
+    def test_prints_each_shell_s_script_and_jj_p4son_hook(self):
+        for argv, name in ((['bash'], 'git-p4son.bash'), (['zsh'], '_git-p4son'), (['powershell'], 'git-p4son.ps1'),
+                           (['bash', '--jj'], 'git-p4son-jj.bash'), (['zsh',
+                                                                      '--jj'], 'git-p4son-jj.zsh'),
+                           (['powershell', '--jj'], 'git-p4son-jj.ps1')):
+            with self.subTest(argv=argv):
+                path = self.path(*argv)
+                self.assertEqual(os.path.basename(path), name)
+                self.assertTrue(os.path.isfile(path))
+
+
 if __name__ == '__main__':
     unittest.main()

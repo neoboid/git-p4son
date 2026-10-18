@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `jj p4son <TAB>` completes like `git p4son <TAB>` in bash, zsh and PowerShell, through a hook loaded after jj's
+  own completion: `git p4son completion <shell> --jj` prints its path
 - **Behaviour change:** `sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, from
   whatever branch you are on, instead of onto the current branch. It checks the sync branch out, syncs, and returns
   you to where you started with the `git rebase` to run. Without the setting it uses `main`, and refuses when there

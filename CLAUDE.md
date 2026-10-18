@@ -138,7 +138,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
   aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
-  `completions/` call `git p4son complete`.
+  `completions/` call `git p4son complete`. Their `git-p4son-jj.*` hooks, which `completion --jj` prints, complete
+  `jj p4son` and hand every other `jj` completion to jj's own; `tests/test_completion_scripts.py` runs them in each
+  shell.
 
 - **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
   command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and which

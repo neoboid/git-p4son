@@ -69,9 +69,9 @@ class JjBackend:
         return named_base(base, self.words, lambda name: name in workspace.bookmarks,
                           lambda base: workspace.bookmarks_at(self.resolve_base(base)))
 
-    def commit_identity(self, commit: str) -> str:
-        """The change ID, which survives rebases and rewording."""
-        return self.workspace.resolve(commit).change_id
+    def commit_identities(self, commits: list[str]) -> list[str]:
+        """The change IDs, which survive rebases and rewording."""
+        return self.workspace.change_ids(commits)
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return self.workspace.existing_changes(change_ids)

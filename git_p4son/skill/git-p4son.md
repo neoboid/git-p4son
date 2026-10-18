@@ -178,7 +178,7 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 Notes:
 
-- `-b` is required: pass `main`, or the branch you started from. The alias records it, with how many commits the CL
+- `-b` is required: pass `main`, or the branch you started from. The alias records it, with the commits the CL
   includes, so later updates know which commits are new.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
@@ -204,15 +204,21 @@ git p4son update --per-commit --shelve --dry-run   # check the steps
 git p4son update --per-commit --shelve
 ```
 
-The alias of a CL that `new` or `review` made records how many commits the CL includes, so `update` works out the
+The alias of a CL that `new` or `review` made records which commits the CL includes, so `update` works out the
 new ones by itself; don't pass `-b`. Each step opens the changed files in the CL, reverts files that are no longer
 part of the change, and appends the commit to the commit list; `--shelve` replaces the shelf, which adds a new patch
 to the Swarm review. The entries the commit list already has are left as they are, so the user may reword them in
 the CL. If a step fails, `update` returns to the branch and names the step that failed: tell the user what failed;
 after fixing it, run the same command again, which skips the commits that worked.
 
-- **"The commits CL N includes changed since its last update"** means included commits were squashed, dropped or
-  reordered. Don't drop the record yourself: tell the user, who either puts them back or drops it.
+- **"... is gone from the branch"** is a warning: a commit the CL includes was dropped or squashed, and its patch
+  stays in the review. The update goes on. Tell the user, and next time undo a shelved commit by reverting it in a
+  new commit.
+- **"... sits below commits CL N already includes"** means a new commit was moved under reviewed ones. Ask the user
+  before moving it after them with a rebase.
+- **After amending or squashing into an included commit**, such as `jj squash` into a reviewed change, `update` sees
+  nothing new there. With no new commits it opens every file since the base anyway; with new ones as well, pass
+  `-b main` so the amend's files are opened.
 - **A CL whose alias records nothing**, made by `alias new` or an older git-p4son, needs the range: count the new
   commits by comparing the commit list in `p4 describe -s <CL>` with `git log --oneline main..`, then run
   `git p4son update -b HEAD~2 --per-commit --shelve`, replacing 2 with the number.

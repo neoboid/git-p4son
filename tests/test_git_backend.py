@@ -93,9 +93,12 @@ class TestGitBackendBase(GitRepoTestCase):
             self.backend.base_name('HEAD~2')
 
     def test_a_commit_s_identity_is_its_author_date(self):
-        date = self.git('log', '-1', '--format=%ad', '--date=raw', 'HEAD~1')
-        self.assertEqual(self.backend.commit_identity(
-            self.git('rev-parse', 'HEAD~1')), date)
+        commits = [self.git('rev-parse', 'HEAD'),
+                   self.git('rev-parse', 'HEAD~1')]
+        dates = [self.git('log', '-1', '--format=%ad',
+                          '--date=raw', commit) for commit in commits]
+        self.assertEqual(self.backend.commit_identities(commits), dates)
+        self.assertEqual(self.backend.commit_identities([]), [])
 
 
 class TestGitBackendWithoutCommits(GitRepoTestCase):

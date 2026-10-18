@@ -36,8 +36,8 @@ class Backend(Protocol):
     def base_name(self, base: str) -> str:
         """The branch or bookmark base names, or the one at the commit it names; raise CommandError otherwise."""
 
-    def commit_identity(self, commit: str) -> str:
-        """What identifies commit across rebases: the jj change ID, or git's author date."""
+    def commit_identities(self, commits: list[str]) -> list[str]:
+        """What identifies each commit across rebases, in their order: the jj change ID, or git's author date."""
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids that still exist; all of them for git."""

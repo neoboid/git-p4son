@@ -18,13 +18,12 @@ _Read = TypeVar('_Read')
 
 @dataclass(frozen=True)
 class Record:
-    """What an alias made by new records about its CL: the base, and how many commits since it the CL includes."""
+    """What an alias made by new records about its CL: the base, and the commits since it the CL includes."""
     base: str
     # What base resolved to at the last new or update.
     base_commit: str
-    included: int
-    # The identity of the last included commit: its jj change ID, or with git its author date.
-    last: str
+    # The included commits' identities, in order: their jj change IDs, or with git their author dates.
+    included: list[str]
 
 
 class _Alias(NamedTuple):
@@ -113,11 +112,11 @@ def _no_alias(name: str) -> CommandError:
 
 def _read_record(data: dict[str, Any]) -> Record | None:
     """The record in an alias file's data, or None unless every key holds its type."""
-    base, base_commit, included, last = (
-        data.get(key) for key in ('base', 'base_commit', 'included', 'last'))
-    if (isinstance(base, str) and isinstance(base_commit, str) and type(included) is int
-            and isinstance(last, str)):
-        return Record(base, base_commit, included, last)
+    base, base_commit, included = (data.get(key)
+                                   for key in ('base', 'base_commit', 'included'))
+    if (isinstance(base, str) and isinstance(base_commit, str) and isinstance(included, list)
+            and all(isinstance(identity, str) for identity in included)):
+        return Record(base, base_commit, included)
     return None
 
 
@@ -166,12 +165,12 @@ def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | N
     if not os.path.isdir(aliases_dir):
         log.info(f'Creating {aliases_dir}')
         os.makedirs(aliases_dir, exist_ok=True)
-    data: dict[str, int | str] = {'changelist': int(changelist)}
+    data: dict[str, int | str | list[str]] = {'changelist': int(changelist)}
     if change is not None:
         data['change'] = change
     if record is not None:
         data |= {'base': record.base, 'base_commit': record.base_commit,
-                 'included': record.included, 'last': record.last}
+                 'included': record.included}
     with open(path, 'w', encoding='utf-8') as f:
         f.write(format_toml(data))
     _remove_old_alias(old_path, workspace_dir)

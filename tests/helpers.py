@@ -5,6 +5,7 @@ import atexit
 import contextlib
 import copy
 import io
+import itertools
 import os
 import shutil
 import stat
@@ -102,6 +103,9 @@ def start_patch(test: unittest.TestCase, target: str, **kwargs: Any) -> Any:
 
 
 _TestClass = TypeVar('_TestClass', bound=type[unittest.TestCase])
+
+# Author dates a second apart, as git-p4son tells commits apart by them and tests commit faster than that.
+_COMMIT_SECONDS = itertools.count(1_760_000_000)
 _GitRepoTest = TypeVar('_GitRepoTest', bound='GitRepoTestCase')
 
 
@@ -268,7 +272,8 @@ class GitRepoTestCase(WorkspaceTestCase):
     def commit_history(self, *commits: tuple[str, dict[str, str | None]]) -> list[str]:
         """Commit each (message, {path: content, or None to delete}) on top of HEAD; returns the new commits.
 
-        One git fast-import writes them all, then the index and working tree are reset to the last."""
+        One git fast-import writes them all, then the index and working tree are reset to the last. Their author dates
+        are their positions, so two calls in one repository share dates, which a record takes for the same commit."""
         with open(os.path.join(self.ws, '.git', 'HEAD')) as f:
             ref = f.read().split()[-1]
         parent = self.git('rev-parse', '-q', '--verify', 'HEAD', check=False)
@@ -303,10 +308,10 @@ class GitRepoTestCase(WorkspaceTestCase):
         return [commit_by_mark[f':{mark}'] for mark in range(1, len(commits) + 1)]
 
     def commit(self, message: str = 'test commit', date: str | None = None) -> None:
-        """Stage everything and commit it, with date as the author date if given."""
+        """Stage everything and commit it, with date as the author date, else a second after the last one."""
         self.git('add', '-A')
-        self.git('commit', '-q', '--allow-empty', '-m',
-                 message, *([f'--date={date}'] if date else []))
+        self.git('commit', '-q', '--allow-empty', '-m', message,
+                 f'--date={date or f"@{next(_COMMIT_SECONDS)} +0000"}')
 
     def assert_at(self, branch: str, commit: str) -> None:
         """Assert HEAD is commit, on branch, or detached for an empty branch."""

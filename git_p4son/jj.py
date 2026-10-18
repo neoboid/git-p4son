@@ -244,6 +244,15 @@ class Workspace:
             return None
         return names[0]
 
+    def change_ids(self, commits: list[str]) -> list[str]:
+        """The change IDs of commits, in their order."""
+        if not commits:
+            return []
+        lines = self.run('log', '-r', ' | '.join(commits), '--no-graph',
+                         '-T', 'commit_id ++ " " ++ change_id ++ "\n"').stdout
+        change_of = dict(line.split(' ', 1) for line in lines)
+        return [change_of[commit] for commit in commits]
+
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids jj still has."""
         if not change_ids:

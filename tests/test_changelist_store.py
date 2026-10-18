@@ -202,10 +202,10 @@ class TestAliasChanges(WorkspaceTestCase):
 
 
 class TestRecord(WorkspaceTestCase):
-    """An alias made by new records its CL's base and how many commits since it the CL includes."""
+    """An alias made by new records its CL's base and the identities of the commits since it the CL includes."""
 
     RECORD = Record(base='main', base_commit='a' * 40,
-                    included=2, last='1760781234 +0200')
+                    included=['1760781234 +0200', '1760781299 +0200'])
 
     def read(self, name):
         with open(os.path.join(self.ws, CONFIG_DIR, 'aliases', f'{name}.toml'), encoding='utf-8') as f:
@@ -215,7 +215,7 @@ class TestRecord(WorkspaceTestCase):
         save_changelist_alias('feat', '101', self.ws,
                               force=False, change='kxyz', record=self.RECORD)
         self.assertEqual(self.read('feat'), 'changelist = 101\nchange = "kxyz"\nbase = "main"\n'
-                         f'base_commit = "{"a" * 40}"\nincluded = 2\nlast = "1760781234 +0200"\n')
+                         f'base_commit = "{"a" * 40}"\nincluded = ["1760781234 +0200", "1760781299 +0200"]\n')
         self.assertEqual(find_record('101', self.ws), ('feat', self.RECORD))
 
     def test_an_alias_without_one_records_none(self):
@@ -226,8 +226,8 @@ class TestRecord(WorkspaceTestCase):
     def test_update_keeps_the_changelist_and_the_change(self):
         save_changelist_alias('feat', '101', self.ws,
                               force=False, change='kxyz', record=self.RECORD)
-        moved = Record(base='main', base_commit='b' * 40,
-                       included=3, last='1760781299 +0200')
+        moved = Record(base='main', base_commit='b' *
+                       40, included=['1760781234 +0200'])
         update_record('feat', moved, self.ws)
         self.assertEqual(find_record('101', self.ws), ('feat', moved))
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
@@ -242,8 +242,10 @@ class TestRecord(WorkspaceTestCase):
 
     def test_a_record_with_a_missing_or_wrong_key_is_none(self):
         save_changelist_alias('feat', '101', self.ws, force=False)
-        for extra in ('base = "main"\nincluded = 2\n',
-                      'base = "main"\nbase_commit = "x"\nincluded = "2"\nlast = "y"\n'):
+        # The second is slice 1's count, which was never released.
+        for extra in ('base = "main"\nincluded = ["x"]\n',
+                      'base = "main"\nbase_commit = "x"\nincluded = 2\nlast = "y"\n',
+                      'base = "main"\nbase_commit = "x"\nincluded = [2]\n'):
             with self.subTest(extra=extra):
                 self.write_file(os.path.join(
                     CONFIG_DIR, 'aliases', 'feat.toml'), 'changelist = 101\n' + extra)

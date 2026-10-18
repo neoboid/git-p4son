@@ -1,8 +1,8 @@
 """Tests for git_p4son.init module."""
 
 import os
-import subprocess
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 
@@ -352,6 +352,26 @@ class TestConfigureJjWithoutJj(WorkspaceTestCase):
         mock_input.assert_not_called()
 
 
+class TestAddP4sonAlias(WorkspaceTestCase):
+    """add_p4son_alias, with jj's version scripted and its config commands recorded."""
+
+    def config_sets(self, version):
+        """The jj config set commands add_p4son_alias runs with jj at version, as (key, value)."""
+        with mock.patch('git_p4son.jj.run', return_value=make_run_result(stdout=[f'jj {version}'])) as mock_run, \
+                captured_output():
+            jj.add_p4son_alias(self.ws)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        return [tuple(command[-2:]) for command in commands if 'set' in command]
+
+    def test_jj_0_42_gets_the_table_form_with_a_doc(self):
+        self.assertEqual(self.config_sets('0.42.0'), [
+            ('aliases.p4son', '{ definition = ["util", "exec", "--", "git-p4son"], doc = "Run git-p4son" }')])
+
+    def test_jj_0_41_gets_the_plain_form(self):
+        self.assertEqual(self.config_sets('0.41.0'), [
+            ('aliases.p4son', '["util", "exec", "--", "git-p4son"]')])
+
+
 @requires_jj
 class TestConfigureJj(GitRepoTestCase):
     """_configure_jj in a git repository, with jj installed and a user config of its own."""
@@ -366,8 +386,18 @@ class TestConfigureJj(GitRepoTestCase):
             colocate = _configure_jj(self.ws)
         return colocate, [call.args[0] for call in mock_input.call_args_list]
 
-    def alias(self):
-        return run_jj(self.ws, '--ignore-working-copy', 'config', 'get', 'aliases.p4son')
+    def alias_definition(self):
+        """The alias's command from the user config, in its plain or its table form."""
+        with open(os.environ['JJ_CONFIG'], 'rb') as f:
+            alias = tomllib.load(f)['aliases']['p4son']
+        return alias['definition'] if isinstance(alias, dict) else alias
+
+    def test_an_alias_in_the_table_form_is_found(self):
+        run_jj(self.ws, 'git', 'init', '--colocate')
+        with open(os.environ['JJ_CONFIG'], 'w') as f:
+            f.write(
+                '[aliases.p4son]\ndefinition = ["util", "exec", "--", "git-p4son"]\ndoc = "Run git-p4son"\n')
+        self.assertEqual(self.configure(), (False, []))
 
     def test_colocating_also_offers_the_alias(self):
         colocate, questions = self.configure('yes', '')
@@ -377,7 +407,8 @@ class TestConfigureJj(GitRepoTestCase):
             'Use jj in this workspace too (colocated)?', questions[0])
         self.assertIn('[N]o', questions[0])
         self.assertIn('[Y]es', questions[1])
-        self.assertEqual(self.alias(), '["util", "exec", "--", "git-p4son"]')
+        self.assertEqual(self.alias_definition(),
+                         ['util', 'exec', '--', 'git-p4son'])
 
     def test_not_colocating_offers_no_alias(self):
         colocate, questions = self.configure('')
@@ -391,8 +422,7 @@ class TestConfigureJj(GitRepoTestCase):
         self.assertFalse(colocate)
         self.assertEqual(len(questions), 1)
         self.assertIn('jj p4son', questions[0])
-        with self.assertRaises(subprocess.CalledProcessError):
-            self.alias()
+        self.assertFalse(jj.has_p4son_alias(self.ws))
 
     def test_rerunning_asks_nothing_once_done(self):
         run_jj(self.ws, 'git', 'init', '--colocate')

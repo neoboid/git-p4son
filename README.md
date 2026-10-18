@@ -888,11 +888,15 @@ changes.
 ### The jj p4son alias
 
 jj has no external subcommands, but an alias can run git-p4son, so `jj p4son sync` runs `git p4son sync`. Add it
-once per machine to jj's user config, or let `init` offer it:
+once per machine to jj's user config, or let `init` offer it. From jj 0.42, an alias can carry a doc, which jj's
+shell completion shows next to `p4son`:
 
 ```sh
-jj config set --user aliases.p4son '["util", "exec", "--", "git-p4son"]'
+jj config set --user aliases.p4son '{ definition = ["util", "exec", "--", "git-p4son"], doc = "Run git-p4son" }'
 ```
+
+With jj 0.41, set `aliases.p4son` to the list alone, `'["util", "exec", "--", "git-p4son"]'`. `init` writes
+whichever form the installed jj supports.
 
 `jj util exec` neither locks nor snapshots, so `jj p4son` behaves exactly as `git p4son`, and git-p4son's messages
 keep saying `git p4son`. Run it from inside the workspace: `jj -R other-workspace p4son` would still run in the

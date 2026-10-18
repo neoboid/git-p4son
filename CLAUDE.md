@@ -247,6 +247,8 @@ these together, with a CHANGELOG note:
 - `git_p4son/jj.py` (`_MIN_VERSION`)
 - `.github/workflows/test.yml` (`JJ_FLOOR`)
 - `README.md` (the Jujutsu section)
+- Once the floor reaches 0.42, `add_p4son_alias`'s plain-form branch (`_ALIAS_DOC_VERSION`), its test and the
+  README's 0.41 alias sentence go
 
 ## Code Style
 

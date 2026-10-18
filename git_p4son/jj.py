@@ -85,15 +85,22 @@ def _validate_workspace(workspace_dir: str) -> None:
 # The first jj with working-copy locking.
 _MIN_VERSION = (0, 41)
 MIN_VERSION = '.'.join(map(str, _MIN_VERSION))
+# Aliases as tables, with a doc.
+_ALIAS_DOC_VERSION = (0, 42)
 # util exec neither locks nor snapshots.
 _P4SON_ALIAS = '["util", "exec", "--", "git-p4son"]'
 
 
+def _version(workspace_dir: str) -> tuple[int, ...]:
+    """The installed jj's (major, minor), or () if it prints none; raise OSError if jj cannot be run."""
+    match = re.search(r'jj (\d+)\.(\d+)',
+                      run(['jj', '--version'], cwd=workspace_dir).stdout[0])
+    return () if match is None else tuple(map(int, match.groups()))
+
+
 def _supported(workspace_dir: str) -> bool:
     """Whether the installed jj is _MIN_VERSION or newer; raise OSError if jj cannot be run."""
-    version = run(['jj', '--version'], cwd=workspace_dir).stdout[0]
-    match = re.search(r'jj (\d+)\.(\d+)', version)
-    return match is not None and tuple(map(int, match.groups())) >= _MIN_VERSION
+    return _version(workspace_dir) >= _MIN_VERSION
 
 
 def is_supported(workspace_dir: str) -> bool:
@@ -112,9 +119,12 @@ def has_p4son_alias(workspace_dir: str) -> bool:
 
 
 def add_p4son_alias(workspace_dir: str) -> None:
-    """Add the jj p4son alias to jj's user config."""
-    run([*_JJ, '--ignore-working-copy', 'config', 'set', '--user', 'aliases.p4son', _P4SON_ALIAS],
-        cwd=workspace_dir)
+    """Add the jj p4son alias to jj's user config, with a doc for jj's completion where jj supports one."""
+    alias = _P4SON_ALIAS
+    if _version(workspace_dir) >= _ALIAS_DOC_VERSION:
+        alias = f'{{ definition = {_P4SON_ALIAS}, doc = "Run git-p4son" }}'
+    _run_live(workspace_dir, '--ignore-working-copy', 'config',
+              'set', '--user', 'aliases.p4son', alias)
 
 
 def colocate(workspace_dir: str) -> None:

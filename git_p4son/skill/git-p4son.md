@@ -219,6 +219,8 @@ after fixing it, run the same command again, which skips the commits that worked
 - **After amending or squashing into an included commit**, such as `jj squash` into a reviewed change, `update` sees
   nothing new there. With no new commits it opens every file since the base anyway; with new ones as well, pass
   `-b main` so the amend's files are opened.
+- **After a sync**, `update --shelve` may insert an empty commit, "Rebase onto CL N", after the included commits, so
+  the sync's changes get a patch of their own. That's expected: leave it on the branch.
 - **A CL whose alias records nothing**, made by `alias new` or an older git-p4son, needs the range: count the new
   commits by comparing the commit list in `p4 describe -s <CL>` with `git log --oneline main..`, then run
   `git p4son update -b HEAD~2 --per-commit --shelve`, replacing 2 with the number.

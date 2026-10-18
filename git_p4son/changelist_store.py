@@ -24,6 +24,8 @@ class Record:
     base_commit: str
     # The included commits' identities, in order: their jj change IDs, or with git their author dates.
     included: list[str]
+    # The identity of an inserted catch-up commit the CL doesn't include yet, so a rerun still shelves it alone.
+    catch_up: str = ''
 
 
 class _Alias(NamedTuple):
@@ -112,11 +114,11 @@ def _no_alias(name: str) -> CommandError:
 
 def _read_record(data: dict[str, Any]) -> Record | None:
     """The record in an alias file's data, or None unless every key holds its type."""
-    base, base_commit, included = (data.get(key)
-                                   for key in ('base', 'base_commit', 'included'))
+    base, base_commit, included, catch_up = (data.get(key)
+                                             for key in ('base', 'base_commit', 'included', 'catch_up'))
     if (isinstance(base, str) and isinstance(base_commit, str) and isinstance(included, list)
-            and all(isinstance(identity, str) for identity in included)):
-        return Record(base, base_commit, included)
+            and all(isinstance(identity, str) for identity in included) and isinstance(catch_up, str | None)):
+        return Record(base, base_commit, included, catch_up or '')
     return None
 
 
@@ -171,6 +173,8 @@ def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | N
     if record is not None:
         data |= {'base': record.base, 'base_commit': record.base_commit,
                  'included': record.included}
+        if record.catch_up:
+            data['catch_up'] = record.catch_up
     with open(path, 'w', encoding='utf-8') as f:
         f.write(format_toml(data))
     _remove_old_alias(old_path, workspace_dir)

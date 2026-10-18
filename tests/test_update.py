@@ -304,8 +304,8 @@ class TestUpdateIncluded(IncludedTestCase):
         with self.command_args(['update', 'feat']) as args:
             identities = args.backend.commit_identities(
                 [self.git('rev-parse', 'HEAD~1'), self.git('rev-parse', 'HEAD')])
-        self.assertEqual(find_record('101', self.ws), ('feat', Record(
-            'main', self.git('rev-parse', 'main'), identities)))
+        self.assertEqual(find_record('101', self.ws),
+                         ('feat', Record('main', '', identities)))
 
     def test_update_appends_only_the_new_commits_leaving_the_entries_as_they_are(self):
         self.reword_first_entry()

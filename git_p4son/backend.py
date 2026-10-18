@@ -39,6 +39,11 @@ class Backend(Protocol):
     def commit_identities(self, commits: list[str]) -> list[str]:
         """What identifies each commit across rebases, in their order: the jj change ID, or git's author date."""
 
+    def insert_empty_after(self, commit: str, message: str) -> str:
+        """Insert an empty commit right after commit, with the commits after it, up to the tip, rebased onto it.
+
+        Returns the new commit."""
+
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids that still exist; all of them for git."""
 

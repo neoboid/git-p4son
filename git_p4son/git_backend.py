@@ -8,7 +8,7 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, resolve_commit, switch_branch, switch_detached,
+    get_head_subject, insert_empty_commit, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch
@@ -86,6 +86,15 @@ class GitBackend:
     def commit_identities(self, commits: list[str]) -> list[str]:
         """The author dates, which git keeps through rebases, amends and squashes."""
         return author_dates(commits, self.workspace_dir)
+
+    def insert_empty_after(self, commit: str, message: str) -> str:
+        """Insert it with git's plumbing, recreating the commits after it and moving the branch."""
+        inserted, old_head, stale = insert_empty_commit(
+            commit, message, self.workspace_dir)
+        for branch in stale:
+            log.warning(f'{branch} still builds on the commits before "{message}". Rebase it onto them with '
+                        f'"git rebase --onto HEAD {old_head[:12]} {branch}".')
+        return inserted
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return set(change_ids)

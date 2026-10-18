@@ -1,13 +1,15 @@
 """Update command: updates an existing changelist from the git change."""
 
 import argparse
+import shlex
+from dataclasses import replace
 from .changelist_store import find_record, load_changelist_alias, update_record
 from .common import CommandError
-from .git import resolve_commit
-from .included import Plan, included_count, plan_update
+from .git import get_head_subject, resolve_commit
+from .included import Plan, catch_up_subject, included_count, plan_update
 from .lib import edit_and_shelve, update_changelist
 from .log import log, plural
-from .per_commit import SWARM_SHELF_DELAY, run_per_commit
+from .per_commit import SWARM_SHELF_DELAY, message_args, run_per_commit
 
 
 def _step(changelist: str, args: argparse.Namespace) -> list[str]:
@@ -27,22 +29,24 @@ def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
                    message=args.message, message_file=args.file)
 
 
-def _check_per_commit(plan: Plan, changelist: str, no_edit: bool, workspace_dir: str) -> None:
-    """Raise CommandError unless the per-commit loop would run on exactly the commits the CL doesn't include yet."""
-    current = plan.current
-    included = included_count(plan.kept)
+def _check_per_commit(plan: Plan, changelist: str, no_edit: bool, given: bool, workspace_dir: str) -> None:
+    """Raise CommandError unless the per-commit loop would start right after the commits the CL includes."""
     if no_edit:
         raise CommandError(f'--no-edit opens no files, so CL {changelist} can\'t include its new commits, and '
                            '--per-commit has nothing to do. Leave out --no-edit, or --per-commit to change only the '
                            'description.')
-    if not plan.subjects:
-        raise CommandError(f'CL {changelist} already includes the {plural(included, "commit")} '
-                           f'since {current.base}.')
     # The resume hint after a failed step names the last commit that worked, which is where the loop starts.
-    if resolve_commit(plan.start, workspace_dir) != plan.after:
+    if given and resolve_commit(plan.start, workspace_dir) != plan.after:
         raise CommandError(f'--per-commit runs on the commits CL {changelist} doesn\'t include yet, the ones after '
-                           f'commit {included} since {current.base}, so -b would shelve included ones again. '
-                           'Leave out -b.')
+                           f'commit {included_count(plan.kept)} since {plan.current.base}, so -b would shelve '
+                           'included ones again. Leave out -b.')
+
+
+def _check_anything_new(plan: Plan, changelist: str) -> None:
+    """Raise CommandError if the per-commit loop would have no commit to run on."""
+    if not plan.subjects:
+        raise CommandError(f'CL {changelist} already includes the {plural(included_count(plan.kept), "commit")} '
+                           f'since {plan.current.base}.')
 
 
 def _warn_dropped(plan: Plan, changelist: str) -> None:
@@ -54,6 +58,42 @@ def _warn_dropped(plan: Plan, changelist: str) -> None:
                 f'{plural(included_count(plan.current), "commit")} CL {changelist} included: number {positions}. '
                 'The review keeps their patches. To undo a shelved commit, revert it in a new commit rather than '
                 'dropping it.')
+
+
+def _catch_up(plan: Plan, args: argparse.Namespace, workspace_dir: str) -> bool:
+    """Insert the empty commit that gives a moved base its own patch, if the CL's shelf needs one; True if it did.
+
+    A dry run only says what it would insert. The record then has the moved base, so the steps of a loop that shelves
+    don't catch up again, and the catch-up, so a rerun after a failed shelve still shelves it alone."""
+    subject = catch_up_subject(plan, workspace_dir, args.backend.revision)
+    if subject is None:
+        return False
+    after = get_head_subject(workspace_dir, plan.after)
+    if args.dry_run:
+        log.info(
+            f'Would insert "{subject}" after "{after}", as the base moved since the last shelve.')
+        return False
+    log.heading('Catching up with the base')
+    commit: str = args.backend.insert_empty_after(plan.after, subject)
+    update_record(plan.alias, replace(plan.kept, base_commit=plan.next.base_commit,
+                                      catch_up=args.backend.commit_identities([commit])[0]), workspace_dir)
+    log.success(f'Inserted "{subject}" after "{after}"')
+    return True
+
+
+def _shelve_twice(plan: Plan, catch_up: str, changelist: str, args: argparse.Namespace, workspace_dir: str) -> None:
+    """Shelve at the catch-up, then at the tip, so the catch-up is a patch of its own, before the new commits'."""
+    rerun = shlex.join(['git', 'p4son', *_step(changelist, args),
+                       *message_args(args.message, args.file)])
+    try:
+        run_per_commit(_step(changelist, args), None, plan.after, workspace_dir, args.backend,
+                       sleep=SWARM_SHELF_DELAY, dry_run=False, message=args.message, message_file=args.file,
+                       resumable=lambda: None,
+                       only={catch_up, resolve_commit(args.backend.revision, workspace_dir)})
+    except CommandError as error:
+        # The record keeps the catch-up until it is included, so the same command finishes either step.
+        raise CommandError(
+            f'{error}\nAfter fixing the problem, run "{rerun}" again.', error.returncode) from error
 
 
 def _new_commits(plan: Plan | None, no_edit: bool) -> list[str] | None:
@@ -83,15 +123,30 @@ def update_command(args: argparse.Namespace) -> int:
             args.base_given, args.base_branch)
         plan = plan_update(found[1], found[0], changelist,
                            given, args.backend, workspace_dir, revision)
-        args.base_branch = plan.start
         _warn_dropped(plan, changelist)
-
-    if args.per_commit:
-        if plan is not None:
+        if args.per_commit:
             # Recorded now, so neither the steps, each planning on its own, nor a refused run warns about them again.
             if plan.dropped and not args.dry_run:
                 update_record(plan.alias, plan.kept, workspace_dir)
-            _check_per_commit(plan, changelist, args.no_edit, workspace_dir)
+            _check_per_commit(plan, changelist, args.no_edit,
+                              given is not None, workspace_dir)
+        if args.shelve and not args.no_edit:
+            # Checked before the catch-up rewrites the branch, as checkouts and opens would refuse it after.
+            args.backend.check_clean()
+            if _catch_up(plan, args, workspace_dir):
+                revision = args.backend.revision
+                alias, record = find_record(changelist, workspace_dir) or found
+                plan = plan_update(record, alias, changelist,
+                                   given, args.backend, workspace_dir, revision)
+            if plan.catch_up is not None and not args.per_commit and len(plan.subjects) > 1:
+                _shelve_twice(plan, plan.catch_up,
+                              changelist, args, workspace_dir)
+                return 0
+        if args.per_commit:
+            _check_anything_new(plan, changelist)
+        args.base_branch = plan.start
+
+    if args.per_commit:
         _update_per_commit(changelist, args)
         return 0
 
@@ -113,5 +168,8 @@ def update_command(args: argparse.Namespace) -> int:
                     dry_run=args.dry_run, revision=revision)
     # Without their files opened, the new commits stay uncounted, for the next update to include.
     if plan is not None and not args.dry_run and not args.no_edit:
-        update_record(plan.alias, plan.next, workspace_dir)
+        # base_commit is the base of the last shelve, which a catch-up is measured from.
+        shelved = plan.next if args.shelve else replace(
+            plan.next, base_commit=plan.current.base_commit)
+        update_record(plan.alias, shelved, workspace_dir)
     return 0

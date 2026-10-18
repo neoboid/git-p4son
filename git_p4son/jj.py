@@ -244,6 +244,28 @@ class Workspace:
             return None
         return names[0]
 
+    def insert_empty_after(self, commit: str, message: str) -> None:
+        """Insert an empty change right after commit, which jj rebases the descendants onto.
+
+        When commit is the working change's, a new empty working change goes on top, so the inserted change is the
+        tip's; otherwise the working change stays. It leaves the files alone, so it runs under git-p4son's lock; load
+        the workspace again after."""
+        edit = commit == self.working.commit
+        run([*_JJ, '--ignore-working-copy', 'new', *([] if edit else ['--no-edit']), '--insert-after', commit,
+             '-m', message], cwd=self.directory)
+        if edit:
+            # A new working change on top, so the next edits go into a change of their own, not the catch-up.
+            run([*_JJ, '--ignore-working-copy', 'new'], cwd=self.directory)
+
+    def child(self, commit: str) -> str:
+        """The commit of the one change whose parent is commit; raise CommandError if there are none or several."""
+        children = self.run(
+            'log', '-r', f'children({commit})', '--no-graph', '-T', 'commit_id ++ "\\n"').stdout
+        if len(children) != 1:
+            raise CommandError(
+                f'{commit[:7]} has {len(children)} children in jj, where one was expected.')
+        return children[0]
+
     def change_ids(self, commits: list[str]) -> list[str]:
         """The change IDs of commits, in their order."""
         if not commits:

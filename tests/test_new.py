@@ -120,8 +120,14 @@ class TestNewAlias(NewTestCase):
     def test_records_the_base_by_name_and_the_commits_since_it(self):
         self.new('-b', self.git('rev-parse', 'main'))
         record = recorded('101', self.ws)
-        self.assertEqual((record.base, record.base_commit, len(record.included)),
-                         ('main', self.git('rev-parse', 'main'), 2))
+        # Not shelved, so there is no shelf for a later update to catch up.
+        self.assertEqual((record.base, record.base_commit,
+                         len(record.included)), ('main', '', 2))
+
+    def test_a_shelved_cl_records_the_base_commit_its_shelf_is_on(self):
+        self.new('--shelve')
+        self.assertEqual(recorded('101', self.ws).base_commit,
+                         self.git('rev-parse', 'main'))
 
     def test_a_base_no_branch_names_is_refused_before_creating(self):
         self.command_fails(new_command, ['new', 'feat', '-m', 'Feature', '-b', 'HEAD~1'],

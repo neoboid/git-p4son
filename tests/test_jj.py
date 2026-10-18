@@ -539,6 +539,55 @@ class TestJjPerCommit(JjP4RepoTestCase):
         self.assert_restored(working, {**self.FILES, 'a.txt': None})
 
 
+@requires_jj
+class TestJjCatchUp(JjP4RepoTestCase):
+    """CL 102, reviewed from Edit m top with bookmark feat; then CL 103, changing m.txt's last line, is synced."""
+
+    M = ''.join(f'{line}\n' for line in range(1, 9))
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_sync(101, {'m.txt': self.M})
+        self.jj('new', 'main', '-m', 'Edit m top')
+        self.edit('m.txt', 'top\n' + self.M.split('\n', 1)[1])
+        self.jj('bookmark', 'create', 'feat', '-r', '@')
+        self.jj('new')
+
+    def setUp(self):
+        super().setUp()
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+
+    def test_the_catch_up_change_goes_in_after_the_working_change_itself(self):
+        """With the last included change being @ itself, the catch-up lands above it, outside the change's range."""
+        self.p4son('new', '-b', 'main', '--review')
+        self.p4.submit(103, {'m.txt': self.M.replace('8\n', 'eight\n')})
+        self.p4.opened.clear()
+        self.p4son('sync')
+        self.jj('edit', 'feat')
+        self.p4son('update', 'feat', '--shelve')
+        self.assertEqual([line for line in self.p4.pending['102'] if line[:1].isdigit()],
+                         ['1. Edit m top', '2. Rebase onto CL 103'])
+        self.assertIn('The working copy has no changes.', self.jj('status'))
+        # A new change on top, so the next edits don't go into the catch-up.
+        self.assertEqual(self.describe('@-'), 'Rebase onto CL 103')
+        self.assertEqual(self.describe('@', 'empty'), 'true')
+
+    def test_the_catch_up_change_goes_in_before_the_new_ones(self):
+        self.p4son('new', '-b', 'main', '--review')
+        self.p4.submit(103, {'m.txt': self.M.replace('8\n', 'eight\n')})
+        # Reverted before syncing, as sync asks; the shelf and the review stay.
+        self.p4.opened.clear()
+        self.p4son('sync')
+        self.jj('describe', '-m', 'Add o')
+        self.write_file('o.txt', 'o1\n')
+        self.p4son('update', 'feat', '--per-commit', '--shelve')
+        self.assertEqual([line for line in self.p4.pending['102'] if line[:1].isdigit()],
+                         ['1. Edit m top', '2. Rebase onto CL 103', '3. Add o'])
+        self.assertEqual(self.describe('feat'), 'Edit m top')
+        self.assertEqual(self.describe('feat+'), 'Rebase onto CL 103')
+        self.assertEqual(self.read('o.txt'), 'o1\n')
+
+
 class TestJjSync(JjP4RepoTestCase):
     def build_workspace(self):
         super().build_workspace()

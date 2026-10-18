@@ -193,18 +193,20 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
 @overload
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
-        input: str | None = None, env: dict[str, str] | None = None, *,
+        input: str | bytes | None = None, env: dict[str, str] | None = None, *,
         text: Literal[False], fail_on_returncode: bool = True
         ) -> RunResult[bytes]: ...
 
 
 def run(command: list[str], cwd: str = '.', dry_run: bool = False,
-        input: str | None = None,
+        input: str | bytes | None = None,
         env: dict[str, str] | None = None,
         text: bool = True,
         fail_on_returncode: bool = True
         ) -> RunResult[list[str]] | RunResult[bytes]:
-    """Run a command and return a RunResult, raising on failure unless fail_on_returncode is False."""
+    """Run a command and return a RunResult, raising on failure unless fail_on_returncode is False.
+
+    Bytes input, only with text=False, goes to the command as it is."""
     use_spinner = input is None and not dry_run
     log.command(join_command_line(command),
                 truncate_for_spinner=use_spinner)
@@ -215,7 +217,8 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
 
     if input is not None:
         log.end_command()
-        log.stdin(input)
+        log.stdin(input if isinstance(input, str)
+                  else input.decode('utf-8', 'replace'))
     else:
         log.start_spinner()
 
@@ -230,7 +233,7 @@ def run(command: list[str], cwd: str = '.', dry_run: bool = False,
                                 text=text,
                                 encoding='utf-8' if text else None,
                                 errors='replace' if text else None,
-                                input=input if text or input is None
+                                input=input if text or not isinstance(input, str)
                                 else input.encode('utf-8'))
     except OSError:
         # E.g. a missing executable: stop the spinner overwriting the error.

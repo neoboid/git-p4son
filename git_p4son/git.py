@@ -294,8 +294,13 @@ def get_commits_since(base: str, workspace_dir: str,
 def get_commit_subjects_since(base_branch: str, workspace_dir: str,
                               revision: str = 'HEAD') -> list[str]:
     """Return the subjects of the non-merge commits since base_branch, oldest first, or a short SHA for none."""
-    return [subject or sha[:7]
+    return [commit_subject(sha, subject)
             for sha, subject in get_commits_since(base_branch, workspace_dir, revision)]
+
+
+def commit_subject(sha: str, subject: str) -> str:
+    """The subject a commit list shows for a commit, its short SHA when it has none."""
+    return subject or sha[:7]
 
 
 # --- tracking ---
@@ -401,6 +406,19 @@ def branch_exists(branch: str, workspace_dir: str) -> bool:
     result = run(['git', 'rev-parse', '--verify', '--quiet', f'refs/heads/{branch}'],
                  cwd=workspace_dir, fail_on_returncode=False)
     return result.returncode == 0
+
+
+def branches_at(commit: str, workspace_dir: str) -> list[str]:
+    """The local branches pointing at commit, by name."""
+    # Full names, as a tag of the same name makes refname:short say heads/<name>.
+    result = run(['git', 'for-each-ref', f'--points-at={commit}', '--format=%(refname)', 'refs/heads/'],
+                 cwd=workspace_dir)
+    return [ref.removeprefix('refs/heads/') for ref in result.stdout]
+
+
+def author_date(commit: str, workspace_dir: str) -> str:
+    """The commit's author date as git stores it, seconds since the epoch and a time zone."""
+    return run(['git', 'log', '-1', '--format=%ad', '--date=raw', commit], cwd=workspace_dir).stdout[0]
 
 
 def list_branches(workspace_dir: str) -> list[str]:

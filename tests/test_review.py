@@ -6,12 +6,12 @@ import unittest
 from git_p4son.changelist_store import load_changelist_alias, save_changelist_alias
 from git_p4son.common import CommandError
 from git_p4son.review import review_command, _steps
-from tests.helpers import cli_args, on_jj, P4RepoTestCase, start_patch
+from tests.helpers import cli_args, on_jj, P4RepoTestCase, recorded, start_patch
 
 
 class TestSteps(unittest.TestCase):
     def commands(self, *argv):
-        return tuple(shlex.join(step) for step in _steps(cli_args(['review', *argv])))
+        return tuple(shlex.join(step) for step in _steps(cli_args(['review', '-b', 'main', *argv])))
 
     def test_new_then_update(self):
         self.assertEqual(self.commands('feat'),
@@ -58,6 +58,8 @@ class TestReview(P4RepoTestCase):
                          {'101': {'a.txt': 'a2\n', 'b.txt': None, 'c.txt': 'c1\n'}})
         self.assertEqual(len(self.shelves()), 2)
         self.assertEqual(load_changelist_alias('my-feature', self.ws), '101')
+        record = recorded('101', self.ws)
+        self.assertEqual((record.base, record.included), ('main', 2))
         self.sleep.assert_called_once_with(5)
         self.assert_at('feature', self.feature_head)
 

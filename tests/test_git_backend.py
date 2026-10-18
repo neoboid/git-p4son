@@ -63,6 +63,41 @@ class TestGitBackend(GitRepoTestCase):
             (self.backend.words.tool, self.backend.words.branch), ('git', 'branch'))
 
 
+class TestGitBackendBase(GitRepoTestCase):
+    """GitBackend with main at "Base" and branch feat two commits on, "One" and "Two"."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('Base')
+        self.git('switch', '-q', '-c', 'feat')
+        self.commit('One')
+        self.commit('Two')
+
+    def setUp(self):
+        super().setUp()
+        self.backend = GitBackend(self.ws)
+
+    def test_a_branch_names_itself(self):
+        self.assertEqual(self.backend.base_name('main'), 'main')
+
+    def test_a_commit_is_named_by_the_one_branch_at_it(self):
+        self.assertEqual(self.backend.base_name(
+            self.git('rev-parse', 'main')), 'main')
+        self.assertEqual(self.backend.base_name('HEAD~2'), 'main')
+
+    def test_a_commit_with_no_branch_or_several_is_refused(self):
+        with self.assertRaisesRegex(CommandError, 'HEAD~1 names no branch'):
+            self.backend.base_name('HEAD~1')
+        self.git('branch', 'also-main', 'main')
+        with self.assertRaisesRegex(CommandError, 'HEAD~2 names no branch.*also-main, main'):
+            self.backend.base_name('HEAD~2')
+
+    def test_a_commit_s_identity_is_its_author_date(self):
+        date = self.git('log', '-1', '--format=%ad', '--date=raw', 'HEAD~1')
+        self.assertEqual(self.backend.commit_identity(
+            self.git('rev-parse', 'HEAD~1')), date)
+
+
 class TestGitBackendWithoutCommits(GitRepoTestCase):
     def test_no_subject_without_a_commit(self):
         with self.assertRaisesRegex(CommandError, 'No commits found'):

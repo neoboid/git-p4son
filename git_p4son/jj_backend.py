@@ -10,7 +10,7 @@ from .git import commit_all, get_head_commit
 from .jj import Workspace
 from .log import log
 from .sync_branch import choose_sync_branch
-from .words import Words
+from .words import Words, named_base
 
 
 @dataclass
@@ -62,6 +62,16 @@ class JjBackend:
 
     def change_id(self) -> str:
         return self.workspace.tip.change_id
+
+    def base_name(self, base: str) -> str:
+        """The bookmark base names, or the one bookmark at the commit it names; raise CommandError otherwise."""
+        workspace = self.workspace
+        return named_base(base, self.words, lambda name: name in workspace.bookmarks,
+                          lambda base: workspace.bookmarks_at(self.resolve_base(base)))
+
+    def commit_identity(self, commit: str) -> str:
+        """The change ID, which survives rebases and rewording."""
+        return self.workspace.resolve(commit).change_id
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return self.workspace.existing_changes(change_ids)

@@ -480,7 +480,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
 
 ```sh
-git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--force] [--dry-run] [--no-edit]
+git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
               [--no-alias] [--no-commit-list] [--shelve] [--review]
 ```
 
@@ -493,8 +493,10 @@ git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--
   multiple lines
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description, so it holds only the
   message
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
-  `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, for enumerating commits and finding
+  changed files: a branch or bookmark, or a commit exactly one points at. The alias records it by name, as a commit
+  would go stale after a sync and rebase, along with how many commits since it the changelist includes, so `update`
+  knows where the next ones start. With `--no-alias` any commit will do
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-edit`: Skip opening changed files for edit in Perforce
@@ -504,35 +506,54 @@ git p4son new [-m <message> | -F <file>] [alias] [--base-branch BASE_BRANCH] [--
 
 **Examples:**
 ```sh
-git p4son new -m "Fix login bug"
 git p4son new -m "Add feature" -b main
-git p4son new -m "Fix bug" myalias
-git p4son new -m "Fix bug" --no-alias
+git p4son new -m "Fix bug" myalias -b main
+git p4son new -m "Fix bug" --no-alias -b HEAD~1
 git p4son new -m "New feature" --review -b main
 ```
 
 ### Update Command
 
-Update an existing Perforce changelist description. Commits since the base branch replace their existing
-entries in the enumerated commit list (matched by subject) and new ones are appended; entries outside the
-range are kept and the list is renumbered. So `update -b main` rebuilds the whole list without duplicating
-it, while `update -b HEAD~3` only refreshes the last three entries. The message above the list is kept unless `-m`
-or `-F` replaces it. By default also opens changed files for
-edit, and reverts files that are no longer part of the git change (see
+Update an existing Perforce changelist with the commits it doesn't include yet. The message above the commit list
+is kept unless `-m` or `-F` replaces it. By default also opens changed files for edit, and reverts files that are no
+longer part of the git change (see
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files requires a
 clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
 `--no-edit`.
 
-With `--per-commit`, `update` runs once per commit since the base branch instead of once for the whole range, the
-way `review` does after creating the changelist. It checks out each commit in turn, oldest first, runs the update
-on it, and returns to where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as
-its own patch in the Swarm review. Use it after making several commits since the last update:
-`update -b HEAD~2 --per-commit --shelve` updates the changelist with the last two commits, one at a time. The
-changelist and the base are resolved once, before the first step, so a relative base like `HEAD~2` means the same
-commit for every step, and `-m`/`-F` is applied on the first step only. It needs a clean git workspace, also with
-`--no-edit`. If a step fails, `update` returns to where you started and names the step and commit that failed. The
-error ends with the command that resumes after the last commit that worked, so earlier commits get no second
-shelf.
+**Changelists made by `new` or `review`.** Their alias records the base, by name, and how many commits since it the
+changelist includes. `update` folds in the commits after those: it appends their subjects to the commit list,
+opens their files, and records the new count. The entries the list already has are left as they are, so an entry
+you reworded in the changelist stays as you wrote it. Every update counts, shelved or not.
+
+- `-b` only chooses which files to open, from that commit on, for example `-b main` to open them all again after a
+  manual `p4 revert`. The commit list is still only appended to. A `-b` above the last included commit is refused,
+  as the commits it skips would be counted without being opened.
+- `update` checks that the last included commit is still where the count says, by its jj change ID or, with git,
+  its author date. If included commits were squashed, dropped or reordered since, it refuses instead of shelving
+  the wrong ones. Put them back, or drop the record with `git p4son alias new <changelist> <alias> --force` and pass
+  `-b`.
+
+**Other changelists**, whose alias records nothing (made by `alias new` or an older git-p4son), or named by a number
+no alias holds: the commits since the base branch, `HEAD~1` by default, replace their existing entries in the
+commit list (matched by subject) and new ones are appended; entries outside the range are kept and the list is
+renumbered.
+
+With `--per-commit`, `update` runs once per commit instead of once for the whole range, the way `review` does after
+creating the changelist. It checks out each commit in turn, oldest first, runs the update on it, and returns to
+where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as its own patch in the
+Swarm review.
+
+- **With a record,** plain `update --per-commit --shelve` runs on exactly the commits the changelist doesn't include
+  yet. `-b` is refused there, as it would shelve included commits again.
+- **Without one,** pass the range: `update -b HEAD~2 --per-commit --shelve` updates the changelist with the last two
+  commits, one at a time. The base is resolved once, before the first step, so a relative base like `HEAD~2` means
+  the same commit for every step.
+
+`-m`/`-F` is applied on the first step only. It needs a clean git workspace, also with `--no-edit`. If a step
+fails, `update` returns to where you started and names the step and commit that failed. The error ends with the
+command that resumes after the last commit that worked, so earlier commits get no second shelf; with a record,
+running the same command again does the same.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
@@ -546,25 +567,27 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-m, --message MESSAGE`: Replace the changelist description message above the commit list. The commit list is
   kept and updated as usual, and so is a Swarm `#review` keyword on a line of its own at the end of the description
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
-- `-b, --base-branch BASE_BRANCH`: Base branch for enumerating commits and finding changed files. Default is
-  `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Where the commits to fold in start, for the commit list and the files to open.
+  Defaults to after the last commit the changelist includes, when its alias records that, else to `HEAD~1`
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
   touched at all
-- `--no-edit`: Skip opening changed files for edit in Perforce
+- `--no-edit`: Skip opening changed files for edit in Perforce. With a record, the new commits are then neither
+  appended nor counted, so the next update that opens files includes them
 - `--shelve`: Re-shelve the changelist after updating
-- `--per-commit`: Update the changelist once per commit since the base branch, oldest first, with each commit
-  checked out in turn. With `--shelve`, steps sleep 5 seconds between them to give Perforce/Swarm time to process
-  each shelf. `--dry-run` prints the steps, one per commit
+- `--per-commit`: Update the changelist once per commit it doesn't include yet, or since the base branch without
+  a record, oldest first, with each commit checked out in turn. With `--shelve`, steps sleep 5 seconds between them
+  to give Perforce/Swarm time to process each shelf. `--dry-run` prints the steps, one per commit
 
 **Examples:**
 ```sh
-git p4son update              # update changelist for current branch
+git p4son update              # fold the new commits into the changelist for the current branch
 git p4son update --shelve     # update and re-shelve
 git p4son update 12345
-git p4son update myalias -b main
+git p4son update myalias -b main   # open every file of the change again
 git p4son update -F description.txt   # replace the message, e.g. after review feedback
-git p4son update -b HEAD~2 --per-commit --shelve   # one shelf for each of the last two commits
+git p4son update --per-commit --shelve   # one shelf for each commit the changelist doesn't include yet
+git p4son update 12345 -b HEAD~2 --per-commit --shelve   # no record: the last two commits
 ```
 
 ### Keeping the changelist in sync with git
@@ -597,8 +620,7 @@ shelf. The commits are reviewed where they are: to review them on top of the lat
 `new`, it needs a clean git workspace, untracked files included, and checks it even with `--dry-run`.
 
 ```sh
-git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--force] [--dry-run]
-                 [--no-commit-list]
+git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
 ```
 
 **Arguments:**
@@ -608,7 +630,8 @@ git p4son review [alias] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] 
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
   multiple lines
-- `-b, --base-branch BASE_BRANCH`: Base branch to find commits since. Default is `HEAD~1`
+- `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, to find commits since: a branch or
+  bookmark, or a commit exactly one points at, which the alias records as for [`new`](#new-command)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the steps, one per commit, without running them. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
@@ -633,8 +656,8 @@ worked.
 # Review all commits since main (alias defaults to branch name)
 git p4son review -m "Add my feature" -b main
 
-# Review just the last commit (default base branch)
-git p4son review -m "Fix bug"
+# Review a branch's only commit: HEAD~1 is main's commit, so the alias records main
+git p4son review -m "Fix bug" -b HEAD~1
 
 # Preview the steps without running them
 git p4son review -m "Add my feature" -b main --dry-run
@@ -666,7 +689,9 @@ numbered sequentially.
 ### Alias Command
 
 Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`, and
-with the jj backend `change = "<change ID>"`, the [jj change](#jujutsu-jj) it was made for). Aliases
+with the jj backend `change = "<change ID>"`, the [jj change](#jujutsu-jj) it was made for). An alias that `new` or
+`review` saved also records the changelist's base and how many commits since it it includes, which
+[`update`](#update-command) counts on from: `base`, `base_commit`, `included` and `last`. Aliases
 saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when written,
 or all at once with `alias clean`.
 
@@ -935,7 +960,8 @@ With the jj backend in a jj workspace:
   marked `(gone)` once jj no longer has it.
 - The default message is the first line of the change's description. Use `jj describe`, `-m` or `-F`.
 - `-b/--base-branch` takes a jj revision that resolves to one change, such as a bookmark, change ID or commit ID.
-  It defaults to the change's parent rather than git's `HEAD~1`.
+  Where it has a default, it's the change's parent rather than git's `HEAD~1`. `new` and `review` record it as a
+  bookmark, so it has to name one, or resolve to a commit exactly one points at.
 - `new` and `update` use jj's snapshot of the working copy, check that it did not change while git-p4son took the
   lock, and refuse files jj left untracked. You do not need a separate committed change before opening files in
   Perforce. Before a Perforce revert overwrites a file, git-p4son saves the working file and puts it back

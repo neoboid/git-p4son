@@ -73,6 +73,13 @@ class JjBackend:
         """The change IDs, which survive rebases and rewording."""
         return self.workspace.change_ids(commits)
 
+    def insert_empty_after(self, commit: str, message: str) -> str:
+        """Insert it with jj, which moves the bookmarks too, then load the workspace at the operation that made it."""
+        self.workspace.insert_empty_after(commit, message)
+        self.workspace = Workspace.load(self.workspace.directory, '@')
+        # jj rebased every child of commit onto the new change, so it's the only one left.
+        return self.workspace.child(commit)
+
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return self.workspace.existing_changes(change_ids)
 

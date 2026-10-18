@@ -218,6 +218,16 @@ class TestRecord(WorkspaceTestCase):
                          f'base_commit = "{"a" * 40}"\nincluded = ["1760781234 +0200", "1760781299 +0200"]\n')
         self.assertEqual(find_record('101', self.ws), ('feat', self.RECORD))
 
+    def test_a_catch_up_waiting_to_be_included_is_written_only_while_it_waits(self):
+        waiting = Record(base='main', base_commit='b' * 40,
+                         included=['1760781234 +0200'], catch_up='1760781300 +0200')
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, record=waiting)
+        self.assertIn('catch_up = "1760781300 +0200"\n', self.read('feat'))
+        self.assertEqual(find_record('101', self.ws), ('feat', waiting))
+        update_record('feat', self.RECORD, self.ws)
+        self.assertNotIn('catch_up', self.read('feat'))
+
     def test_an_alias_without_one_records_none(self):
         save_changelist_alias('feat', '101', self.ws, force=False)
         self.assertIsNone(find_record('101', self.ws))

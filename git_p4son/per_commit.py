@@ -31,36 +31,43 @@ def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
     return args
 
 
+def message_args(message: str | None, message_file: str | None) -> list[str]:
+    """The arguments that give a command line the message, from its file if it came from one."""
+    if message is None:
+        return []
+    return ['-F', message_file] if message_file else [f'--message={message}']
+
+
 def _resume_hint(rest: list[str], resume_after: str, message: str | None, message_file: str | None,
                  resumable: Callable[[], str | None] | None) -> str | None:
     """How to resume after resume_after, or None when resumable says there is nothing to resume."""
     note = resumable() if resumable else ''
     if note is None:
         return None
-    message_args = []
-    if message is not None:
-        message_args = (['-F', message_file] if message_file
-                        else [f'--message={message}'])
     command = shlex.join(['git', 'p4son', *rest, '--per-commit',
-                          *message_args, '-b', resume_after])
+                          *message_args(message, message_file), '-b', resume_after])
     return f'{note} After fixing the problem, resume with: {command}'.lstrip()
 
 
 def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, workspace_dir: str,
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
-                   resumable: Callable[[], str | None] | None = None, base_name: str | None = None) -> None:
+                   resumable: Callable[[], str | None] | None = None, base_name: str | None = None,
+                   only: set[str] | None = None) -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one.
 
     A failing step raises CommandError naming it, ending with the rest command that resumes after the last commit that
     worked, unless resumable returns None; any text it returns goes before that command. base_name, the name of the
-    base, goes to every step, as the steps get the base as a commit."""
+    base, goes to every step, as the steps get the base as a commit. only, if given, picks the commits to run on."""
     rest = rest or first
     backend.check_clean()
 
     log.heading('Finding commits')
     base = resolve_commit(base_branch, workspace_dir)
     commits = get_commits_since(base, workspace_dir, backend.revision)
+    if only is not None:
+        commits = [(commit, subject)
+                   for commit, subject in commits if commit in only]
     if not commits:
         raise CommandError(f'No commits found since {base_branch}')
     log.success(f'{plural(len(commits), "commit")} since {base_branch}')

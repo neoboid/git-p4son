@@ -97,10 +97,10 @@ def _get_rebase_branch(workspace_dir: str) -> str | None:
 
 # --- HEAD ---
 
-def get_head_subject(workspace_dir: str) -> str | None:
-    """Return the subject line of the HEAD commit, or None on failure."""
+def get_head_subject(workspace_dir: str, revision: str = 'HEAD') -> str | None:
+    """Return the subject line of revision's commit, HEAD by default, or None on failure."""
     try:
-        result = run(['git', 'log', '-1', '--format=%s', 'HEAD'],
+        result = run(['git', 'log', '-1', '--format=%s', revision],
                      cwd=workspace_dir)
         subject = result.stdout[0].strip() if result.stdout else ''
         return subject or None
@@ -422,6 +422,58 @@ def author_dates(commits: list[str], workspace_dir: str) -> list[str]:
         return []
     return run(['git', 'log', '--no-walk=unsorted', '--format=%ad', '--date=raw', *commits],
                cwd=workspace_dir).stdout
+
+
+def merge_base(first: str, second: str, workspace_dir: str) -> str:
+    """The best common ancestor of two commits."""
+    return run(['git', 'merge-base', first, second], cwd=workspace_dir).stdout[0]
+
+
+def changed_paths(old: str, new: str, workspace_dir: str) -> set[str]:
+    """The paths whose contents differ between two commits."""
+    # Both paths of a rename, as Perforce has the file at the old one until the change is submitted.
+    result = run(['git', 'diff', '--name-only', '--no-renames', '-z', old, new, '--'],
+                 cwd=workspace_dir, text=False)
+    return set(_nul_fields(result.stdout))
+
+
+def insert_empty_commit(after: str, message: str, workspace_dir: str) -> tuple[str, str, list[str]]:
+    """Commit an empty commit right after after, and recreate HEAD's commits after it on top, moving HEAD.
+
+    The recreated commits are copies with their parent swapped, so the working files and the index stay as they are.
+    Returns the new commit, HEAD's old commit, and the other local branches still built on the commits it recreated.
+    Raises
+    CommandError if a merge commit is among them."""
+    head = get_head_commit(workspace_dir)
+    commits = run(['git', 'rev-list', '--reverse',
+                  f'{after}..{head}'], cwd=workspace_dir).stdout
+    if run(['git', 'rev-list', '--merges', f'{after}..{head}'], cwd=workspace_dir).stdout:
+        raise CommandError(
+            f'A merge commit follows {after[:7]}, so no commit can be inserted after it.')
+    inserted = run(['git', 'commit-tree', f'{after}^{{tree}}', '-p', after, '-m', message],
+                   cwd=workspace_dir).stdout[0]
+    parent = inserted
+    for commit in commits:
+        raw = run(['git', 'cat-file', 'commit', commit],
+                  cwd=workspace_dir, text=False).stdout
+        # Bytes, so a message in another encoding is copied as it is.
+        headers, _, body = raw.partition(b'\n\n')
+        headers = re.sub(
+            rb'^parent [0-9a-f]+$', f'parent {parent}'.encode(), headers, count=1, flags=re.MULTILINE)
+        # A signature, with its indented lines, no longer matches the copy.
+        headers = re.sub(
+            rb'^gpgsig(-sha256)? [^\n]*(\n [^\n]*)*\n?', b'', headers, flags=re.MULTILINE).rstrip(b'\n')
+        parent = run(['git', 'hash-object', '-t', 'commit', '-w', '--stdin'], cwd=workspace_dir,
+                     input=headers + b'\n\n' + body, text=False).stdout.decode().strip()
+    # HEAD moves the branch it is on, or itself when detached.
+    run(['git', 'update-ref', 'HEAD', parent, head], cwd=workspace_dir)
+    if not commits:
+        return inserted, head, []
+    current = get_current_branch(workspace_dir)
+    result = run(['git', 'for-each-ref', f'--contains={commits[0]}', '--format=%(refname)', 'refs/heads/'],
+                 cwd=workspace_dir)
+    stale = [ref.removeprefix('refs/heads/') for ref in result.stdout]
+    return inserted, head, [branch for branch in stale if branch != current]
 
 
 def list_branches(workspace_dir: str) -> list[str]:

@@ -93,8 +93,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   workspace unless `--no-edit` is given.
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
-  included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update`
-  starts and what it appends.
+  included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
+  and what it appends. `catch_up_subject` says whether a base moved since the last shelve needs an empty catch-up
+  commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
 
 - **`review.py`** - The `review` command: one Swarm review built commit by commit through `run_per_commit`,
   running `new <alias> --review` on the first commit and `update <alias> --shelve` on the others.
@@ -204,8 +205,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
   delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
   keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and the identities of the commits since
-  it the CL includes (`find_record`, `update_record`). An alias may record a jj change (`change = "..."`), at most one
-  alias per change, as saving moves the record: `alias_for_change` and `alias_changes`. The old
+  it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
+  may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
+  `alias_for_change` and `alias_changes`. The old
   `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
   which `alias clean` runs first, moves the rest.
 

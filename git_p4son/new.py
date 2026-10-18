@@ -39,7 +39,7 @@ def new_command(args: argparse.Namespace) -> int:
     else:
         if args.alias and base is not None:
             record = new_record(base, resolve_commit(args.base_branch, workspace_dir), revision,
-                                args.backend, workspace_dir)
+                                args.shelve or args.review, args.backend, workspace_dir)
             save_changelist_alias(args.alias, changelist, workspace_dir,
                                   force=args.force, change=change, record=record)
         log.success(f'Created CL {changelist}{alias_note}')

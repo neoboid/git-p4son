@@ -538,6 +538,17 @@ stays as you wrote it. Every update counts, shelved or not.
   nothing new, `update` opens every file since the base, which takes in what the amend added. With new commits as
   well, run `update -b main` to open them.
 
+**After a sync.** A shelf holds whole files, so once a sync has changed files the changelist touches, its next shelf
+would mix those changes into the next commit's patch. So when `update --shelve` finds that the base moved since the
+last shelve, the branch was rebased onto it, and it changed such a file, it first inserts an empty commit, `Rebase
+onto CL <N>`, right after the last included commit, with the commits after it rebased onto it. Its shelf is a patch
+of its own, holding what the sync changed, and its entry keeps the commit list matching the patches.
+
+- With `--per-commit`, it's the first step. Without it, `update --shelve` shelves twice: at the rebase commit, then at
+  the tip.
+- An update without `--shelve` leaves the catch-up to the next one that shelves, and a changelist that was never
+  shelved has no patches to catch up. A dry run says what it would insert.
+
 **Other changelists**, whose alias records nothing (made by `alias new` or an older git-p4son), or named by a number
 no alias holds: the commits since the base branch, `HEAD~1` by default, replace their existing entries in the
 commit list (matched by subject) and new ones are appended; entries outside the range are kept and the list is

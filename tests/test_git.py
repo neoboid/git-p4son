@@ -11,9 +11,7 @@ from unittest import mock
 from git_p4son.common import CommandError, run, RunError, RunResult
 from git_p4son.git import (
     add_all_files,
-    add_info_excludes,
     case_only_ignored,
-    exclude_pattern,
     add_files,
     commit,
     find_base_commits,
@@ -41,7 +39,7 @@ from git_p4son.git import (
     merge_file,
     parse_sync_subject,
 )
-from tests.helpers import GitRepoTestCase, make_run_result
+from tests.helpers import CRLF_WHITELIST_GITIGNORE, GitRepoTestCase, make_run_result
 
 
 @unittest.skipIf(sys.platform == 'win32', 'Windows does not allow carriage returns or trailing spaces in file names')
@@ -1022,25 +1020,22 @@ class TestCaseOnlyIgnored(GitRepoTestCase):
         self.assertEqual(case_only_ignored(self.ws), [])
 
 
-class TestExcludes(GitRepoTestCase):
-    def exclude_file(self):
-        with open(os.path.join(self.ws, '.git', 'info', 'exclude'), encoding='utf-8') as f:
-            return f.read()
+class TestCaseOnlyIgnoredWhitelist(GitRepoTestCase):
+    """A CRLF whitelist .gitignore, where git's check-ignore calls any folder ignored."""
 
-    def test_a_pattern_matches_exactly_the_path(self):
-        self.assertEqual(exclude_pattern('A/Thirdparty/'), '/A/Thirdparty/')
-        self.assertEqual(exclude_pattern('a[1]*?\\b/'), '/a\\[1]\\*\\?\\\\b/')
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('config', 'core.ignorecase', 'true')
+        with open(os.path.join(self.ws, '.gitignore'), 'wb') as f:
+            f.write(CRLF_WHITELIST_GITIGNORE)
+        self.write_file('Some/Other/Private/File.c', 'c\n')
+        self.commit('Base')
+        self.write_file(
+            'Some/Plugins/A/Source/Thirdparty/SDK/version.txt', 'v\n')
 
-    def test_patterns_are_added_once_under_a_comment(self):
-        before = self.exclude_file()
-        self.assertEqual(add_info_excludes(
-            ['/A/Thirdparty/'], self.ws), ['/A/Thirdparty/'])
-        self.assertEqual(add_info_excludes(
-            ['/A/Thirdparty/', '/C/thirdparty/'], self.ws), ['/C/thirdparty/'])
-        added = self.exclude_file()[len(before):].splitlines()
-        self.assertEqual([line for line in added if not line.startswith('#')],
-                         ['/A/Thirdparty/', '/C/thirdparty/'])
-        self.assertTrue(added[0].startswith('# git-p4son'))
+    def test_the_folder_is_found_from_git_s_walk_not_check_ignore(self):
+        self.assertEqual(case_only_ignored(self.ws), [
+                         'Some/Plugins/A/Source/Thirdparty/'])
 
 
 if __name__ == '__main__':

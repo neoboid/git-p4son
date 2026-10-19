@@ -13,7 +13,8 @@ def format_toml(data: dict[str, Any]) -> str:
         for key, value in data.items() if isinstance(value, dict))
 
 
-def _format_string(value: str) -> str:
+def format_string(value: str) -> str:
+    """A TOML basic string holding value."""
     escaped = value.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{escaped}"'
 
@@ -22,13 +23,13 @@ def _format_key(key: str) -> str:
     """Format a TOML key, quoting it when it is not a bare key."""
     if _BARE_KEY_RE.match(key):
         return key
-    return _format_string(key)
+    return format_string(key)
 
 
 def _format_value(value: object) -> str:
     """Format a TOML value: strings, booleans, numbers, and lists."""
     if isinstance(value, str):
-        return _format_string(value)
+        return format_string(value)
     if isinstance(value, bool):
         return 'true' if value else 'false'
     if isinstance(value, (int, float)):

@@ -1,6 +1,7 @@
 """Tests for git_p4son.init module."""
 
 import os
+import shlex
 import tempfile
 import tomllib
 import unittest
@@ -25,7 +26,8 @@ from git_p4son.sync_split_users import get_split_users, set_split_users
 from git_p4son.writable import is_writable_mode, set_writable_mode
 from git_p4son.sync_branch import get_sync_branch_setting
 from tests.helpers import (
-    captured_output, GitRepoTestCase, isolate_jj, make_run_result, requires_jj, run_jj, start_patch, WorkspaceTestCase,
+    captured_output, CRLF_WHITELIST_GITIGNORE, GitRepoTestCase, isolate_jj, jj_tracked, make_run_result, requires_jj,
+    run_jj, start_patch, WorkspaceTestCase,
 )
 
 
@@ -442,19 +444,57 @@ class TestConfigureJj(GitRepoTestCase):
         self.assertEqual(run_jj(self.ws, 'config', 'get',
                          'working-copy.eol-conversion'), 'input-output')
 
-    def test_colocating_excludes_the_folders_git_ignores_only_without_case(self):
+    def assert_untracked_by_jj(self, folder, path):
+        """jj lists the folder under Untracked paths, and the working change stays empty."""
+        self.assertNotIn('Working copy changes', run_jj(self.ws, 'status'))
+        self.assertNotIn(f'{folder}/{path}', jj_tracked(self.ws))
+        self.assertIn(f'root:{folder}', run_jj(
+            self.ws, 'config', 'get', 'snapshot.auto-track'))
+        self.assertTrue(os.path.exists(os.path.join(self.ws, folder, path)))
+
+    def test_colocating_keeps_jj_from_tracking_what_git_ignores_only_without_case(self):
         self.git('config', 'core.ignorecase', 'true')
         self.write_file('.gitignore', 'ThirdParty/\n')
         self.commit('First')
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         with captured_output() as out:
             jj.colocate(self.ws)
-        self.assertIn('/Src/Thirdparty/', out.getvalue())
         self.assertNotIn('only because of core.ignorecase', out.getvalue())
-        self.assertIn('The working copy has no changes',
-                      run_jj(self.ws, 'status'))
-        self.assertTrue(os.path.exists(
-            os.path.join(self.ws, 'Src', 'Thirdparty', 'lib.c')))
+        self.assert_untracked_by_jj('Src/Thirdparty', 'lib.c')
+
+    def test_a_file_git_tracks_in_such_a_folder_is_left_to_git(self):
+        """Added with git add -f, it is git's, so colocating neither warns about it nor leaves it out."""
+        self.git('config', 'core.ignorecase', 'true')
+        self.write_file('.gitignore', 'ThirdParty/\n')
+        self.write_file('Src/Thirdparty/forced.c', 'f\n')
+        self.git('add', '-f', 'Src/Thirdparty/forced.c')
+        self.commit('First')
+        with captured_output() as out:
+            jj.colocate(self.ws)
+        self.assertNotIn('only because of core.ignorecase', out.getvalue())
+        self.assertIn('Src/Thirdparty/forced.c', jj_tracked(self.ws))
+
+    def test_a_whitelist_gitignore_doesn_t_let_jj_track_them_either(self):
+        """.gitignore's re-includes outrank .git/info/exclude, but not jj's own snapshot.auto-track."""
+        self.git('config', 'core.ignorecase', 'true')
+        with open(os.path.join(self.ws, '.gitignore'), 'wb') as f:
+            f.write(CRLF_WHITELIST_GITIGNORE)
+        self.commit('First')
+        self.write_file(
+            'Some/Plugins/A/Source/Thirdparty/SDK/version.txt', 'v\n')
+        with captured_output():
+            jj.colocate(self.ws)
+        self.assert_untracked_by_jj(
+            'Some/Plugins/A/Source/Thirdparty', 'SDK/version.txt')
+
+    def test_the_steps_to_colocate_by_hand_keep_jj_from_tracking_them(self):
+        self.git('config', 'core.ignorecase', 'true')
+        self.write_file('.gitignore', 'ThirdParty/\n')
+        self.commit('First')
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        for step in jj.colocate_steps(self.ws):
+            run_jj(self.ws, *shlex.split(step)[1:])
+        self.assert_untracked_by_jj('Src/Thirdparty', 'lib.c')
 
     def test_the_steps_to_colocate_by_hand_match_git_s_line_endings(self):
         self.git('config', 'core.autocrlf', 'input')
@@ -483,8 +523,6 @@ class TestInitCommand(unittest.TestCase):
         self.mock_jj = start_patch(
             self, 'git_p4son.init._configure_jj', return_value=False)
         self.mock_colocate = start_patch(self, 'git_p4son.init.jj.colocate')
-        self.mock_exclude = start_patch(
-            self, 'git_p4son.init.jj.exclude_case_only_ignored', return_value=[])
 
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
@@ -534,25 +572,9 @@ class TestInitCommand(unittest.TestCase):
         with mock.patch('git_p4son.init.jj.colocate_steps', return_value=['jj one', 'jj two']):
             steps = self._next_steps(has_commits=False)
         self.mock_colocate.assert_not_called()
-        # So the colocation by hand skips what git ignores only without case.
-        self.mock_exclude.assert_called_once_with('/ws')
         commit = steps.index('* git commit -m "Initial commit"')
         self.assertEqual(steps[commit + 1:commit + 3],
                          ['* jj one', '* jj two'])
-
-    def test_a_new_repo_names_the_excludes_to_drop_if_the_review_takes_them_in(self):
-        """The excludes follow .gitignore as init wrote it, and would keep git ignoring what the review takes in."""
-        self.mock_jj.return_value = True
-        self.mock_exclude.return_value = ['/Src/Thirdparty/']
-        steps = self._next_steps(has_commits=False)
-        review = steps.index('* Review and edit .gitignore')
-        self.assertIn('# git-p4son', steps[review + 1])
-        self.assertIn('.git/info/exclude', steps[review + 1])
-
-    def test_no_excludes_need_no_step(self):
-        self.mock_jj.return_value = True
-        steps = self._next_steps(has_commits=False)
-        self.assertFalse(any('info/exclude' in step for step in steps))
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

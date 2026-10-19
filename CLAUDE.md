@@ -161,12 +161,12 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   on disk for sync under the lock; `rebase_branch`, `conflicted_since`, `working_is_empty` and `return_to` run jj on the
   live working copy, only after it. `operation` warns when git's `core.autocrlf` (`git.get_autocrlf`) and jj's
   `working-copy.eol-conversion` disagree, and about files the tip adds that git ignores only by matching without case
-  (`check_ignored`, which `colocate` also runs, and which names the exclude lines and `jj file untrack` that fix
-  it). `exclude_case_only_ignored` adds exact patterns for those untracked folders to `.git/info/exclude` before jj
-  snapshots them: in `colocate`, in `init` for a new repository, and in the jj backend's `finish_sync` and
-  `fail_sync`. `check_invoked_inside_workspace`, which `run_command` calls first, refuses `jj -R` naming another
-  workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit it. For `init`:
-  `is_supported`, `colocate` and `colocate_steps`, which match git's line endings from jj's first snapshot on,
+  (`check_ignored`, which `colocate` also runs, and which names the `jj config set` and `jj file untrack` that fix
+  it). `leave_out_case_only_ignored` leaves those untracked folders out of jj's `snapshot.auto-track` for the repo
+  before jj snapshots them, in the jj backend's `finish_sync` and `fail_sync`; `colocate` and `colocate_steps` pass
+  the setting to `jj git init`. `check_invoked_inside_workspace`, which `run_command` calls first, refuses `jj -R`
+  naming another workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit it. For
+  `init`: `is_supported`, `colocate` and `colocate_steps`, which match git's line endings from jj's first snapshot on,
   `has_p4son_alias` and `add_p4son_alias`.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
@@ -236,7 +236,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
   deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
   (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
-  `added_files`, `ignored_files`, `case_only`, `case_only_ignored`, `exclude_pattern` and `add_info_excludes` for
+  `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files` walks, for
   jj's ignore check. git's `-z` output is read as bytes.
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the

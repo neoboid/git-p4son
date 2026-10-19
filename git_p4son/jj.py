@@ -12,11 +12,13 @@ from typing import Self
 
 from .common import CommandError, RunResult, normalize_workspace_path, run
 from .git import (
-    EOL_FOR_AUTOCRLF, add_info_excludes, added_files, case_only, case_only_ignored, checkout_detached, exclude_pattern,
-    get_autocrlf, get_changed_files, get_untracked_files, list_tracked_files, reset_files_commands,
+    EOL_FOR_AUTOCRLF, added_files, case_only, case_only_ignored, checkout_detached, is_ancestor,
+    get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
 from .log import log, plural
+from .sync_branch import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
+from .toml_writer import format_string
 
 
 _LOCK_ENV = '_GIT_P4SON_JJ_LOCK'
@@ -133,68 +135,47 @@ def _matching_eol(workspace_dir: str) -> str:
     return EOL_FOR_AUTOCRLF[get_autocrlf(workspace_dir)]
 
 
+def _auto_track(workspace_dir: str, paths: list[str]) -> str | None:
+    """jj's snapshot.auto-track, as it is, leaving paths out too; None if it leaves them all out already."""
+    current = run([*_JJ, '--ignore-working-copy', 'config', 'get', 'snapshot.auto-track'],
+                  cwd=workspace_dir).stdout[0]
+    # A whole fileset, so root:X isn't taken for part of root:X2.
+    filesets = [fileset for fileset in map(_root_fileset, paths)
+                if not re.search(rf'(?<![^\s(]){re.escape(fileset)}(?![^\s)])', current)]
+    return ' ~ '.join([f'({current})', *filesets]) if filesets else None
+
+
+def _config_value(value: str) -> str:
+    """value as jj config set and --config take it: as it is, unless it holds a quote, which needs TOML quoting."""
+    return format_string(value) if '"' in value else value
+
+
+def _command_line(args: list[str]) -> str:
+    """args as a command line that cmd, PowerShell and POSIX shells read alike, where double quotes can do it."""
+    def quoted(arg: str) -> str:
+        if re.fullmatch(r'[\w/.:=@%+,-]+', arg):
+            return arg
+        return shlex.quote(arg) if re.search(r'["$`\\!]', arg) else f'"{arg}"'
+    return ' '.join(map(quoted, args))
+
+
 def _colocate_commands(workspace_dir: str) -> list[list[str]]:
-    """The jj commands that colocate, with jj's line endings matching git's from the first snapshot on."""
-    eol = _matching_eol(workspace_dir)
+    """The jj commands that colocate, with jj's settings matching git's from the first snapshot on.
+
+    The settings are the line endings, and leaving out what git ignores only without case."""
+    settings = [('working-copy.eol-conversion', _matching_eol(workspace_dir))]
+    auto_track = _auto_track(workspace_dir, case_only_ignored(workspace_dir))
+    if auto_track is not None:
+        settings.append(('snapshot.auto-track', _config_value(auto_track)))
     # jj snapshots as it initializes, before a repo setting could exist.
-    return [['--config', f'working-copy.eol-conversion={eol}', 'git', 'init', '--colocate'],
-            ['config', 'set', '--repo', 'working-copy.eol-conversion', eol]]
-
-
-def exclude_case_only_ignored(workspace_dir: str) -> list[str]:
-    """Exclude the untracked paths git ignores only without case in .git/info/exclude, as jj would track them.
-
-    Returns the patterns added."""
-    paths = case_only_ignored(workspace_dir)
-    if not paths:
-        return []
-    log.heading('Excluding what git ignores only without case')
-    added = add_info_excludes([exclude_pattern(path)
-                              for path in paths], workspace_dir)
-    for pattern in added:
-        log.info(pattern)
-    log.success(f'Added {plural(len(added), "pattern")} to .git/info/exclude')
-    return added
-
-
-def _folders(path: str) -> list[str]:
-    """The folders path is in, outermost first, each ending in /."""
-    parts = path.split('/')
-    return ['/'.join(parts[:depth]) + '/' for depth in range(1, len(parts))]
-
-
-def _case_only_folders(files: list[str], workspace_dir: str) -> list[str]:
-    """Each file's outermost folder git ignores only without case, or the file if none is."""
-    case_only_folders = set(case_only(sorted({folder for path in files for folder in _folders(path)}),
-                                      workspace_dir))
-    paths = []
-    for path in files:
-        paths.append(next((folder for folder in _folders(
-            path) if folder in case_only_folders), path))
-    return list(dict.fromkeys(paths))
-
-
-def _to_untrack(excluded: list[str], files: list[str], commit: str, workspace_dir: str) -> list[str]:
-    """The paths jj file untrack takes for files: a folder in excluded, unless commit holds other files in it."""
-    others = set(list_tracked_files(workspace_dir, commit)) - set(files)
-    paths: list[str] = []
-    for path in excluded:
-        if path.endswith('/') and any(other.startswith(path) for other in others):
-            paths.extend(file for file in files if file.startswith(path))
-        else:
-            paths.append(path)
-    return paths
-
-
-def _root_fileset(path: str) -> str:
-    """The jj fileset that names path, a folder with what it holds, from the workspace root."""
-    quoted = path.rstrip('/').replace('\\', '\\\\').replace('"', '\\"')
-    return f'root:"{quoted}"'
+    init = [arg for name, value in settings for arg in (
+        '--config', f'{name}={value}')]
+    return [[*init, 'git', 'init', '--colocate'],
+            *(['config', 'set', '--repo', name, value] for name, value in settings)]
 
 
 def colocate(workspace_dir: str) -> None:
-    """Make the git repository at workspace_dir a colocated jj workspace too, excluding what jj would wrongly track."""
-    exclude_case_only_ignored(workspace_dir)
+    """Make the git repository at workspace_dir a colocated jj workspace too, as _colocate_commands sets it up."""
     for command in _colocate_commands(workspace_dir):
         _run_live(workspace_dir, *command)
     Workspace.load(workspace_dir, '@').check_ignored()
@@ -202,7 +183,34 @@ def colocate(workspace_dir: str) -> None:
 
 def colocate_steps(workspace_dir: str) -> list[str]:
     """The command lines that colocate by hand, as colocate does."""
-    return [shlex.join(['jj', *command]) for command in _colocate_commands(workspace_dir)]
+    return [_command_line(['jj', *command]) for command in _colocate_commands(workspace_dir)]
+
+
+def leave_out_case_only_ignored(workspace_dir: str) -> None:
+    """Leave the untracked paths git ignores only without case out of jj's snapshots, as jj would track them."""
+    paths = case_only_ignored(workspace_dir)
+    auto_track = _auto_track(workspace_dir, paths) if paths else None
+    if auto_track is None:
+        return
+    log.heading(
+        "Leaving what git ignores only without case out of jj's snapshots")
+    _run_live(workspace_dir, '--ignore-working-copy', 'config', 'set', '--repo', 'snapshot.auto-track',
+              _config_value(auto_track))
+    log.success(f'snapshot.auto-track is now {auto_track}')
+
+
+def _under(file: str, path: str) -> bool:
+    """Whether file is path, or in it when path is a folder ending in /."""
+    return file == path or (path.endswith('/') and file.startswith(path))
+
+
+def _root_fileset(path: str) -> str:
+    """The jj fileset that names path, a folder with what it holds, from the workspace root; quoted only if needed."""
+    path = path.rstrip('/')
+    if re.fullmatch(r'[\w/.-]+', path):
+        return f'root:{path}'
+    quoted = path.replace('\\', '\\\\').replace('"', '\\"')
+    return f'root:"{quoted}"'
 
 
 def _validate_version(workspace_dir: str) -> None:
@@ -384,19 +392,31 @@ class Workspace:
     def check_ignored(self) -> None:
         """Warn, naming the fix, about the files the tip adds that git ignores only by matching without case."""
         # The tip, as jj new or jj commit right after the snapshot leaves the files in @-.
-        files = case_only(added_files(
-            self.tip.commit, self.directory), self.directory)
+        if self._on_sync_branch(self.tip.commit):
+            return
+        added = added_files(self.tip.commit, self.directory)
+        files = case_only(added, self.directory)
         if not files:
             return
-        paths = _case_only_folders(files, self.directory)
+        # The tip's files, with these untracked, so a folder git lists as a whole holds no file git tracks.
+        found = case_only_ignored(self.directory, (self.tip.commit, files))
+        paths = list(dict.fromkeys(
+            next((path for path in found if _under(file, path)), file) for file in files))
+        auto_track = _auto_track(self.directory, paths)
         log.warning(f'jj tracks {plural(len(files), "file")} that git ignores only because of core.ignorecase, '
-                    'as jj matches .gitignore with case. To stop tracking them, add these lines to '
-                    '.git/info/exclude, then run the jj file untrack below:')
-        for path in paths:
-            log.info(exclude_pattern(path))
-        untrack = _to_untrack(paths, files, self.tip.commit, self.directory)
-        log.info(shlex.join(
-            ['jj', 'file', 'untrack', *map(_root_fileset, untrack)]))
+                    "as jj matches .gitignore with case. To stop tracking them, leave them out of jj's "
+                    'snapshot.auto-track, then untrack them:')
+        if auto_track is not None:
+            log.info(_command_line(
+                ['jj', 'config', 'set', '--repo', 'snapshot.auto-track', _config_value(auto_track)]))
+        log.info(_command_line(
+            ['jj', 'file', 'untrack', *map(_root_fileset, paths)]))
+
+    def _on_sync_branch(self, commit: str) -> bool:
+        """Whether commit is in the sync bookmark's history, which git made, not a jj snapshot."""
+        targets = self.bookmarks.get(get_sync_branch_setting(
+            self.directory) or DEFAULT_SYNC_BRANCH, [])
+        return len(targets) == 1 and targets[0] is not None and is_ancestor(commit, targets[0], self.directory)
 
     def check_snapshot(self) -> None:
         """Raise CommandError, after listing them, if jj left files git does not ignore out of its snapshot."""

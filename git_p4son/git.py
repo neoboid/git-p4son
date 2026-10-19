@@ -424,51 +424,51 @@ def author_dates(commits: list[str], workspace_dir: str) -> list[str]:
                cwd=workspace_dir).stdout
 
 
+def is_ancestor(commit: str, other: str, workspace_dir: str) -> bool:
+    """Whether commit is other or in its history."""
+    return run(['git', 'merge-base', '--is-ancestor', commit, other], cwd=workspace_dir,
+               fail_on_returncode=False).returncode == 0
+
+
 def merge_base(first: str, second: str, workspace_dir: str) -> str:
     """The best common ancestor of two commits."""
     return run(['git', 'merge-base', first, second], cwd=workspace_dir).stdout[0]
 
 
-def case_only_ignored(workspace_dir: str) -> list[str]:
-    """The untracked paths git ignores only by matching without case, folders ending in /."""
+def _ignored_untracked(workspace_dir: str, *, with_case: bool, env: dict[str, str] | None) -> set[str]:
+    """The untracked paths git ignores, a wholly ignored folder as one path ending in /."""
+    result = run(['git', *_case(with_case), 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory',
+                  '-z'], cwd=workspace_dir, env=env, text=False)
+    return set(_nul_fields(result.stdout))
+
+
+@contextlib.contextmanager
+def _index_without(revision: str, files: list[str], workspace_dir: str) -> Iterator[dict[str, str]]:
+    """Yield the environment for git commands to use an index of revision's files except files."""
+    with _index_from(revision, workspace_dir) as env:
+        run(['git', 'update-index', '--force-remove', '-z', '--stdin'], cwd=workspace_dir, env=env,
+            input='\0'.join(files))
+        yield env
+
+
+def case_only_ignored(workspace_dir: str, untracked_at: tuple[str, list[str]] | None = None) -> list[str]:
+    """The untracked paths git ignores only by matching without case, the deepest folder of each, ending in /.
+
+    With untracked_at, a revision and files, the index holds the revision's files except those."""
     result = run(['git', 'config', '--type=bool', '--get', 'core.ignorecase'],
                  cwd=workspace_dir, fail_on_returncode=False)
     if result.stdout != ['true']:
         return []
-    # --directory also lists a folder holding only ignored paths, which case_only drops, as no pattern matches it.
-    listed = run(['git', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'],
-                 cwd=workspace_dir, text=False)
-    return case_only(_nul_fields(listed.stdout), workspace_dir)
-
-
-def exclude_pattern(path: str) -> str:
-    """The ignore pattern that matches exactly path, from the workspace root; a folder if path ends with /."""
-    # A trailing space is dropped from a pattern unless escaped.
-    return '/' + re.sub(r'([*?\[\\]| $)', r'\\\1', path)
-
-
-_EXCLUDES_COMMENT = '# git-p4son: git ignores these only without case, by core.ignorecase, and jj would track them'
-
-
-def add_info_excludes(patterns: list[str], workspace_dir: str) -> list[str]:
-    """Add the patterns not in .git/info/exclude yet to it, under a comment; returns those added."""
-    path = os.path.join(workspace_dir, run(['git', 'rev-parse', '--git-path', 'info/exclude'],
-                                           cwd=workspace_dir).stdout[0])
-    existing = ''
-    if os.path.exists(path):
-        with open(path, encoding='utf-8') as f:
-            existing = f.read()
-    added = [pattern for pattern in patterns if pattern not in existing.splitlines()]
-    if added:
-        # A repository made from an empty template has no info folder.
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'a', encoding='utf-8') as f:
-            separator = '\n' if existing and not existing.endswith(
-                '\n') else ''
-            comment = [] if _EXCLUDES_COMMENT in existing.splitlines() else [
-                _EXCLUDES_COMMENT]
-            f.write(separator + '\n'.join([*comment, *added]) + '\n')
-    return added
+    index = contextlib.nullcontext(
+        None) if untracked_at is None else _index_without(*untracked_at, workspace_dir)
+    with index as env:
+        # git's walk, not check-ignore, which can call a folder ignored that the walk, and jj, look into.
+        without_case = _ignored_untracked(
+            workspace_dir, with_case=False, env=env)
+        with_case = _ignored_untracked(workspace_dir, with_case=True, env=env)
+    paths = sorted(without_case - with_case)
+    return [path for position, path in enumerate(paths)
+            if not (path.endswith('/') and position + 1 < len(paths) and paths[position + 1].startswith(path))]
 
 
 def added_files(commit: str, workspace_dir: str) -> list[str]:

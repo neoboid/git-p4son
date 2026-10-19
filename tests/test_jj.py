@@ -99,6 +99,15 @@ class JjRepoTestCase(WorkspaceTestCase):
     def jj(self, *args):
         return run_jj(self.ws, *args)
 
+    def git(self, *args):
+        subprocess.run(['git', *args], cwd=self.ws, check=True)
+
+    def output(self, **kwargs):
+        """The output of a jj.operation that does nothing."""
+        with captured_output() as out, jj.operation(self.ws, **kwargs):
+            pass
+        return out.getvalue()
+
     def commit_of(self, revision):
         # Without --ignore-working-copy, jj would wait for the lock a test may hold.
         return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', 'commit_id')
@@ -191,17 +200,13 @@ class TestJjBackend(JjRepoTestCase):
 
 
 class TestLineEndingCheck(JjRepoTestCase):
-    def git(self, *args):
-        subprocess.run(['git', *args], cwd=self.ws, check=True)
-
     def test_mismatch_is_reported_with_the_fix(self):
         self.git('config', 'core.autocrlf', 'true')
-        with captured_output() as out, jj.operation(self.ws):
-            pass
+        out = self.output()
         self.assertIn(
-            "jj's working-copy.eol-conversion is none, but git's core.autocrlf is true", out.getvalue())
+            "jj's working-copy.eol-conversion is none, but git's core.autocrlf is true", out)
         self.assertIn(
-            'jj config set --repo working-copy.eol-conversion input-output', out.getvalue())
+            'jj config set --repo working-copy.eol-conversion input-output', out)
 
     def test_matching_settings_are_quiet(self):
         with self.operation() as workspace:
@@ -215,9 +220,47 @@ class TestLineEndingCheck(JjRepoTestCase):
 
     def test_the_git_backend_is_not_warned(self):
         self.git('config', 'core.autocrlf', 'true')
-        with captured_output() as out, jj.operation(self.ws, lock_only=True):
-            pass
-        self.assertNotIn('write line endings differently', out.getvalue())
+        self.assertNotIn('write line endings differently',
+                         self.output(lock_only=True))
+
+
+class TestIgnoredCheck(JjRepoTestCase):
+    """git ignores ThirdParty/ case-insensitively, as with core.ignorecase, and jj matches it with case."""
+
+    def setUp(self):
+        super().setUp()
+        self.git('config', 'core.ignorecase', 'true')
+        self.write_file('.gitignore', 'ThirdParty/\n')
+
+    def test_a_file_jj_tracks_and_git_ignores_is_reported_with_the_fix(self):
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        out = self.output()
+        self.assertIn('Src/Thirdparty/lib.c', out)
+        self.assertIn('jj tracks the files above, which git ignores', out)
+        self.assertIn('.git/info/exclude', out)
+        self.assertIn('jj file untrack', out)
+
+    def test_a_file_moved_out_of_the_working_change_by_jj_new_is_still_reported(self):
+        """jj new leaves the files in the tip, the change git-p4son sends."""
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        self.jj('new')
+        self.assertIn('Src/Thirdparty/lib.c', self.output())
+
+    def test_a_file_git_ignores_with_case_too_is_quiet(self):
+        """Tracked before generated/ was ignored, as jj file track --include-ignored would."""
+        self.write_file('generated/keep.txt', 'k\n')
+        self.jj('status')
+        self.write_file('.gitignore', 'ThirdParty/\ngenerated/\n')
+        self.assertNotIn('which git ignores', self.output())
+
+    def test_a_command_that_doesn_t_snapshot_doesn_t_check(self):
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        self.jj('status')
+        self.assertNotIn('which git ignores', self.output(snapshot=False))
+
+    def test_files_git_ignores_too_are_quiet(self):
+        self.write_file('Src/ThirdParty/lib.c', 'x\n')
+        self.assertNotIn('which git ignores', self.output())
 
 
 class TestWorkspace(JjRepoTestCase):

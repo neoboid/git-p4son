@@ -12,7 +12,8 @@ from typing import Self
 
 from .common import CommandError, RunResult, normalize_workspace_path, run
 from .git import (
-    EOL_FOR_AUTOCRLF, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
+    EOL_FOR_AUTOCRLF, added_files, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files,
+    ignored_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
 from .log import log
@@ -127,9 +128,29 @@ def add_p4son_alias(workspace_dir: str) -> None:
               'set', '--user', 'aliases.p4son', alias)
 
 
+def _matching_eol(workspace_dir: str) -> str:
+    """The working-copy.eol-conversion that matches git's core.autocrlf."""
+    return EOL_FOR_AUTOCRLF[get_autocrlf(workspace_dir)]
+
+
+def _colocate_commands(workspace_dir: str) -> list[list[str]]:
+    """The jj commands that colocate, with jj's line endings matching git's from the first snapshot on."""
+    eol = _matching_eol(workspace_dir)
+    # jj snapshots as it initializes, before a repo setting could exist.
+    return [['--config', f'working-copy.eol-conversion={eol}', 'git', 'init', '--colocate'],
+            ['config', 'set', '--repo', 'working-copy.eol-conversion', eol]]
+
+
 def colocate(workspace_dir: str) -> None:
     """Make the git repository at workspace_dir a colocated jj workspace too."""
-    _run_live(workspace_dir, 'git', 'init', '--colocate')
+    for command in _colocate_commands(workspace_dir):
+        _run_live(workspace_dir, *command)
+    Workspace.load(workspace_dir, '@').check_ignored()
+
+
+def colocate_steps(workspace_dir: str) -> list[str]:
+    """The command lines that colocate by hand, as colocate does."""
+    return [shlex.join(['jj', *command]) for command in _colocate_commands(workspace_dir)]
 
 
 def _validate_version(workspace_dir: str) -> None:
@@ -301,13 +322,27 @@ class Workspace:
 
     def check_line_endings(self) -> None:
         """Warn, naming the fix, when git's core.autocrlf and jj's working-copy.eol-conversion disagree."""
-        autocrlf = get_autocrlf(self.directory)
-        matching = EOL_FOR_AUTOCRLF[autocrlf]
+        matching = _matching_eol(self.directory)
         if matching == self.eol_conversion:
             return
         log.warning(f"jj's working-copy.eol-conversion is {self.eol_conversion}, but git's core.autocrlf is "
-                    f'{autocrlf}, so jj and git write line endings differently. To match git, run: '
+                    f'{get_autocrlf(self.directory)}, so jj and git write line endings differently. To match git, run: '
                     f'jj config set --repo working-copy.eol-conversion {matching}')
+
+    def check_ignored(self) -> None:
+        """Warn, listing them, about the files the tip adds that git ignores only by matching without case."""
+        # The tip, as jj new or jj commit right after the snapshot leaves the files in @-.
+        ignored = ignored_files(added_files(
+            self.tip.commit, self.directory), self.directory)
+        with_case = set(ignored_files(ignored, self.directory, with_case=True))
+        files = [path for path in ignored if path not in with_case]
+        if not files:
+            return
+        for path in files:
+            log.file_change(path, 'add')
+        log.warning('jj tracks the files above, which git ignores, as git matches ignore patterns without case, by '
+                    'core.ignorecase, and jj with case. Add patterns that match their case to .git/info/exclude, '
+                    'then jj file untrack them.')
 
     def check_snapshot(self) -> None:
         """Raise CommandError, after listing them, if jj left files git does not ignore out of its snapshot."""
@@ -432,6 +467,8 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
         if log.verbose_mode:
             log.info(f'Pinned jj operation {before}')
         workspace.check_line_endings()
+        if snapshot:
+            workspace.check_ignored()
         if snapshot and workspace.working.commit != snapshot_commit:
             raise CommandError(
                 'The jj working change changed while git-p4son took its lock. Run the command again.')

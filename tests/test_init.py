@@ -429,6 +429,35 @@ class TestConfigureJj(GitRepoTestCase):
         self.configure('yes')
         self.assertEqual(self.configure(), (False, []))
 
+    def test_colocating_matches_git_s_line_endings_from_the_first_snapshot(self):
+        self.git('config', 'core.autocrlf', 'true')
+        # As git checks the file out with core.autocrlf.
+        with open(os.path.join(self.ws, 'a.txt'), 'wb') as f:
+            f.write(b'a\r\nb\r\n')
+        self.commit('First')
+        with captured_output():
+            jj.colocate(self.ws)
+        self.assertIn('The working copy has no changes',
+                      run_jj(self.ws, 'status'))
+        self.assertEqual(run_jj(self.ws, 'config', 'get',
+                         'working-copy.eol-conversion'), 'input-output')
+
+    def test_colocating_reports_the_files_jj_tracks_that_git_ignores(self):
+        self.git('config', 'core.ignorecase', 'true')
+        self.write_file('.gitignore', 'ThirdParty/\n')
+        self.commit('First')
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        with captured_output() as out:
+            jj.colocate(self.ws)
+        self.assertIn('Src/Thirdparty/lib.c', out.getvalue())
+        self.assertIn('which git ignores', out.getvalue())
+
+    def test_the_steps_to_colocate_by_hand_match_git_s_line_endings(self):
+        self.git('config', 'core.autocrlf', 'input')
+        self.assertEqual(jj.colocate_steps(self.ws), [
+            'jj --config working-copy.eol-conversion=input git init --colocate',
+            'jj config set --repo working-copy.eol-conversion input'])
+
     def test_colocate_imports_the_branch(self):
         self.commit('First')
         with captured_output():
@@ -496,10 +525,12 @@ class TestInitCommand(unittest.TestCase):
     def test_a_new_repo_colocates_as_a_next_step_after_the_initial_commit(self):
         """jj would snapshot every untracked file before .gitignore is reviewed, so colocating waits for the commit."""
         self.mock_jj.return_value = True
-        steps = self._next_steps(has_commits=False)
+        with mock.patch('git_p4son.init.jj.colocate_steps', return_value=['jj one', 'jj two']):
+            steps = self._next_steps(has_commits=False)
         self.mock_colocate.assert_not_called()
         commit = steps.index('* git commit -m "Initial commit"')
-        self.assertEqual(steps[commit + 1], '* jj git init --colocate')
+        self.assertEqual(steps[commit + 1:commit + 3],
+                         ['* jj one', '* jj two'])
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

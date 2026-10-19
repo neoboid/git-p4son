@@ -322,8 +322,9 @@ With jj 0.41 or newer installed, `init` offers two things for [jj](#jujutsu-jj):
 
 - **Colocating jj**, when the workspace has no `.jj` folder: "Use jj in this workspace too (colocated)?", default
   no. On yes, in an existing repository it runs `jj git init --colocate` as its last step, so jj imports the branch
-  as a bookmark. In a repository it creates, it lists `jj git init --colocate` as a next step after your initial
-  commit instead, since jj would otherwise snapshot every file before you have reviewed `.gitignore`.
+  as a bookmark. It sets jj's [line endings](#line-endings) to match git's from jj's first snapshot on. In a
+  repository it creates, it lists the same commands as next steps after your initial commit instead, since jj would
+  otherwise snapshot every file before you have reviewed `.gitignore`.
 - **The [`jj p4son` alias](#the-jj-p4son-alias)**, when the workspace has a `.jj` folder, or is to get one, and
   jj's config has no `aliases.p4son`: default yes. It adds the alias to jj's user config.
 
@@ -981,7 +982,7 @@ With the jj backend in a jj workspace:
 For example:
 
 ```sh
-jj git init --colocate       # Add jj to an existing git-p4son repository, or answer yes in init
+jj git init --colocate       # Add jj to an existing git-p4son repository (see Line endings), or answer yes in init
 git p4son sync               # From any change: syncs main, then rebases your changes onto it
 
 jj new main -m "Fix login"
@@ -1034,6 +1035,38 @@ together:
 On the jj backend, git-p4son warns when they disagree, and names the jj setting that matches git, for example
 `jj config set --repo working-copy.eol-conversion input-output`. The check reads only `core.autocrlf`: `text` and
 `eol` attributes in a `.gitattributes` override it in git, and jj doesn't read them.
+
+Set it before jj's first snapshot, as `jj git init --colocate` takes one. Once jj has recorded the files with the
+wrong line endings, a later setting doesn't fix them, as jj only reads the files again when they change. `init`
+colocates with the matching setting, and to colocate by hand, pass it to the init too:
+
+```sh
+jj --config working-copy.eol-conversion=input-output git init --colocate
+jj config set --repo working-copy.eol-conversion input-output
+```
+
+If you colocated without it, and jj shows every text file as changed, colocate again before doing anything else in
+jj. Don't `jj restore` that change: it holds every file the first snapshot added, and restoring it deletes them from
+disk, including your untracked work. Colocating again leaves the files alone:
+
+```sh
+rm -rf .jj                   # Remove-Item -Recurse -Force .jj in PowerShell
+git reset                    # Drops the entries jj added to git's index
+jj --config working-copy.eol-conversion=input-output git init --colocate
+jj config set --repo working-copy.eol-conversion input-output
+```
+
+Add any patterns from [Ignored files](#ignored-files) to `.git/info/exclude` before the init, so jj doesn't track
+those files again.
+
+### Ignored files
+
+git matches `.gitignore` patterns without case when `core.ignorecase` is true, the default on Windows and macOS. jj
+always matches them with case, so it tracks a `Thirdparty/` folder that git ignores through `ThirdParty/`. On the jj
+backend, and right after `init` colocates, git-p4son warns about the files the change you're working on adds that
+git ignores only by matching without case. Files you track on purpose, with `jj file track --include-ignored`, are
+left alone. Add patterns that match their case to `.git/info/exclude`, such as `[Tt]hird[Pp]arty/`, then untrack the
+files with `jj file untrack`.
 
 ### Locking, and the git workflow
 

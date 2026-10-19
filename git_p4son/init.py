@@ -273,7 +273,8 @@ def _init_workspace(cwd: str) -> int:
         log.info('* git add .')
         log.info('* git commit -m "Initial commit"')
         if colocate:
-            log.info('* jj git init --colocate')
+            for step in jj.colocate_steps(cwd):
+                log.info(f'* {step}')
         log.info('* git p4son sync')
         if writable:
             log.info('* git p4son writable apply')

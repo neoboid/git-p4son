@@ -157,9 +157,11 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and `restore_working` move the files
   on disk for sync under the lock; `rebase_branch`, `conflicted_since`, `working_is_empty` and `return_to` run jj on the
   live working copy, only after it. `operation` warns when git's `core.autocrlf` (`git.get_autocrlf`) and jj's
-  `working-copy.eol-conversion` disagree. `check_invoked_inside_workspace`, which `run_command` calls first, refuses `jj
-  -R` naming another workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit it. For
-  `init`: `is_supported`, `colocate`, `has_p4son_alias` and `add_p4son_alias`.
+  `working-copy.eol-conversion` disagree, and about files the tip adds that git ignores only by matching without case
+  (`check_ignored`, which `colocate` also runs). `check_invoked_inside_workspace`, which `run_command` calls first,
+  refuses `jj -R` naming another workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit
+  it. For `init`: `is_supported`, `colocate` and `colocate_steps`, which match git's line endings from jj's first
+  snapshot on, `has_p4son_alias` and `add_p4son_alias`.
 
 - **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
   Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
@@ -227,8 +229,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
   deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
-  (`format_sync_subject`, `git_last_synced_changelist`), and blob reads and `merge_file` for `sync_merge`. git's `-z`
-  output is read as bytes.
+  (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
+  `added_files` and `ignored_files` for jj's ignore check. git's `-z` output is read as bytes.
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),

@@ -429,6 +429,27 @@ def merge_base(first: str, second: str, workspace_dir: str) -> str:
     return run(['git', 'merge-base', first, second], cwd=workspace_dir).stdout[0]
 
 
+def added_files(commit: str, workspace_dir: str) -> list[str]:
+    """The files commit adds to its first parent, or every file of a commit without one."""
+    result = run(['git', 'diff-tree', '-r', '--root', '--no-commit-id', '--no-renames', '--name-only',
+                  '--diff-filter=A', '-z', commit], cwd=workspace_dir, text=False)
+    return _nul_fields(result.stdout)
+
+
+def ignored_files(paths: list[str], workspace_dir: str, with_case: bool = False) -> list[str]:
+    """The paths git's ignore rules match, tracked or not, matching with case if with_case, else by core.ignorecase."""
+    if not paths:
+        return []
+    case = ['-c', 'core.ignorecase=false'] if with_case else []
+    # Exit 1 when none matches.
+    result = run(['git', *case, 'check-ignore', '--no-index', '--stdin', '-z'], cwd=workspace_dir,
+                 input='\0'.join(paths), text=False, fail_on_returncode=False)
+    if result.returncode > 1:
+        raise RunError('git check-ignore', result.returncode,
+                       result.stderr.decode('utf-8', 'replace').splitlines())
+    return _nul_fields(result.stdout)
+
+
 def changed_paths(old: str, new: str, workspace_dir: str) -> set[str]:
     """The paths whose contents differ between two commits."""
     # Both paths of a rename, as Perforce has the file at the old one until the change is submitted.

@@ -235,32 +235,42 @@ class TestIgnoredCheck(JjRepoTestCase):
     def test_a_file_jj_tracks_and_git_ignores_is_reported_with_the_fix(self):
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         out = self.output()
-        self.assertIn('Src/Thirdparty/lib.c', out)
-        self.assertIn('jj tracks the files above, which git ignores', out)
-        self.assertIn('.git/info/exclude', out)
-        self.assertIn('jj file untrack', out)
+        self.assertIn(
+            'jj tracks 1 file that git ignores only because of core.ignorecase', out)
+        self.assertIn('/Src/Thirdparty/\n', out)
+        self.assertIn('jj file untrack \'root:"Src/Thirdparty"\'', out)
+
+    def test_a_folder_holding_files_git_tracks_is_untracked_file_by_file(self):
+        """Untracking the folder would untrack old.c too, which jj would then record as deleted."""
+        self.write_file('Src/Thirdparty/old.c', 'o\n')
+        self.jj('commit', '-m', 'old')
+        self.write_file('Src/Thirdparty/new.c', 'n\n')
+        out = self.output()
+        self.assertIn('/Src/Thirdparty/\n', out)
+        self.assertIn('jj file untrack \'root:"Src/Thirdparty/new.c"\'', out)
 
     def test_a_file_moved_out_of_the_working_change_by_jj_new_is_still_reported(self):
         """jj new leaves the files in the tip, the change git-p4son sends."""
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         self.jj('new')
-        self.assertIn('Src/Thirdparty/lib.c', self.output())
+        self.assertIn('/Src/Thirdparty/\n', self.output())
 
     def test_a_file_git_ignores_with_case_too_is_quiet(self):
         """Tracked before generated/ was ignored, as jj file track --include-ignored would."""
         self.write_file('generated/keep.txt', 'k\n')
         self.jj('status')
         self.write_file('.gitignore', 'ThirdParty/\ngenerated/\n')
-        self.assertNotIn('which git ignores', self.output())
+        self.assertNotIn('only because of core.ignorecase', self.output())
 
     def test_a_command_that_doesn_t_snapshot_doesn_t_check(self):
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         self.jj('status')
-        self.assertNotIn('which git ignores', self.output(snapshot=False))
+        self.assertNotIn('only because of core.ignorecase',
+                         self.output(snapshot=False))
 
     def test_files_git_ignores_too_are_quiet(self):
         self.write_file('Src/ThirdParty/lib.c', 'x\n')
-        self.assertNotIn('which git ignores', self.output())
+        self.assertNotIn('only because of core.ignorecase', self.output())
 
 
 class TestWorkspace(JjRepoTestCase):
@@ -648,6 +658,17 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.describe('@-', 'commit_id'),
                          self.describe('main', 'commit_id'))
         self.assertEqual(self.read('c.txt'), 'c1\n')
+
+    def test_a_folder_git_ignores_only_without_case_is_excluded_before_jj_snapshots(self):
+        self.git('config', 'core.ignorecase', 'true')
+        self.p4.submit(101, {'.gitignore': 'ThirdParty/\n',
+                       'Src/Thirdparty/lib.c': 'x\n'})
+        self.p4son('sync', '101')
+        self.assertEqual(self.read('Src/Thirdparty/lib.c'), 'x\n')
+        self.assertNotIn('Src/Thirdparty/lib.c',
+                         self.jj('file', 'list').split())
+        with open(os.path.join(self.ws, '.git', 'info', 'exclude'), encoding='utf-8') as f:
+            self.assertIn('/Src/Thirdparty/\n', f.read())
 
     def test_verbose_logs_the_pinned_operation(self):
         with mock.patch.object(log, 'verbose_mode', True):

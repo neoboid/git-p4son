@@ -12,11 +12,11 @@ from typing import Self
 
 from .common import CommandError, RunResult, normalize_workspace_path, run
 from .git import (
-    EOL_FOR_AUTOCRLF, added_files, checkout_detached, get_autocrlf, get_changed_files, get_untracked_files,
-    ignored_files, reset_files_commands,
+    EOL_FOR_AUTOCRLF, add_info_excludes, added_files, case_only, case_only_ignored, checkout_detached, exclude_pattern,
+    get_autocrlf, get_changed_files, get_untracked_files, list_tracked_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
-from .log import log
+from .log import log, plural
 
 
 _LOCK_ENV = '_GIT_P4SON_JJ_LOCK'
@@ -141,8 +141,60 @@ def _colocate_commands(workspace_dir: str) -> list[list[str]]:
             ['config', 'set', '--repo', 'working-copy.eol-conversion', eol]]
 
 
+def exclude_case_only_ignored(workspace_dir: str) -> list[str]:
+    """Exclude the untracked paths git ignores only without case in .git/info/exclude, as jj would track them.
+
+    Returns the patterns added."""
+    paths = case_only_ignored(workspace_dir)
+    if not paths:
+        return []
+    log.heading('Excluding what git ignores only without case')
+    added = add_info_excludes([exclude_pattern(path)
+                              for path in paths], workspace_dir)
+    for pattern in added:
+        log.info(pattern)
+    log.success(f'Added {plural(len(added), "pattern")} to .git/info/exclude')
+    return added
+
+
+def _folders(path: str) -> list[str]:
+    """The folders path is in, outermost first, each ending in /."""
+    parts = path.split('/')
+    return ['/'.join(parts[:depth]) + '/' for depth in range(1, len(parts))]
+
+
+def _case_only_folders(files: list[str], workspace_dir: str) -> list[str]:
+    """Each file's outermost folder git ignores only without case, or the file if none is."""
+    case_only_folders = set(case_only(sorted({folder for path in files for folder in _folders(path)}),
+                                      workspace_dir))
+    paths = []
+    for path in files:
+        paths.append(next((folder for folder in _folders(
+            path) if folder in case_only_folders), path))
+    return list(dict.fromkeys(paths))
+
+
+def _to_untrack(excluded: list[str], files: list[str], commit: str, workspace_dir: str) -> list[str]:
+    """The paths jj file untrack takes for files: a folder in excluded, unless commit holds other files in it."""
+    others = set(list_tracked_files(workspace_dir, commit)) - set(files)
+    paths: list[str] = []
+    for path in excluded:
+        if path.endswith('/') and any(other.startswith(path) for other in others):
+            paths.extend(file for file in files if file.startswith(path))
+        else:
+            paths.append(path)
+    return paths
+
+
+def _root_fileset(path: str) -> str:
+    """The jj fileset that names path, a folder with what it holds, from the workspace root."""
+    quoted = path.rstrip('/').replace('\\', '\\\\').replace('"', '\\"')
+    return f'root:"{quoted}"'
+
+
 def colocate(workspace_dir: str) -> None:
-    """Make the git repository at workspace_dir a colocated jj workspace too."""
+    """Make the git repository at workspace_dir a colocated jj workspace too, excluding what jj would wrongly track."""
+    exclude_case_only_ignored(workspace_dir)
     for command in _colocate_commands(workspace_dir):
         _run_live(workspace_dir, *command)
     Workspace.load(workspace_dir, '@').check_ignored()
@@ -330,19 +382,21 @@ class Workspace:
                     f'jj config set --repo working-copy.eol-conversion {matching}')
 
     def check_ignored(self) -> None:
-        """Warn, listing them, about the files the tip adds that git ignores only by matching without case."""
+        """Warn, naming the fix, about the files the tip adds that git ignores only by matching without case."""
         # The tip, as jj new or jj commit right after the snapshot leaves the files in @-.
-        ignored = ignored_files(added_files(
+        files = case_only(added_files(
             self.tip.commit, self.directory), self.directory)
-        with_case = set(ignored_files(ignored, self.directory, with_case=True))
-        files = [path for path in ignored if path not in with_case]
         if not files:
             return
-        for path in files:
-            log.file_change(path, 'add')
-        log.warning('jj tracks the files above, which git ignores, as git matches ignore patterns without case, by '
-                    'core.ignorecase, and jj with case. Add patterns that match their case to .git/info/exclude, '
-                    'then jj file untrack them.')
+        paths = _case_only_folders(files, self.directory)
+        log.warning(f'jj tracks {plural(len(files), "file")} that git ignores only because of core.ignorecase, '
+                    'as jj matches .gitignore with case. To stop tracking them, add these lines to '
+                    '.git/info/exclude, then run the jj file untrack below:')
+        for path in paths:
+            log.info(exclude_pattern(path))
+        untrack = _to_untrack(paths, files, self.tip.commit, self.directory)
+        log.info(shlex.join(
+            ['jj', 'file', 'untrack', *map(_root_fileset, untrack)]))
 
     def check_snapshot(self) -> None:
         """Raise CommandError, after listing them, if jj left files git does not ignore out of its snapshot."""

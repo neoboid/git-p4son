@@ -429,6 +429,48 @@ def merge_base(first: str, second: str, workspace_dir: str) -> str:
     return run(['git', 'merge-base', first, second], cwd=workspace_dir).stdout[0]
 
 
+def case_only_ignored(workspace_dir: str) -> list[str]:
+    """The untracked paths git ignores only by matching without case, folders ending in /."""
+    result = run(['git', 'config', '--type=bool', '--get', 'core.ignorecase'],
+                 cwd=workspace_dir, fail_on_returncode=False)
+    if result.stdout != ['true']:
+        return []
+    # --directory also lists a folder holding only ignored paths, which case_only drops, as no pattern matches it.
+    listed = run(['git', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'],
+                 cwd=workspace_dir, text=False)
+    return case_only(_nul_fields(listed.stdout), workspace_dir)
+
+
+def exclude_pattern(path: str) -> str:
+    """The ignore pattern that matches exactly path, from the workspace root; a folder if path ends with /."""
+    # A trailing space is dropped from a pattern unless escaped.
+    return '/' + re.sub(r'([*?\[\\]| $)', r'\\\1', path)
+
+
+_EXCLUDES_COMMENT = '# git-p4son: git ignores these only without case, by core.ignorecase, and jj would track them'
+
+
+def add_info_excludes(patterns: list[str], workspace_dir: str) -> list[str]:
+    """Add the patterns not in .git/info/exclude yet to it, under a comment; returns those added."""
+    path = os.path.join(workspace_dir, run(['git', 'rev-parse', '--git-path', 'info/exclude'],
+                                           cwd=workspace_dir).stdout[0])
+    existing = ''
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            existing = f.read()
+    added = [pattern for pattern in patterns if pattern not in existing.splitlines()]
+    if added:
+        # A repository made from an empty template has no info folder.
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'a', encoding='utf-8') as f:
+            separator = '\n' if existing and not existing.endswith(
+                '\n') else ''
+            comment = [] if _EXCLUDES_COMMENT in existing.splitlines() else [
+                _EXCLUDES_COMMENT]
+            f.write(separator + '\n'.join([*comment, *added]) + '\n')
+    return added
+
+
 def added_files(commit: str, workspace_dir: str) -> list[str]:
     """The files commit adds to its first parent, or every file of a commit without one."""
     result = run(['git', 'diff-tree', '-r', '--root', '--no-commit-id', '--no-renames', '--name-only',
@@ -436,18 +478,29 @@ def added_files(commit: str, workspace_dir: str) -> list[str]:
     return _nul_fields(result.stdout)
 
 
+def _case(with_case: bool) -> list[str]:
+    """The git options that match ignore patterns with case if with_case, else by core.ignorecase."""
+    return ['-c', 'core.ignorecase=false'] if with_case else []
+
+
 def ignored_files(paths: list[str], workspace_dir: str, with_case: bool = False) -> list[str]:
-    """The paths git's ignore rules match, tracked or not, matching with case if with_case, else by core.ignorecase."""
+    """The paths git's ignore rules match, tracked or not; a path ending in / as a folder."""
     if not paths:
         return []
-    case = ['-c', 'core.ignorecase=false'] if with_case else []
     # Exit 1 when none matches.
-    result = run(['git', *case, 'check-ignore', '--no-index', '--stdin', '-z'], cwd=workspace_dir,
+    result = run(['git', *_case(with_case), 'check-ignore', '--no-index', '--stdin', '-z'], cwd=workspace_dir,
                  input='\0'.join(paths), text=False, fail_on_returncode=False)
     if result.returncode > 1:
         raise RunError('git check-ignore', result.returncode,
                        result.stderr.decode('utf-8', 'replace').splitlines())
     return _nul_fields(result.stdout)
+
+
+def case_only(paths: list[str], workspace_dir: str) -> list[str]:
+    """The paths git ignores by core.ignorecase but not when it matches with case."""
+    ignored = ignored_files(paths, workspace_dir)
+    with_case = set(ignored_files(ignored, workspace_dir, with_case=True))
+    return [path for path in ignored if path not in with_case]
 
 
 def changed_paths(old: str, new: str, workspace_dir: str) -> set[str]:

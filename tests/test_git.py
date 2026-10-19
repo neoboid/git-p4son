@@ -11,6 +11,9 @@ from unittest import mock
 from git_p4son.common import CommandError, run, RunError, RunResult
 from git_p4son.git import (
     add_all_files,
+    add_info_excludes,
+    case_only_ignored,
+    exclude_pattern,
     add_files,
     commit,
     find_base_commits,
@@ -995,6 +998,49 @@ class TestGetLocalChangesInRepo(GitRepoTestCase):
 
         self.assertEqual(sorted(changes.adds), sorted(names))
         self.assertEqual(changes.moves, [('old.txt', 'new "name".txt')])
+
+
+class TestCaseOnlyIgnored(GitRepoTestCase):
+    """.gitignore ignores ThirdParty/ and *.o, which core.ignorecase matches without case."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('config', 'core.ignorecase', 'true')
+        self.write_file('.gitignore', 'ThirdParty/\n*.o\n')
+        self.write_file('keep.c', 'k\n')
+        self.commit('Base')
+        for path in ('A/Thirdparty/sub/a.c', 'A/Thirdparty/b.o', 'B/ThirdParty/c.c', 'C/thirdparty/d.c', 'e.o'):
+            self.write_file(path, 'x\n')
+
+    def test_only_the_deepest_untracked_folders_git_ignores_without_case(self):
+        """A/ is listed too, as all it holds is ignored, but it would also cover what A/ gets later."""
+        self.assertEqual(case_only_ignored(self.ws), [
+                         'A/Thirdparty/', 'C/thirdparty/'])
+
+    def test_none_when_git_matches_with_case(self):
+        self.git('config', 'core.ignorecase', 'false')
+        self.assertEqual(case_only_ignored(self.ws), [])
+
+
+class TestExcludes(GitRepoTestCase):
+    def exclude_file(self):
+        with open(os.path.join(self.ws, '.git', 'info', 'exclude'), encoding='utf-8') as f:
+            return f.read()
+
+    def test_a_pattern_matches_exactly_the_path(self):
+        self.assertEqual(exclude_pattern('A/Thirdparty/'), '/A/Thirdparty/')
+        self.assertEqual(exclude_pattern('a[1]*?\\b/'), '/a\\[1]\\*\\?\\\\b/')
+
+    def test_patterns_are_added_once_under_a_comment(self):
+        before = self.exclude_file()
+        self.assertEqual(add_info_excludes(
+            ['/A/Thirdparty/'], self.ws), ['/A/Thirdparty/'])
+        self.assertEqual(add_info_excludes(
+            ['/A/Thirdparty/', '/C/thirdparty/'], self.ws), ['/C/thirdparty/'])
+        added = self.exclude_file()[len(before):].splitlines()
+        self.assertEqual([line for line in added if not line.startswith('#')],
+                         ['/A/Thirdparty/', '/C/thirdparty/'])
+        self.assertTrue(added[0].startswith('# git-p4son'))
 
 
 if __name__ == '__main__':

@@ -267,9 +267,17 @@ def _init_workspace(cwd: str) -> int:
         jj.colocate(cwd)
         log.success('Colocated')
 
+    excluded: list[str] = []
+    if colocate and created:
+        # Now, as colocating by hand would track them before git-p4son runs again.
+        excluded = jj.exclude_case_only_ignored(cwd)
+
     if created:
         log.heading('Next steps')
         log.info('* Review and edit .gitignore')
+        if excluded:
+            log.info('* If the review takes in what init excluded above, remove its lines under "# git-p4son" in '
+                     '.git/info/exclude')
         log.info('* git add .')
         log.info('* git commit -m "Initial commit"')
         if colocate:

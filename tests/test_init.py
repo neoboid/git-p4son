@@ -442,15 +442,19 @@ class TestConfigureJj(GitRepoTestCase):
         self.assertEqual(run_jj(self.ws, 'config', 'get',
                          'working-copy.eol-conversion'), 'input-output')
 
-    def test_colocating_reports_the_files_jj_tracks_that_git_ignores(self):
+    def test_colocating_excludes_the_folders_git_ignores_only_without_case(self):
         self.git('config', 'core.ignorecase', 'true')
         self.write_file('.gitignore', 'ThirdParty/\n')
         self.commit('First')
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         with captured_output() as out:
             jj.colocate(self.ws)
-        self.assertIn('Src/Thirdparty/lib.c', out.getvalue())
-        self.assertIn('which git ignores', out.getvalue())
+        self.assertIn('/Src/Thirdparty/', out.getvalue())
+        self.assertNotIn('only because of core.ignorecase', out.getvalue())
+        self.assertIn('The working copy has no changes',
+                      run_jj(self.ws, 'status'))
+        self.assertTrue(os.path.exists(
+            os.path.join(self.ws, 'Src', 'Thirdparty', 'lib.c')))
 
     def test_the_steps_to_colocate_by_hand_match_git_s_line_endings(self):
         self.git('config', 'core.autocrlf', 'input')
@@ -479,6 +483,8 @@ class TestInitCommand(unittest.TestCase):
         self.mock_jj = start_patch(
             self, 'git_p4son.init._configure_jj', return_value=False)
         self.mock_colocate = start_patch(self, 'git_p4son.init.jj.colocate')
+        self.mock_exclude = start_patch(
+            self, 'git_p4son.init.jj.exclude_case_only_ignored', return_value=[])
 
     def _make_args(self):
         return mock.Mock(spec=['command', 'verbose'])
@@ -528,9 +534,25 @@ class TestInitCommand(unittest.TestCase):
         with mock.patch('git_p4son.init.jj.colocate_steps', return_value=['jj one', 'jj two']):
             steps = self._next_steps(has_commits=False)
         self.mock_colocate.assert_not_called()
+        # So the colocation by hand skips what git ignores only without case.
+        self.mock_exclude.assert_called_once_with('/ws')
         commit = steps.index('* git commit -m "Initial commit"')
         self.assertEqual(steps[commit + 1:commit + 3],
                          ['* jj one', '* jj two'])
+
+    def test_a_new_repo_names_the_excludes_to_drop_if_the_review_takes_them_in(self):
+        """The excludes follow .gitignore as init wrote it, and would keep git ignoring what the review takes in."""
+        self.mock_jj.return_value = True
+        self.mock_exclude.return_value = ['/Src/Thirdparty/']
+        steps = self._next_steps(has_commits=False)
+        review = steps.index('* Review and edit .gitignore')
+        self.assertIn('# git-p4son', steps[review + 1])
+        self.assertIn('.git/info/exclude', steps[review + 1])
+
+    def test_no_excludes_need_no_step(self):
+        self.mock_jj.return_value = True
+        steps = self._next_steps(has_commits=False)
+        self.assertFalse(any('info/exclude' in step for step in steps))
 
     def test_fresh_repo_with_writable_mode_suggests_apply(self):
         self.mock_writable.return_value = (True, True)

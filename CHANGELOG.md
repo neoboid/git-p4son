@@ -6,9 +6,10 @@
   `core.autocrlf` from jj's first snapshot on, so with `core.autocrlf = true` jj no longer records every text file as
   changed
 - With `core.ignorecase`, git ignores folders that jj, which matches `.gitignore` patterns with case, would track,
-  such as a `Thirdparty/` folder through `ThirdParty/`. Colocating, in `init`, and each sync on the jj backend now add
-  patterns matching those folders exactly to `.git/info/exclude`, so jj skips them. If jj tracks such files anyway,
-  git-p4son warns, and lists the exclude lines and the `jj file untrack` command that fix it
+  such as a `Thirdparty/` folder through `ThirdParty/`. Colocating, in `init`, and each sync on the jj backend now
+  leave those folders out of jj's `snapshot.auto-track` for the repository, so jj skips them, also when `.gitignore`
+  re-includes them with `!`. If jj tracks such files anyway, git-p4son warns, and lists the `jj config set` and the
+  `jj file untrack` command that fix it
 - `init` no longer checks for a git editor, as git-p4son hasn't opened one since `review` stopped running
   `git rebase -i`
 - **Behaviour change:** `new` and `review` require `-b`, naming a branch or bookmark, or a commit exactly one points

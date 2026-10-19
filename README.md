@@ -1056,26 +1056,30 @@ jj --config working-copy.eol-conversion=input-output git init --colocate
 jj config set --repo working-copy.eol-conversion input-output
 ```
 
-Add any patterns from [Ignored files](#ignored-files) to `.git/info/exclude` before the init, so jj doesn't track
-those files again.
+If git ignores folders only by matching without case, see [Ignored files](#ignored-files): `git p4son init`
+colocates with both settings.
 
 ### Ignored files
 
 git matches `.gitignore` patterns without case when `core.ignorecase` is true, the default on Windows and macOS. jj
 always matches them with case, so it would track a `Thirdparty/` folder that git ignores through `ThirdParty/`.
 
-To keep jj from tracking them, git-p4son adds a pattern that matches each such folder, or file, exactly, such as
-`/Some/Plugin/Source/Thirdparty/`, to `.git/info/exclude`, under a `# git-p4son` comment. jj reads that file too. It
-does so before `init` colocates, or when `init` creates the repository, for the colocation by hand. It also does so
-at the end of each sync on the jj backend, as a sync can bring in new folders.
+To keep jj from tracking them, git-p4son leaves each such folder, or file, out of jj's `snapshot.auto-track` for the
+repository, building on any value you have, for example `(all()) ~ root:Some/Plugin/Source/Thirdparty`. That's
+jj's own setting, so it works whatever `.gitignore` re-includes with `!`, which would outrank `.git/info/exclude`,
+and it leaves git alone. `jj status` then lists the folders under "Untracked paths". As the repository's value holds
+yours, a later change to your user-level `snapshot.auto-track` doesn't reach the repository.
 
-The patterns follow `.gitignore` as it was when git-p4son added them. If you later take such a folder into git by
-editing `.gitignore`, remove its line under `# git-p4son` too, or git goes on ignoring it.
+git-p4son does so when `init` colocates, passing the setting to `jj git init`, as jj snapshots straight away, and in
+the steps it lists for colocating a repository it creates by hand. It also does so at the end of each sync on the jj
+backend, as a sync can bring in new folders. To let jj track such a folder again, remove its `root:"..."` from
+`snapshot.auto-track`, with `jj config edit --repo`.
 
 If jj tracks such files anyway, for example in a workspace colocated before git-p4son did this, git-p4son warns about
-the ones the change you're working on adds. The warning lists the lines to add to `.git/info/exclude` and the
-`jj file untrack` command that stops tracking them, which leaves the files on disk. The command names a folder only
-when git tracks nothing else in it, so files git tracks stay tracked. Files you track on purpose, with
+the ones the change you're working on adds, unless it's a commit in the sync branch's history, which git made. The
+warning lists the `jj config set` that leaves them out and the `jj file untrack` command that stops tracking them,
+which leaves the files on disk. Both are quoted to paste into cmd, PowerShell or a POSIX shell alike. They name a
+folder only when git tracks nothing else in it, so files git tracks stay tracked. Files you track on purpose, with
 `jj file track --include-ignored`, are left alone.
 
 ### Locking, and the git workflow

@@ -2,6 +2,7 @@
 
 import dataclasses
 import os
+import shlex
 import stat
 import subprocess
 import unittest
@@ -18,8 +19,8 @@ from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from git_p4son.cli import create_parser, run_command
 from git_p4son.log import log
 from tests.helpers import (
-    captured_output, isolate_jj, JjTestCase, make_run_result, P4RepoTestCase, requires_jj, run_jj, start_patch,
-    WorkspaceTestCase,
+    captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
+    requires_jj, run_jj, start_patch, WorkspaceTestCase,
 )
 
 
@@ -232,28 +233,93 @@ class TestIgnoredCheck(JjRepoTestCase):
         self.git('config', 'core.ignorecase', 'true')
         self.write_file('.gitignore', 'ThirdParty/\n')
 
+    def run_fix(self, out):
+        """Run the jj commands the warning names, then snapshot."""
+        for line in out.splitlines():
+            if line.startswith('jj '):
+                self.jj(*shlex.split(line)[1:])
+        self.jj('status')
+
+    def assert_fixed(self, out, *paths):
+        self.run_fix(out)
+        tracked = jj_tracked(self.ws)
+        for path in paths:
+            self.assertNotIn(path, tracked)
+            self.assertTrue(os.path.exists(os.path.join(self.ws, path)))
+
     def test_a_file_jj_tracks_and_git_ignores_is_reported_with_the_fix(self):
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         out = self.output()
         self.assertIn(
             'jj tracks 1 file that git ignores only because of core.ignorecase', out)
-        self.assertIn('/Src/Thirdparty/\n', out)
-        self.assertIn('jj file untrack \'root:"Src/Thirdparty"\'', out)
+        # Double quotes, which cmd, PowerShell and POSIX shells all read alike.
+        self.assertIn(
+            'jj config set --repo snapshot.auto-track "(all()) ~ root:Src/Thirdparty"\n', out)
+        self.assertIn('jj file untrack root:Src/Thirdparty\n', out)
+        self.assert_fixed(out, 'Src/Thirdparty/lib.c')
+        self.assertEqual(self.jj(
+            'config', 'get', 'snapshot.auto-track'), '(all()) ~ root:Src/Thirdparty')
 
-    def test_a_folder_holding_files_git_tracks_is_untracked_file_by_file(self):
+    def test_a_folder_whose_name_starts_another_s_is_still_added(self):
+        self.jj('config', 'set', '--repo', 'snapshot.auto-track',
+                'all() ~ root:Src/Thirdparty2')
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        self.run_fix(self.output())
+        self.assertEqual(self.jj('config', 'get', 'snapshot.auto-track'),
+                         '(all() ~ root:Src/Thirdparty2) ~ root:Src/Thirdparty')
+
+    def test_a_path_with_a_space_is_quoted_in_the_fileset(self):
+        self.write_file('C D/Thirdparty/lib.c', 'x\n')
+        out = self.output()
+        self.assert_fixed(out, 'C D/Thirdparty/lib.c')
+        self.assertEqual(self.jj(
+            'config', 'get', 'snapshot.auto-track'), '(all()) ~ root:"C D/Thirdparty"')
+
+    def test_the_tip_on_the_sync_branch_is_git_s_and_not_checked(self):
+        """A file git tracks there, as added with git add -f, is git's, not one a jj snapshot took."""
+        self.write_file('Src/Thirdparty/forced.c', 'f\n')
+        self.jj('commit', '-m', 'forced')
+        self.jj('bookmark', 'set', 'main', '-r', '@-', '--allow-backwards')
+        self.assertNotIn('only because of core.ignorecase', self.output())
+
+    def test_the_fix_builds_on_an_auto_track_setting_of_the_user_s(self):
+        self.jj('config', 'set', '--repo', 'snapshot.auto-track',
+                '"all() ~ glob:\'*.tmp\'"')
+        self.write_file('Src/Thirdparty/lib.c', 'x\n')
+        self.run_fix(self.output())
+        self.assertEqual(self.jj('config', 'get', 'snapshot.auto-track'),
+                         "(all() ~ glob:'*.tmp') ~ root:Src/Thirdparty")
+
+    def test_a_whitelist_gitignore_with_crlf_still_names_the_folder(self):
+        """git's check-ignore calls any folder ignored there, and the re-includes outrank .git/info/exclude."""
+        with open(os.path.join(self.ws, '.gitignore'), 'wb') as f:
+            f.write(CRLF_WHITELIST_GITIGNORE)
+        self.write_file(
+            'Some/Plugins/A/Source/Thirdparty/SDK/version.txt', 'v\n')
+        self.write_file(
+            'Some/Plugins/A/Source/Thirdparty/docs/index.txt', 'i\n')
+        out = self.output()
+        self.assertIn('jj tracks 2 files', out)
+        self.assertIn(
+            'jj file untrack root:Some/Plugins/A/Source/Thirdparty\n', out)
+        self.assert_fixed(out, 'Some/Plugins/A/Source/Thirdparty/SDK/version.txt',
+                          'Some/Plugins/A/Source/Thirdparty/docs/index.txt')
+
+    def test_a_folder_holding_files_git_tracks_is_named_file_by_file(self):
         """Untracking the folder would untrack old.c too, which jj would then record as deleted."""
         self.write_file('Src/Thirdparty/old.c', 'o\n')
         self.jj('commit', '-m', 'old')
         self.write_file('Src/Thirdparty/new.c', 'n\n')
         out = self.output()
-        self.assertIn('/Src/Thirdparty/\n', out)
-        self.assertIn('jj file untrack \'root:"Src/Thirdparty/new.c"\'', out)
+        self.assertIn('jj file untrack root:Src/Thirdparty/new.c\n', out)
+        self.assert_fixed(out, 'Src/Thirdparty/new.c')
+        self.assertIn('Src/Thirdparty/old.c', jj_tracked(self.ws))
 
     def test_a_file_moved_out_of_the_working_change_by_jj_new_is_still_reported(self):
         """jj new leaves the files in the tip, the change git-p4son sends."""
         self.write_file('Src/Thirdparty/lib.c', 'x\n')
         self.jj('new')
-        self.assertIn('/Src/Thirdparty/\n', self.output())
+        self.assertIn('root:Src/Thirdparty', self.output())
 
     def test_a_file_git_ignores_with_case_too_is_quiet(self):
         """Tracked before generated/ was ignored, as jj file track --include-ignored would."""
@@ -659,16 +725,19 @@ class TestJjSync(JjP4RepoTestCase):
                          self.describe('main', 'commit_id'))
         self.assertEqual(self.read('c.txt'), 'c1\n')
 
-    def test_a_folder_git_ignores_only_without_case_is_excluded_before_jj_snapshots(self):
+    def test_a_folder_git_ignores_only_without_case_is_left_out_of_jj_s_next_snapshots(self):
         self.git('config', 'core.ignorecase', 'true')
         self.p4.submit(101, {'.gitignore': 'ThirdParty/\n',
                        'Src/Thirdparty/lib.c': 'x\n'})
         self.p4son('sync', '101')
         self.assertEqual(self.read('Src/Thirdparty/lib.c'), 'x\n')
-        self.assertNotIn('Src/Thirdparty/lib.c',
-                         self.jj('file', 'list').split())
-        with open(os.path.join(self.ws, '.git', 'info', 'exclude'), encoding='utf-8') as f:
-            self.assertIn('/Src/Thirdparty/\n', f.read())
+        self.assertNotIn('Src/Thirdparty/lib.c', jj_tracked(self.ws))
+        self.assertEqual(self.jj(
+            'config', 'get', 'snapshot.auto-track'), '(all()) ~ root:Src/Thirdparty')
+        self.p4.submit(102, {'a.txt': 'a2\n'})
+        self.p4son('sync', '102')
+        self.assertEqual(self.jj(
+            'config', 'get', 'snapshot.auto-track'), '(all()) ~ root:Src/Thirdparty')
 
     def test_verbose_logs_the_pinned_operation(self):
         with mock.patch.object(log, 'verbose_mode', True):

@@ -135,6 +135,12 @@ def recorded(changelist: str, workspace_dir: str) -> Record:
     return found[1]
 
 
+# A whitelist .gitignore with CRLF line endings, as Git for Windows checks it out, where git's check-ignore calls any
+# folder ignored, also when matching with case.
+CRLF_WHITELIST_GITIGNORE = (b'*\r\n!/Some/\r\n!/Some/Plugins/\r\n!/Some/Plugins/**/\r\n!/Some/Other/\r\n'
+                            b'!/Some/Other/**/\r\n!*.txt\r\n!*.c\r\n!.gitignore\r\nThirdParty/\r\n\r\n')
+
+
 def isolate_jj(test: unittest.TestCase, workspace_dir: str) -> None:
     """Give jj a fixed user and no user config for the rest of the test."""
     config = os.path.join(
@@ -151,6 +157,11 @@ def run_jj(workspace_dir: str, *args: str) -> str:
     """Run jj in workspace_dir and return its stripped stdout."""
     return subprocess.run(['jj', '--no-pager', '--color', 'never', *args], cwd=workspace_dir,
                           capture_output=True, text=True, check=True).stdout.strip()
+
+
+def jj_tracked(workspace_dir: str) -> list[str]:
+    """The files jj tracks in the working change, as slash paths, as jj prints native ones."""
+    return [path.replace('\\', '/') for path in run_jj(workspace_dir, 'file', 'list').splitlines()]
 
 
 def init_git_repo(path: str) -> None:

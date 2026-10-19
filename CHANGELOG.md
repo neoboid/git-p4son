@@ -5,9 +5,10 @@
 - Colocating jj, in `init` or by its next steps, sets jj's `working-copy.eol-conversion` to match git's
   `core.autocrlf` from jj's first snapshot on, so with `core.autocrlf = true` jj no longer records every text file as
   changed
-- On the jj backend, and after colocating, git-p4son warns about the files the change you're working on adds that git
-  ignores only by matching without case, as jj matches `.gitignore` patterns with case where git, with
-  `core.ignorecase`, doesn't
+- With `core.ignorecase`, git ignores folders that jj, which matches `.gitignore` patterns with case, would track,
+  such as a `Thirdparty/` folder through `ThirdParty/`. Colocating, in `init`, and each sync on the jj backend now add
+  patterns matching those folders exactly to `.git/info/exclude`, so jj skips them. If jj tracks such files anyway,
+  git-p4son warns, and lists the exclude lines and the `jj file untrack` command that fix it
 - `init` no longer checks for a git editor, as git-p4son hasn't opened one since `review` stopped running
   `git rebase -i`
 - **Behaviour change:** `new` and `review` require `-b`, naming a branch or bookmark, or a commit exactly one points

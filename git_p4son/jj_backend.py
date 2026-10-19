@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import commit_all, get_head_commit
-from .jj import Workspace
+from .jj import Workspace, exclude_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch
 from .words import Words, named_base
@@ -176,15 +176,18 @@ class JjBackend:
         log.success(sync.start)
 
     def fail_sync(self) -> None:
+        """Exclude what jj's next snapshot would wrongly track, and say where the sync stays."""
         sync = self._prepared()
+        exclude_case_only_ignored(self.workspace.directory)
         if not sync.on_sync_branch:
             log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
                         f'Perforce left them, and nothing is rebased. Your changes are as they were; return with '
                         f'"{sync.return_command}" once it is sorted out.')
 
     def finish_sync(self, changelist: int | None, rebase: bool) -> None:
-        """Leave the rebase and the return to after_lock, as jj commands cannot run under its lock."""
+        """Exclude what jj would wrongly track; the rebase and the return wait for after_lock, outside jj's lock."""
         self._prepared().finished = (changelist, rebase)
+        exclude_case_only_ignored(self.workspace.directory)
 
     def after_lock(self) -> None:
         """After a sync, rebase the changes it started from onto the sync bookmark, then return to them.

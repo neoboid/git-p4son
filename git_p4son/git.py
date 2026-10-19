@@ -567,17 +567,3 @@ def merge_file(current_path: str, base_path: str, other_path: str,
         text=False, fail_on_returncode=False)
     # git merge-file -p: exit 0 = clean, >0 = conflicts (count), <0 = error
     return (result.returncode == 0, result.stdout)
-
-
-# --- editor ---
-
-NO_EDITOR_MESSAGE = 'No git editor configured. Set one with: git config core.editor <editor>'
-
-
-def resolve_editor(workspace_dir: str) -> str | None:
-    """Resolve the user's editor via git var GIT_EDITOR."""
-    try:
-        result = run(['git', 'var', 'GIT_EDITOR'], cwd=workspace_dir)
-        return result.stdout[0].strip() if result.stdout else None
-    except RunError:
-        return None

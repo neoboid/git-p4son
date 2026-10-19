@@ -455,9 +455,8 @@ class TestInitCommand(unittest.TestCase):
         return mock.Mock(spec=['command', 'verbose'])
 
     def _next_steps(self, has_commits):
-        with mock.patch('git_p4son.init.resolve_editor', return_value='vim'), \
-                mock.patch('git_p4son.init._setup_gitignore',
-                           return_value='created'), \
+        with mock.patch('git_p4son.init._setup_gitignore',
+                        return_value='created'), \
                 mock.patch('git_p4son.init.has_commits',
                            return_value=has_commits), \
                 mock.patch('git_p4son.git.run'), \
@@ -521,7 +520,6 @@ class TestInitCommand(unittest.TestCase):
         steps = self._next_steps(has_commits=True)
         self.assertFalse(any('writable' in step for step in steps))
 
-    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='Created an empty .gitignore')
     @mock.patch('git_p4son.init.has_commits', return_value=False)
     @mock.patch('git_p4son.init.add_files')
@@ -531,8 +529,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.path.exists', return_value=False)
     @mock.patch('os.getcwd', return_value='/ws')
     def test_success(self, mock_cwd, mock_exists, mock_spec, mock_depot,
-                     mock_run, mock_add, mock_has_commits, mock_gitignore,
-                     mock_editor):
+                     mock_run, mock_add, mock_has_commits, mock_gitignore):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         # git init and git commit; add_files stages .gitignore
@@ -546,7 +543,6 @@ class TestInitCommand(unittest.TestCase):
                                     'Not inside a Perforce workspace'):
             init_command(self._make_args())
 
-    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exists')
     @mock.patch('git_p4son.init.has_commits', return_value=True)
     @mock.patch('git_p4son.git.run')
@@ -556,13 +552,11 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_skips_git_init(self, mock_cwd, mock_exists,
                                           mock_spec, mock_depot, mock_run,
-                                          mock_has_commits, mock_gitignore,
-                                          mock_editor):
+                                          mock_has_commits, mock_gitignore):
         result = init_command(self._make_args())
         self.assertEqual(result, 0)
         mock_run.assert_not_called()
 
-    @mock.patch('git_p4son.init.resolve_editor', return_value='vim')
     @mock.patch('git_p4son.init._setup_gitignore', return_value='.gitignore already exists')
     @mock.patch('git_p4son.init.has_commits', return_value=False)
     @mock.patch('git_p4son.init.add_files')
@@ -573,7 +567,7 @@ class TestInitCommand(unittest.TestCase):
     @mock.patch('os.getcwd', return_value='/ws')
     def test_existing_repo_without_commits_creates_initial_commit(
             self, mock_cwd, mock_exists, mock_spec, mock_depot, mock_run,
-            mock_add, mock_has_commits, mock_gitignore, mock_editor):
+            mock_add, mock_has_commits, mock_gitignore):
         """Re-running init on a repo without commits creates the initial commit."""
         result = init_command(self._make_args())
         self.assertEqual(result, 0)

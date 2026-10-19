@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `init` no longer checks for a git editor, as git-p4son hasn't opened one since `review` stopped running
+  `git rebase -i`
 - **Behaviour change:** `new` and `review` require `-b`, naming a branch or bookmark, or a commit exactly one points
   at. The alias records it by name, along with the commits since it the changelist includes, by jj change ID or git
   author date. `update` then folds in only the commits it doesn't know by default, appending their subjects and

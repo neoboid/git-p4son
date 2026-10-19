@@ -19,7 +19,6 @@ from .log import log
 from .perforce import get_client_spec
 from .skill import install_skill, is_claude_code_installed, is_skill_installed
 from .git import (
-    NO_EDITOR_MESSAGE,
     add_files,
     branch_exists,
     commit,
@@ -28,7 +27,6 @@ from .git import (
     init_repo,
     is_workspace_dir,
     list_branches,
-    resolve_editor,
 )
 from .sync_branch import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
 from .sync_split_users import current_p4_user, is_self_split, set_self_split
@@ -282,12 +280,5 @@ def _init_workspace(cwd: str) -> int:
     elif writable_changed:
         log.heading('Next steps')
         log.info('* git p4son writable apply, to update the tracked files')
-
-    log.heading('Checking git editor')
-    editor = resolve_editor(cwd)
-    if editor:
-        log.success(editor)
-    else:
-        log.warning(NO_EDITOR_MESSAGE)
 
     return 0

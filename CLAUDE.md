@@ -110,7 +110,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   up `.gitignore` (from `.p4ignore` if present), creates the git repo with a first commit, records `[sync] branch` (in a
   new repo the branch `HEAD` is on; in an existing one `main` first, then `HEAD`'s branch, then a menu), runs `jj git
   init --colocate` last if asked to in an existing repo (a new one lists it as a next step, after the user's first
-  commit), and checks for a git editor.
+  commit).
 
 - **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
   (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
@@ -227,8 +227,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
   deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
-  (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
-  `resolve_editor`. git's `-z` output is read as bytes.
+  (`format_sync_subject`, `git_last_synced_changelist`), and blob reads and `merge_file` for `sync_merge`. git's `-z`
+  output is read as bytes.
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),

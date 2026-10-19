@@ -138,19 +138,13 @@ cloning.
 
 These steps set up git-p4son in an existing Perforce workspace. You only need to do this once.
 
-1. **Set a git editor** if you don't have one already, for git's commit messages. `init` warns when none is set.
-   Set one with:
-   ```sh
-   git config --global core.editor <editor>   # e.g. vim, nano, code --wait
-   ```
-
-2. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
+1. **Sync your workspace to a known changelist.** Pick a changelist to use as the starting point for your git
    history:
    ```sh
    p4 sync //...@12345
    ```
 
-3. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace - it doesn't have to be at the
+2. **Run `git p4son init`.** This can be anywhere inside your Perforce workspace - it doesn't have to be at the
    root:
    ```sh
    cd /path/to/your/workspace    # or a subdirectory of it
@@ -160,15 +154,15 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    root (entire workspace or current directory subtree), runs `git init`, sets up `.gitignore` (copying from
    `.p4ignore` if available), and creates an initial commit.
 
-4. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
+3. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
-5. **Add and commit all files manually the first time**
+4. **Add and commit all files manually the first time**
    ```sh
    git add .
    git commit -m "Initial submit all files"
    ```
 
-6. **Run `git p4son sync`** to get your first official sync commit
+5. **Run `git p4son sync`** to get your first official sync commit
    ```sh
    git p4son sync
    ```
@@ -291,7 +285,7 @@ git p4son init
 
 This command checks that it runs in a Perforce workspace, then asks for the depot root, writable mode, split users,
 the Claude Code skill and jj. It then sets up `.gitignore`, runs `git init` and creates a first commit holding only
-`.gitignore`. It ends by listing the next steps, and warns when no git editor is configured.
+`.gitignore`. It ends by listing the next steps.
 
 The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
 workspace or just the directory's subtree where the git root is placed. The selection is saved in

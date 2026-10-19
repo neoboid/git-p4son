@@ -33,6 +33,9 @@ The tests are isolated in temporary directories, so they run in parallel with `p
 `-n` options. The jj tests are skipped when `jj` is not on `PATH`, unless `GIT_P4SON_REQUIRE_JJ` is set, as CI sets
 it, to make them fail instead. `scripts/install-jj.py VERSION DEST` downloads jj's official binary, as CI does.
 `on_jj(TestClass)` in `tests/helpers.py` runs a command test class again on the jj backend, as a `JjTestCase`.
+`tests/__init__.py` points `GIT_CONFIG_GLOBAL` at an empty config of the tests' own, with no global ignore or
+attributes file, so a developer's global git settings don't reach git or jj in the tests. The system config still
+applies, as Git for Windows sets `core.autocrlf` there.
 
 Format code with `autopep8`:
 ```bash

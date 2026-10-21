@@ -14,10 +14,6 @@ def new_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
     revision = args.backend.revision
 
-    # Opening and reverting files relies on every tracked file matching the change.
-    if not args.no_edit:
-        args.backend.check_clean()
-
     change = args.backend.change_id()
     base = None
     if args.alias:

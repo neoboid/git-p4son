@@ -92,11 +92,8 @@ class JjBackend:
         return lines[0]
 
     def check_clean(self) -> None:
-        """Raise CommandError, listing them, if files changed since jj's snapshot, or jj left any out of it.
-
-        Skipped while a step's commit is checked out, which leaves none."""
-        if self._checked_out is None:
-            self.workspace.check_clean()
+        """Raise CommandError, listing them, if files changed since jj's snapshot, or jj left any out of it."""
+        self.workspace.check_clean()
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""

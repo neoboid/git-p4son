@@ -143,8 +143,6 @@ def update_command(args: argparse.Namespace) -> int:
             _check_per_commit(plan, changelist, args.no_edit,
                               given is not None, workspace_dir)
         if args.shelve and not args.no_edit:
-            # Checked before the catch-up rewrites the branch, as checkouts and opens would refuse it after.
-            args.backend.check_clean()
             if _catch_up(plan, args, workspace_dir):
                 revision = args.backend.revision
                 alias, record = find_record(changelist, workspace_dir) or found
@@ -161,10 +159,6 @@ def update_command(args: argparse.Namespace) -> int:
     if args.per_commit:
         _update_per_commit(changelist, args)
         return 0
-
-    # Opening and reverting files relies on every tracked file matching the change.
-    if not args.no_edit:
-        args.backend.check_clean()
 
     if args.message is not None or not args.no_commit_list:
         log.heading(f'Updating description for CL {changelist}')

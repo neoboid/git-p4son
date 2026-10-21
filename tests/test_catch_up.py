@@ -89,6 +89,12 @@ class TestCatchUp(CatchUpTestCase):
                          '1. Edit m top', '2. Add n', '3. Rebase onto CL 103', '4. Add o'])
         self.assertEqual(len(self.shelves()), 2)
 
+    def test_the_catch_up_and_its_two_shelves_check_the_workspace_once(self):
+        self.sync_main({'m.txt': M.replace('8\n', 'eight\n')})
+        self.add_o()
+        self.assertEqual(self.update(
+            '--shelve').count('# Checking git workspace'), 1)
+
     def test_a_catch_up_with_nothing_new_is_its_own_shelf(self):
         self.sync_main({'m.txt': M.replace('8\n', 'eight\n')})
         self.update('--shelve')

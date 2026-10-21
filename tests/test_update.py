@@ -14,6 +14,7 @@ from tests.helpers import (
     captured_output,
     cli_args,
     GitRepoTestCase,
+    JjTestCase,
     P4RepoTestCase,
     recorded,
     start_patch,
@@ -125,6 +126,12 @@ class TestUpdateCleanWorkspace(UpdateTestCase):
         self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
         self.assertEqual(self.p4.calls, [])
 
+    def test_a_dirty_workspace_is_refused_before_the_plan_is_checked(self):
+        """Checked once, before the command runs, so ahead of "already includes"."""
+        self.edit('a.txt', 'dirty\n')
+        self.command_fails(update_command, [
+                           'update', '101', '--per-commit'], message='not clean')
+
     def test_no_edit_skips_the_check_and_opens_nothing(self):
         self.edit('d.txt', 'd1\n')
         self.commit('Add d')
@@ -141,6 +148,34 @@ class TestUpdateCleanWorkspace(UpdateTestCase):
         self.assertEqual(self.p4.opened, FEATURE_OPENED)
         self.assertEqual(set(self.p4.shelved['101']),
                          {'a.txt', 'b.txt', 'c.txt'})
+
+
+class TestUpdateChecksOnce(UpdateTestCase):
+    """The workspace checks of an update with a record, counted by their heading."""
+
+    @property
+    def CHECK(self):
+        return '# Checking jj workspace files' if isinstance(self, JjTestCase) else '# Checking git workspace'
+
+    def setUp(self):
+        super().setUp()
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+        self.commit_change_c()
+
+    def test_a_shelving_update_checks_once(self):
+        self.assertEqual(self.update('--shelve').count(self.CHECK), 1)
+
+    def per_commit_checks(self, *argv):
+        """How many times update --per-commit with argv checks, over Change c and Add d."""
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        return self.run_command(update_command, ['update', '101', '--per-commit', *argv]).count(self.CHECK)
+
+    def test_a_shelving_per_commit_update_checks_once_not_in_its_steps(self):
+        self.assertEqual(self.per_commit_checks('--shelve'), 1)
+
+    def test_a_per_commit_update_checks_once_not_in_its_steps(self):
+        self.assertEqual(self.per_commit_checks(), 1)
 
 
 class TestSteps(unittest.TestCase):
@@ -400,6 +435,7 @@ class TestUpdateIncluded(IncludedTestCase):
 
 
 TestUpdateOnJj = on_jj(TestUpdate)
+TestUpdateChecksOnceOnJj = on_jj(TestUpdateChecksOnce)
 
 
 class TestUpdateIncludedGitRewrites(IncludedTestCase):

@@ -60,7 +60,6 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
     A failing step raises CommandError naming it and the command that resumes after the last commit that worked,
     unless resumable returns None; any text it returns goes before that command."""
     rest = rest or first
-    backend.check_clean()
 
     log.heading('Finding commits')
     base = resolve_commit(base_branch, workspace_dir)

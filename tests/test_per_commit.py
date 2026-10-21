@@ -57,10 +57,37 @@ class TestRunPerCommit(GitRepoTestCase):
         self.assert_at('feature', self.feature_head)
 
     def test_rest_defaults_to_first(self):
-        with captured_output():
+        with captured_output() as out:
             run_per_commit(['update', 'only'], None, 'main', self.ws, GitBackend(self.ws), sleep=None,
                            dry_run=False)
         self.assertEqual([name for name, *_ in self.ran], ['only', 'only'])
+        self.assertTrue(out.getvalue().endswith(
+            '[ok] Ran 2 steps, git p4son update only\n'), out.getvalue())
+
+    def test_each_step_and_the_run_end_with_an_ok_line(self):
+        out = self.run_steps(sleep=5)
+        first, second = (self.git('log', '-1', '--format=%h %s', commit)
+                         for commit in ('HEAD~1', 'HEAD'))
+        self.assertIn(
+            f'# Step 1 of 2 done\n[ok] {first}\n\n# Sleeping for 5 seconds', out)
+        self.assertIn(
+            f'# Step 2 of 2 done\n[ok] {second}\n\n# Returning to feature\n', out)
+        self.assertTrue(out.endswith(
+            '[ok] Ran 2 steps, git p4son update first, then git p4son update rest\n'), out)
+
+    def test_where_to_return_is_found_under_the_first_step(self):
+        self.assertRegex(self.run_steps(), r'\[ok\] 2 commits since main\n\n# Step 1 of 2: .*\n'
+                         r'>  git symbolic-ref -q HEAD\n')
+
+    def test_a_failing_step_is_not_closed(self):
+        self.errors['rest'] = CommandError('no')
+        with captured_output() as out, self.assertRaises(CommandError):
+            run_per_commit(['update', 'first'], ['update', 'rest'], 'main', self.ws, GitBackend(self.ws),
+                           sleep=None, dry_run=False)
+        self.assertIn('# Step 1 of 2 done', out.getvalue())
+        self.assertNotIn('# Step 2 of 2 done', out.getvalue())
+        self.assertIn('# Returning to feature', out.getvalue())
+        self.assertNotIn('Ran 2 steps', out.getvalue())
 
     def test_message_goes_to_the_first_step_only(self):
         self.run_steps(message='One\nTwo')
@@ -156,7 +183,8 @@ class TestRunPerCommit(GitRepoTestCase):
 
     def test_returns_to_a_detached_start(self):
         self.git('switch', '-q', '--detach')
-        self.run_steps()
+        self.assertIn(
+            f'# Returning to {self.feature_head[:7]}\n', self.run_steps())
         self.assert_at('', self.feature_head)
 
 

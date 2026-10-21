@@ -114,6 +114,8 @@ class JjBackend:
             self._checked_out = commit
 
         def restore() -> None:
+            log.heading(
+                f'Returning to jj change {workspace.working.change_id[:8]}')
             self._checked_out = None
             workspace.restore_working(head)
 

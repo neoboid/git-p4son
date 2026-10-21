@@ -30,7 +30,7 @@ class _Position:
 
     @property
     def name(self) -> str:
-        return self.branch or self.commit
+        return self.branch or self.commit[:7]
 
     def restore(self, workspace_dir: str) -> None:
         """Check the branch out again, or the commit detached."""
@@ -118,7 +118,11 @@ class GitBackend:
     def checkouts(self) -> Iterator[Callable[[str], None]]:
         """Yield a function that checks out a commit detached, returning to the starting branch or commit on exit."""
         start = _Position.current(self.workspace_dir)
-        with restoring(lambda: start.restore(self.workspace_dir),
+
+        def restore() -> None:
+            log.heading(f'Returning to {start.name}')
+            start.restore(self.workspace_dir)
+        with restoring(restore,
                        lambda error: log.error(f'Could not return to {start.name}: {error}')):
             yield lambda commit: switch_detached(commit, self.workspace_dir)
 

@@ -1,6 +1,7 @@
 """Runs a git p4son step on each commit since a base branch, with that commit checked out."""
 
 import argparse
+import contextlib
 import shlex
 import time
 from collections.abc import Callable
@@ -85,10 +86,14 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
         return
 
     resume_after = base
-    with backend.checkouts() as checkout:
+    with contextlib.ExitStack() as stack:
         for number, ((commit, subject), step) in enumerate(zip(commits, steps), 1):
             name = f'{number} of {len(steps)}'
-            log.heading(f'Step {name}: {commit[:7]} {subject}')
+            label = f'{commit[:7]} {subject}'
+            log.heading(f'Step {name}: {label}')
+            if number == 1:
+                # Entered here, so finding where to return reads as part of the first checkout.
+                checkout = stack.enter_context(backend.checkouts())
             checkout(commit)
             log.success(f'Checked out, running git p4son {shlex.join(step)}')
             step_message = message if number == 1 else None
@@ -99,10 +104,15 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
             except CommandError as error:
                 hint = _resume_hint(rest, resume_after, step_message,
                                     message_file, resumable)
-                raise CommandError(f'Step {name} failed at {commit[:7]} {subject}: {error}'
+                raise CommandError(f'Step {name} failed at {label}: {error}'
                                    + (f'\n{hint}' if hint else ''), error.returncode) from error
+            log.heading(f'Step {name} done')
+            log.success(label)
             resume_after = commit
             if sleep is not None and number < len(steps):
                 log.heading(f'Sleeping for {sleep} seconds')
                 time.sleep(sleep)
                 log.success(f'Slept {sleep} seconds')
+    ran = [first] if rest == first else steps[:2]
+    log.success(f'Ran {plural(len(steps), "step")}, '
+                + ', then '.join(f'git p4son {shlex.join(step)}' for step in ran))

@@ -617,6 +617,14 @@ class TestJjPerCommit(JjP4RepoTestCase):
         self.assertEqual(len(self.shelves()), 3)
         self.assert_restored(working, {**self.FILES, 'd.txt': 'd1\n'})
 
+    def test_the_run_ends_returning_to_the_working_change(self):
+        change = self.describe('@', 'change_id')[:8]
+        out = self.p4son('review', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertRegex(out, r'\[ok\] 2 commits since \w+\n\n# Step 1 of 2: ')
+        self.assertRegex(out, rf'\n# Returning to jj change {change}\n(>  .*\n)*'
+                         r'\[ok\] Ran 2 steps, git p4son new feat --review, then git p4son update feat --shelve\n'
+                         r'\n# Reconciling jj workspace\n')
+
     def test_a_failing_step_puts_the_working_change_back(self):
         working = self.add_d()
         start_patch(self, 'git_p4son.cli.update_command',

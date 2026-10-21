@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `review`, `update --per-commit`, and an `update --shelve` that inserts a catch-up commit, close each step with a
+  `Step N of M done` heading naming its commit, head the return to the starting branch or jj change, and end with a
+  line saying how many steps ran and which commands
+- `update` on a changelist whose alias records its commits plans the update under a heading of its own, closed by how
+  many commits the changelist includes and how many are new
 - Colocating jj, in `init` or by its next steps, sets jj's `working-copy.eol-conversion` to match git's
   `core.autocrlf` from jj's first snapshot on, so with `core.autocrlf = true` jj no longer records every text file as
   changed

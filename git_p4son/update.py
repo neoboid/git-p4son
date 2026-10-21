@@ -3,7 +3,7 @@
 import argparse
 import shlex
 from dataclasses import replace
-from .changelist_store import find_record, load_changelist_alias, update_record
+from .changelist_store import Record, find_record, load_changelist_alias, update_record
 from .common import CommandError
 from .git import get_head_subject, resolve_commit
 from .included import Plan, catch_up_subject, included_count, plan_update
@@ -103,6 +103,19 @@ def _new_commits(plan: Plan | None, no_edit: bool) -> list[str] | None:
     return [] if no_edit else plan.subjects
 
 
+def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | None, args: argparse.Namespace,
+          revision: str) -> Plan:
+    """plan_update under a heading of its own, closed by how many commits the CL still includes and how many are new."""
+    log.heading(f'Planning the update of CL {changelist}')
+    plan = plan_update(record, alias, changelist, given,
+                       args.backend, args.workspace_dir, revision)
+    included = plural(included_count(plan.kept), 'commit') + \
+        (' still' if plan.dropped else '')
+    left = ', left for an update without --no-edit' if args.no_edit and plan.subjects else ''
+    log.success(f'{included} included, {len(plan.subjects)} new{left}')
+    return plan
+
+
 def update_command(args: argparse.Namespace) -> int:
     """Execute the update command."""
     workspace_dir = args.workspace_dir
@@ -121,8 +134,7 @@ def update_command(args: argparse.Namespace) -> int:
         # As typed for messages, and resolved by the backend, as a jj revision means nothing to git.
         given = None if args.base_given is None else (
             args.base_given, args.base_branch)
-        plan = plan_update(found[1], found[0], changelist,
-                           given, args.backend, workspace_dir, revision)
+        plan = _plan(found[1], found[0], changelist, given, args, revision)
         _warn_dropped(plan, changelist)
         if args.per_commit:
             # Recorded now, so neither the steps, each planning on its own, nor a refused run warns about them again.
@@ -136,8 +148,8 @@ def update_command(args: argparse.Namespace) -> int:
             if _catch_up(plan, args, workspace_dir):
                 revision = args.backend.revision
                 alias, record = find_record(changelist, workspace_dir) or found
-                plan = plan_update(record, alias, changelist,
-                                   given, args.backend, workspace_dir, revision)
+                plan = _plan(record, alias, changelist,
+                             given, args, revision)
             if plan.catch_up is not None and not args.per_commit and len(plan.subjects) > 1:
                 _shelve_twice(plan, plan.catch_up,
                               changelist, args, workspace_dir)

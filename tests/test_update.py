@@ -316,6 +316,14 @@ class TestUpdateIncluded(IncludedTestCase):
         self.assertIn('c.txt', self.p4.opened)
         self.assertEqual(self.included(), 3)
 
+    def test_planning_has_a_heading_closed_by_what_is_new(self):
+        self.commit_change_c()
+        # Up to the section's first ok line, as a jj template echoed holds a newline.
+        section = self.update().split('# Planning the update of CL 101\n', 1)[
+            1].split('\n\n', 1)[0]
+        self.assertTrue(section.endswith(
+            '[ok] 2 commits included, 1 new'), section)
+
     def test_an_explicit_base_reopens_the_files_but_still_only_appends(self):
         self.reword_first_entry()
         self.commit_change_c()
@@ -377,7 +385,8 @@ class TestUpdateIncluded(IncludedTestCase):
         """Counting them without opening their files would leave them out of the CL for good."""
         self.edit('d.txt', 'd1\n')
         self.commit('Add d')
-        self.update('--no-edit', '-m', 'Reworded')
+        self.assertIn('[ok] 2 commits included, 1 new, left for an update without --no-edit\n',
+                      self.update('--no-edit', '-m', 'Reworded'))
         self.assertEqual(self.p4.pending['101'], [
                          'Reworded'] + FEATURE_DESCRIPTION[1:])
         self.assertEqual(self.included(), 2)
@@ -415,6 +424,7 @@ class TestUpdateIncludedGitRewrites(IncludedTestCase):
         self.commit_change_c()
         out = self.update('--per-commit', '--shelve')
         self.assertEqual(out.count('Gone from the branch'), 1)
+        self.assertIn('[ok] 1 commit still included, 1 new\n', out)
         self.assertIn('included: number 1.', out)
         self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
         self.assertEqual(len(self.shelves()), 1)

@@ -92,9 +92,11 @@ class JjBackend:
         return lines[0]
 
     def check_clean(self) -> None:
-        """Raise CommandError, listing them, if jj left files out of its snapshot; a step's checkout leaves none."""
+        """Raise CommandError, listing them, if files changed since jj's snapshot, or jj left any out of it.
+
+        Skipped while a step's commit is checked out, which leaves none."""
         if self._checked_out is None:
-            self.workspace.check_snapshot()
+            self.workspace.check_clean()
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""
@@ -144,9 +146,6 @@ class JjBackend:
         self._sync = _Sync(name, commit, workspace.tip.change_id[:12], workspace.working is workspace.tip,
                            get_head_commit(workspace.directory), workspace.tip.commit == commit)
         return commit
-
-    def check_sync_clean(self) -> None:
-        self.workspace.check_clean()
 
     def start_sync(self) -> None:
         """Put the sync bookmark's files on disk; on the bookmark they are there already, and HEAD only detaches."""

@@ -105,7 +105,7 @@ def sync_preflight(depot_root: str, workspace_dir: str, ignore_blocking_processe
                    backend: Backend, sync_revision: str) -> None:
     """Gate a sync on blocking processes and clean workspaces; raise CommandError if one fails."""
     check_no_blocking_processes(workspace_dir, ignore_blocking_processes)
-    backend.check_sync_clean()
+    backend.check_clean()
     _check_p4_workspace_clean(depot_root, workspace_dir, sync_revision)
 
 

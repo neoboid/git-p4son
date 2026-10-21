@@ -368,6 +368,15 @@ class TestWorkspace(JjRepoTestCase):
         with self.operation() as workspace:
             workspace.check_snapshot()
 
+    def test_clean_check_refuses_a_file_changed_after_the_snapshot(self):
+        """new and update open the files on disk, which would then differ from the change they read."""
+        self.write_file('x.txt', 'x1\n')
+        self.jj('status')
+        with open_backend(self.ws, 'jj') as backend, captured_output():
+            self.write_file('x.txt', 'x2\n')
+            with self.assertRaisesRegex(CommandError, 'changed after jj snapshotted'):
+                backend.check_clean()
+
     def test_nested_operation_needs_the_git_backend(self):
         with self.operation():
             with self.assertRaisesRegex(CommandError, '--backend git'):

@@ -178,9 +178,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
   interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
   the alias the branch or bookmark suggests, the jj change aliases record (`change_id`, `existing_changes`), the
-  default message, the clean check, `-b` completions, `checkouts`
-  for the per-commit loop, sync's clean check and commits (`prepare_sync`, `check_sync_clean`, `start_sync`,
-  `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`.
+  default message, the clean check (`check_clean`, which sync shares), `-b` completions, `checkouts` for the
+  per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use,
+  whose `tool` hooks get as `GIT_P4SON_BACKEND`.
   `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
   `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
   `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once

@@ -57,9 +57,8 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                    only: set[str] | None = None) -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one.
 
-    A failing step raises CommandError naming it, ending with the rest command that resumes after the last commit that
-    worked, unless resumable returns None; any text it returns goes before that command. base_name, the name of the
-    base, goes to every step, as the steps get the base as a commit. only, if given, picks the commits to run on."""
+    A failing step raises CommandError naming it and the command that resumes after the last commit that worked,
+    unless resumable returns None; any text it returns goes before that command."""
     rest = rest or first
     backend.check_clean()
 

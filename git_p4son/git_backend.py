@@ -134,9 +134,6 @@ class GitBackend:
         # In full, so a tag of the same name, which git would read first, is not read instead.
         return f'refs/heads/{name}'
 
-    def check_sync_clean(self) -> None:
-        self.check_clean()
-
     def start_sync(self) -> None:
         """Check out the sync branch, unless sync started on it."""
         sync = self._prepared()

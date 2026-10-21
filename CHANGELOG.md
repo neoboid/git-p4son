@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On the jj backend, `new`, `update` and `review` also refuse files changed since jj's snapshot, as sync already did,
+  since they open the files on disk in Perforce
 - `review`, `update --per-commit`, and an `update --shelve` that inserts a catch-up commit, close each step with a
   `Step N of M done` heading naming its commit, head the return to the starting branch or jj change, and end with a
   line saying how many steps ran and which commands

@@ -62,9 +62,6 @@ class Backend(Protocol):
     def prepare_sync(self, branch: str | None) -> str:
         """Choose the sync branch, branch if given; returns the revision holding it. Raise CommandError if none fits."""
 
-    def check_sync_clean(self) -> None:
-        """Raise CommandError, after listing them, if git sees changes in the files sync is about to commit over."""
-
     def start_sync(self) -> None:
         """Put the sync branch's files in the work tree, ready for the pre-sync hooks and sync's first commit."""
 

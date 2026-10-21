@@ -60,7 +60,8 @@ checks, which mypy narrows on; it does not narrow on `os.name`.
 **`cli.py`** builds the argparse parser (`create_parser`), where each command registers its handler with
 `set_defaults(func=...)` (and `needs_workspace=False` for commands that run outside a repo). `run_command` does the
 shared setup before calling `args.func`: finding the workspace, resolving the `branch` keyword to an alias, reading
-`-F` message files, deriving a message from HEAD, and ending a dry run with "Dry run, nothing changed". `main` is the
+`-F` message files, deriving a message from HEAD, checking the workspace is clean once when the parser's
+`needs_clean` says so (`check_clean_workspace`), and ending a dry run with "Dry run, nothing changed". `main` is the
 only place that prints a `CommandError`/`RunError` and turns it into an exit code. `cli.py` also holds
 `completion_command` and sends `complete` to `complete.py` before argparse runs.
 
@@ -133,7 +134,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   writable files p4 refused or overwrote.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
-  that commit checked out through the backend, for `review` and `update --per-commit`. A step's arguments are parsed
+  that commit checked out through the backend, for `review` and `update --per-commit`. The steps skip `run_command`, so
+  its clean check runs once, before them. A step's arguments are parsed
   with the real parser just before it runs, with the base resolved once to a SHA. It returns to where it started, also
   when a step fails, ends the error with the command that resumes after the last commit that worked, and sleeps
   `SWARM_SHELF_DELAY` between shelving steps. `base_name`, the base's name, goes to every step, as the steps get the

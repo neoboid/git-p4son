@@ -160,12 +160,6 @@ class TestRunPerCommit(GitRepoTestCase):
         with self.assertRaisesRegex(CommandError, 'No commits found since feature'):
             self.run_steps(base_branch='feature')
 
-    def test_dirty_workspace(self):
-        self.write_file('stray.txt')
-        with self.assertRaisesRegex(CommandError, 'not clean'):
-            self.run_steps()
-        self.assertEqual(self.ran, [])
-
     def test_failing_return_keeps_the_step_error(self):
         start_patch(self, 'git_p4son.git_backend.switch_branch',
                     side_effect=RunError('git switch failed'))

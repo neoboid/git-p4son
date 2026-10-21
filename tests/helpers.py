@@ -253,15 +253,19 @@ class WorkspaceTestCase(unittest.TestCase):
     def run_command(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                     **overrides: Any) -> str:
         """Run command with command_args(argv, **overrides); returns everything it printed."""
+        from git_p4son.cli import check_clean_workspace
         with captured_output() as out, self.command_args(argv, **overrides) as args:
+            check_clean_workspace(args)
             self.assertEqual(command(args), 0)
         return out.getvalue()
 
     def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                       message: str) -> None:
         """Run command with command_args(argv), expecting a CommandError matching message."""
+        from git_p4son.cli import check_clean_workspace
         with captured_output(), self.assertRaisesRegex(CommandError, message), \
                 self.command_args(argv) as args:
+            check_clean_workspace(args)
             command(args)
 
 

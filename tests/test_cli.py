@@ -15,7 +15,7 @@ from git_p4son.cli import (
 from git_p4son.common import CommandError, RunError
 from git_p4son.git_backend import GitBackend
 from git_p4son.log import log
-from tests.helpers import captured_output
+from tests.helpers import captured_output, start_patch
 
 
 class TestCreateParser(unittest.TestCase):
@@ -239,8 +239,42 @@ class TestSnapshotDefault(unittest.TestCase):
                 self.assertFalse(parser.parse_args(argv).snapshot)
 
 
+class TestCleanCheckDefault(unittest.TestCase):
+    """run_command checks the workspace for the commands that open files, unless --no-edit."""
+
+    def needs_clean(self, argv):
+        args = create_parser().parse_args(argv)
+        return getattr(args, 'needs_clean', lambda args: False)(args)
+
+    def test_commands_that_open_files_need_a_clean_workspace(self):
+        for argv in (['new', '-b', 'main'], ['update'], ['update', '--no-edit', '--per-commit'],
+                     ['review', '-b', 'main']):
+            with self.subTest(argv=argv):
+                self.assertTrue(self.needs_clean(argv))
+
+    def test_no_edit_and_other_commands_do_not(self):
+        for argv in (['new', '-b', 'main', '--no-edit'], ['update', '--no-edit'], ['list-changes'], ['sync']):
+            with self.subTest(argv=argv):
+                self.assertFalse(self.needs_clean(argv))
+
+
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
+    def setUp(self):
+        # The workspace is fake, so git's clean check is too.
+        self.check_clean = start_patch(
+            self, 'git_p4son.git_backend.check_git_workspace_clean')
+
+    @mock.patch('git_p4son.cli.update_command', return_value=0)
+    def test_checks_the_workspace_once_before_a_command_that_edits(self, _update, _ws):
+        for argv, checks in ((['update', '100'], 1), (['update', '100', '--no-edit'], 0),
+                             (['update', '100', '--no-edit', '--per-commit'], 1), (['list-changes'], 0)):
+            with self.subTest(argv=argv), mock.patch('git_p4son.cli.list_changes_command', return_value=0):
+                self.check_clean.reset_mock()
+                with captured_output():
+                    run_command(create_parser().parse_args(argv))
+                self.assertEqual(self.check_clean.call_count, checks)
+
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_dispatches_sync(self, mock_sync, _ws):
         parser = create_parser()
@@ -401,6 +435,9 @@ class TestRunCommand(unittest.TestCase):
 
 
 class TestBranchKeyword(unittest.TestCase):
+    def setUp(self):
+        start_patch(self, 'git_p4son.git_backend.check_git_workspace_clean')
+
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')
     def test_resolves_branch_to_alias(self, _branch):
         result = GitBackend('/ws').suggested_alias()

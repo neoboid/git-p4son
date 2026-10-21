@@ -256,7 +256,8 @@ Examples:
         'under an alias. By default also opens the changed files for edit in '
         'the changelist.'
     )
-    new_parser.set_defaults(func=new_command, new_alias=True)
+    new_parser.set_defaults(func=new_command, new_alias=True,
+                            needs_clean=_needs_clean_to_edit)
     _add_message_args(
         new_parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
@@ -306,7 +307,8 @@ Examples:
         'unless -m or -F replaces it. By default also opens changed files '
         'for edit.'
     )
-    update_parser.set_defaults(func=update_command)
+    update_parser.set_defaults(
+        func=update_command, needs_clean=_needs_clean_to_edit)
     _add_branch_keyword_arg(update_parser, 'changelist',
                             'Changelist number or named alias to update')
     _add_message_args(
@@ -431,7 +433,8 @@ Examples:
         '--review on it, then check out each later one and run git p4son '
         'update --shelve, before returning to where you started.'
     )
-    review_parser.set_defaults(func=review_command, new_alias=True)
+    review_parser.set_defaults(
+        func=review_command, new_alias=True, needs_clean=lambda args: True)
     _add_branch_keyword_arg(review_parser, 'alias',
                             'Alias name for the new changelist')
     _add_message_args(
@@ -640,7 +643,23 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         args.message = backend.subject()
         log.success(args.message)
 
+    check_clean_workspace(args)
     return _run_handler(args)
+
+
+def _needs_clean_to_edit(args: argparse.Namespace) -> bool:
+    """Unless --no-edit, as opening and reverting files relies on every tracked file matching the change."""
+    # --per-commit checks out each commit, which git would carry changes into.
+    return not args.no_edit or getattr(args, 'per_commit', False)
+
+
+def check_clean_workspace(args: argparse.Namespace) -> None:
+    """Check the workspace once, before the command runs, when its parser's needs_clean says so for args.
+
+    Raises CommandError if it isn't clean. The steps of a per-commit run don't come through here."""
+    needs_clean = getattr(args, 'needs_clean', None)
+    if needs_clean is not None and needs_clean(args):
+        args.backend.check_clean()
 
 
 def _run_handler(args: argparse.Namespace) -> int:

@@ -1,11 +1,11 @@
-"""Tests for git_p4son.review module."""
+"""Tests for the review command."""
 
 import shlex
 import unittest
 
 from git_p4son.changelist_store import load_changelist_alias, save_changelist_alias
 from git_p4son.common import CommandError
-from git_p4son.review import review_command, _steps
+from git_p4son.new import review_command, _steps
 from tests.helpers import cli_args, on_jj, P4RepoTestCase, recorded, start_patch
 
 

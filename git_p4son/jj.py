@@ -418,8 +418,9 @@ class Workspace:
             self.directory) or DEFAULT_SYNC_BRANCH, [])
         return len(targets) == 1 and targets[0] is not None and is_ancestor(commit, targets[0], self.directory)
 
-    def check_snapshot(self) -> None:
-        """Raise CommandError, after listing them, if jj left files git does not ignore out of its snapshot."""
+    def check_clean(self) -> None:
+        """Raise CommandError, after listing them, if jj left files git doesn't ignore out of its snapshot, or files
+        changed since."""
         log.heading('Checking jj workspace files')
         files = get_untracked_files(self.working.commit, self.directory)
         if files:
@@ -427,12 +428,8 @@ class Workspace:
                 log.file_change(path, 'untracked')
             raise CommandError('jj did not snapshot the files above. '
                                'Track or ignore them first.')
-        log.success('All files snapshotted')
-
-    def check_clean(self) -> None:
-        """Raise CommandError, after listing them, if files changed since jj's snapshot, or jj left any out of it."""
-        self.check_snapshot()
         self.check_unchanged()
+        log.success('All files snapshotted, none changed since')
 
     def check_unchanged(self) -> None:
         """Raise CommandError, after listing them, if tracked files changed since jj's snapshot."""

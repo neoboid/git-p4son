@@ -364,9 +364,11 @@ class TestWorkspace(JjRepoTestCase):
             self.assertEqual(workspace.resolve_base(
                 'main'), self.commit_of('main'))
 
-    def test_snapshot_check_passes_when_jj_tracks_everything(self):
-        with self.operation() as workspace:
-            workspace.check_snapshot()
+    def test_clean_check_is_one_section_closed_once_both_checks_pass(self):
+        with self.operation() as workspace, captured_output() as out:
+            workspace.check_clean()
+        self.assertRegex(out.getvalue(), r'# Checking jj workspace files\n(>  .*\n)*>  git .*diff --name-only.*\n'
+                         r'\[ok\] All files snapshotted, none changed since\n$')
 
     def test_clean_check_refuses_a_file_changed_after_the_snapshot(self):
         """new and update open the files on disk, which would then differ from the change they read."""

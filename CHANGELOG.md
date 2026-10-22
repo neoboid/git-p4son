@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- On jj, the workspace check is one section again, closed once both of its checks pass
 - `new`, `update` and `review` check the workspace once, before anything else, rather than up to twice per command
   and again in each step of `review` and `update --per-commit` on the git backend
 - On the jj backend, `new`, `update` and `review` also refuse files changed since jj's snapshot, as sync already did,

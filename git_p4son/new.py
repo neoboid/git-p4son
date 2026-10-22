@@ -1,4 +1,4 @@
-"""New command: creates a Perforce changelist from the git change."""
+"""New command: creates a Perforce changelist from the git change, at once or commit by commit."""
 
 import argparse
 from .changelist_store import (
@@ -18,6 +18,9 @@ from .per_commit import SWARM_SHELF_DELAY, run_per_commit
 
 def new_command(args: argparse.Namespace) -> int:
     """Execute the new command."""
+    if args.per_commit:
+        _new_per_commit(args)
+        return 0
     workspace_dir = args.workspace_dir
     revision = args.backend.revision
 
@@ -63,16 +66,23 @@ def _check_one_alias_per_change(alias: str, change: str | None, workspace_dir: s
 
 
 def _steps(args: argparse.Namespace) -> tuple[list[str], list[str]]:
-    """The new step for the first commit and the update step for the others."""
+    """The new step for the first commit and the update step for the others, both shelving if new would."""
+    shelve = ['--review'] if args.review else ['--shelve'] if args.shelve else []
     commit_list = ['--no-commit-list'] if args.no_commit_list else []
     force = ['--force'] if args.force else []
-    return (['new', args.alias, '--review', *force, *commit_list],
-            ['update', args.alias, '--shelve', *commit_list])
+    return (['new', args.alias, *shelve, *force, *commit_list],
+            ['update', args.alias, *(['--shelve'] if shelve else []), *commit_list])
 
 
-def review_command(args: argparse.Namespace) -> int:
-    """Execute the review command."""
+def _new_per_commit(args: argparse.Namespace) -> None:
+    """Create the changelist on the first commit since the base, then update it once per later commit."""
     workspace_dir = args.workspace_dir
+    if args.no_edit:
+        raise CommandError('--no-edit opens no files, so the steps of --per-commit can\'t add their commits to the '
+                           'changelist. Leave out --no-edit.')
+    if args.no_alias:
+        raise CommandError('--per-commit names the changelist by its alias in the steps after the first. '
+                           'Leave out --no-alias.')
 
     log.heading(f'Checking alias "{args.alias}"')
     check_alias_usable(args.alias, workspace_dir, args.force)
@@ -93,6 +103,5 @@ def review_command(args: argparse.Namespace) -> int:
 
     first, rest = _steps(args)
     run_per_commit(first, rest, args.base_branch, workspace_dir, args.backend,
-                   sleep=SWARM_SHELF_DELAY, dry_run=args.dry_run,
+                   sleep=SWARM_SHELF_DELAY if args.review or args.shelve else None, dry_run=args.dry_run,
                    message=args.message, message_file=args.file, resumable=resumable, base_name=base_name)
-    return 0

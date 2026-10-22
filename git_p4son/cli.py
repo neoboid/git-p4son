@@ -9,7 +9,7 @@ from . import __version__, jj
 from .backend import BACKENDS, alias_for_branch, open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
-from .new import new_command, review_command
+from .new import new_command
 from .update import update_command
 from .list_changes import list_changes_command
 from .alias import (
@@ -61,7 +61,7 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_new_args(parser: argparse.ArgumentParser) -> None:
-    """Add new's changelist arguments."""
+    """Add the arguments new and review share."""
     _add_message_args(
         parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
@@ -300,6 +300,14 @@ Examples:
         action='store_true',
         help='Add #review keyword and shelve to create a Swarm review'
     )
+    new_parser.add_argument(
+        '--per-commit',
+        action='store_true',
+        help='Create the changelist on the first commit since the base branch, '
+             'then update it once per later commit, oldest first, with each '
+             'commit checked out in turn. With --shelve or --review each commit '
+             'gets a shelf of its own'
+    )
 
     update_parser = subparsers.add_parser(
         'update',
@@ -433,35 +441,17 @@ Examples:
         'review',
         help='Create a Swarm review, one shelf per commit',
         description='Create a Swarm review from the commits since the base '
-        'branch, oldest first: check out the first and run git p4son new '
-        '--review on it, then check out each later one and run git p4son '
-        'update --shelve, before returning to where you started.'
+        'branch, oldest first, as git p4son new --review --per-commit does: '
+        'check out the first and run git p4son new --review on it, then check '
+        'out each later one and run git p4son update --shelve, before '
+        'returning to where you started.'
     )
     review_parser.set_defaults(
-        func=review_command, new_alias=True, needs_clean=lambda args: True)
-    _add_branch_keyword_arg(review_parser, 'alias',
-                            'Alias name for the new changelist')
-    _add_message_args(
-        review_parser,
-        'Changelist description message. Defaults to the HEAD commit subject, '
-        'or with the jj backend the jj change description',
-        'Read the changelist description message from the given file',
-        from_head=True)
-    _add_base_branch(
-        review_parser, 'The base the change starts from, to find commits since')
-    review_parser.add_argument(
-        '-f', '--force',
-        action='store_true',
-        help='Overwrite an existing alias'
-    )
+        func=new_command, new_alias=True, needs_clean=_needs_clean_to_edit,
+        review=True, per_commit=True, shelve=False, no_alias=False, no_edit=False)
+    _add_new_args(review_parser)
     _add_dry_run(
         review_parser, 'Print the steps, one per commit, without running them')
-    review_parser.add_argument(
-        '--no-commit-list',
-        action='store_true',
-        help='Leave the enumerated commit list out of the changelist description. '
-             'Passed on to new and each update step'
-    )
 
     writable_parser = subparsers.add_parser(
         'writable',
@@ -654,7 +644,7 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
 def _needs_clean_to_edit(args: argparse.Namespace) -> bool:
     """Unless --no-edit, as opening and reverting files relies on every tracked file matching the change."""
     # --per-commit checks out each commit, which git would carry changes into.
-    return not args.no_edit or getattr(args, 'per_commit', False)
+    return not args.no_edit or args.per_commit
 
 
 def check_clean_workspace(args: argparse.Namespace) -> None:

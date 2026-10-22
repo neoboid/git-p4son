@@ -283,7 +283,7 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     log.success(f'{plural(count, "file")} would be reverted' if dry_run
                 else f'{plural(count, "file")} reverted')
 
-    if not dry_run and is_writable_mode(workspace_dir):
+    if count and not dry_run and is_writable_mode(workspace_dir):
         log.heading('Making reverted tracked files writable (writable mode)')
         # p4 revert leaves files read-only; the still opened ones are writable already.
         changed = restore_writable(revert_if_unchanged + stale_deletes,

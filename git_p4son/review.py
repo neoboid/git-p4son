@@ -21,7 +21,9 @@ def review_command(args: argparse.Namespace) -> int:
     log.heading(f'Checking alias "{args.alias}"')
     check_alias_usable(args.alias, workspace_dir, args.force)
     log.success(f'Alias "{args.alias}" is usable')
+    log.heading(f'Resolving base {args.base_given}')
     base_name = args.backend.base_name(args.base_given)
+    log.success(base_name)
 
     aliases_before = dict(list_changelist_aliases(workspace_dir))
 

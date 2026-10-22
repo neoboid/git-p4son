@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `review` resolves the base's name under a heading of its own, and `new` under `Creating changelist`
 - Writable mode's section after reverting unchanged files only shows when files were reverted
 - On jj, the workspace check is one section again, closed once both of its checks pass
 - `new`, `update` and `review` check the workspace once, before anything else, rather than up to twice per command

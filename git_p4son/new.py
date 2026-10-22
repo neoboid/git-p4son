@@ -15,14 +15,13 @@ def new_command(args: argparse.Namespace) -> int:
     revision = args.backend.revision
 
     change = args.backend.change_id()
-    base = None
     if args.alias:
         check_alias_usable(args.alias, workspace_dir, args.force)
         _check_one_alias_per_change(
             args.alias, change, workspace_dir, args.force)
-        base = args.backend.base_name(args.base_given)
 
     log.heading('Creating changelist')
+    base = args.backend.base_name(args.base_given) if args.alias else None
     changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
         commit_list=not args.no_commit_list, review=args.review,

@@ -151,10 +151,23 @@ class TestCreateParser(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(['alias', 'delete', 'x', '--all'])
 
-    def test_update_per_commit(self):
-        self.assertFalse(self.parser.parse_args(['update']).per_commit)
-        self.assertTrue(self.parser.parse_args(
-            ['update', '--per-commit']).per_commit)
+    def test_per_commit(self):
+        for argv in (['update'], ['new', '-b', 'main']):
+            with self.subTest(argv=argv):
+                self.assertFalse(self.parser.parse_args(argv).per_commit)
+                self.assertTrue(self.parser.parse_args(
+                    [*argv, '--per-commit']).per_commit)
+
+    def test_review_is_new_review_per_commit(self):
+        args = self.parser.parse_args(['review', '-b', 'main'])
+        self.assertEqual((args.review, args.per_commit, args.shelve, args.no_alias, args.no_edit),
+                         (True, True, False, False, False))
+
+    def test_review_sets_every_argument_new_has(self):
+        """new_command reads them all, so one review left out would fail at runtime."""
+        new = vars(self.parser.parse_args(['new', '-b', 'main']))
+        review = vars(self.parser.parse_args(['review', '-b', 'main']))
+        self.assertLessEqual(new.keys() - {'command'}, review.keys())
 
     def test_message_and_file_are_exclusive(self):
         for command in ('new', 'update', 'review'):
@@ -248,7 +261,7 @@ class TestCleanCheckDefault(unittest.TestCase):
 
     def test_commands_that_open_files_need_a_clean_workspace(self):
         for argv in (['new', '-b', 'main'], ['update'], ['update', '--no-edit', '--per-commit'],
-                     ['review', '-b', 'main']):
+                     ['new', '-b', 'main', '--no-edit', '--per-commit'], ['review', '-b', 'main']):
             with self.subTest(argv=argv):
                 self.assertTrue(self.needs_clean(argv))
 
@@ -357,13 +370,13 @@ class TestRunCommand(unittest.TestCase):
 
     @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Review change')
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
-    @mock.patch('git_p4son.cli.review_command', return_value=0)
-    def test_review_defaults_message_from_head(self, mock_review, _branch, _head, _ws):
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
+    def test_review_defaults_message_from_head(self, mock_new, _branch, _head, _ws):
         parser = create_parser()
         args = parser.parse_args(['review', '-b', 'main'])
         result = run_command(args)
         self.assertEqual(args.message, 'Review change')
-        mock_review.assert_called_once_with(args)
+        mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.git_backend.get_head_subject', return_value='Add feature')
@@ -445,14 +458,14 @@ class TestBranchKeyword(unittest.TestCase):
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')
     @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
-    @mock.patch('git_p4son.cli.review_command', return_value=0)
+    @mock.patch('git_p4son.cli.new_command', return_value=0)
     def test_run_command_resolves_at_branch_for_review(
-            self, mock_review, _ws, _branch):
+            self, mock_new, _ws, _branch):
         args = create_parser().parse_args(
             ['review', '-b', 'main', '-m', 'msg'])
         result = run_command(args)
         self.assertEqual(args.alias, 'feat-bar')
-        mock_review.assert_called_once_with(args)
+        mock_new.assert_called_once_with(args)
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/bar')

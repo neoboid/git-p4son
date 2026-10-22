@@ -476,7 +476,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 
 ```sh
 git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
-              [--no-alias] [--no-commit-list] [--shelve] [--review]
+              [--no-alias] [--no-commit-list] [--shelve] [--review] [--per-commit]
 ```
 
 **Arguments:**
@@ -498,6 +498,15 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
 - `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
 - `--review`: Add `#review` keyword and shelve to create a Swarm review
+- `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
+  commit, as described below. Refuses `--no-edit` and `--no-alias`
+
+With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
+checks out each later commit and runs `git p4son update` on it, and finally returns to where you started. With
+`--shelve` or `--review`, every step shelves, so each commit shows up as its own patch in the Swarm review, and every
+step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf. It needs a clean git
+workspace even with `--dry-run`. [`review`](#review-command) is `new --review --per-commit`, and describes the steps,
+the dry run and resuming after a failed step.
 
 **Examples:**
 ```sh
@@ -505,6 +514,7 @@ git p4son new -m "Add feature" -b main
 git p4son new -m "Fix bug" myalias -b main
 git p4son new -m "Fix bug" --no-alias -b HEAD~1
 git p4son new -m "New feature" --review -b main
+git p4son new -m "New feature" --shelve --per-commit -b main   # a shelf per commit, without a Swarm review
 ```
 
 ### Update Command
@@ -549,10 +559,10 @@ no alias holds: the commits since the base branch, `HEAD~1` by default, replace 
 commit list (matched by subject) and new ones are appended; entries outside the range are kept and the list is
 renumbered.
 
-With `--per-commit`, `update` runs once per commit instead of once for the whole range, the way `review` does after
-creating the changelist. It checks out each commit in turn, oldest first, runs the update on it, and returns to
-where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as its own patch in the
-Swarm review.
+With `--per-commit`, `update` runs once per commit instead of once for the whole range, the way `new --per-commit`
+and `review` do after creating the changelist. It checks out each commit in turn, oldest first, runs the update on
+it, and returns to where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as its
+own patch in the Swarm review.
 
 - **With a record,** plain `update --per-commit --shelve` runs on exactly the commits the changelist doesn't include
   yet. `-b` is refused there, as it would shelve included commits again.
@@ -623,11 +633,13 @@ are left out of it.
 
 ### Review Command
 
-Create a Swarm review with one shelf per commit. `review` checks out the first commit since the base branch and runs
-`git p4son new --review` on it, then checks out each later commit and runs `git p4son update --shelve`, and finally
-returns to where you started. Every step but the last sleeps 5 seconds to give Perforce/Swarm time to process the
-shelf. The commits are reviewed where they are: to review them on top of the latest `main`, rebase first. Like
-`new`, it needs a clean git workspace, untracked files included, and checks it even with `--dry-run`.
+Create a Swarm review with one shelf per commit. `review` is short for `git p4son new --review --per-commit`, taking the
+same arguments apart from `--review`, `--per-commit`, `--shelve`, `--no-edit` and `--no-alias`. It checks out the first
+commit since the base branch and runs `git p4son new --review` on it, then checks out each later commit and runs
+`git p4son update --shelve`, and finally returns to where you started. Every step but the last sleeps 5 seconds to give
+Perforce/Swarm time to process the shelf. The commits are reviewed where they are: to review them on top of the latest
+`main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks it even with
+`--dry-run`.
 
 ```sh
 git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
@@ -1098,9 +1110,9 @@ Hooks must not run ordinary jj commands, which would wait for the lock their cal
 as `jj --at-op=@ log` avoid snapshotting and the git import. A hook that runs git-p4son itself needs
 `--backend git`, which reuses the caller's lock.
 
-`review` and `update --per-commit` run once per commit since the base, up to the jj change, as they do in git.
-Under jj's lock, each step puts its commit's files on disk with git, and the working change's files go back at the
-end, also when a step fails, so jj sees no change. No jj command runs, and untracked and ignored files are left
+`review`, `new --per-commit` and `update --per-commit` run once per commit since the base, up to the jj change, as they
+do in git. Under jj's lock, each step puts its commit's files on disk with git, and the working change's files go back
+at the end, also when a step fails, so jj sees no change. No jj command runs, and untracked and ignored files are left
 alone. They refuse to start if files changed after jj's snapshot, as the checkouts would overwrite them:
 
 ```sh

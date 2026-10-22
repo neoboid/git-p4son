@@ -30,9 +30,9 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   hand when needed (see "Binary assets in a review").
 - **Never submit.** git-p4son has no submit command on purpose: submitting is left to the user, usually in P4V.
 - **Keep the workspace clean.** `sync`, `new`, `update` and `review` refuse to run with uncommitted changes,
-  untracked files included (`new` and `update` don't check with `--no-edit`). `review` checks even on a dry run;
-  `sync --dry-run` does not, so a clean dry run doesn't mean the sync will start. Commit or stash first, and keep
-  scratch files, like a description file, outside the workspace.
+  untracked files included (`new` and `update` don't check with `--no-edit`). `review` and the other `--per-commit`
+  runs check even on a dry run; `sync --dry-run` does not, so a clean dry run doesn't mean the sync will start.
+  Commit or stash first, and keep scratch files, like a description file, outside the workspace.
 - **Preview first.** `sync`, `new`, `update` and `review` take `-n/--dry-run`, which prints what would happen without
   touching Perforce or git.
 - **Avoid the interactive commands.** `init` and `alias clean` prompt for answers. Setup is the user's job, and
@@ -157,6 +157,7 @@ the branch it started from, unless it merged local changes back: then it stays o
 The usual way to put a branch up for review is `review`. It checks out the branch's commits one at a time, oldest
 first, creates or updates the CL on each and shelves it, then returns to the branch. Each shelf becomes a patch in
 the Swarm review, so every git commit shows up as its own patch and reviewers can step through the commits in order.
+`review` is short for `new --review --per-commit`.
 
 1. Write the CL description to a file outside the workspace: the title on the first line, then a short description
    of the change. Everything above `Changes included:` is yours, and `update` keeps it; git-p4son writes the commit

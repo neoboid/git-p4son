@@ -88,7 +88,9 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
   (the branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
   reverts the files no longer part of them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves;
-  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given.
+  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds
+  the changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
+  `update <alias>` on the others, both shelving with `--shelve` or `--review`.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
   in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
@@ -101,8 +103,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   and what it appends. `catch_up_subject` says whether a base moved since the last shelve needs an empty catch-up
   commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
 
-- **`review`** - `review_command` in `new.py`: one Swarm review built commit by commit through `run_per_commit`,
-  running `new <alias> --review` on the first commit and `update <alias> --shelve` on the others.
+- **`review`** - Has no module: its parser runs `new_command` as `new --review --per-commit`.
 
 - **`list_changes.py`** - The `list-changes` command: prints the numbered commit subjects since a base branch.
 
@@ -134,12 +135,11 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   writable files p4 refused or overwrote.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
-  that commit checked out through the backend, for `review` and `update --per-commit`. The steps skip `run_command`, so
-  its clean check runs once, before them. A step's arguments are parsed
-  with the real parser just before it runs, with the base resolved once to a SHA. It returns to where it started, also
-  when a step fails, ends the error with the command that resumes after the last commit that worked, and sleeps
-  `SWARM_SHELF_DELAY` between shelving steps. `base_name`, the base's name, goes to every step, as the steps get the
-  base as a commit.
+  that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
+  `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
+  before it runs, with the base resolved once to a SHA. It returns to where it started, also when a step fails, ends
+  the error with the command that resumes after the last commit that worked, and sleeps `SWARM_SHELF_DELAY` between
+  shelving steps. `base_name`, the base's name, goes to every step, as the steps get the base as a commit.
 
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.

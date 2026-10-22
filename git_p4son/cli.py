@@ -61,6 +61,30 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
                         help='Skip opening changed files for edit in Perforce')
 
 
+def _add_new_args(parser: argparse.ArgumentParser) -> None:
+    """Add new's changelist arguments."""
+    _add_message_args(
+        parser,
+        'Changelist description message. Defaults to the HEAD commit subject, '
+        'or with the jj backend the jj change description',
+        'Read the changelist description message from the given file',
+        from_head=True)
+    parser.add_argument(
+        '--no-commit-list',
+        action='store_true',
+        help='Leave the enumerated commit list out of the changelist description'
+    )
+    _add_base_branch(
+        parser, 'The base the change starts from, for enumerating commits and finding changed files')
+    _add_branch_keyword_arg(parser, 'alias',
+                            'Alias name to save the new changelist number under')
+    parser.add_argument(
+        '-f', '--force',
+        action='store_true',
+        help='Overwrite an existing alias'
+    )
+
+
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
                       file_help: str, from_head: bool = False) -> None:
     """Add -m/--message and -F/--file; with from_head, run_command defaults to the HEAD subject."""
@@ -258,26 +282,7 @@ Examples:
     )
     new_parser.set_defaults(func=new_command, new_alias=True,
                             needs_clean=_needs_clean_to_edit)
-    _add_message_args(
-        new_parser,
-        'Changelist description message. Defaults to the HEAD commit subject, '
-        'or with the jj backend the jj change description',
-        'Read the changelist description message from the given file',
-        from_head=True)
-    new_parser.add_argument(
-        '--no-commit-list',
-        action='store_true',
-        help='Leave the enumerated commit list out of the changelist description'
-    )
-    _add_base_branch(
-        new_parser, 'The base the change starts from, for enumerating commits and finding changed files')
-    _add_branch_keyword_arg(new_parser, 'alias',
-                            'Alias name to save the new changelist number under')
-    new_parser.add_argument(
-        '-f', '--force',
-        action='store_true',
-        help='Overwrite an existing alias'
-    )
+    _add_new_args(new_parser)
     new_parser.add_argument(
         '--no-alias',
         action='store_true',

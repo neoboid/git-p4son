@@ -903,6 +903,14 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         with open(os.path.join(self.ws, 'c.txt')) as f:
             self.assertEqual(f.read(), 'content')
 
+    def test_writable_mode_has_no_section_when_nothing_was_reverted(self):
+        """p4 made no file read-only."""
+        self.mocks['writable_mode'].return_value = True
+        self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
+        revert_unchanged_files('100', self.ws, dry_run=False)
+        self.assertNotIn('writable mode', self.out.getvalue())
+        self.mocks['make_writable'].assert_not_called()
+
     def test_writable_mode_off_leaves_permissions(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
         revert_unchanged_files('100', self.ws, dry_run=False)

@@ -73,6 +73,8 @@ class TestReview(P4RepoTestCase):
 
     def test_dry_run_prints_the_steps(self):
         out = self.review('--dry-run', '-m', 'Line one\nLine two')
+        self.assertRegex(
+            out, r'# Resolving base main\n(>  .*\n)*\[ok\] main\n')
         self.assertIn('Change a: git p4son new my-feature --review', out)
         self.assertIn(
             'Replace b with c: git p4son update my-feature --shelve', out)

@@ -84,6 +84,11 @@ class TestNew(NewTestCase):
 
 
 class TestNewCleanWorkspace(NewTestCase):
+    def test_the_base_s_name_is_resolved_under_creating_the_changelist(self):
+        out = self.new('--no-edit')
+        self.assertLess(out.index('# Creating changelist'),
+                        out.index('refs/heads/main'))
+
     def test_refuses_a_dirty_workspace_before_creating(self):
         self.edit('a.txt', 'dirty\n')
         for argv in ([], ['--dry-run']):

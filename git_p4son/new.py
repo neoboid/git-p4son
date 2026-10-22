@@ -1,12 +1,19 @@
 """New command: creates a Perforce changelist from the git change."""
 
 import argparse
-from .changelist_store import alias_for_change, check_alias_usable, load_changelist_alias, save_changelist_alias
+from .changelist_store import (
+    alias_for_change,
+    check_alias_usable,
+    list_changelist_aliases,
+    load_changelist_alias,
+    save_changelist_alias,
+)
 from .common import CommandError
 from .git import resolve_commit
 from .included import new_record
 from .lib import create_changelist, edit_and_shelve
 from .log import log
+from .per_commit import SWARM_SHELF_DELAY, run_per_commit
 
 
 def new_command(args: argparse.Namespace) -> int:
@@ -53,3 +60,39 @@ def _check_one_alias_per_change(alias: str, change: str | None, workspace_dir: s
     changelist = load_changelist_alias(name, workspace_dir)
     raise CommandError(f'Alias "{name}" already records this jj change, for CL {changelist}. Run '
                        f'"git p4son update {name}" to update it, or pass --force to move the record to "{alias}".')
+
+
+def _steps(args: argparse.Namespace) -> tuple[list[str], list[str]]:
+    """The new step for the first commit and the update step for the others."""
+    commit_list = ['--no-commit-list'] if args.no_commit_list else []
+    force = ['--force'] if args.force else []
+    return (['new', args.alias, '--review', *force, *commit_list],
+            ['update', args.alias, '--shelve', *commit_list])
+
+
+def review_command(args: argparse.Namespace) -> int:
+    """Execute the review command."""
+    workspace_dir = args.workspace_dir
+
+    log.heading(f'Checking alias "{args.alias}"')
+    check_alias_usable(args.alias, workspace_dir, args.force)
+    log.success(f'Alias "{args.alias}" is usable')
+    log.heading(f'Resolving base {args.base_given}')
+    base_name = args.backend.base_name(args.base_given)
+    log.success(base_name)
+
+    aliases_before = dict(list_changelist_aliases(workspace_dir))
+
+    def resumable() -> str | None:
+        # Once the first step has saved the alias, its changelist exists.
+        changelist = dict(list_changelist_aliases(
+            workspace_dir)).get(args.alias)
+        if changelist is None or changelist == aliases_before.get(args.alias):
+            return None
+        return f'CL {changelist} exists.'
+
+    first, rest = _steps(args)
+    run_per_commit(first, rest, args.base_branch, workspace_dir, args.backend,
+                   sleep=SWARM_SHELF_DELAY, dry_run=args.dry_run,
+                   message=args.message, message_file=args.file, resumable=resumable, base_name=base_name)
+    return 0

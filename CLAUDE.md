@@ -101,7 +101,7 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
   and what it appends. `catch_up_subject` says whether a base moved since the last shelve needs an empty catch-up
   commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
 
-- **`review.py`** - The `review` command: one Swarm review built commit by commit through `run_per_commit`,
+- **`review`** - `review_command` in `new.py`: one Swarm review built commit by commit through `run_per_commit`,
   running `new <alias> --review` on the first commit and `update <alias> --shelve` on the others.
 
 - **`list_changes.py`** - The `list-changes` command: prints the numbered commit subjects since a base branch.

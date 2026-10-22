@@ -9,7 +9,7 @@ from . import __version__, jj
 from .backend import BACKENDS, alias_for_branch, open_backend
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
-from .new import new_command
+from .new import new_command, review_command
 from .update import update_command
 from .list_changes import list_changes_command
 from .alias import (
@@ -20,7 +20,6 @@ from .alias import (
     alias_show_command,
 )
 from .init import init_command
-from .review import review_command
 from .common import CommandError, RunError
 from .git import get_workspace_dir
 from .log import log

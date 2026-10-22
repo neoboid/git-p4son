@@ -282,8 +282,8 @@ class TestUpdatePerCommit(UpdateTestCase):
 
     def test_dry_run_prints_the_steps(self):
         out = self.update('--dry-run')
-        self.assertIn('Change a: git p4son update 101', out)
-        self.assertIn('Replace b with c: git p4son update 101', out)
+        self.assertRegex(out, r'Step 1 of 2: \w+ Change a\nStep 2 of 2: \w+ Replace b with c\n'
+                         r'\[ok\] Would run 2 steps, git p4son update 101\n')
         self.assertEqual(self.p4.calls, [])
 
 

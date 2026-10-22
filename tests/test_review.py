@@ -75,10 +75,11 @@ class TestReview(P4RepoTestCase):
         out = self.review('--dry-run', '-m', 'Line one\nLine two')
         self.assertRegex(
             out, r'# Resolving base main\n(>  .*\n)*\[ok\] main\n')
-        self.assertIn('Change a: git p4son new my-feature --review', out)
-        self.assertIn(
-            'Replace b with c: git p4son update my-feature --shelve', out)
-        self.assertIn('Line one\nLine two', out)
+        self.assertIn('# Changelist description\nLine one\nLine two\n'
+                      '[ok] For step 1, git p4son new my-feature --review\n', out)
+        self.assertRegex(out, r'Step 1 of 2: \w+ Change a\nStep 2 of 2: \w+ Replace b with c\n'
+                         r'\[ok\] Would run 2 steps, git p4son new my-feature --review, then git p4son update '
+                         r'my-feature --shelve\n')
         self.assertEqual(self.p4.pending, {})
 
     def test_no_commits(self):

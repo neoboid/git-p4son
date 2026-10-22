@@ -2,6 +2,7 @@
 
 import shlex
 import unittest
+from unittest import mock
 
 from git_p4son.changelist_store import (
     find_record,
@@ -11,6 +12,7 @@ from git_p4son.changelist_store import (
 )
 from git_p4son.common import CommandError
 from git_p4son.new import new_command, _steps
+from git_p4son.update import update_command
 from tests.helpers import cli_args, on_jj, P4RepoTestCase, recorded, start_patch
 
 
@@ -151,6 +153,15 @@ class TestNewAlias(NewTestCase):
         self.command_fails(new_command, ['new', 'bad alias!', '-m', 'Feature', '-b', 'main'],
                            message='Invalid alias name')
         self.assertEqual(self.p4.pending, {})
+
+    def test_a_failure_opening_the_files_leaves_the_commits_for_update(self):
+        start_patch(self, 'git_p4son.new.edit_and_shelve',
+                    side_effect=CommandError('p4 said no'))
+        self.new_fails('--shelve', message='p4 said no')
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+        record = recorded('101', self.ws)
+        self.assertEqual((record.base, record.base_commit,
+                         record.included), ('main', '', []))
 
     def test_no_alias(self):
         out = self.new('--no-alias', alias=None)
@@ -318,6 +329,17 @@ class TestNewPerCommitWithoutReview(PerCommitTestCase):
         first_commit = self.git('rev-parse', 'HEAD~1')
         self.new_fails(
             message=rf'resume with: git p4son update my-feature --per-commit -b {first_commit}$')
+
+    def test_the_hint_after_the_first_step_fails_past_creating_resumes(self):
+        """The record includes no commit until its files are opened, so the hinted update redoes the first."""
+        with mock.patch('git_p4son.new.edit_and_shelve', side_effect=CommandError('p4 said no')), \
+                self.assertRaises(CommandError) as raised:
+            self.run_command(new_command, self.argv('--shelve'))
+        hint = str(raised.exception).split('resume with: git p4son ')[1]
+        self.run_command(update_command, shlex.split(hint))
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(len(self.shelves()), 2)
+        self.assertEqual(len(recorded('101', self.ws).included), 2)
 
     def test_no_edit_is_refused_before_creating(self):
         self.new_fails('--no-edit', message='--no-edit')

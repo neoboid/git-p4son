@@ -1,12 +1,14 @@
 """New command: creates a Perforce changelist from the git change, at once or commit by commit."""
 
 import argparse
+from dataclasses import replace
 from .changelist_store import (
     alias_for_change,
     check_alias_usable,
     list_changelist_aliases,
     load_changelist_alias,
     save_changelist_alias,
+    update_record,
 )
 from .common import CommandError
 from .git import resolve_commit
@@ -38,6 +40,7 @@ def new_command(args: argparse.Namespace) -> int:
         revision=revision)
 
     alias_note = f' (alias={args.alias})' if args.alias else ''
+    record = None
     if args.dry_run:
         log.success(
             f'Would create a changelist with this description{alias_note}')
@@ -45,13 +48,15 @@ def new_command(args: argparse.Namespace) -> int:
         if args.alias and base is not None:
             record = new_record(base, resolve_commit(args.base_branch, workspace_dir), revision,
                                 args.shelve or args.review, args.backend, workspace_dir)
-            save_changelist_alias(args.alias, changelist, workspace_dir,
-                                  force=args.force, change=change, record=record)
+            save_changelist_alias(args.alias, changelist, workspace_dir, force=args.force, change=change,
+                                  record=replace(record, base_commit='', included=[]))
         log.success(f'Created CL {changelist}{alias_note}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve or args.review,
                     dry_run=args.dry_run, revision=revision)
+    if record is not None:
+        update_record(args.alias, record, workspace_dir)
     return 0
 
 

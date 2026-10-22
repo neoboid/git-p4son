@@ -5,6 +5,8 @@
 - `new --per-commit` creates the changelist on the first commit since the base, then updates it once per later
   commit, as `update --per-commit` does, each step shelving with `--shelve` or `--review`. `review` is now short for
   `new --review --per-commit`
+- When `new` or `review` fails opening or shelving the files after creating the changelist, its alias records no
+  commit as included yet, so the `update` that the error names to resume with is no longer refused
 - `review -n` and `update --per-commit -n` show the changelist description in a section of its own and list the steps
   as the real run heads them, ending with the commands they would run
 - `review` resolves the base's name under a heading of its own, and `new` under `Creating changelist`

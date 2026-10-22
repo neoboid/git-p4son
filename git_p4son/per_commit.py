@@ -32,6 +32,11 @@ def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
     return args
 
 
+def _title(name: str, label: str) -> str:
+    """A step's heading, which the dry run's plan lists too."""
+    return f'Step {name}: {label}'
+
+
 def message_args(message: str | None, message_file: str | None) -> list[str]:
     """The arguments that give a command line the message, from its file if it came from one."""
     if message is None:
@@ -71,24 +76,27 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
         raise CommandError(f'No commits found since {base_branch}')
     log.success(f'{plural(len(commits), "commit")} since {base_branch}')
 
+    total = plural(len(commits), 'step')
     steps = [first] + [rest] * (len(commits) - 1)
+    names = [(f'{number} of {len(commits)}', f'{commit[:7]} {subject}')
+             for number, (commit, subject) in enumerate(commits, 1)]
+    ran = ', then '.join(f'git p4son {shlex.join(step)}' for step in (
+        [first] if rest == first else steps[:2]))
     if dry_run:
-        log.heading('Planning steps')
-        for (commit, subject), step in zip(commits, steps):
-            log.info(
-                f'{commit[:7]} {subject}: git p4son {shlex.join([*step, "-b", base])}')
         if message is not None:
-            log.info('Message for the first step:')
+            log.heading('Changelist description')
             log.info(message)
-        log.success(f'Would run {plural(len(steps), "step")}')
+            log.success(f'For step 1, git p4son {shlex.join(first)}')
+        log.heading(f'Planning {total}')
+        for name, label in names:
+            log.info(_title(name, label))
+        log.success(f'Would run {total}, {ran}')
         return
 
     resume_after = base
     with contextlib.ExitStack() as stack:
-        for number, ((commit, subject), step) in enumerate(zip(commits, steps), 1):
-            name = f'{number} of {len(steps)}'
-            label = f'{commit[:7]} {subject}'
-            log.heading(f'Step {name}: {label}')
+        for number, ((commit, _), step, (name, label)) in enumerate(zip(commits, steps, names), 1):
+            log.heading(_title(name, label))
             if number == 1:
                 # Entered here, so finding where to return reads as part of the first checkout.
                 checkout = stack.enter_context(backend.checkouts())
@@ -111,6 +119,4 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                 log.heading(f'Sleeping for {sleep} seconds')
                 time.sleep(sleep)
                 log.success(f'Slept {sleep} seconds')
-    ran = [first] if rest == first else steps[:2]
-    log.success(f'Ran {plural(len(steps), "step")}, '
-                + ', then '.join(f'git p4son {shlex.join(step)}' for step in ran))
+    log.success(f'Ran {total}, {ran}')

@@ -148,12 +148,13 @@ class TestRunPerCommit(GitRepoTestCase):
 
     def test_dry_run_prints_the_plan_without_checking_out(self):
         out = self.run_steps(dry_run=True, message='Line one\nLine two')
-        main = self.git('rev-parse', 'main')
+        first, second = (self.git('log', '-1', '--format=%h %s', commit)
+                         for commit in ('HEAD~1', 'HEAD'))
         self.assertEqual(self.ran, [])
-        for line in (f'First commit: git p4son update first -b {main}\n',
-                     f'Second commit: git p4son update rest -b {main}\n'):
-            self.assertIn(line, out)
-        self.assertIn('Line one\nLine two', out)
+        self.assertIn(
+            '# Changelist description\nLine one\nLine two\n[ok] For step 1, git p4son update first\n', out)
+        self.assertIn(f'# Planning 2 steps\nStep 1 of 2: {first}\nStep 2 of 2: {second}\n'
+                      '[ok] Would run 2 steps, git p4son update first, then git p4son update rest\n', out)
         self.assert_at('feature', self.feature_head)
 
     def test_no_commits(self):

@@ -145,6 +145,10 @@ the branch it started from, unless it merged local changes back: then it stays o
   `sync-split-users add` only when the user asks for that.
 - If the workspace was synced by another tool, run `git p4son sync <that CL>` so git records the same state before
   you branch.
+- Every sync first re-syncs to the last synced CL, so Perforce's have revisions match the files git has on disk
+  before it syncs forward. When the two disagree, for example after `p4 revert -k` left older content on disk than
+  the revision Perforce says you have, a plain `sync` fixes it: don't force-sync or flush files by hand.
+  `sync last-synced` runs only that first step.
 - A sync can take a long time on a big workspace. Allow for it rather than giving up early.
 - If the user has listed blocking processes in `.git-p4son/config.toml` (`[sync] blocking-processes`), `sync`
   refuses to start while one of them, such as the Unreal editor, is running. Ask the user to close it. The error

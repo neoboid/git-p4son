@@ -259,7 +259,7 @@ class TestNewPerCommit(PerCommitTestCase):
     def test_dry_run_prints_the_steps(self):
         out = self.new('--dry-run', '-m', 'Line one\nLine two')
         self.assertRegex(
-            out, r'# Resolving base main\n(>  .*\n)*\[ok\] main\n')
+            out, r'# Resolving base name from main\n(>  .*\n)*\[ok\] main\n')
         self.assertIn('# Changelist description\nLine one\nLine two\n'
                       '[ok] For step 1, git p4son new my-feature --review\n', out)
         self.assertRegex(out, r'Step 1 of 2: \w+ Change a\nStep 2 of 2: \w+ Replace b with c\n'

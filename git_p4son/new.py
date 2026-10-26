@@ -92,7 +92,7 @@ def _new_per_commit(args: argparse.Namespace) -> None:
     log.heading(f'Checking alias "{args.alias}"')
     check_alias_usable(args.alias, workspace_dir, args.force)
     log.success(f'Alias "{args.alias}" is usable')
-    log.heading(f'Resolving base {args.base_given}')
+    log.heading(f'Resolving base name from {args.base_given}')
     base_name = args.backend.base_name(args.base_given)
     log.success(base_name)
 

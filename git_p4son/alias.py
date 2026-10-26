@@ -30,6 +30,7 @@ def _print_aliases(aliases: list[tuple[str, str]], workspace_dir: str, backend: 
 
 def alias_list_command(args: argparse.Namespace) -> int:
     """Execute the 'alias list' command."""
+    log.heading('Listing aliases')
     aliases = list_changelist_aliases(args.workspace_dir)
     if not aliases:
         log.info('No aliases defined')
@@ -51,6 +52,7 @@ def alias_new_command(args: argparse.Namespace) -> int:
     if not args.changelist.isdigit():
         raise CommandError(f'Invalid changelist number: {args.changelist}')
 
+    log.heading(f'Saving alias {args.alias}')
     save_changelist_alias(args.alias, args.changelist, workspace_dir,
                           force=args.force)
     log.success(f'{args.alias} -> CL {args.changelist}')
@@ -62,6 +64,7 @@ def alias_delete_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
 
     if args.all:
+        log.heading('Deleting all aliases')
         aliases = list_changelist_aliases(workspace_dir)
         if not aliases:
             log.success('No changelist aliases to delete')
@@ -69,6 +72,7 @@ def alias_delete_command(args: argparse.Namespace) -> int:
         _clean_all(aliases, workspace_dir)
         return 0
 
+    log.heading(f'Deleting alias {args.alias}')
     delete_changelist_alias(args.alias, workspace_dir)
     log.success(f'Deleted alias "{args.alias}"')
     return 0
@@ -115,6 +119,7 @@ def _clean_interactive(aliases: list[tuple[str, str]],
 
 def alias_clean_command(args: argparse.Namespace) -> int:
     """Execute the 'alias clean' command."""
+    log.heading('Cleaning aliases')
     workspace_dir = args.workspace_dir
 
     moved = migrate_changelist_aliases(workspace_dir)

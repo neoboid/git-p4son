@@ -439,6 +439,13 @@ class TestRunCommand(unittest.TestCase):
         self.assertEqual(result, 0)
 
     @mock.patch('git_p4son.cli.list_changes_command', return_value=0)
+    def test_resolves_the_base_under_a_heading(self, _lc, _ws):
+        for argv, base in ((['list-changes'], 'HEAD~1'), (['list-changes', '-b', 'main'], 'main')):
+            with self.subTest(argv=argv), captured_output() as out:
+                run_command(create_parser().parse_args(argv))
+            self.assertIn(f'# Resolving base\n[ok] {base}\n', out.getvalue())
+
+    @mock.patch('git_p4son.cli.list_changes_command', return_value=0)
     def test_dispatches_list_changes(self, mock_lc, _ws):
         parser = create_parser()
         args = parser.parse_args(['list-changes'])

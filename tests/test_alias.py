@@ -165,7 +165,9 @@ class TestAliasNewAndList(WorkspaceTestCase):
         with captured_output() as out:
             alias_list_command(
                 cli_args(['alias', 'list'], workspace_dir=self.ws))
-        return out.getvalue().splitlines()
+        heading, *lines = out.getvalue().lstrip('\n').splitlines()
+        self.assertEqual(heading, '# Listing aliases')
+        return lines
 
     def test_new_aliases_are_listed_in_name_order(self):
         self.assertEqual(self._new('200', 'feature-b'), 0)

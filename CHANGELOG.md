@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `new`, `update` and `list-changes` resolve `-b` under a `Resolving base` heading, closed by the base it resolved
+  to, and `new --per-commit` and `review` name the base under `Resolving base name from ...`
+- `list-changes`, `alias list`, `alias delete --all` and `alias clean` open with a heading of their own
+- `alias new` and `alias delete` head saving and deleting the alias
+- On jj, opening the workspace runs under an `Opening jj workspace` heading, closed by the change git-p4son works
+  on and the operation it pinned (`-v` showed only the operation before)
 - On jj, every command reads jj's operation once, under jj's lock, rather than twice
 - `new --per-commit` creates the changelist on the first commit since the base, then updates it once per later
   commit, as `update --per-commit` does, each step shelving with `--shelve` or `--review`. `review` is now short for

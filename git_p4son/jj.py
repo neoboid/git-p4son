@@ -521,6 +521,7 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
         with working_copy_lock(workspace_dir), _marked_as_locked(root, inherited):
             yield None
         return
+    log.heading('Opening jj workspace')
     _validate_version(workspace_dir)
     _validate_workspace(workspace_dir)
     # Check before snapshotting, so a busy workspace fails rather than waits.
@@ -531,14 +532,14 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
             workspace_dir, 'log', '-r', '@', '--no-graph', '-T', 'commit_id').stdout[0]
     with working_copy_lock(workspace_dir):
         workspace = Workspace.load(workspace_dir, '@')
-        if log.verbose_mode:
-            log.info(f'Pinned jj operation {workspace.operation}')
         workspace.check_line_endings()
         if snapshot:
             workspace.check_ignored()
         if snapshot and workspace.working.commit != snapshot_commit:
             raise CommandError(
                 'The jj working change changed while git-p4son took its lock. Run the command again.')
+        log.success(
+            f'Change {workspace.tip.change_id[:8]} at operation {workspace.operation[:12]}')
         with _marked_as_locked(root, inherited):
             yield workspace
     if snapshot:

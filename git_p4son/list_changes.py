@@ -8,6 +8,7 @@ from .log import log
 
 def list_changes_command(args: argparse.Namespace) -> int:
     """Execute the list-changes command."""
+    log.heading('Listing changes')
     subjects = get_commit_subjects_since(args.base_branch, args.workspace_dir,
                                          args.backend.revision)
     if subjects:

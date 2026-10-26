@@ -17,8 +17,8 @@ class TestListChangesCommand(unittest.TestCase):
         with captured_output() as out:
             self.assertEqual(list_changes_command(args), 0)
         mock_subjects.assert_called_once_with('main', '/ws', 'HEAD')
-        self.assertEqual(out.getvalue(),
-                         '1. Add feature\n2. Fix bug\n3. Update docs\n')
+        self.assertEqual(out.getvalue().lstrip('\n'),
+                         '# Listing changes\n1. Add feature\n2. Fix bug\n3. Update docs\n')
 
     @mock.patch('git_p4son.list_changes.get_commit_subjects_since')
     def test_no_changes(self, mock_subjects):
@@ -27,7 +27,8 @@ class TestListChangesCommand(unittest.TestCase):
                          backend=GitBackend('/ws'))
         with captured_output() as out:
             self.assertEqual(list_changes_command(args), 0)
-        self.assertEqual(out.getvalue(), '[ok] No changes found\n')
+        self.assertEqual(out.getvalue().lstrip('\n'),
+                         '# Listing changes\n[ok] No changes found\n')
 
 
 if __name__ == '__main__':

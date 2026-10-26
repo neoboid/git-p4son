@@ -17,7 +17,6 @@ from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from git_p4son.cli import create_parser, run_command
-from git_p4son.log import log
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
     requires_jj, run_jj, start_patch, WorkspaceTestCase,
@@ -758,10 +757,17 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.jj(
             'config', 'get', 'snapshot.auto-track'), '(all()) ~ root:Src/Thirdparty')
 
-    def test_verbose_logs_the_pinned_operation(self):
-        with mock.patch.object(log, 'verbose_mode', True):
-            out = self.p4son('list-changes', '-b', 'main')
-        self.assertRegex(out, r'Pinned jj operation [0-9a-f]{20,}')
+    def test_logs_the_change_and_pinned_operation(self):
+        out = self.p4son('list-changes', '-b', 'main')
+        self.assertIn('Opening jj workspace', out)
+        self.assertRegex(out, r'Change [a-z]{8} at operation [0-9a-f]{12}')
+
+    def test_resolves_the_base_under_a_heading_of_its_own(self):
+        out = self.p4son('list-changes', '-b', 'main')
+        heading = out.index('# Resolving base')
+        self.assertLess(heading, out.index(' log -r main '))
+        self.assertIn(
+            f'[ok] main -> {self.describe("main", "commit_id")}', out[heading:])
 
     def test_a_stray_file_becomes_a_change_sync_rebases(self):
         """jj snapshots a stray file into the working change, which sync then rebases onto the new sync commit."""

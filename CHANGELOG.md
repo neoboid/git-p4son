@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On git, a base that names no commit fails while resolving it, with `"nope" is not a commit`, rather than in
+  git's own error further on
 - `new`, `update` and `list-changes` resolve `-b` under a `Resolving base` heading, closed by the base it resolved
   to, and `new --per-commit` and `review` name the base under `Resolving base name from ...`
 - `list-changes`, `alias list`, `alias delete --all` and `alias clean` open with a heading of their own

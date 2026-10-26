@@ -3,6 +3,7 @@
 import unittest
 from unittest import mock
 
+from git_p4son.cli import create_parser, run_command
 from git_p4son.backend import completion_backend, open_backend, selected_backend
 from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError
@@ -11,10 +12,11 @@ from tests.helpers import captured_output, GitRepoTestCase
 
 
 class TestGitBackend(GitRepoTestCase):
-    """GitBackend in a repository with one commit on branch feat/x."""
+    """GitBackend in a repository with one commit on main and one on branch feat/x."""
 
     def build_workspace(self):
         super().build_workspace()
+        self.commit('Initial')
         self.git('switch', '-q', '-c', 'feat/x')
         self.commit('Add feature')
 
@@ -30,6 +32,20 @@ class TestGitBackend(GitRepoTestCase):
 
     def test_named_base_is_kept_as_given(self):
         self.assertEqual(self.backend.resolve_base('main'), 'main')
+
+    def test_unknown_base_is_refused(self):
+        with self.assertRaisesRegex(CommandError, '"nope" is not a commit'):
+            self.backend.resolve_base('nope')
+
+    def test_unknown_base_fails_under_its_heading(self):
+        with captured_output() as out, \
+                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
+                self.assertRaisesRegex(CommandError, '"nope" is not a commit'):
+            run_command(create_parser().parse_args(
+                ['list-changes', '-b', 'nope']))
+        _, heading, section = out.getvalue().partition('# Resolving base\n')
+        self.assertTrue(heading)
+        self.assertNotIn('[ok]', section)
 
     def test_suggested_alias_is_the_branch_with_slashes_replaced(self):
         self.assertEqual(self.backend.suggested_alias(), 'feat-x')

@@ -63,8 +63,10 @@ class GitBackend:
         self._sync: _Sync | None = None
 
     def resolve_base(self, base: str | None) -> str:
-        """The base as given, or HEAD~1."""
-        return DEFAULT_BASE if base is None else base
+        """The base as given, or HEAD~1; raise CommandError if it names no commit."""
+        base = DEFAULT_BASE if base is None else base
+        resolve_commit(base, self.workspace_dir)
+        return base
 
     def suggested_alias(self) -> str:
         """The alias the current branch suggests; raise CommandError on a detached HEAD."""

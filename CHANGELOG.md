@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- On jj, every command reads jj's operation once, under jj's lock, rather than twice
 - `new --per-commit` creates the changelist on the first commit since the base, then updates it once per later
   commit, as `update --per-commit` does, each step shelving with `--shelve` or `--review`. `review` is now short for
   `new --review --per-commit`

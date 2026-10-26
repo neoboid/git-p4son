@@ -529,14 +529,10 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
     if snapshot:
         snapshot_commit = _run_live(
             workspace_dir, 'log', '-r', '@', '--no-graph', '-T', 'commit_id').stdout[0]
-    before = _operation_id(workspace_dir)
     with working_copy_lock(workspace_dir):
-        if before != _operation_id(workspace_dir):
-            raise CommandError(
-                'jj changed while git-p4son took its lock. Run the command again.')
-        workspace = Workspace.load(workspace_dir, before)
+        workspace = Workspace.load(workspace_dir, '@')
         if log.verbose_mode:
-            log.info(f'Pinned jj operation {before}')
+            log.info(f'Pinned jj operation {workspace.operation}')
         workspace.check_line_endings()
         if snapshot:
             workspace.check_ignored()

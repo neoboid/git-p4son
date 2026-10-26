@@ -90,7 +90,9 @@ def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
         args.backend = GitBackend(args.workspace_dir)
     if hasattr(args, 'base_branch'):
         args.base_given = args.base_branch
-        args.base_branch = args.backend.resolve_base(args.base_branch)
+        # The workspace may be fake, so git doesn't look the base up.
+        with mock.patch('git_p4son.git_backend.resolve_commit'):
+            args.base_branch = args.backend.resolve_base(args.base_branch)
     return args
 
 

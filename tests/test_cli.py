@@ -274,9 +274,10 @@ class TestCleanCheckDefault(unittest.TestCase):
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
     def setUp(self):
-        # The workspace is fake, so git's clean check is too.
+        # The workspace is fake, so git's clean check and base lookup are too.
         self.check_clean = start_patch(
             self, 'git_p4son.git_backend.check_git_workspace_clean')
+        start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
     def test_checks_the_workspace_once_before_a_command_that_edits(self, _update, _ws):
@@ -457,6 +458,7 @@ class TestRunCommand(unittest.TestCase):
 class TestBranchKeyword(unittest.TestCase):
     def setUp(self):
         start_patch(self, 'git_p4son.git_backend.check_git_workspace_clean')
+        start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')
     def test_resolves_branch_to_alias(self, _branch):

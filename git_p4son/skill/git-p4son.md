@@ -165,8 +165,8 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 1. Write the CL description to a file outside the workspace: the title on the first line, then a short description
    of the change. Everything above `Changes included:` is yours, and `update` keeps it; git-p4son writes the commit
-   list below it. `git p4son list-changes -b main` prints the commit subjects, which helps when summarising the
-   branch.
+   list below it. `git p4son list-changes -b main --porcelain` prints only that list, numbered as the CL will hold
+   it, which helps when summarising the branch.
 2. Preview the full description and the files the CL would get, then the steps, one per commit:
    ```sh
    git p4son new -F /tmp/my-feature.txt -b main --dry-run

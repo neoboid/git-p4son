@@ -261,6 +261,31 @@ class WorkspaceTestCase(unittest.TestCase):
             self.assertEqual(command(args), 0)
         return out.getvalue()
 
+    def p4son(self, *argv: str) -> str:
+        """Run git-p4son with argv as the command line would; returns everything it printed.
+
+        If the command fails, what it printed is added to the failure."""
+        from git_p4son.cli import create_parser, run_command
+        try:
+            with captured_output() as out, \
+                    mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
+                self.assertEqual(run_command(
+                    create_parser().parse_args(argv)), 0)
+        except Exception as error:
+            error.add_note(
+                f'git p4son {" ".join(argv)} printed:\n{out.getvalue()}')
+            raise
+        return out.getvalue()
+
+    def p4son_fails(self, *argv: str, message: str) -> str:
+        """Run git-p4son with argv, expecting a CommandError matching message; returns everything it printed."""
+        from git_p4son.cli import create_parser, run_command
+        with captured_output() as out, \
+                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
+                self.assertRaisesRegex(CommandError, message):
+            run_command(create_parser().parse_args(argv))
+        return out.getvalue()
+
     def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                       message: str) -> None:
         """Run command with command_args(argv), expecting a CommandError matching message."""

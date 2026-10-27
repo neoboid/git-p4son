@@ -106,6 +106,8 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 - **`review`** - Has no module: its parser runs `new_command` as `new --review --per-commit`.
 
 - **`list_changes.py`** - The `list-changes` command: prints the numbered commit subjects since a base branch.
+  `--porcelain` sets the parser's `quiet`, as `alias show` does, so `run_command` runs it under `log.quiet` and only
+  the list, printed directly, reaches stdout.
 
 - **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `delete`, `clean`), each an `alias_*_command` built on
   `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.

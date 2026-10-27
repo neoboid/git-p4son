@@ -3,7 +3,6 @@
 import unittest
 from unittest import mock
 
-from git_p4son.cli import create_parser, run_command
 from git_p4son.backend import completion_backend, open_backend, selected_backend
 from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError
@@ -38,12 +37,9 @@ class TestGitBackend(GitRepoTestCase):
             self.backend.resolve_base('nope')
 
     def test_unknown_base_fails_under_its_heading(self):
-        with captured_output() as out, \
-                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
-                self.assertRaisesRegex(CommandError, '"nope" is not a commit'):
-            run_command(create_parser().parse_args(
-                ['list-changes', '-b', 'nope']))
-        _, heading, section = out.getvalue().partition('# Resolving base\n')
+        out = self.p4son_fails('list-changes', '-b', 'nope',
+                               message='"nope" is not a commit')
+        _, heading, section = out.partition('# Resolving base\n')
         self.assertTrue(heading)
         self.assertNotIn('[ok]', section)
 

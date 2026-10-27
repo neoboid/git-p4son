@@ -5,7 +5,7 @@ from unittest import mock
 
 from git_p4son.git_backend import GitBackend
 from git_p4son.list_changes import list_changes_command
-from tests.helpers import captured_output
+from tests.helpers import captured_output, GitRepoTestCase
 
 
 class TestListChangesCommand(unittest.TestCase):
@@ -29,6 +29,21 @@ class TestListChangesCommand(unittest.TestCase):
             self.assertEqual(list_changes_command(args), 0)
         self.assertEqual(out.getvalue().lstrip('\n'),
                          '# Listing changes\n[ok] No changes found\n')
+
+
+class TestListChangesPorcelain(GitRepoTestCase):
+    def build_workspace(self):
+        super().build_workspace()
+        for subject in ('Initial', 'Add feature', 'Fix bug'):
+            self.commit(subject)
+
+    def test_prints_only_the_list(self):
+        self.assertEqual(self.p4son('list-changes', '-b', 'HEAD~2', '--porcelain'),
+                         '1. Add feature\n2. Fix bug\n')
+
+    def test_prints_nothing_without_changes(self):
+        self.assertEqual(self.p4son(
+            'list-changes', '-b', 'HEAD', '--porcelain'), '')
 
 
 if __name__ == '__main__':

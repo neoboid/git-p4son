@@ -363,6 +363,9 @@ Examples:
     list_changes_parser.set_defaults(func=list_changes_command)
     _add_base_branch(list_changes_parser, 'Base branch to compare against',
                      'Defaults to HEAD~1, or with the jj backend the parent of the jj change')
+    list_changes_parser.add_argument(
+        '--porcelain', dest='quiet', action='store_true',
+        help='Print only the numbered list, nothing without changes, for scripts and agents')
 
     alias_parser = subparsers.add_parser(
         'alias',

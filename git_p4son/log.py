@@ -1,4 +1,6 @@
-"""Structured output: all user-facing output goes through the `log` singleton."""
+"""Structured output: all user-facing output goes through the `log` singleton, but for a command's result.
+
+A result, such as `alias show`'s changelist or `list-changes`' list, is printed directly, so `log.quiet` leaves it."""
 
 import contextlib
 import shutil

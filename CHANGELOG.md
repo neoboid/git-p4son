@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `list-changes --porcelain` prints only the numbered list, and nothing when there are no changes, for scripts and
+  agents writing a CL description. The Claude skill uses it
 - On git, a base that names no commit fails while resolving it, with `"nope" is not a commit`, rather than in
   git's own error further on
 - `new`, `update` and `list-changes` resolve `-b` under a `Resolving base` heading, closed by the base it resolved

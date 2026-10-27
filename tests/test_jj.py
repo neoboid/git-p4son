@@ -16,7 +16,6 @@ from git_p4son.git_backend import GitBackend
 from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
-from git_p4son.cli import create_parser, run_command
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
     requires_jj, run_jj, start_patch, WorkspaceTestCase,
@@ -411,29 +410,6 @@ class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
     def describe(self, revision, template='description.first_line()'):
         return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', template)
 
-    def p4son(self, *argv):
-        """Run git-p4son with argv as the command line would; returns everything it printed.
-
-        If the command fails, what it printed is added to the failure."""
-        try:
-            with captured_output() as out, \
-                    mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
-                self.assertEqual(run_command(
-                    create_parser().parse_args(argv)), 0)
-        except Exception as error:
-            error.add_note(
-                f'git p4son {" ".join(argv)} printed:\n{out.getvalue()}')
-            raise
-        return out.getvalue()
-
-    def p4son_fails(self, *argv, message):
-        """Run git-p4son with argv, expecting a CommandError matching message; returns everything it printed."""
-        with captured_output() as out, \
-                mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
-                self.assertRaisesRegex(CommandError, message):
-            run_command(create_parser().parse_args(argv))
-        return out.getvalue()
-
     def working(self):
         """The working change's commit, after jj snapshots the files on disk."""
         self.jj('status')
@@ -526,8 +502,8 @@ class TestJjNew(JjP4RepoTestCase):
 
     def test_list_changes_reads_the_jj_change(self):
         self.describe_change_b()
-        out = self.p4son('list-changes', '-b', 'main')
-        self.assertIn('1. Change a\n2. Change b\n', out)
+        self.assertEqual(self.p4son('list-changes', '-b', 'main', '--porcelain'),
+                         '1. Change a\n2. Change b\n')
 
     def test_writable_apply_reads_the_jj_change(self):
         self.describe_change_b()

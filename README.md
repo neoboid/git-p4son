@@ -693,16 +693,19 @@ git p4son review -F description.txt -b main
 List commit subjects since a base branch in chronological order (oldest first):
 
 ```sh
-git p4son list-changes [--base-branch BASE_BRANCH]
+git p4son list-changes [--base-branch BASE_BRANCH] [--porcelain]
 ```
 
 **Options:**
 - `-b, --base-branch BASE_BRANCH`: Base branch to compare against. Default is `HEAD~1`.
+- `--porcelain`: Print only the numbered list, and nothing when there are no changes, for scripts and agents. Errors
+  still go to stderr.
 
 **Examples:**
 ```sh
 git p4son list-changes
 git p4son list-changes --base-branch main
+git p4son list-changes --base-branch main --porcelain
 ```
 
 This command is useful for generating changelist descriptions by listing all commit messages since the base branch,

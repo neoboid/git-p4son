@@ -12,7 +12,7 @@ def list_changes_command(args: argparse.Namespace) -> int:
     subjects = get_commit_subjects_since(args.base_branch, args.workspace_dir,
                                          args.backend.revision)
     if subjects:
-        log.info('\n'.join(number_commits(subjects)))
+        print('\n'.join(number_commits(subjects)))
     else:
         log.success("No changes found")
     return 0

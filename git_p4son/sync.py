@@ -26,13 +26,13 @@ from .sync_split_users import (
 from .perforce import (
     ClobberMode,
     get_latest_changelist,
-    get_submitted_changes,
+    get_latest_changes,
+    get_user_changes,
     p4_get_opened_files,
     p4_sync,
     p4_sync_preview,
     P4SyncAbortError,
     P4SyncClobberError,
-    P4Change,
 )
 
 
@@ -148,34 +148,17 @@ def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
         f'{changed} of {plural(len(tracked), "tracked file")} made writable')
 
 
-def _split_user_changes(changes: list[P4Change], users: list[str],
-                        last_synced: int) -> list[P4Change]:
-    """The changes submitted by one of users after last_synced, matching names case-insensitively."""
-    lowered = {u.lower() for u in users}
-    return [c for c in changes
-            if c.change > last_synced and c.user.lower() in lowered]
+def build_sync_targets(splits: list[tuple[int, int]], last_synced: int, required: list[int]) -> list[int]:
+    """Build the sync sequence that gives each split changelist a commit of its own.
 
-
-def build_sync_targets(changes: list[P4Change], users: list[str],
-                       last_synced: int, required: list[int]) -> list[int]:
-    """Build the sync sequence that splits out the given users' changelists.
-
-    Each of their changelists is preceded by the one submitted just before it,
-    so it lands in a commit of its own. changes is oldest first.
-    """
-    to_split = {c.change for c in _split_user_changes(
-        changes, users, last_synced)}
-    split: list[int] = []
-    for i, change in enumerate(changes):
-        if change.change not in to_split:
-            continue
-        last = split[-1] if split else last_synced
-        if i > 0 and changes[i - 1].change > last:
-            split.append(changes[i - 1].change)
-            last = split[-1]
-        if change.change > last:
-            split.append(change.change)
-    return sorted(set(split).union(required))
+    splits pairs each changelist with the one submitted to the depot root just before it, or 0 for none, which is
+    synced first when newer than last_synced."""
+    targets = set(required)
+    for change, before in splits:
+        targets.add(change)
+        if before > last_synced:
+            targets.add(before)
+    return sorted(targets)
 
 
 def _collect_split_users(args: argparse.Namespace,
@@ -212,25 +195,31 @@ def _split_targets(targets: list[tuple[int, str]], users: list[str],
                    workspace_dir: str) -> list[tuple[int, str]]:
     """Add the targets that give each of users' changelists its own commit."""
     upper = targets[-1][0]
-    log.heading(f'Finding changelists submitted to {depot_root} '
-                f'in CL {last_synced}..{upper}')
-    changes = get_submitted_changes(depot_root, last_synced, upper,
-                                    workspace_dir)
-    log.success(plural(len(changes), 'changelist'))
+    log.heading(
+        f'Finding split users\' changelists in CL {last_synced}..{upper}')
+    candidates = {change: user for user in users
+                  for change in get_user_changes(user, last_synced, upper, workspace_dir)
+                  if change > last_synced}
+    log.success(plural(len(candidates), 'changelist'))
 
-    matched = _split_user_changes(changes, users, last_synced)
     log.heading('Finding changelists to split into their own commits')
-    if matched:
-        for change in matched:
-            log.info(f'CL {change.change} ({change.user})')
-        log.success(f'{plural(len(matched), "changelist")} to split out')
+    changes = sorted(candidates)
+    splits = []
+    for change, latest in zip(changes, get_latest_changes(
+            depot_root, [f'@{change}' for change in changes], 2, workspace_dir)):
+        # A changelist that touched nothing under the depot root isn't the newest there.
+        if not latest or latest[0] != change:
+            continue
+        splits.append((change, latest[1] if len(latest) > 1 else 0))
+        log.info(f'CL {change} ({candidates[change]})')
+    if splits:
+        log.success(f'{plural(len(splits), "changelist")} to split out')
     else:
         log.success('None found')
 
     labels = dict(targets)
     return [(cl, labels.get(cl, _SPLIT_LABEL))
-            for cl in build_sync_targets(changes, users, last_synced,
-                                         list(labels))]
+            for cl in build_sync_targets(splits, last_synced, list(labels))]
 
 
 def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:

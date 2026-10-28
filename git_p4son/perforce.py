@@ -186,33 +186,40 @@ def p4_depot_root_exists(depot_root: str, workspace_dir: str) -> bool:
         return False
 
 
+def get_latest_changes(depot_root: str, revisions: list[str], count: int,
+                       workspace_dir: str) -> list[list[int]]:
+    """For each of revisions, such as @123 or #head, oldest first, list the newest count changelists submitted to the
+    depot root at it, newest first."""
+    if not revisions:
+        return []
+    # p4 runs each line as a changes command of its own; with no lower bound it walks back and stops at count.
+    res = run([*_P4, '-ztag', '-x', '-', 'changes', f'-m{count}', '-s', 'submitted'], cwd=workspace_dir,
+              input='\n'.join(f'{depot_root}/...{revision}' for revision in revisions))
+    groups: list[list[int]] = []
+    for record in parse_ztag_multi_output(res.stdout):
+        change = int(record['change'])
+        # A query's changelists go down, and a later revision's newest is at or above the earlier ones.
+        if not groups or change >= groups[-1][-1]:
+            groups.append([])
+        groups[-1].append(change)
+    # Only the oldest revisions can have no changelist at all, and they print nothing.
+    return [[] for _ in range(len(revisions) - len(groups))] + groups
+
+
 def get_latest_changelist(depot_root: str, workspace_dir: str) -> int:
     """Get the latest submitted changelist affecting the depot root."""
-    res = run([*_P4, '-ztag', 'changes', '-m1', '-s', 'submitted',
-              f'{depot_root}/...#head'], cwd=workspace_dir)
-    fields = parse_ztag_output(res.stdout)
-    if 'change' not in fields:
+    [latest] = get_latest_changes(depot_root, ['#head'], 1, workspace_dir)
+    if not latest:
         raise CommandError('No changelists found affecting workspace')
-    return int(fields['change'])
+    return latest[0]
 
 
-@dataclass
-class P4Change:
-    """A submitted changelist affecting the depot root."""
-
-    change: int
-    user: str
-
-
-def get_submitted_changes(depot_root: str, start: int, end: int,
-                          workspace_dir: str) -> list[P4Change]:
-    """List changelists submitted to the depot root in [start, end], oldest first."""
-    res = run([*_P4, '-ztag', 'changes', '-s', 'submitted',
-               f'{depot_root}/...@{start},@{end}'], cwd=workspace_dir)
-    records = parse_ztag_multi_output(res.stdout)
-    changes = [P4Change(change=int(r['change']), user=r.get('user', ''))
-               for r in records if 'change' in r]
-    return sorted(changes, key=lambda c: c.change)
+def get_user_changes(user: str, start: int, end: int, workspace_dir: str) -> list[int]:
+    """List the changelists user submitted anywhere in the depot in [start, end]."""
+    # Without a path p4 reads only the changelists, not their files, which a path query on a large range scans.
+    res = run([*_P4, '-ztag', 'changes', '-s', 'submitted', '-u', user, f'@{start},@{end}'],
+              cwd=workspace_dir)
+    return [int(r['change']) for r in parse_ztag_multi_output(res.stdout) if 'change' in r]
 
 
 def get_p4_user(workspace_dir: str) -> str | None:

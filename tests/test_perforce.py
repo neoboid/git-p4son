@@ -12,10 +12,11 @@ from git_p4son.perforce import (
     get_client_spec,
     get_existing_p4_users,
     get_latest_changelist,
+    get_latest_changes,
     get_opened_files,
     get_opened_files_in_changelist,
     get_p4_user,
-    get_submitted_changes,
+    get_user_changes,
     get_writable_files,
     is_always_writable_file_type,
     is_binary_file_type,
@@ -319,32 +320,38 @@ class TestGetClientSpec(unittest.TestCase):
         self.assertIsNone(spec)
 
 
-class TestGetSubmittedChanges(unittest.TestCase):
+class TestGetUserChanges(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run')
-    def test_parses_and_sorts_changes(self, mock_run):
-        # p4 lists newest first; the sequence builder needs oldest first.
+    def test_lists_the_user_s_changes_anywhere(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            '... change 105',
-            '... user andreas',
-            '... desc Fix the thing',
-            '',
-            '... change 102',
-            '... user colleague',
-            '... desc Some other work',
-            '',
+            '... change 105', '... user andreas', '',
+            '... change 102', '... user andreas', '',
         ])
-        changes = get_submitted_changes('//myclient', 100, 105, '/ws')
-        self.assertEqual([(c.change, c.user) for c in changes],
-                         [(102, 'colleague'), (105, 'andreas')])
+        self.assertEqual(get_user_changes(
+            'andreas', 100, 105, '/ws'), [105, 102])
         mock_run.assert_called_once_with(
-            ['p4', '-L', 'en', '-ztag', 'changes', '-s', 'submitted',
-             '//myclient/...@100,@105'], cwd='/ws')
+            ['p4', '-L', 'en', '-ztag', 'changes', '-s', 'submitted', '-u', 'andreas', '@100,@105'], cwd='/ws')
+
+
+class TestGetLatestChanges(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_lists_the_newest_changes_at_each_revision_in_one_p4(self, mock_run):
+        # One query per line, each newest first: none at @3, one at @10, two at @104 and again at @105.
+        mock_run.return_value = make_run_result(stdout=[
+            '... change 10', '',
+            '... change 103', '', '... change 97', '',
+            '... change 103', '', '... change 97', '',
+        ])
+        self.assertEqual(get_latest_changes('//myclient', ['@3', '@10', '@104', '@105'], 2, '/ws'),
+                         [[], [10], [103, 97], [103, 97]])
+        mock_run.assert_called_once_with(
+            ['p4', '-L', 'en', '-ztag', '-x', '-', 'changes', '-m2', '-s', 'submitted'], cwd='/ws',
+            input='//myclient/...@3\n//myclient/...@10\n//myclient/...@104\n//myclient/...@105')
 
     @mock.patch('git_p4son.perforce.run')
-    def test_no_changes_in_range(self, mock_run):
-        mock_run.return_value = make_run_result(stdout=[])
-        self.assertEqual(get_submitted_changes('//myclient', 100, 105, '/ws'),
-                         [])
+    def test_no_revisions_runs_nothing(self, mock_run):
+        self.assertEqual(get_latest_changes('//myclient', [], 2, '/ws'), [])
+        mock_run.assert_not_called()
 
 
 class TestGetP4User(unittest.TestCase):
@@ -567,8 +574,8 @@ class TestGetLatestChangelist(unittest.TestCase):
         cl = get_latest_changelist('//myclient', '/ws')
         self.assertEqual(cl, 54321)
         mock_run.assert_called_once_with(
-            ['p4', '-L', 'en', '-ztag', 'changes', '-m1', '-s', 'submitted',
-             '//myclient/...#head'], cwd='/ws')
+            ['p4', '-L', 'en', '-ztag', '-x', '-', 'changes', '-m1', '-s', 'submitted'], cwd='/ws',
+            input='//myclient/...#head')
 
     @mock.patch('git_p4son.perforce.run')
     def test_no_changes_found(self, mock_run):

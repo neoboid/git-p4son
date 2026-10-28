@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Splitting out users' changelists in `sync` no longer lists every changelist in the range under the depot root,
+  which on a large range failed with p4's `Too many rows scanned`. It lists each split user's changelists, then
+  checks each one against the depot root
 - `list-changes --porcelain` prints only the numbered list, and nothing when there are no changes, for scripts and
   agents writing a CL description. The Claude skill uses it
 - On git, a base that names no commit fails while resolving it, with `"nope" is not a commit`, rather than in

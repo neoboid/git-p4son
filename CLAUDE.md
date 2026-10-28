@@ -67,19 +67,20 @@ only place that prints a `CommandError`/`RunError` and turns it into an exit cod
 
 ### Commands
 
-- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist, onto the sync branch from any
-  branch. `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers, `last-synced`, or a
-  trailing `head`; none means the latest) into a `_SyncPlan`, reading the last sync from the sync branch the
-  backend's `prepare_sync` chose, or None when already synced. `sync_preflight` refuses to start while a blocking
-  process runs (unless `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce one judged
-  by the sync branch's files. `sync_command` then has the backend check out the sync branch (`start_sync`), and
-  returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync`
-  runs a catch-up pass to the last synced CL, syncs and commits each target, merges local changes back once at the
-  end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments are numeric-only: aliases name pending
-  CLs, which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each
-  split user's submit, so each of their changelists gets a commit of its own; `-u` adds users for one run and
-  `--no-split` ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left
-  in the work tree, as merged-back local changes; after a failure partway, sync stays on the sync branch.
+- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist, onto the sync branch from any branch.
+  `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers, `last-synced`, or a trailing `head`;
+  none means the latest) into a `_SyncPlan`, reading the last sync from the sync branch the backend's `prepare_sync`
+  chose, or None when already synced. `sync_preflight` refuses to start while a blocking process runs (unless
+  `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce one judged by the sync branch's
+  files. `sync_command` then has the backend check out the sync branch (`start_sync`), and returns (`abandon_sync`) if a
+  pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last synced CL, syncs and commits each
+  target, merges local changes back once at the end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments
+  are numeric-only: aliases name pending CLs, which Perforce renumbers on submit. When moving forward,
+  `build_sync_targets` also syncs the CL before each split user's submit, so each of their changelists gets a commit of
+  its own; `_split_targets` finds their CLs per user, then checks them all against the depot root in one batched `-m2`
+  query. `-u` adds users for one run and `--no-split` ignores the configured ones. `finish_sync` returns to where sync
+  started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
+  on the sync branch.
 
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
   `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command

@@ -434,10 +434,12 @@ visits `101 102 103 104 105 106`.
 Splitting only moves forward from a previous sync. The first sync, `last-synced`, and syncing to an older changelist
 with `--force` are never split. Without any split users, `sync` makes no extra Perforce queries.
 
-Finding the split users' changelists costs one extra Perforce query over the range being synced. It runs after the
-blocking processes check, the clean-workspace checks and the pre-sync hooks, so a running blocking process, a dirty
-workspace or a hook that aborts the sync says so before that work. `--dry-run` skips the checks and hooks but still
-shows the resulting sequence.
+Finding the split users' changelists costs one Perforce query per split user, listing their changelists in the range
+being synced, then one batched query that checks each changelist found touched the workspace and finds the one before
+it. None of them scans the files of every changelist in the range, which on a large range can exceed the server's
+`maxscanrows`. They run after the blocking processes check, the clean-workspace checks and the pre-sync hooks, so a
+running blocking process, a dirty workspace or a hook that aborts the sync says so before that work. `--dry-run` skips
+the checks and hooks but still shows the resulting sequence.
 
 #### Hooks
 

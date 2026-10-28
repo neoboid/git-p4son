@@ -24,7 +24,7 @@ from git_p4son.changelist_store import find_record, Record
 from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.config import ensure_config_dir
 from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
-from git_p4son.perforce import P4Change, P4SyncPreviewFile
+from git_p4son.perforce import P4SyncPreviewFile
 
 
 @contextlib.contextmanager
@@ -63,11 +63,6 @@ def make_run_result(returncode: int = 0, stdout: list[str] | bytes | None = None
 def preview_update(path: str) -> P4SyncPreviewFile:
     """Preview entry for a file p4 would update."""
     return P4SyncPreviewFile(mode='upd', filepath=path)
-
-
-def make_changes(*pairs: tuple[int, str]) -> list[P4Change]:
-    """Build a change list from (changelist, user) pairs."""
-    return [P4Change(change=cl, user=user) for cl, user in pairs]
 
 
 def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
@@ -365,7 +360,8 @@ class FakeP4:
     """A scripted Perforce server for the p4 commands git-p4son runs.
 
     install() puts it in place of perforce.run and run_with_stream_output; an unscripted command fails the test.
-    Depot paths are //<client>/<path>, mapped to <workspace>/<path>. opened maps paths to (changelist, action),
+    Depot paths are //<client>/<path>, mapped to <workspace>/<path>; a submitted change without files touched
+    nothing in the client's view. opened maps paths to (changelist, action),
     pending changelist numbers to their description lines and shelved changelist numbers to {path: content}.
     Like run(), it carries out nothing on a dry run."""
 
@@ -426,7 +422,9 @@ class FakeP4:
         if dry_run:
             return RunResult(0, [], [])
         self.calls.append(args)
-        files = [self._rel(line) for line in (input or '').splitlines()]
+        # A file list comes as -x -; the batched changes query sends depot paths, which aren't workspace files.
+        files = [self._rel(line) for line in (
+            input or '').splitlines()] if args[:2] == ['-x', '-'] else []
         stderr: list[str] = []
         if args[:3] == ['-ztag', 'client', '-o']:
             out = [f'... Client {self.client}', f'... Root {self.ws}',
@@ -440,15 +438,17 @@ class FakeP4:
             known[self.user.lower()] = self.user
             out = [f'... User {known[n.lower()]}' for n in args[2:]
                    if n.lower() in known]
-        elif args[:3] == ['-ztag', 'changes', '-m1']:
-            out = [f'... change {max(self.changes)}']
-        elif args[:4] == ['-ztag', 'changes', '-s', 'submitted']:
-            start, end = (int(n.lstrip('@'))
-                          for n in args[4].split('@', 1)[1].split(','))
+        elif args[:5] == ['-ztag', 'changes', '-s', 'submitted', '-u']:
+            start, end = (int(n.lstrip('@')) for n in args[6].split(','))
+            out = self._changes(sorted((c for c in self.changes if start <= c <= end
+                                        and self.changes[c][0] == args[5]), reverse=True))
+        elif args[:4] == ['-ztag', '-x', '-', 'changes'] and args[4].startswith('-m'):
             out = []
-            for number in sorted(c for c in self.changes if start <= c <= end):
-                out += [f'... change {number}',
-                        f'... user {self.changes[number][0]}', '']
+            for line in (input or '').splitlines():
+                at = line.rsplit('@', 1)[1] if '@' in line else None
+                in_view = sorted((c for c, (_, files) in self.changes.items()
+                                  if files and (at is None or c <= int(at))), reverse=True)
+                out += self._changes(in_view[:int(args[4][2:])])
         elif args[:2] == ['change', '-o']:
             out = self._spec(args[2])
         elif args[:2] == ['change', '-i']:
@@ -487,6 +487,11 @@ class FakeP4:
         else:
             raise AssertionError(f'unscripted p4 command: {args}')
         return RunResult(0, out, stderr)
+
+    def _changes(self, numbers: list[int]) -> list[str]:
+        """The changes as p4 -ztag changes lists them."""
+        return [line for number in numbers
+                for line in (f'... change {number}', f'... user {self.changes[number][0]}', '')]
 
     def _rel(self, path: str) -> str:
         return os.path.relpath(os.path.join(self.ws, path),

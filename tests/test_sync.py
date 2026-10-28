@@ -24,7 +24,6 @@ from tests.helpers import (
     on_jj,
     captured_output,
     cli_args,
-    make_changes,
     make_run_result,
     P4RepoTestCase,
     start_patch,
@@ -107,114 +106,24 @@ class TestSyncChangelist(unittest.TestCase):
 
 
 class TestBuildSyncTargets(unittest.TestCase):
-    """Each of the user's changelists gets its own commit, in a strictly increasing sequence."""
+    """Each split changelist, after the workspace changelist before it, in a strictly increasing sequence."""
 
-    def test_single_own_changelist(self):
-        changes = make_changes((100, 'other'), (101, 'other'),
-                               (102, 'me'), (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [103])
-        self.assertEqual(targets, [101, 102, 103])
+    def test_split_changelists_follow_their_predecessors(self):
+        self.assertEqual(build_sync_targets(
+            [(102, 101), (105, 104)], 100, [106]), [101, 102, 104, 105, 106])
 
-    def test_user_names_match_case_insensitively(self):
-        changes = make_changes((100, 'other'), (101, 'other'),
-                               (102, 'Me'), (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [103])
-        self.assertEqual(targets, [101, 102, 103])
+    def test_predecessor_already_synced_or_missing(self):
+        """When the predecessor is last synced, older or missing, only the split changelist is added."""
+        self.assertEqual(build_sync_targets(
+            [(101, 100), (103, 90), (105, 0)], 100, [106]), [101, 103, 105, 106])
 
-    def test_two_own_changelists(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
-                               (103, 'other'), (104, 'other'), (105, 'me'),
-                               (106, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [106])
-        self.assertEqual(targets, [101, 102, 104, 105, 106])
+    def test_changelists_appear_once(self):
+        """A predecessor that is split out or required too is synced once."""
+        self.assertEqual(build_sync_targets(
+            [(102, 101), (103, 102)], 100, [101, 103]), [101, 102, 103])
 
-    def test_back_to_back_own_changelists(self):
-        """A predecessor that is itself one of the user's changelists is not repeated."""
-        changes = make_changes((100, 'other'), (101, 'other'),
-                               (102, 'me'), (103, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, [103])
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_predecessor_is_last_synced(self):
-        """When the predecessor is last synced, only the user's changelist is added."""
-        changes = make_changes((100, 'other'), (101, 'me'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [102])
-        self.assertEqual(targets, [101, 102])
-
-    def test_own_changelist_is_the_upper_bound(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'))
-        targets = build_sync_targets(changes, ['me'], 100, [102])
-        self.assertEqual(targets, [101, 102])
-
-    def test_no_own_changelists(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [102])
-        self.assertEqual(targets, [102])
-
-    def test_no_changes_at_all(self):
-        """With no changes in the range the upper bound is still synced."""
-        targets = build_sync_targets([], ['me'], 100, [120])
-        self.assertEqual(targets, [120])
-
-    def test_user_match_is_case_insensitive(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'Me'))
-        targets = build_sync_targets(changes, ['me'], 100, [103])
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_two_users_both_split_out(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
-                               (103, 'other'), (104, 'other'), (105, 'bob'),
-                               (106, 'other'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [106])
-        self.assertEqual(targets, [101, 102, 104, 105, 106])
-
-    def test_adjacent_changelists_from_two_selected_users(self):
-        """alice's changelist, the predecessor of bob's, is not repeated."""
-        changes = make_changes((100, 'other'), (101, 'other'),
-                               (102, 'alice'), (103, 'bob'))
-        targets = build_sync_targets(changes, ['alice', 'bob'], 100, [103])
-        self.assertEqual(targets, [101, 102, 103])
-
-    def test_unselected_user_is_not_split_out(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'alice'),
-                               (103, 'other'), (104, 'bob'))
-        targets = build_sync_targets(changes, ['alice'], 100, [104])
-        self.assertEqual(targets, [101, 102, 104])
-
-    def test_targets_are_strictly_increasing(self):
-        changes = make_changes((100, 'me'), (101, 'me'), (102, 'other'),
-                               (103, 'me'), (104, 'me'), (105, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [105])
-        self.assertEqual(targets, sorted(set(targets)))
-        self.assertEqual(targets, [101, 102, 103, 104, 105])
-
-    def test_required_changelists_between_split_points(self):
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
-                               (103, 'other'), (104, 'other'), (105, 'me'),
-                               (106, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [103, 106])
-        self.assertEqual(targets, [101, 102, 103, 104, 105, 106])
-
-    def test_required_changelists_matching_split_points(self):
-        """A required changelist that is also a split point is synced once."""
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
-                               (103, 'other'), (104, 'other'), (105, 'me'),
-                               (106, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [102, 104, 106])
-        self.assertEqual(targets, [101, 102, 104, 105, 106])
-
-    def test_required_changelist_outside_the_depot_root(self):
-        """A required changelist outside the depot root is still synced."""
-        changes = make_changes((100, 'other'), (101, 'other'), (102, 'me'),
-                               (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [110])
-        self.assertEqual(targets, [101, 102, 110])
-
-    def test_required_changelists_without_own_changelists(self):
-        changes = make_changes((100, 'other'), (101, 'other'),
-                               (102, 'other'), (103, 'other'))
-        targets = build_sync_targets(changes, ['me'], 100, [101, 103])
-        self.assertEqual(targets, [101, 103])
+    def test_no_split_changelists(self):
+        self.assertEqual(build_sync_targets([], 100, [120]), [120])
 
 
 class TestCollectSplitUsers(unittest.TestCase):
@@ -707,6 +616,13 @@ class TestSyncSplitting(SyncTestCase):
         out = self.sync()
         self.assertIn('no previous sync to start from', out)
         self.assertEqual(self.p4.synced(), [106])
+
+    def test_changelists_outside_the_view_are_not_split(self):
+        self.p4.submit(107, {}, user='me')
+        self.p4.submit(108, {'a.txt': 'a108\n'})
+        self.configure('me')
+        self.sync()
+        self.assertEqual(self.synced_commits(), [101, 102, 104, 105, 108])
 
     def test_dry_run_prints_the_split_sequence(self):
         self.configure('me')

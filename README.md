@@ -1023,6 +1023,10 @@ to `main`, to each sync commit:
 
 From the sync bookmark itself, nothing is rebased. `--no-rebase` skips the rebase and still returns you.
 
+`sync` refuses when the sync bookmark points at the working change itself, which a sync would make part of the
+bookmark's history. Move the bookmark back with `jj bookmark set main -r @- --allow-backwards`, or, to keep the edits
+as a change on it, run `jj describe` and `jj new`.
+
 You stay on the sync bookmark when:
 
 - local changes were merged back: they are in a new working change on it, for you to review, and your changes are

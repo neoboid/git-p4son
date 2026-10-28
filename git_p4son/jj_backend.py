@@ -3,10 +3,11 @@
 import contextlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import NoReturn
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
-from .git import commit_all, get_head_commit
+from .git import commit_all, get_head_commit, get_local_changes
 from .jj import Workspace, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch
@@ -30,6 +31,29 @@ class _Sync:
     @property
     def return_command(self) -> str:
         return f'jj {"edit" if self.editing else "new"} {self.start}'
+
+
+def _refuse_bookmark_at_working(workspace: Workspace, bookmark: str) -> NoReturn:
+    """Raise CommandError, listing the working change's files, as sync would bury the change in the bookmark."""
+    log.heading(f'Checking sync bookmark {bookmark}')
+    move_back = f'jj bookmark set {bookmark} -r @- --allow-backwards'
+    error = f'jj bookmark "{bookmark}" points at the working change, which a sync would bury in its history.'
+    working = workspace.working
+    if working.empty:
+        raise CommandError(f'{error} Move it back first: {move_back}')
+    changes = get_local_changes(
+        working.parents[0], workspace.directory, working.commit)
+    for path in changes.adds:
+        log.file_change(path, 'add')
+    for path in changes.mods:
+        log.file_change(path, 'modify')
+    for path in changes.dels:
+        log.file_change(path, 'delete')
+    for old, new in changes.moves:
+        log.file_change(old, 'delete')
+        log.file_change(new, 'add')
+    raise CommandError(f'{error} Keep the files above out of {bookmark} with: {move_back}. '
+                       'Or keep them as a change: jj describe, then jj new.')
 
 
 class JjBackend:
@@ -131,7 +155,7 @@ class JjBackend:
     def prepare_sync(self, branch: str | None) -> str:
         """The sync bookmark: branch, else [sync] branch, else main; returns its commit.
 
-        Raises CommandError when it does not exist, or is conflicted."""
+        Raises CommandError when it does not exist, is conflicted, or points at the working change."""
         workspace = self.workspace
         name = choose_sync_branch(
             workspace.directory, branch, lambda name: name in workspace.bookmarks, 'bookmark')
@@ -140,6 +164,8 @@ class JjBackend:
             raise CommandError(
                 f'jj bookmark "{name}" is conflicted. Resolve it first.')
         commit = targets[0]
+        if commit == workspace.working.commit:
+            _refuse_bookmark_at_working(workspace, name)
         self._sync = _Sync(name, commit, workspace.tip.change_id[:12], workspace.working is workspace.tip,
                            get_head_commit(workspace.directory), workspace.tip.commit == commit)
         return commit

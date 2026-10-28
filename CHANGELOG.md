@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On jj, `sync` refuses when the sync bookmark points at the working change, listing its files, rather than
+  committing on top of it and so making the working change part of the bookmark's history
 - Splitting out users' changelists in `sync` no longer lists every changelist in the range under the depot root,
   which on a large range failed with p4's `Too many rows scanned`. It lists each split user's changelists, then
   checks each one against the depot root

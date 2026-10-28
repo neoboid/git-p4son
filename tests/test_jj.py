@@ -779,6 +779,32 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(self.describe('main'),
                          'git-p4son: p4 sync //myclient/...@101')
 
+    def assert_sync_refused(self, message):
+        """Point main at @, then check sync and sync --dry-run refuse, leaving main and @ alone; returns the output."""
+        self.jj('bookmark', 'set', 'main', '-r', '@')
+        self.p4.submit(101, {'c.txt': 'c1\n'})
+        main, working = self.describe('main', 'commit_id'), self.working()
+        for argv in ([], ['--dry-run']):
+            with self.subTest(argv=argv):
+                out = self.p4son_fails('sync', *argv,
+                                       message=f'jj bookmark "main" points at the working change.*{message}')
+                self.assertEqual(self.p4.synced(), [])
+                self.assertEqual(
+                    (self.describe('main', 'commit_id'), self.working()), (main, working))
+        return out
+
+    def test_sync_refuses_when_the_bookmark_points_at_an_edited_working_change(self):
+        self.edit('b.txt', 'stale\n')
+        self.write_file('new.txt', 'x')
+        out = self.assert_sync_refused('jj describe')
+        files = out[out.index('# Checking sync bookmark main'):]
+        self.assertIn('~ b.txt', files)
+        self.assertIn('+ new.txt', files)
+
+    def test_sync_refuses_when_the_bookmark_points_at_an_empty_working_change(self):
+        self.assert_sync_refused(
+            'Move it back first: jj bookmark set main -r @- --allow-backwards')
+
     def test_a_described_working_change_is_rebased_and_returned_to(self):
         self.jj('describe', '-m', 'work in progress')
         self.edit('b.txt', 'b2\n')

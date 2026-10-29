@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0
+
 - `sync` commits onto the sync branch, `[sync] branch` or `main`, instead of the current branch, then returns you
   with the `git rebase` to run
 - `new` and `review` require `-b`, and the alias records the commits the changelist includes. `update` appends only

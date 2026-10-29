@@ -1,0 +1,196 @@
+# Architecture
+
+The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the rules every change follows.
+
+## Commands
+
+- **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist, onto the sync branch from any branch.
+  `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers, `last-synced`, or a trailing `head`;
+  none means the latest) into a `_SyncPlan`, reading the last sync from the sync branch the backend's `prepare_sync`
+  chose, or None when already synced. `sync_preflight` refuses to start while a blocking process runs (unless
+  `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce one judged by the sync branch's
+  files. `sync_command` then has the backend check out the sync branch (`start_sync`), and returns (`abandon_sync`) if a
+  pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last synced CL, syncs and commits each
+  target, merges local changes back once at the end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments
+  are numeric-only: aliases name pending CLs, which Perforce renumbers on submit. When moving forward,
+  `build_sync_targets` also syncs the CL before each split user's submit, so each of their changelists gets a commit of
+  its own; `_split_targets` finds their CLs per user, then checks them all against the depot root in one batched `-m2`
+  query. `-u` adds users for one run and `--no-split` ignores the configured ones. `finish_sync` returns to where sync
+  started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
+  on the sync branch.
+
+- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
+  `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command
+  (`list`, `add`, `delete`).
+
+- **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
+  (the branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
+  reverts the files no longer part of them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves;
+  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds
+  the changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
+  `update <alias>` on the others, both shelving with `--shelve` or `--review`.
+
+- **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
+  in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
+  merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, and the
+  record's new count. `--per-commit` instead updates once per commit through `run_per_commit`. Requires a clean git
+  workspace unless `--no-edit` is given.
+
+- **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
+  included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
+  and what it appends. `catch_up_subject` says whether a base moved since the last shelve needs an empty catch-up
+  commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
+
+- **`review`** - Has no module: its parser runs `new_command` as `new --review --per-commit`.
+
+- **`list_changes.py`** - The `list-changes` command: prints the numbered commit subjects since a base branch.
+  `--porcelain` sets the parser's `quiet`, as `alias show` does, so `run_command` runs it under `log.quiet` and only
+  the list, printed directly, reaches stdout.
+
+- **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `delete`, `clean`), each an `alias_*_command` built on
+  `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.
+
+- **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
+  mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
+  up `.gitignore` (from `.p4ignore` if present), creates the git repo with a first commit, records `[sync] branch` (in a
+  new repo the branch `HEAD` is on; in an existing one `main` first, then `HEAD`'s branch, then a menu), runs `jj git
+  init --colocate` last if asked to in an existing repo (a new one lists it as a next step, after the user's first
+  commit).
+
+- **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
+  (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
+  `restore_writable`, `is_user_writable`) set and clear the user write bit on git-tracked files and are also used by
+  `sync` and `lib`. Making files read-only skips files opened in Perforce, and allwrite workspaces entirely.
+
+- **`skill.py`** - The `skill` command: `install` writes a stub `SKILL.md` to the user's Claude Code skills directory,
+  and `show` prints the full agent instructions shipped in `skill/git-p4son.md`, followed by the workspace's own
+  overrides in `.git-p4son/skill-override.md` when run inside a workspace that has one. The stub only tells the agent
+  to run `skill show`, so the instructions follow the installed version. `init` offers the install.
+
+## Command support
+
+- **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the
+  writable files p4 would touch into tracked and ignored ones and stages the locally modified ones, and
+  `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
+  writable files p4 refused or overwrote.
+
+- **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
+  that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
+  `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
+  before it runs, with the base resolved once to a SHA. It returns to where it started, also when a step fails, ends
+  the error with the command that resumes after the last commit that worked, and sleeps `SWARM_SHELF_DELAY` between
+  shelving steps. `base_name`, the base's name, goes to every step, as the steps get the base as a commit.
+
+- **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
+  processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
+
+- **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order,
+  from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a
+  failure. On Windows, scripts run through extension associations, overridable with
+  `[hooks.extension-associations]`. `sync` runs the `pre-sync` and `post-sync` hooks.
+
+- **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
+  aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
+  `completions/` call `git p4son complete`. Their `git-p4son-jj.*` hooks, which `completion --jj` prints, complete
+  `jj p4son` and hand every other `jj` completion to jj's own; `tests/test_completion_scripts.py` runs them in each
+  shell.
+
+- **`jj.py`** - Colocated jj workspaces. `operation` pins a jj operation and holds jj's working-copy lock while a
+  command runs, yielding a `Workspace`, or None outside jj and with `lock_only`, which the git backend uses and which
+  needs no jj. The `Workspace` resolves the change git-p4son works on (the working change, or its parent when the
+  working change is empty and new), its bookmark and the default base; commands reach it only through `JjBackend`. git
+  still reads objects, diffs and makes the sync commits, and `Workspace.checkout` and `restore_working` move the files
+  on disk for sync under the lock; `rebase_branch`, `conflicted_since`, `working_is_empty` and `return_to` run jj on the
+  live working copy, only after it. `operation` warns when git's `core.autocrlf` (`git.get_autocrlf`) and jj's
+  `working-copy.eol-conversion` disagree, and about files the tip adds that git ignores only by matching without case
+  (`check_ignored`, which `colocate` also runs, and which names the `jj config set` and `jj file untrack` that fix
+  it). `leave_out_case_only_ignored` leaves those untracked folders out of jj's `snapshot.auto-track` for the repo
+  before jj snapshots them, in the jj backend's `finish_sync` and `fail_sync`; `colocate` and `colocate_steps` pass
+  the setting to `jj git init`. `check_invoked_inside_workspace`, which `run_command` calls first, refuses `jj -R`
+  naming another workspace through `JJ_WORKSPACE_ROOT`, then drops the variable so hooks don't inherit it. For
+  `init`: `is_supported`, `colocate` and `colocate_steps`, which match git's line endings from jj's first snapshot on,
+  `has_p4son_alias` and `add_p4son_alias`.
+
+- **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
+  Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
+  a git-p4son run under its caller's lock needs `--backend git`.
+
+## Shared modules
+
+- **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
+  interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
+  the alias the branch or bookmark suggests, the jj change aliases record (`change_id`, `existing_changes`), the
+  default message, the clean check (`check_clean`, which sync shares), `-b` completions, `checkouts` for the
+  per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use,
+  whose `tool` hooks get as `GIT_P4SON_BACKEND`.
+  `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
+  `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
+  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once
+  the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the
+  alias recording the change, else the suggested name, unless the command (`new_alias=True` on its parser) names a
+  new one. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
+  command branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
+
+- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
+  `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
+  `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
+
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its sync refuses a sync bookmark
+  at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and moves the
+  bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
+  <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back
+  changes are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and
+  clean check a step reads, and the working change's files back at the end, so jj sees no change.
+
+- **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
+  `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
+  `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. They read the change from the
+  backend's `revision` and keep the working files around Perforce reverts. On a dry run of `new` the changelist is
+  `DRY_RUN_CHANGELIST`.
+
+- **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
+  under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`
+  own the layout; `new` and `update` build descriptions through it.
+
+- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
+  delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
+  keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and the identities of the commits since
+  it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
+  may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
+  `alias_for_change` and `alias_changes`. The old
+  `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
+  which `alias clean` runs first, moves the rest.
+
+- **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
+  `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.
+
+- **`depot.py`** - Owns the depot root: reading it from config, expanding the `$(workspace)` placeholder, and
+  `resolve_depot_root`, which returns it with the client spec (`ResolvedDepot`) for `sync`. `check_depot_root` and
+  `subdirectory_depot_root` back `init`'s choice.
+
+- **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a
+  default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
+  depot root, `core.writable`, the split users, the blocking processes and the hook associations.
+
+- **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files; reading
+  uses `tomllib`.
+
+- **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
+  deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
+  (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
+  `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files` walks, for
+  jj's ignore check. git's `-z` output is read as bytes.
+
+- **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
+  client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),
+  reverts, shelving, submitted changes and users, and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor`
+  parsing streamed progress and raising `P4SyncClobberError` or `P4SyncAbortError`.
+
+- **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
+  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`),
+  `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
+  prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
+
+- **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
+  file changes, command echo with a spinner, child process output, and quiet and verbose modes, with
+  `log.quiet()` scoping quiet mode to a block. `plural` formats counts.

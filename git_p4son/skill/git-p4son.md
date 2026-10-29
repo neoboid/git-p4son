@@ -48,8 +48,10 @@ With `.jj`, git-p4son works on the jj change, unless `.git-p4son/config.toml` se
 check it first. On the git backend, use git as in any other workspace. On the jj backend, read the rest of the skill
 with these translations:
 
-- **Commands stay `git p4son ...`**, as do the commands in git-p4son's messages. The user may run them as
-  `jj p4son ...` through a jj alias; it is the same command.
+- **Run commands as `jj p4son ...`** when jj has the alias, which `init` offers to add: check once with
+  `jj config get aliases.p4son`. It runs the same `git-p4son`, but keeps the commands you show the user in jj's
+  terms. Without the alias, run `git p4son ...`. Read `git p4son` in the rest of the skill and in git-p4son's
+  messages as either.
 - **A branch is a bookmark, and a commit is a change.** Where the skill says to commit, describe the change with
   `jj describe` and start the next one with `jj new`. A git commit leaves the jj change behind, so don't run one.
 - **The change git-p4son works on** is the working change `@`, or its parent when `@` is empty, undescribed and new.
@@ -62,11 +64,17 @@ with these translations:
 - **Branching off `main`** is `jj new main -m "..."` and `jj bookmark create <name>`. **Switching to a change**, as
   `git checkout feature-a` does in the stacks walkthrough, is `jj edit <bookmark>` to amend that change, or
   `jj new <bookmark>` to add a change on top.
-- **`sync`** works from any change: it rebases your changes onto the sync bookmark and returns you, so don't rebase
-  after it. Resolve any conflicts it lists with jj.
-- **Stacks:** jj rebases the changes above one you edit, so `--update-refs` is not needed.
-- **After a submit,** abandon the submitted changes with `jj abandon` and delete the bookmark with
-  `jj bookmark delete`, then `git p4son alias delete` as usual. Ask first, as with git.
+- **`sync`** works from any change: it rebases the branch you started from onto the sync bookmark, as
+  `jj rebase -b <change> -d main` does, and returns you, so don't rebase that branch after it. A stack moves as one,
+  whichever of its changes you sync from. Bookmarks on other branches off `main` stay where they were; bring each up
+  to date with `jj rebase -b <bookmark> -d main`. Resolve any conflicts the sync lists with jj.
+- **Stacks:** jj rebases the changes above one you edit, so `--update-refs` is not needed. Once A is submitted,
+  before syncing, abandoning its changes moves B and the rest of the stack onto A's parent, so there is nothing to
+  replay with `--onto`: sync from B, which rebases the stack onto the new `main`.
+- **After a submit,** abandon the submitted changes before you sync: `jj abandon main..<bookmark>` drops the
+  branch's changes and its bookmark, then `git p4son alias delete` as usual. Ask first, as with git. Synced first,
+  the submitted changes are rebased onto their own sync commit and come back empty, or conflicted where a later
+  changelist edited the same lines; abandoning them then clears both.
 - **Don't add `--backend` yourself.** It switches between the git and jj workflows; ask the user if a command seems
   to need it.
 

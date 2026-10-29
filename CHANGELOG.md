@@ -2,98 +2,23 @@
 
 ## Unreleased
 
-- On jj, `sync` refuses when the sync bookmark points at the working change, listing its files, rather than
-  committing on top of it and so making the working change part of the bookmark's history
-- Splitting out users' changelists in `sync` no longer lists every changelist in the range under the depot root,
-  which on a large range failed with p4's `Too many rows scanned`. It lists each split user's changelists, then
-  checks each one against the depot root
-- `list-changes --porcelain` prints only the numbered list, and nothing when there are no changes, for scripts and
-  agents writing a CL description. The Claude skill uses it
-- On git, a base that names no commit fails while resolving it, with `"nope" is not a commit`, rather than in
-  git's own error further on
-- `new`, `update` and `list-changes` resolve `-b` under a `Resolving base` heading, closed by the base it resolved
-  to, and `new --per-commit` and `review` name the base under `Resolving base name from ...`
-- `list-changes`, `alias list`, `alias delete --all` and `alias clean` open with a heading of their own
-- `alias new` and `alias delete` head saving and deleting the alias
-- On jj, opening the workspace runs under an `Opening jj workspace` heading, closed by the change git-p4son works
-  on and the operation it pinned (`-v` showed only the operation before)
-- On jj, every command reads jj's operation once, under jj's lock, rather than twice
-- `new --per-commit` creates the changelist on the first commit since the base, then updates it once per later
-  commit, as `update --per-commit` does, each step shelving with `--shelve` or `--review`. `review` is now short for
-  `new --review --per-commit`
-- When `new` or `review` fails opening or shelving the files after creating the changelist, its alias records no
-  commit as included yet, so the `update` that the error names to resume with is no longer refused
-- `review -n` and `update --per-commit -n` show the changelist description in a section of its own and list the steps
-  as the real run heads them, ending with the commands they would run
-- `review` resolves the base's name under a heading of its own, and `new` under `Creating changelist`
-- Writable mode's section after reverting unchanged files only shows when files were reverted
-- On jj, the workspace check is one section again, closed once both of its checks pass
-- `new`, `update` and `review` check the workspace once, before anything else, rather than up to twice per command
-  and again in each step of `review` and `update --per-commit` on the git backend
-- On the jj backend, `new`, `update` and `review` also refuse files changed since jj's snapshot, as sync already did,
-  since they open the files on disk in Perforce
-- `review`, `update --per-commit`, and an `update --shelve` that inserts a catch-up commit, close each step with a
-  `Step N of M done` heading naming its commit, head the return to the starting branch or jj change, and end with a
-  line saying how many steps ran and which commands
-- `update` on a changelist whose alias records its commits plans the update under a heading of its own, closed by how
-  many commits the changelist includes and how many are new
-- Colocating jj, in `init` or by its next steps, sets jj's `working-copy.eol-conversion` to match git's
-  `core.autocrlf` from jj's first snapshot on, so with `core.autocrlf = true` jj no longer records every text file as
-  changed
-- With `core.ignorecase`, git ignores folders that jj, which matches `.gitignore` patterns with case, would track,
-  such as a `Thirdparty/` folder through `ThirdParty/`. Colocating, in `init`, and each sync on the jj backend now
-  leave those folders out of jj's `snapshot.auto-track` for the repository, so jj skips them, also when `.gitignore`
-  re-includes them with `!`. If jj tracks such files anyway, git-p4son warns, and lists the `jj config set` and the
-  `jj file untrack` command that fix it
-- `init` no longer checks for a git editor, as git-p4son hasn't opened one since `review` stopped running
-  `git rebase -i`
-- **Behaviour change:** `new` and `review` require `-b`, naming a branch or bookmark, or a commit exactly one points
-  at. The alias records it by name, along with the commits since it the changelist includes, by jj change ID or git
-  author date. `update` then folds in only the commits it doesn't know by default, appending their subjects and
-  leaving the entries the commit list already has as they are, so entries reworded in the changelist survive. Plain
-  `update --per-commit --shelve` shelves exactly the new commits, and refuses `-b`. An included commit dropped from
-  the branch gets a warning, and a new commit below included ones is refused. After a sync that changed files the
-  changelist touches, `update --shelve` first inserts an empty "Rebase onto CL N" commit, so the sync's changes get a
-  Swarm patch of their own. Changelists whose alias records nothing, from `alias new` or older versions, update as
-  before
-- `jj p4son <TAB>` completes like `git p4son <TAB>` in bash, zsh and PowerShell, through a hook loaded after jj's
-  own completion: `git p4son completion <shell> --jj` prints its path
-- **Behaviour change:** `sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, from
-  whatever branch you are on, instead of onto the current branch. It checks the sync branch out, syncs, and returns
-  you to where you started with the `git rebase` to run. Without the setting it uses `main`, and refuses when there
-  is no `main`. `init` records the setting: the branch `HEAD` is on in a new repository, and `main` first in an
-  existing one. `sync --branch` overrides the setting, and replaces the unreleased jj-only `--bookmark`
-- In a jj workspace, git-p4son warns when jj's `working-copy.eol-conversion` and git's `core.autocrlf` convert line
-  endings differently, as in Git for Windows with jj's defaults, and names the jj setting that matches git
-- Changelist aliases are stored as TOML files, `.git-p4son/aliases/<alias>.toml`. Aliases in the old
-  `.git-p4son/changelists/` keep working and move to the new location when written, or all at once with `alias clean`
-- The Claude Code skill now loads before any `git p4son` command, including `--help` and `--dry-run`, and when
-  drafting a CL description, so agents read the instructions before preparing a changelist. Run `skill install`
-  again to update an installed skill
-- Add support for colocated jj workspaces (jj 0.41 or newer). `new`, `update` and `list-changes` work on the jj
-  change, taking the alias from its bookmark and the message from its description, and keep the working files as
-  they are around Perforce reverts. `sync` works from any change: it moves the sync bookmark to each sync commit,
-  then rebases the changes you started from onto it and returns you, listing changes that got conflicts;
-  `--no-rebase` skips the rebase. An alias `new` saves records the jj change, so the `branch` keyword finds it by
-  change after rewrites and bookmark renames; a change without a bookmark names its alias after its change ID.
-  `review` and `update --per-commit` run on each commit of the change's stack and put the working change's files
-  back after, so jj sees no change. `init` offers to colocate jj and to add a `jj p4son` alias to jj's user
-  config, with a doc jj's completion shows from jj 0.42; `jj -R` naming another workspace is refused. The Claude
-  Code skill tells agents how to work in a jj workspace. git-p4son holds jj's working-copy lock while it runs.
-  `core.backend` and the global `--backend` flag choose git or jj; `--backend git` uses the git workflow in a jj
-  workspace. Hooks are told the backend in `GIT_P4SON_BACKEND`
-- `new` and `update` keep the working files as they are around Perforce reverts in git workspaces too, instead of
-  putting back git's index version, and read the change from `HEAD`. `writable apply` changes the files tracked in
-  `HEAD`, leaving a file that is staged but not committed alone
-- `update --per-commit` no longer runs `git rebase -i`. It checks out each commit since the base branch in turn,
-  updates the changelist on it, and returns to where you started, also when a step fails; the error names the step
-  and commit, and gives the command that resumes after the last commit that worked. A relative base like `HEAD~2`
-  is resolved once, so it means the same commit for every step. `--dry-run` prints one line per commit
-- `review` works the same way: it checks out each commit in turn instead of running `git rebase -i`, and after a
-  failed step gives the `update --per-commit` command that finishes it once the changelist exists. Commits are
-  reviewed where they are instead of being replayed onto the base branch, so rebase first to review on the latest
-  `main`.
-  `review --no-edit-todo` is gone, along with the editable todo and the message file in `.git-p4son/reviews/`
+- `sync` commits onto the sync branch, `[sync] branch` or `main`, instead of the current branch, then returns you
+  with the `git rebase` to run
+- `new` and `review` require `-b`, and the alias records the commits the changelist includes. `update` appends only
+  new commits, keeping reworded entries, and after a sync that touched the changelist's files, `update --shelve`
+  first adds an empty "Rebase onto CL N" commit
+- `review` and `update --per-commit` check out each commit in turn instead of running `git rebase -i`, so commits are
+  reviewed where they are; `review --no-edit-todo` is gone. `review` is now `new --review --per-commit`
+- Add support for colocated jj workspaces (jj 0.41 or newer): `new`, `update`, `review` and `list-changes` work on
+  the jj change, and `sync` rebases your changes onto the moved sync bookmark. `sync`, `new`, `update` and `review`
+  refuse files changed since jj's snapshot. `init` offers to colocate jj and add a `jj p4son` alias, completed by the
+  hook `git p4son completion <shell> --jj` prints, and `--backend` or `core.backend` choose git or jj
+- `new` and `update` leave the working files as they are around Perforce reverts
+- `sync` with split users no longer fails with p4's `Too many rows scanned` on a large range
+- `list-changes --porcelain` prints only the list. The Claude Code skill uses it and covers jj; run `skill install`
+  again to update it
+- Changelist aliases move to `.git-p4son/aliases/<alias>.toml`; old ones keep working
+- Every step of a command's output runs under a heading of its own
 
 ## 0.6.0
 

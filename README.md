@@ -1,20 +1,19 @@
 # Git Perforcesson
 
-`git-p4son` is a tool for managing a local git repository within a Perforce workspace.
-This way you can use the familiar local git development flow even though you are
-working on a project where perforce is used for source control.
+`git-p4son` lets you work in a Perforce workspace with a local git repository, or a colocated
+[Jujutsu (jj)](#jujutsu-jj) one, so you can use the familiar local development flow even though your project uses
+Perforce for source control.
 
-The idea is to have a `main` git branch that is kept in sync with a branch of a Perforce depot.
-From `main` you branch out into feature branches, where you do local changes
-and rebase on `main` whenever it is updated.
+A `main` branch (a bookmark in jj) is kept in sync with your Perforce workspace, one commit per changelist. You work
+on feature branches or jj changes and rebase them onto `main` after a sync; with jj, `sync` rebases the change you
+sync from for you.
 
-Once your changes is ready to be submitted in perforce `git-p4son` can help you create both
-changelists and push them for reviews. You can even push individual git commits as patches
-for review, so that the reviewer can see the changes in the order you made them locally. Similar
-to the pull request worfkflow on github.
+When your changes are ready, `git-p4son` creates the changelist and shelves it for a Swarm review. It can post each
+commit as a patch of its own, so reviewers see the changes in the order you made them, much like a pull request.
+Updates fold in only the new commits.
 
-This is a bit cumbersome to do manually, but this package provides commands
-that help out with the repetitive and error prone stuff.
+With jj, `git-p4son` works on the jj change: the changelist's alias follows the change through rewrites, the message
+comes from its description, and `jj p4son` runs every command.
 
 ## On big workspaces
 Sometimes git struggles to keep entire perforce workspaces in the repo, like when working
@@ -80,6 +79,44 @@ git p4son alias delete my-fancy-feature
 # Start working on the next feature
 git checkout -b my-next-fancy-feature
 ```
+
+### With jj
+
+The same workflow in a [colocated jj workspace](#jujutsu-jj), with the [`jj p4son` alias](#the-jj-p4son-alias):
+
+```sh
+# Start work on a new feature
+jj new main -m "Feature part1"
+# Change some code, which jj snapshots into the change
+
+# Sync main from any change: the change you are on is rebased onto it
+jj p4son sync
+
+# Change even more code in a change of its own
+jj new -m "Feature part2"
+jj bookmark create my-fancy-feature
+
+# Create a Swarm review with every change since main, one shelf each.
+# The alias is named after the bookmark and records the jj change.
+jj p4son review -m "My fancy feature" -b main
+
+# After review feedback, add a change and move the bookmark to it
+jj new -m "Address review feedback"
+jj bookmark set my-fancy-feature -r @
+jj p4son update --shelve
+
+# After approval, submit in p4v, then abandon the submitted changes before
+# syncing, which deletes the bookmark too
+jj abandon main..my-fancy-feature
+jj p4son alias delete my-fancy-feature
+jj p4son sync
+
+# Start working on the next feature
+jj new main -m "Next fancy feature"
+```
+
+`sync` only rebases the change you sync from, and the stack above it. Bring other bookmarks up to date with
+`jj rebase -b <bookmark> -d main`.
 
 ## Installation
 
@@ -153,6 +190,8 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    The command verifies that you are inside a P4 workspace, prompts you to select a depot
    root (entire workspace or current directory subtree), runs `git init`, sets up `.gitignore` (copying from
    `.p4ignore` if available), and creates an initial commit.
+   With jj 0.41 or newer installed, it also offers to colocate jj and to add the `jj p4son` alias, see
+   [Jujutsu (jj)](#jujutsu-jj).
 
 3. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
 
@@ -1000,14 +1039,14 @@ For example:
 
 ```sh
 jj git init --colocate       # Add jj to an existing git-p4son repository (see Line endings), or answer yes in init
-git p4son sync               # From any change: syncs main, then rebases your changes onto it
+jj p4son sync                # From any change: syncs main, then rebases your changes onto it
 
 jj new main -m "Fix login"
 # Edit files
 jj bookmark create fix-login
-git p4son new -b main --review
+jj p4son new -b main --review
 # Edit more files
-git p4son update -b main --shelve
+jj p4son update -b main --shelve
 ```
 
 ### Syncing a bookmark

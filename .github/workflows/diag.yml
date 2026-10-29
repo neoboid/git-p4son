@@ -1,0 +1,24 @@
+name: Diagnose flaky jj test
+
+on:
+  push:
+    branches: [diag-flaky-jj]
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - shell: bash
+        run: |
+          python scripts/install-jj.py 0.46.0 "$RUNNER_TEMP/jj"
+          echo "$RUNNER_TEMP/jj" >> "$GITHUB_PATH"
+      - run: jj --version
+      - run: pip install -e . && pip install pytest pytest-xdist
+      - run: python -m pytest tests/test_diag_flaky.py -n auto --maxprocesses 8 -q -rf

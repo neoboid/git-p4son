@@ -12,7 +12,7 @@ license = "MIT"
 authors = [
     {name = "Andreas Andersson", email = "andreas@neoboid.com"}
 ]
-keywords = ["perforce", "git", "version-control", "sync"]
+keywords = ["perforce", "git", "jj", "jujutsu", "version-control", "sync"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

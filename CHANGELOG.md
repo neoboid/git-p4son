@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `alias clean` no longer prompts: it deletes the aliases whose changelist is no longer pending, as it was submitted
+  or deleted, and keeps the rest, each alias under a heading of its own. `--dry-run` lists them first, and
+  `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use `alias delete` for the others. The Claude Code
+  skill now suggests it; run `skill install` again to update it
+
 ## 0.7.0
 
 - `sync` commits onto the sync branch, `[sync] branch` or `main`, instead of the current branch, then returns you

@@ -10,8 +10,9 @@ from .changelist_store import (
     delete_changelist_alias,
     migrate_changelist_aliases,
 )
-from .common import CommandError, prompt_choice
+from .common import CommandError
 from .log import log, plural
+from .perforce import is_changelist_gone
 
 
 def _print_aliases(aliases: list[tuple[str, str]], workspace_dir: str, backend: Backend) -> None:
@@ -69,7 +70,9 @@ def alias_delete_command(args: argparse.Namespace) -> int:
         if not aliases:
             log.success('No changelist aliases to delete')
             return 0
-        _clean_all(aliases, workspace_dir)
+        for name, _changelist in aliases:
+            if _delete_listed(name, workspace_dir):
+                log.success(f'Deleted alias "{name}"')
         return 0
 
     log.heading(f'Deleting alias {args.alias}')
@@ -79,69 +82,50 @@ def alias_delete_command(args: argparse.Namespace) -> int:
 
 
 def _delete_listed(name: str, workspace_dir: str) -> bool:
-    """Delete an alias found in the store; a failure is reported and the clean goes on."""
+    """Delete an alias found in the store; a failure is reported and the caller goes on."""
     try:
         delete_changelist_alias(name, workspace_dir)
-    except CommandError as error:
+    except (CommandError, OSError) as error:
         log.error(str(error))
         return False
     return True
 
 
-def _clean_all(aliases: list[tuple[str, str]], workspace_dir: str) -> None:
-    """Delete every alias without further prompting."""
-    for name, _changelist in aliases:
-        if _delete_listed(name, workspace_dir):
-            log.success(f'Deleted alias "{name}"')
-
-
-def _clean_interactive(aliases: list[tuple[str, str]],
-                       workspace_dir: str) -> None:
-    """Review each alias in turn with yes/no/all/quit prompts."""
-    response = None
-    for name, changelist in aliases:
-        log.heading(f'{name} -> CL {changelist}')
-
-        if response != 'all':
-            response = prompt_choice(
-                'Delete?', ['yes', 'no', 'all', 'quit'])
-
-        if response is None or response == 'quit':
-            log.info('Aborting')
-            break
-        elif response == 'no':
-            log.info('Skipped')
-            continue
-
-        if _delete_listed(name, workspace_dir):
-            log.success('Deleted')
-
-
 def alias_clean_command(args: argparse.Namespace) -> int:
     """Execute the 'alias clean' command."""
-    log.heading('Cleaning aliases')
     workspace_dir = args.workspace_dir
 
-    moved = migrate_changelist_aliases(workspace_dir)
-    if moved:
-        log.success(f'Moved {plural(moved, "alias", "aliases")} '
-                    'to .git-p4son/aliases/')
+    if not args.dry_run:
+        moved = migrate_changelist_aliases(workspace_dir)
+        if moved:
+            log.heading('Moving old aliases')
+            log.success(f'Moved {plural(moved, "alias", "aliases")} '
+                        'to .git-p4son/aliases/')
 
     aliases = list_changelist_aliases(workspace_dir)
     if not aliases:
         log.success('No changelist aliases to clean')
         return 0
 
-    _print_aliases(aliases, workspace_dir, args.backend)
-
-    mode = prompt_choice('Delete?', ['all', 'interactive', 'quit'])
-    if mode is None or mode == 'quit':
-        log.info('Aborting')
-        return 0
-
-    if mode == 'all':
-        _clean_all(aliases, workspace_dir)
-    else:
-        _clean_interactive(aliases, workspace_dir)
-
+    gone: dict[str, bool] = {}
+    for name, changelist in aliases:
+        log.heading(f'{name} -> CL {changelist}')
+        if changelist not in gone:
+            gone[changelist] = is_changelist_gone(changelist, workspace_dir)
+        if not gone[changelist] and args.dry_run:
+            action = 'would-keep'
+            log.success(f'Would keep, CL {changelist} is pending')
+        elif not gone[changelist]:
+            action = 'kept'
+            log.success(f'Kept, CL {changelist} is pending')
+        elif args.dry_run:
+            action = 'would-delete'
+            log.success(f'Would delete, CL {changelist} is not pending')
+        elif _delete_listed(name, workspace_dir):
+            action = 'deleted'
+            log.success(f'Deleted, CL {changelist} is not pending')
+        else:
+            action = 'failed'
+        if args.quiet:
+            print(f'{action} {name} {changelist}')
     return 0

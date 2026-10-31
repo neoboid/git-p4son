@@ -18,6 +18,7 @@ from git_p4son.perforce import (
     get_p4_user,
     get_user_changes,
     get_writable_files,
+    is_changelist_gone,
     is_always_writable_file_type,
     is_binary_file_type,
     opened_lookup,
@@ -406,6 +407,34 @@ class TestGetExistingP4Users(unittest.TestCase):
         with self.assertRaises(RunError) as ctx:
             get_existing_p4_users(['bob'], '/ws')
         self.assertIn('Connect to server failed', ctx.exception.stderr)
+
+
+class TestIsChangelistGone(unittest.TestCase):
+    def _gone(self, *stdout, stderr=()):
+        with mock.patch('git_p4son.perforce.run',
+                        return_value=make_run_result(stdout=list(stdout), stderr=list(stderr))) as mock_run:
+            gone = is_changelist_gone('101', '/ws')
+        mock_run.assert_called_once_with(
+            ['p4', '-L', 'en', '-ztag', 'describe', '-s', '-m1', '101'], cwd='/ws')
+        return gone
+
+    def test_a_pending_changelist_is_not_gone(self):
+        self.assertFalse(self._gone('... change 101', '... status pending'))
+
+    def test_a_submitted_changelist_is_gone(self):
+        self.assertTrue(self._gone('... change 101', '... status submitted'))
+
+    def test_a_missing_changelist_is_gone(self):
+        self.assertTrue(self._gone(stderr=['101 - no such changelist.']))
+
+    def test_a_description_imitating_ztag_does_not_decide(self):
+        self.assertFalse(self._gone(
+            '... change 101', '... desc Fix', '... status submitted', '', '... status pending'))
+
+    def test_an_answer_that_is_neither_raises(self):
+        with self.assertRaisesRegex(
+                CommandError, '^Cannot tell whether CL 101 is pending\n101 - something unexpected.$'):
+            self._gone(stderr=['101 - something unexpected.'])
 
 
 class TestP4Sync(unittest.TestCase):

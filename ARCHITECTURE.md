@@ -48,7 +48,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   the list, printed directly, reaches stdout.
 
 - **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `delete`, `clean`), each an `alias_*_command` built on
-  `changelist_store.py`; `clean` and `delete --all` go on past an alias that fails to delete.
+  `changelist_store.py`. `clean` deletes the aliases whose changelist `is_changelist_gone` finds submitted or
+  missing; it and `delete --all` go on past an alias that fails to delete. `clean --porcelain` sets `quiet`, as
+  `list-changes --porcelain` does, and prints one line per alias directly.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
@@ -183,7 +185,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),
-  reverts, shelving, submitted changes and users, and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor`
+  reverts, shelving, submitted changes and users, whether a changelist is gone (one `describe` each, as a batched
+  one skips the changelist after a missing one), and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor`
   parsing streamed progress and raising `P4SyncClobberError` or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,

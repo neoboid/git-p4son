@@ -33,11 +33,10 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   untracked files included (`new` and `update` don't check with `--no-edit`). `review` and the other `--per-commit`
   runs check even on a dry run; `sync --dry-run` does not, so a clean dry run doesn't mean the sync will start.
   Commit or stash first, and keep scratch files, like a description file, outside the workspace.
-- **Preview first.** `sync`, `new`, `update` and `review` take `-n/--dry-run`, which prints what would happen without
-  touching Perforce or git.
-- **Avoid the interactive commands.** `init` and `alias clean` prompt for answers. Setup is the user's job, and
-  `alias delete` covers cleaning up. Never use `alias delete --all`, which deletes every alias without asking,
-  unless the user asks for it.
+- **Preview first.** `sync`, `new`, `update`, `review` and `alias clean` take `-n/--dry-run`, which prints what
+  would happen without touching Perforce or git.
+- **Avoid `init`.** It prompts for answers, and setup is the user's job. Never use `alias delete --all`, which
+  deletes every alias without asking, unless the user asks for it.
 
 ## jj workspaces
 
@@ -275,7 +274,10 @@ git branch -D my-feature            # -D: the submitted change has a different h
 git p4son alias delete my-feature
 ```
 
-Ask before deleting a branch or alias if you are not sure the CL was submitted.
+Ask before deleting a branch or alias if you are not sure the CL was submitted. `git p4son alias clean` deletes
+only the aliases whose CL is no longer pending, submitted or deleted, so it is safe to run for leftover aliases.
+Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept`, `deleted` or `failed`, and with
+`--dry-run` `would-keep` or `would-delete`), and with `--dry-run` first to see what would go.
 
 ## When something refuses
 

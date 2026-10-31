@@ -829,8 +829,8 @@ git p4son alias delete [alias | --all]
 - `alias` (optional): Alias name to delete. Defaults to the current branch name.
 
 **Options:**
-- `--all`: Delete all aliases without prompting. Unlike `alias clean`, it does not ask first, which suits scripts
-  and AI agents
+- `--all`: Delete all aliases without prompting, whether their changelists are pending or not. To delete only those
+  that are not, use `alias clean`
 
 **Examples:**
 ```sh
@@ -841,27 +841,34 @@ git p4son alias delete --all
 
 #### alias clean
 
-Clean up changelist aliases:
+Delete the aliases whose changelist is no longer pending, as it was submitted or deleted:
 
 ```sh
-git p4son alias clean
+git p4son alias clean [-n] [--porcelain]
 ```
 
-It first moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`, then lists all aliases and
-asks how to proceed:
-- `a` (all): Delete all aliases
-- `i` (interactive): Review each alias one by one
-- `q` (quit): Exit without deleting anything
+It first moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`, then goes through the aliases
+in name order, each under a heading of its own: it looks up the alias's changelist in Perforce and deletes the alias
+if the changelist was submitted or doesn't exist. If p4 answers neither that nor pending for a changelist, it stops
+there, leaving that alias and the ones after it. A submit that renumbers the changelist leaves its old number behind,
+which counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist
+is still pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
 
-In interactive mode, each alias is displayed in turn with a prompt:
-- `y` (yes): Delete this alias
-- `n` (no): Keep this alias
-- `a` (all): Delete this and all remaining aliases (handy for keeping the first few and sweeping the rest)
-- `q` (quit): Stop and keep remaining aliases
+To delete specific aliases, use `alias list` and `alias delete`.
+
+**Options:**
+- `-n, --dry-run`: List the aliases that would be deleted, without deleting or moving any. Ends with
+  `Dry run, nothing changed`
+- `--porcelain`: Print only one `<action> <alias> <CL>` line per alias, for scripts and agents. The action is `kept`,
+  `deleted`, or `failed` when the alias couldn't be deleted; with `-n` it is `would-keep` or `would-delete`. Errors
+  still go to stderr. A `failed` alias leaves the exit code at 0; a stop exits with 1, with no line for the alias it
+  stopped at or those after it.
 
 **Examples:**
 ```sh
+git p4son alias clean -n            # see which aliases would go
 git p4son alias clean
+git p4son alias clean --porcelain   # e.g. "deleted feature-login 12345"
 ```
 
 ### Writable Command

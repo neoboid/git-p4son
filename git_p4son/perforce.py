@@ -242,6 +242,23 @@ def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
             if 'User' in record]
 
 
+def is_changelist_gone(changelist: str, workspace_dir: str) -> bool:
+    """Report whether the changelist was submitted or doesn't exist, rather than pending.
+
+    Raise CommandError when p4 reports none of these."""
+    # One changelist per describe: a batched describe drops the changelist after one that doesn't exist.
+    res = run([*_P4, '-ztag', 'describe', '-s',
+              '-m1', changelist], cwd=workspace_dir)
+    status = parse_ztag_output(res.stdout).get('status')
+    if status == 'submitted' or any('no such changelist' in line for line in res.stderr):
+        return True
+    if status != 'pending':
+        # p4's lines go in the error, as --porcelain silences log.info.
+        raise CommandError(
+            '\n'.join([f'Cannot tell whether CL {changelist} is pending', *res.stderr]))
+    return False
+
+
 # --- file operations ---
 
 def _warn_p4_errors(res: RunResult[list[str]], expected: tuple[str, ...],

@@ -475,6 +475,14 @@ class TestJjNew(JjP4RepoTestCase):
         self.assertIn(
             f'feat -> CL 101, jj change {short} (gone)\n', self.p4son('alias', 'list'))
 
+    def test_alias_clean_keeps_an_alias_whose_change_is_gone_but_whose_changelist_is_pending(self):
+        self.p4son('new', '-b', 'main')
+        change = self.feat_change()
+        self.jj('abandon', 'feat')
+        self.assertIn('# feat -> CL 101\n[ok] Kept, CL 101 is pending\n',
+                      self.p4son('alias', 'clean'))
+        self.assertEqual(alias_changes(self.ws), {'feat': change})
+
     def test_alias_list_ignores_a_change_that_is_no_change_id(self):
         self.p4son('new', '-b', 'main')
         self.write_file('.git-p4son/aliases/bad.toml',

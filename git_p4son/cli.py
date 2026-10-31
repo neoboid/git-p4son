@@ -433,12 +433,20 @@ Examples:
         help='Delete all aliases without prompting'
     )
 
-    alias_subparsers.add_parser(
+    alias_clean_parser = alias_subparsers.add_parser(
         'clean',
-        help='Clean up changelist aliases',
-        description='List all changelist aliases, then delete all of them '
-        'or review each one interactively with yes/no/all/quit prompts.'
-    ).set_defaults(func=alias_clean_command)
+        help='Delete the aliases whose changelist is no longer pending',
+        description='Delete the changelist aliases whose changelist is no '
+        'longer pending, as it was submitted or deleted. Aliases in the old '
+        '.git-p4son/changelists/ store move to .git-p4son/aliases/ first.'
+    )
+    alias_clean_parser.set_defaults(func=alias_clean_command)
+    _add_dry_run(alias_clean_parser,
+                 'List the aliases that would be deleted, without deleting them')
+    alias_clean_parser.add_argument(
+        '--porcelain', dest='quiet', action='store_true',
+        help='Print only "<action> <alias> <CL>" per alias, the action being kept, deleted, '
+        'failed, or with -n would-keep or would-delete, for scripts and agents')
 
     review_parser = subparsers.add_parser(
         'review',

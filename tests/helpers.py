@@ -449,6 +449,8 @@ class FakeP4:
                 in_view = sorted((c for c, (_, files) in self.changes.items()
                                   if files and (at is None or c <= int(at))), reverse=True)
                 out += self._changes(in_view[:int(args[4][2:])])
+        elif args[:4] == ['-ztag', 'describe', '-s', '-m1']:
+            out, stderr = self._describe(args[4])
         elif args[:2] == ['change', '-o']:
             out = self._spec(args[2])
         elif args[:2] == ['change', '-i']:
@@ -511,6 +513,14 @@ class FakeP4:
             out += [f'... path {self._local(path)}', f'... action {action}',
                     f'... change {change}', '']
         return out
+
+    def _describe(self, change: str) -> tuple[list[str], list[str]]:
+        """A changelist as p4 -ztag describe -s -m1 prints it, or the warning for one that doesn't exist."""
+        if change in self.pending:
+            return [f'... change {change}', '... status pending'], []
+        if int(change) in self.changes:
+            return [f'... change {change}', '... status submitted'], []
+        return [], [f'{change} - no such changelist.']
 
     def _spec(self, change: str) -> list[str]:
         """A pending changelist's spec, as p4 change -o prints it."""

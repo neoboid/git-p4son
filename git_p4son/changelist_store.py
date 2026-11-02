@@ -157,9 +157,9 @@ def _remove_old_alias(old_path: str, workspace_dir: str) -> None:
         pass
 
 
-def _write_alias(name: str, changelist: str, workspace_dir: str, change: str | None = None,
-                 record: Record | None = None) -> None:
+def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
     path, old_path = _alias_paths(name, workspace_dir)
+    changelist, change, record = alias.changelist, alias.change, alias.record
     if not changelist.isdigit():
         raise CommandError(f'Invalid changelist number: {changelist}')
     ensure_config_dir(workspace_dir)
@@ -225,9 +225,8 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
     if change is not None:
         for other, alias in _records(workspace_dir).items():
             if alias.change == change and other != name:
-                _write_alias(other, alias.changelist,
-                             workspace_dir, record=alias.record)
-    _write_alias(name, changelist, workspace_dir, change, record)
+                _write_alias(other, alias._replace(change=None), workspace_dir)
+    _write_alias(name, _Alias(changelist, change, record), workspace_dir)
 
 
 def find_record(changelist: str, workspace_dir: str) -> tuple[str, Record] | None:
@@ -241,8 +240,8 @@ def update_record(name: str, record: Record, workspace_dir: str) -> None:
     path, _ = _alias_paths(name, workspace_dir)
     if not os.path.exists(path):
         raise _no_alias(name)
-    alias = _read_alias_file(path, name)
-    _write_alias(name, alias.changelist, workspace_dir, alias.change, record)
+    _write_alias(name, _read_alias_file(
+        path, name)._replace(record=record), workspace_dir)
 
 
 def alias_changes(workspace_dir: str) -> dict[str, str]:
@@ -294,6 +293,6 @@ def migrate_changelist_aliases(workspace_dir: str) -> int:
             _remove_old_alias(_alias_paths(
                 name, workspace_dir)[1], workspace_dir)
         else:
-            _write_alias(name, changelist, workspace_dir)
+            _write_alias(name, _Alias(changelist, None, None), workspace_dir)
             moved += 1
     return moved

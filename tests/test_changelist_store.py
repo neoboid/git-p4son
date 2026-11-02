@@ -9,7 +9,10 @@ from git_p4son.changelist_store import (
     alias_changes,
     alias_for_change,
     find_record,
+    find_review,
+    mark_review_started,
     Record,
+    Review,
     branch_alias,
     branch_to_alias,
     check_alias_usable,
@@ -260,6 +263,52 @@ class TestRecord(WorkspaceTestCase):
                 self.write_file(os.path.join(
                     CONFIG_DIR, 'aliases', 'feat.toml'), 'changelist = 101\n' + extra)
                 self.assertIsNone(find_record('101', self.ws))
+
+
+class TestReview(WorkspaceTestCase):
+    def test_an_alias_records_its_review_tool_unstarted(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, review_tool='my-tool')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', False))
+
+    def test_marking_it_started_keeps_the_rest(self):
+        record = Record('main', 'abc', ['1'])
+        save_changelist_alias('feat', '101', self.ws, force=False, change='zzzz', record=record,
+                              review_tool='my-tool')
+        mark_review_started('feat', self.ws)
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', True))
+        self.assertEqual(find_record('101', self.ws), ('feat', record))
+        self.assertEqual(alias_changes(self.ws), {'feat': 'zzzz'})
+
+    def test_updating_the_record_keeps_the_review(self):
+        save_changelist_alias('feat', '101', self.ws, force=False, record=Record('main', '', []),
+                              review_tool='my-tool')
+        mark_review_started('feat', self.ws)
+        update_record('feat', Record('main', 'abc', ['1']), self.ws)
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', True))
+
+    def test_moving_the_change_record_keeps_the_other_alias_review(self):
+        save_changelist_alias('old', '101', self.ws,
+                              force=False, change='zzzz', review_tool='my-tool')
+        save_changelist_alias('new', '102', self.ws,
+                              force=False, change='zzzz')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('old', 'my-tool', False))
+        self.assertEqual(alias_changes(self.ws), {'new': 'zzzz'})
+
+    def test_no_review_without_a_tool(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_the_alias_that_records_a_tool_is_found_among_several(self):
+        save_changelist_alias('a', '101', self.ws, force=False)
+        save_changelist_alias('b', '101', self.ws,
+                              force=False, review_tool='my-tool')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('b', 'my-tool', False))
 
 
 class TestBranchToAlias(unittest.TestCase):

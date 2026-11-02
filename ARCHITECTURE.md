@@ -163,8 +163,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and the identities of the commits since
   it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
   may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
-  `alias_for_change` and `alias_changes`. `_write_alias` writes a whole `_Alias`, so every write keeps what the alias
-  holds. The old
+  `alias_for_change` and `alias_changes`. An alias can record a review tool (`review_tool`) and, once the tool has run
+  for the CL, `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a whole `_Alias`, so
+  every write keeps them. The old
   `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
   which `alias clean` runs first, moves the rest.
 

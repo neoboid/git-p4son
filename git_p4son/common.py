@@ -278,6 +278,19 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.kill()
 
 
+def run_interactive(command: list[str], cwd: str = '.', env: dict[str, str] | None = None) -> RunResult[list[str]]:
+    """Run a command on the terminal, its output shown as it is written and its prompts answered there.
+
+    The result holds no output, only the return code."""
+    log.command(join_command_line(command))
+    log.end_command()
+    sys.stdout.flush()
+    start = time.monotonic()
+    returncode = subprocess.run(
+        command, cwd=cwd, env=_command_env(cwd, env)).returncode
+    return RunResult(returncode, [], [], elapsed=timedelta(seconds=time.monotonic() - start))
+
+
 def run_with_stream_output(command: list[str],
                            on_output: Callable[[str, IO[str]], None],
                            cwd: str = '.',

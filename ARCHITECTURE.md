@@ -196,7 +196,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   parsing streamed progress and raising `P4SyncClobberError` or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
-  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`),
+  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands
+  run on the terminal (`run_interactive()`),
   `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
   prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
 

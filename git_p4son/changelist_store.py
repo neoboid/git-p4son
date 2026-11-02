@@ -28,10 +28,19 @@ class Record:
     catch_up: str = ''
 
 
+class Review(NamedTuple):
+    """The review tool an alias records for its CL, and whether the tool has run for it yet."""
+    alias: str
+    tool: str
+    started: bool
+
+
 class _Alias(NamedTuple):
     changelist: str
     change: str | None
     record: Record | None
+    review_tool: str | None = None
+    review_started: bool = False
 
 
 RESERVED_KEYWORDS = frozenset({'last-synced', 'head', 'branch'})
@@ -135,7 +144,9 @@ def _read_alias_file(path: str, name: str) -> _Alias:
             f'Changelist alias "{name}" has no changelist number')
     change = data.get('change')
     valid = isinstance(change, str) and _CHANGE_ID_RE.fullmatch(change)
-    return _Alias(str(changelist), change if valid else None, _read_record(data))
+    review_tool = data.get('review_tool')
+    return _Alias(str(changelist), change if valid else None, _read_record(data),
+                  review_tool if isinstance(review_tool, str) else None, data.get('review_started') is True)
 
 
 def _read_old_alias(path: str, name: str) -> str:
@@ -167,7 +178,8 @@ def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
     if not os.path.isdir(aliases_dir):
         log.info(f'Creating {aliases_dir}')
         os.makedirs(aliases_dir, exist_ok=True)
-    data: dict[str, int | str | list[str]] = {'changelist': int(changelist)}
+    data: dict[str, int | str | bool | list[str]] = {
+        'changelist': int(changelist)}
     if change is not None:
         data['change'] = change
     if record is not None:
@@ -175,6 +187,9 @@ def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
                  'included': record.included}
         if record.catch_up:
             data['catch_up'] = record.catch_up
+    if alias.review_tool is not None:
+        data['review_tool'] = alias.review_tool
+        data['review_started'] = alias.review_started
     with open(path, 'w', encoding='utf-8') as f:
         f.write(format_toml(data))
     _remove_old_alias(old_path, workspace_dir)
@@ -219,14 +234,16 @@ def check_alias_usable(name: str, workspace_dir: str, force: bool) -> None:
 
 
 def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force: bool,
-                          change: str | None = None, record: Record | None = None) -> None:
+                          change: str | None = None, record: Record | None = None,
+                          review_tool: str | None = None) -> None:
     """Save a changelist under an alias, moving the record of change to it; raise CommandError if not usable."""
     check_alias_usable(name, workspace_dir, force)
     if change is not None:
         for other, alias in _records(workspace_dir).items():
             if alias.change == change and other != name:
                 _write_alias(other, alias._replace(change=None), workspace_dir)
-    _write_alias(name, _Alias(changelist, change, record), workspace_dir)
+    _write_alias(name, _Alias(changelist, change,
+                 record, review_tool), workspace_dir)
 
 
 def find_record(changelist: str, workspace_dir: str) -> tuple[str, Record] | None:
@@ -242,6 +259,20 @@ def update_record(name: str, record: Record, workspace_dir: str) -> None:
         raise _no_alias(name)
     _write_alias(name, _read_alias_file(
         path, name)._replace(record=record), workspace_dir)
+
+
+def find_review(changelist: str, workspace_dir: str) -> Review | None:
+    """The review an alias of changelist records, or None for a CL no alias records as a review."""
+    return next((Review(name, alias.review_tool, alias.review_started)
+                 for name, alias in sorted(_records(workspace_dir).items())
+                 if alias.changelist == changelist and alias.review_tool is not None), None)
+
+
+def mark_review_started(name: str, workspace_dir: str) -> None:
+    """Record that the review tool has run for the CL of alias name."""
+    path, _ = _alias_paths(name, workspace_dir)
+    _write_alias(name, _read_alias_file(path, name)._replace(
+        review_started=True), workspace_dir)
 
 
 def alias_changes(workspace_dir: str) -> dict[str, str]:

@@ -5,65 +5,13 @@ from pathlib import Path
 
 from . import CONFIG_DIR
 from .common import RunResult, run
-from .config import get_setting
 from .log import log, plural
-
-DEFAULT_WINDOWS_ASSOCIATIONS: dict[str, list[str]] = {
-    '.ps1': [
-        'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'
-    ],
-    '.nu': ['nu.exe'],
-    '.sh': ['bash.exe'],
-    '.py': ['python.exe'],
-}
+from .scripts import script_command, script_runners
 
 
 def _hook_dir(workspace_dir: str, hook_name: str) -> Path:
     """Return the directory containing scripts for a named hook."""
     return Path(workspace_dir) / CONFIG_DIR / 'hooks' / hook_name
-
-
-def _windows_associations(workspace_dir: str) -> dict[str, list[str]]:
-    """Return default Windows associations overridden by config."""
-    configured = get_setting(workspace_dir, 'hooks', 'extension-associations',
-                             dict, {})
-    associations = DEFAULT_WINDOWS_ASSOCIATIONS.copy()
-
-    for extension, command in configured.items():
-        normalized_extension = extension.lower()
-        if not normalized_extension.startswith('.'):
-            normalized_extension = f'.{normalized_extension}'
-
-        if isinstance(command, str):
-            associations[normalized_extension] = [command]
-        elif isinstance(command, list) and all(
-                isinstance(part, str) for part in command):
-            associations[normalized_extension] = command
-        else:
-            log.warning(
-                'Ignoring invalid hook extension association for '
-                f'{extension}')
-
-    return associations
-
-
-def _is_windows() -> bool:
-    """Return True when running on Windows."""
-    return os.name == 'nt'
-
-
-def _hook_command(path: Path, workspace_dir: str) -> list[str] | None:
-    """Return the command for a hook file, or None if not executable."""
-    if _is_windows():
-        association = _windows_associations(workspace_dir).get(
-            path.suffix.lower())
-        if association is None:
-            return None
-        return [*association, str(path)]
-
-    if not os.access(path, os.X_OK):
-        return None
-    return [str(path)]
 
 
 def run_hooks(hook_name: str, workspace_dir: str, invocation_dir: str,
@@ -85,8 +33,9 @@ def run_hooks(hook_name: str, workspace_dir: str, invocation_dir: str,
     cwd = os.path.abspath(invocation_dir)
     env = {'GIT_P4SON_REPO_ROOT_DIR': repo_root, 'GIT_P4SON_BACKEND': backend}
 
+    runners = script_runners(workspace_dir)
     for path in files:
-        command = _hook_command(path, workspace_dir)
+        command = script_command(path, runners)
         display_path = os.path.relpath(path, workspace_dir)
         if command is None:
             log.warning(f'Skipping non-executable hook: {display_path}')

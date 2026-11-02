@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.config import ConfigError
 from git_p4son.hooks import run_hooks
 from tests.helpers import captured_output, make_run_result
 
@@ -51,73 +50,7 @@ class TestRunHooks(unittest.TestCase):
         self.assertEqual(out.getvalue().count('[warn]'), 1)
         self.assertIn('skip-me', out.getvalue())
 
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
-    @mock.patch('git_p4son.hooks.run')
-    def test_windows_runs_default_script_extensions(self, mock_run,
-                                                    _is_windows):
-        mock_run.return_value = make_run_result()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
-            os.makedirs(hook_dir)
-            ps1 = os.path.join(hook_dir, 'a.ps1')
-            nu = os.path.join(hook_dir, 'b.nu')
-            py = os.path.join(hook_dir, 'c.py')
-            sh = os.path.join(hook_dir, 'd.sh')
-            for path in (ps1, nu, py, sh):
-                with open(path, 'w') as f:
-                    f.write('')
-
-            run_hooks('post-sync', tmpdir, tmpdir, 'git')
-
-        commands = [call.args[0] for call in mock_run.call_args_list]
-        self.assertEqual(commands, [
-            ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-             '-File', ps1],
-            ['nu.exe', nu],
-            ['python.exe', py],
-            ['bash.exe', sh],
-        ])
-
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
-    @mock.patch('git_p4son.hooks.run')
-    def test_windows_config_can_override_extension_association(
-            self, mock_run, _is_windows):
-        mock_run.return_value = make_run_result()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_dir = os.path.join(tmpdir, '.git-p4son')
-            hook_dir = os.path.join(config_dir, 'hooks', 'post-sync')
-            os.makedirs(hook_dir)
-            script = os.path.join(hook_dir, 'script.ps1')
-            with open(script, 'w') as f:
-                f.write('')
-            with open(os.path.join(config_dir, 'config.toml'), 'w') as f:
-                f.write('[hooks.extension-associations]\n')
-                f.write('".ps1" = ["pwsh.exe", "-File"]\n')
-
-            run_hooks('post-sync', tmpdir, tmpdir, 'git')
-
-        mock_run.assert_called_once()
-        self.assertEqual(mock_run.call_args.args[0],
-                         ['pwsh.exe', '-File', script])
-
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
-    @mock.patch('git_p4son.hooks.run')
-    def test_windows_associations_not_a_table_is_an_error(
-            self, mock_run, _is_windows):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_dir = os.path.join(tmpdir, '.git-p4son')
-            hook_dir = os.path.join(config_dir, 'hooks', 'post-sync')
-            os.makedirs(hook_dir)
-            with open(os.path.join(hook_dir, 'script.ps1'), 'w') as f:
-                f.write('')
-            with open(os.path.join(config_dir, 'config.toml'), 'w') as f:
-                f.write('[hooks]\nextension-associations = "pwsh.exe"\n')
-
-            with self.assertRaises(ConfigError):
-                run_hooks('post-sync', tmpdir, tmpdir, 'git')
-        mock_run.assert_not_called()
-
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.scripts._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_windows_warns_for_unknown_extension(self, mock_run,
                                                  _is_windows):
@@ -133,7 +66,7 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_not_called()
         self.assertEqual(out.getvalue().count('[warn]'), 1)
 
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.scripts._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_prints_hook_stdout_after_command_finishes(
             self, mock_run, _is_windows):
@@ -150,7 +83,7 @@ class TestRunHooks(unittest.TestCase):
         mock_run.assert_called_once()
         self.assertIn('\nhook output\n', out.getvalue())
 
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.scripts._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_failing_hook_does_not_stop_remaining_hooks(
             self, mock_run, _is_windows):
@@ -174,7 +107,7 @@ class TestRunHooks(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertEqual(out.getvalue().count('[err]'), 1)
 
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.scripts._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_prints_hook_stderr(self, mock_run, _is_windows):
         mock_run.return_value = make_run_result(stderr=['a warning'])
@@ -190,15 +123,15 @@ class TestRunHooks(unittest.TestCase):
 
         self.assertEqual(err.getvalue(), 'a warning\n')
 
-    @mock.patch('git_p4son.hooks._is_windows', return_value=True)
+    @mock.patch('git_p4son.scripts._is_windows', return_value=True)
     @mock.patch('git_p4son.hooks.run')
     def test_hooks_run_in_sorted_order(self, mock_run, _is_windows):
         mock_run.return_value = make_run_result()
         with tempfile.TemporaryDirectory() as tmpdir:
             hook_dir = os.path.join(tmpdir, '.git-p4son', 'hooks', 'post-sync')
             os.makedirs(hook_dir)
-            second = os.path.join(hook_dir, 'b.nu')
-            first = os.path.join(hook_dir, 'a.nu')
+            second = os.path.join(hook_dir, 'b.py')
+            first = os.path.join(hook_dir, 'a.py')
             for path in (second, first):
                 with open(path, 'w') as f:
                     f.write('')
@@ -207,8 +140,8 @@ class TestRunHooks(unittest.TestCase):
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         self.assertEqual(commands, [
-            ['nu.exe', first],
-            ['nu.exe', second],
+            ['python.exe', first],
+            ['python.exe', second],
         ])
 
 

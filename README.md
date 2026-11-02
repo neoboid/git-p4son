@@ -274,8 +274,9 @@ write most of them; the rest you edit by hand.
   `$(user)` stands for you. See [Split users](#split-users)
 - `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
   [Blocking processes](#blocking-processes)
-- `[hooks.extension-associations]` (table, Windows only): the command that runs a hook script, by file extension.
-  See [Hooks](#hooks)
+- `[core.script-runners]` (table, Windows only): the command that runs a hook script, by file extension.
+  See [Hooks](#hooks). The old `[hooks.extension-associations]` is still read, and `core.script-runners` wins where
+  both name an extension
 
 For example:
 
@@ -952,17 +953,17 @@ The hook process CWD is the directory where git-p4son was invoked, and `GIT_P4SO
 set to the git-p4son repository root. `GIT_P4SON_BACKEND` is `git` or `jj`, the [backend](#choosing-the-backend)
 the command runs with.
 
-On Windows, `.ps1`, `.nu`, `.sh`, and `.py` files are run with
-`powershell.exe -NoProfile -ExecutionPolicy Bypass -File`, `nu.exe`, `bash.exe`, and `python.exe` respectively.
-Customize or add Windows script associations in `.git-p4son/config.toml`:
+On Windows, `.ps1`, `.sh`, and `.py` files are run with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File`, `bash.exe`, and `python.exe` respectively.
+Customize or add Windows script runners in `.git-p4son/config.toml`:
 
 ```toml
-[hooks.extension-associations]
+[core.script-runners]
 ".ps1" = ["pwsh.exe", "-NoProfile", "-File"]
-".py" = "python.exe"
+".nu" = "nu.exe"
 ```
 
-Non-executable or unrecognized hook files, and invalid association entries, are skipped with a warning.
+Non-executable or unrecognized hook files, and invalid runner entries, are skipped with a warning.
 
 ### pre-sync hook
 

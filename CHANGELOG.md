@@ -6,6 +6,9 @@
   or deleted, and keeps the rest, each alias under a heading of its own. `--dry-run` lists them first, and
   `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use `alias delete` for the others. The Claude Code
   skill now suggests it; run `skill install` again to update it
+- The Windows commands that run hook scripts by extension move from `[hooks.extension-associations]` to
+  `[core.script-runners]`; the old name is still read. The `.nu` default is gone: add `".nu" = "nu.exe"` to the setting
+  to run Nushell hooks
 
 ## 0.7.0
 

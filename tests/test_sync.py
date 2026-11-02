@@ -530,7 +530,7 @@ class TestSyncHooks(SyncTestCase):
         self.sync_fails(message='pre-sync hook failed')
         self.assertEqual(self.p4.synced(), [])
 
-    @unittest.skipUnless(sys.platform == 'win32', 'PowerShell hooks run through the Windows .ps1 association')
+    @unittest.skipUnless(sys.platform == 'win32', 'PowerShell hooks run through the default .ps1 runner')
     def test_powershell_hook_runs(self):
         path, read_log = self.hook_log()
         # PowerShell escapes a quote inside single quotes by doubling it.

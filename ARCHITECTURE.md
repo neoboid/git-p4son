@@ -88,8 +88,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order,
   from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a
-  failure. On Windows, scripts run through extension associations, overridable with
-  `[hooks.extension-associations]`. `sync` runs the `pre-sync` and `post-sync` hooks.
+  failure, each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and
+  `post-sync` hooks.
+
+- **`scripts.py`** - `script_command`, the command that runs a workspace script: the file itself on POSIX, when
+  executable, and on Windows the runner `script_runners` gives its extension, the defaults overridden by
+  `[core.script-runners]` and the old `[hooks.extension-associations]`, where `core` wins.
 
 - **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
   aliases, split users and the `branch` keyword. Logging is silenced so stdout carries only candidates; the scripts in
@@ -172,7 +176,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a
   default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
-  depot root, `core.writable`, the split users, the blocking processes and the hook associations.
+  depot root, `core.writable`, the split users, the blocking processes and the script runners.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files; reading
   uses `tomllib`.

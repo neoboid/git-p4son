@@ -5,6 +5,7 @@ import io
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from unittest import mock
@@ -16,6 +17,7 @@ from git_p4son.common import (
     prompt_menu,
     prompt_numbered,
     run,
+    run_interactive,
     run_with_stream_output,
     RunError,
     RunResult,
@@ -221,6 +223,26 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 30)
         mock_log.stop_spinner.assert_called_once()
         mock_log.error.assert_not_called()
+
+
+class TestRunInteractive(unittest.TestCase):
+    def test_runs_in_cwd_with_env_and_returns_the_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = os.path.join(tmpdir, 'out')
+            script = 'import os, sys; open(sys.argv[1], "w").write(os.environ["X"] + "|" + os.getcwd()); sys.exit(4)'
+            with contextlib.redirect_stdout(io.StringIO()) as printed:
+                result = run_interactive(
+                    [sys.executable, '-c', script, out], cwd=tmpdir, env={'X': 'y'})
+            with open(out) as f:
+                value, cwd = f.read().split('|')
+            self.assertTrue(os.path.samefile(cwd, tmpdir))
+        self.assertEqual(result.returncode, 4)
+        self.assertEqual(value, 'y')
+        self.assertIn('-c', printed.getvalue())
+
+    def test_a_missing_executable_raises(self):
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(FileNotFoundError):
+            run_interactive(['definitely-not-a-real-binary-p4son'])
 
 
 class TestMissingExecutable(unittest.TestCase):

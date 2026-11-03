@@ -104,10 +104,12 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
     aliases = list_changelist_aliases(workspace_dir)
     if not aliases:
+        log.heading('Alias clean done')
         log.success('No changelist aliases to clean')
         return 0
 
     gone: dict[str, bool] = {}
+    actions: list[str] = []
     for name, changelist in aliases:
         log.heading(f'{name} -> CL {changelist}')
         if changelist not in gone:
@@ -126,6 +128,24 @@ def alias_clean_command(args: argparse.Namespace) -> int:
             log.success(f'Deleted, CL {changelist} is not pending')
         else:
             action = 'failed'
+        actions.append(action)
         if args.quiet:
             print(f'{action} {name} {changelist}')
+    _print_clean_result(actions, args.dry_run)
     return 0
+
+
+def _print_clean_result(actions: list[str], dry_run: bool) -> None:
+    """Print how many aliases alias clean deleted, kept and failed to delete."""
+    log.heading('Alias clean done')
+    if dry_run:
+        log.success(f'Would delete {plural(actions.count("would-delete"), "alias", "aliases")}, '
+                    f'would keep {actions.count("would-keep")}')
+        return
+    summary = (f'Deleted {plural(actions.count("deleted"), "alias", "aliases")}, '
+               f'kept {actions.count("kept")}')
+    failed = actions.count('failed')
+    if failed:
+        log.warning(f'{summary}, failed to delete {failed}')
+    else:
+        log.success(summary)

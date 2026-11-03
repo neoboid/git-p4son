@@ -153,7 +153,8 @@ class TestAliasClean(WorkspaceTestCase):
         self.assertEqual(self._aliases(), [('pending', '101')])
         self.assertEqual(self._report(out), '# deleted -> CL 103\n[ok] Deleted, CL 103 is not pending\n'
                          '\n# pending -> CL 101\n[ok] Kept, CL 101 is pending\n'
-                         '\n# submitted -> CL 102\n[ok] Deleted, CL 102 is not pending\n')
+                         '\n# submitted -> CL 102\n[ok] Deleted, CL 102 is not pending\n'
+                         '\n# Alias clean done\n[ok] Deleted 2 aliases, kept 1\n')
 
     def test_dry_run_deletes_nothing(self):
         out = self.run_command(alias_clean_command, [
@@ -161,7 +162,8 @@ class TestAliasClean(WorkspaceTestCase):
         self.assertEqual(len(self._aliases()), 3)
         self.assertEqual(self._report(out), '# deleted -> CL 103\n[ok] Would delete, CL 103 is not pending\n'
                          '\n# pending -> CL 101\n[ok] Would keep, CL 101 is pending\n'
-                         '\n# submitted -> CL 102\n[ok] Would delete, CL 102 is not pending\n')
+                         '\n# submitted -> CL 102\n[ok] Would delete, CL 102 is not pending\n'
+                         '\n# Alias clean done\n[ok] Would delete 2 aliases, would keep 1\n')
 
     def test_porcelain_prints_one_line_per_alias(self):
         self.assertEqual(self.p4son('alias', 'clean', '--porcelain'),
@@ -201,6 +203,8 @@ class TestAliasClean(WorkspaceTestCase):
         self.assertIn('# deleted -> CL 103\n[err] boom\n', out)
         self.assertIn(
             '# submitted -> CL 102\n[ok] Deleted, CL 102 is not pending\n', out)
+        self.assertIn(
+            '# Alias clean done\n[warn] Deleted 1 alias, kept 1, failed to delete 1\n', out)
 
     def test_a_failed_lookup_stops_at_its_alias(self):
         fake_run = self.p4.run
@@ -229,13 +233,16 @@ class TestAliasClean(WorkspaceTestCase):
         delete_changelist_alias('deleted', self.ws)
         out = self.run_command(alias_clean_command, ['alias', 'clean'])
         self.assertEqual(self._aliases(), [('pending', '101')])
-        self.assertNotIn('Deleted', out)
+        self.assertNotIn('Deleted,', out)
+        self.assertIn(
+            '# Alias clean done\n[ok] Deleted 0 aliases, kept 1\n', out)
 
     def test_no_aliases_asks_perforce_nothing(self):
         for name, _changelist in self._aliases():
             delete_changelist_alias(name, self.ws)
         out = self.run_command(alias_clean_command, ['alias', 'clean'])
-        self.assertIn('No changelist aliases to clean', out)
+        self.assertIn(
+            '# Alias clean done\n[ok] No changelist aliases to clean\n', out)
         self.assertEqual(self.p4.calls, [])
 
 

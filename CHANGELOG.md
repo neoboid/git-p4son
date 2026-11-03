@@ -9,9 +9,9 @@
   again on `update --shelve`, with the `new` arguments until a run succeeds and the `update` ones after. Swarm
   stays the default, unchanged
 - `alias clean` no longer prompts: it deletes the aliases whose changelist is no longer pending, as it was submitted
-  or deleted, and keeps the rest, each alias under a heading of its own. `--dry-run` lists them first, and
-  `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use `alias delete` for the others. The Claude Code
-  skill now suggests it; run `skill install` again to update it
+  or deleted, and keeps the rest, each alias under a heading of its own, then counts them under an `Alias clean done`
+  heading. `--dry-run` lists them first, and `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use
+  `alias delete` for the others. The Claude Code skill now suggests it; run `skill install` again to update it
 - The Windows commands that run hook scripts by extension move from `[hooks.extension-associations]` to
   `[core.script-runners]`; the old name is still read. The `.nu` default is gone: add `".nu" = "nu.exe"` to the setting
   to run Nushell hooks

@@ -866,6 +866,8 @@ there, leaving that alias and the ones after it. A submit that renumbers the cha
 which counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist
 is still pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
 
+It ends under an `Alias clean done` heading with how many aliases it deleted, kept and failed to delete.
+
 To delete specific aliases, use `alias list` and `alias delete`.
 
 **Options:**

@@ -16,7 +16,7 @@ from git_p4son.complete import (
     run_complete,
 )
 from git_p4son.log import log
-from tests.helpers import GitRepoTestCase
+from tests.helpers import GitRepoTestCase, WorkspaceTestCase
 
 
 class TestRunCompleteOutput(GitRepoTestCase):
@@ -521,6 +521,20 @@ class TestCompleteNoWorkspace(unittest.TestCase):
         result = _complete(self.parser, ['update', ''], workspace_dir=None)
         names = self._names(result)
         self.assertEqual(names, [])
+
+
+class TestCompleteReviewTool(WorkspaceTestCase):
+    def test_review_tool_values_are_swarm_and_the_configured_tools(self):
+        self.write_review_tool('my-tool')
+        result = _complete(create_parser(), [
+                           'review', '--review-tool', ''], workspace_dir=self.ws)
+        self.assertEqual([name for name, _ in result], ['swarm', 'my-tool'])
+
+    def test_a_broken_config_completes_swarm(self):
+        self.write_config('review-tool = "x"\n')
+        result = _complete(create_parser(), [
+                           'review', '--review-tool', ''], workspace_dir=self.ws)
+        self.assertEqual([name for name, _ in result], ['swarm'])
 
 
 if __name__ == '__main__':

@@ -11,7 +11,9 @@
 - `alias clean` no longer prompts: it deletes the aliases whose changelist is no longer pending, as it was submitted
   or deleted, and keeps the rest, each alias under a heading of its own, then counts them under an `Alias clean done`
   heading. `--dry-run` lists them first, and `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use
-  `alias delete` for the others. The Claude Code skill now suggests it; run `skill install` again to update it
+  `alias delete` for the others. It exits with 1 if an alias couldn't be deleted. The Claude Code skill now suggests
+  it; run `skill install` again to update it
+- `alias delete --all` exits with 1 if an alias couldn't be deleted, after going on to delete the rest
 - Errors no longer come out ahead of the output before them when stdout and stderr go to the same pipe or file, as
   with `2>&1`
 - The Windows commands that run hook scripts by extension move from `[hooks.extension-associations]` to

@@ -68,10 +68,9 @@ class TestAliasDeleteCommand(unittest.TestCase):
 
     def test_all_goes_on_past_a_failed_delete(self, _list, mock_delete):
         mock_delete.side_effect = [None, PermissionError('boom'), None]
-        with captured_output() as out:
-            rc = alias_delete_command(
-                cli_args(['alias', 'delete', '--all']))
-        self.assertEqual(rc, 0)
+        with captured_output() as out, \
+                self.assertRaisesRegex(CommandError, '^Failed to delete 1 alias$'):
+            alias_delete_command(cli_args(['alias', 'delete', '--all']))
         self.assertEqual(mock_delete.call_count, 3)
         self.assertIn('[err] boom\n', out.getvalue())
 
@@ -177,7 +176,8 @@ class TestAliasClean(WorkspaceTestCase):
     def test_porcelain_failed_delete(self):
         with mock.patch('git_p4son.alias.delete_changelist_alias',
                         side_effect=[PermissionError('boom'), None]):
-            out = self.p4son('alias', 'clean', '--porcelain')
+            out = self.p4son_fails('alias', 'clean', '--porcelain',
+                                   message='^Failed to delete 1 alias$')
         # captured_output takes stderr too, where the error goes.
         self.assertEqual(
             out, '[err] boom\nfailed deleted 103\nkept pending 101\ndeleted submitted 102\n')
@@ -197,14 +197,15 @@ class TestAliasClean(WorkspaceTestCase):
     def test_goes_on_past_a_failed_delete(self):
         with mock.patch('git_p4son.alias.delete_changelist_alias',
                         side_effect=[PermissionError('boom'), None]) as mock_delete:
-            out = self.run_command(alias_clean_command, ['alias', 'clean'])
+            out = self.p4son_fails('alias', 'clean',
+                                   message='^Failed to delete 1 alias$')
         self.assertEqual([c.args[0] for c in mock_delete.call_args_list],
                          ['deleted', 'submitted'])
         self.assertIn('# deleted -> CL 103\n[err] boom\n', out)
         self.assertIn(
             '# submitted -> CL 102\n[ok] Deleted, CL 102 is not pending\n', out)
-        self.assertIn(
-            '# Alias clean done\n[warn] Deleted 1 alias, kept 1, failed to delete 1\n', out)
+        self.assertTrue(out.endswith(
+            '# Alias clean done\n[warn] Deleted 1 alias, kept 1, failed to delete 1\n'))
 
     def test_a_failed_lookup_stops_at_its_alias(self):
         fake_run = self.p4.run

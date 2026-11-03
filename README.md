@@ -842,7 +842,8 @@ git p4son alias delete [alias | --all]
 
 **Options:**
 - `--all`: Delete all aliases without prompting, whether their changelists are pending or not. To delete only those
-  that are not, use `alias clean`
+  that are not, use `alias clean`. An alias that can't be deleted is reported and skipped, and the command then exits
+  with 1
 
 **Examples:**
 ```sh
@@ -866,7 +867,8 @@ there, leaving that alias and the ones after it. A submit that renumbers the cha
 which counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist
 is still pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
 
-It ends under an `Alias clean done` heading with how many aliases it deleted, kept and failed to delete.
+It ends under an `Alias clean done` heading with how many aliases it deleted and kept. If any couldn't be deleted,
+that line is a warning with how many failed, followed by an error, and the command exits with 1.
 
 To delete specific aliases, use `alias list` and `alias delete`.
 
@@ -875,8 +877,8 @@ To delete specific aliases, use `alias list` and `alias delete`.
   `Dry run, nothing changed`
 - `--porcelain`: Print only one `<action> <alias> <CL>` line per alias, for scripts and agents. The action is `kept`,
   `deleted`, or `failed` when the alias couldn't be deleted; with `-n` it is `would-keep` or `would-delete`. Errors
-  still go to stderr. A `failed` alias leaves the exit code at 0; a stop exits with 1, with no line for the alias it
-  stopped at or those after it.
+  still go to stderr. A `failed` alias makes the exit code 1, after the lines for all aliases; a stop exits with 1,
+  with no line for the alias it stopped at or those after it.
 
 **Examples:**
 ```sh

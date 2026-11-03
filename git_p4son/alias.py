@@ -70,15 +70,25 @@ def alias_delete_command(args: argparse.Namespace) -> int:
         if not aliases:
             log.success('No changelist aliases to delete')
             return 0
+        failed = 0
         for name, _changelist in aliases:
             if _delete_listed(name, workspace_dir):
                 log.success(f'Deleted alias "{name}"')
+            else:
+                failed += 1
+        if failed:
+            raise _failed_deletes(failed)
         return 0
 
     log.heading(f'Deleting alias {args.alias}')
     delete_changelist_alias(args.alias, workspace_dir)
     log.success(f'Deleted alias "{args.alias}"')
     return 0
+
+
+def _failed_deletes(failed: int) -> CommandError:
+    """The error that ends a run that failed to delete some aliases."""
+    return CommandError(f'Failed to delete {plural(failed, "alias", "aliases")}')
 
 
 def _delete_listed(name: str, workspace_dir: str) -> bool:
@@ -136,7 +146,9 @@ def alias_clean_command(args: argparse.Namespace) -> int:
 
 
 def _print_clean_result(actions: list[str], dry_run: bool) -> None:
-    """Print how many aliases alias clean deleted, kept and failed to delete."""
+    """Print how many aliases alias clean deleted, kept and failed to delete.
+
+    Raises CommandError if any delete failed."""
     log.heading('Alias clean done')
     if dry_run:
         log.success(f'Would delete {plural(actions.count("would-delete"), "alias", "aliases")}, '
@@ -147,5 +159,5 @@ def _print_clean_result(actions: list[str], dry_run: bool) -> None:
     failed = actions.count('failed')
     if failed:
         log.warning(f'{summary}, failed to delete {failed}')
-    else:
-        log.success(summary)
+        raise _failed_deletes(failed)
+    log.success(summary)

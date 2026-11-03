@@ -274,6 +274,9 @@ write most of them; the rest you edit by hand.
   `$(user)` stands for you. See [Split users](#split-users)
 - `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
   [Blocking processes](#blocking-processes)
+- `[review-tool] default` (string, default `"swarm"`): the [review tool](#review-tools) `new --review` and `review`
+  push to without `--review-tool`
+- `[review-tool.<name>]` (table): a [review tool](#review-tools)'s `command`, and its `new` and `update` arguments
 - `[core.script-runners]` (table, Windows only): the command that runs a hook script, by file extension.
   See [Hooks](#hooks). The old `[hooks.extension-associations]` is still read, and `core.script-runners` wins where
   both name an extension
@@ -510,7 +513,7 @@ bash, zsh and PowerShell run `$(user)` as a command substitution.
 ### New Command
 
 Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits
-since the base branch. Optionally creates a Swarm review.
+since the base branch. Optionally creates a review, in Swarm or another [review tool](#review-tools).
 
 Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
 is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
@@ -518,7 +521,7 @@ is skipped with `--no-edit`. After opening files, unchanged ones are reverted (s
 
 ```sh
 git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
-              [--no-alias] [--no-commit-list] [--shelve] [--review] [--per-commit]
+              [--no-alias] [--no-commit-list] [--shelve] [--review] [--review-tool NAME] [--per-commit]
 ```
 
 **Arguments:**
@@ -539,16 +542,20 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
 - `--no-edit`: Skip opening changed files for edit in Perforce
 - `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
-- `--review`: Add `#review` keyword and shelve to create a Swarm review
+- `--review`: Shelve and create a review with the default [review tool](#review-tools), Swarm unless
+  `[review-tool] default` names another. For Swarm, adds the `#review` keyword
+- `--review-tool NAME`: Push the review to this review tool instead of the default one: `swarm`, or a
+  `[review-tool.NAME]` in `.git-p4son/config.toml`. Implies `--review`. The alias records the tool, which
+  `update --shelve` then runs
 - `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
   commit, as described below. Refuses `--no-edit` and `--no-alias`
 
 With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
 checks out each later commit and runs `git p4son update` on it, and finally returns to where you started. With
-`--shelve` or `--review`, every step shelves, so each commit shows up as its own patch in the Swarm review, and every
-step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf. It needs a clean git
-workspace even with `--dry-run`. [`review`](#review-command) is `new --review --per-commit`, and describes the steps,
-the dry run and resuming after a failed step.
+`--shelve` or `--review`, every step shelves, so each commit shows up as its own patch in the review. With Swarm,
+every step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf; another review tool runs
+once per step instead. It needs a clean git workspace even with `--dry-run`. [`review`](#review-command) is
+`new --review --per-commit`, and describes the steps, the dry run and resuming after a failed step.
 
 **Examples:**
 ```sh
@@ -636,10 +643,12 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   touched at all
 - `--no-edit`: Skip opening changed files for edit in Perforce. With a record, the new commits are then neither
   appended nor counted, so the next update that opens files includes them
-- `--shelve`: Re-shelve the changelist after updating
+- `--shelve`: Re-shelve the changelist after updating. For a review in a [review tool](#review-tools) other than
+  Swarm, as the alias records it, the tool then runs for the new shelf
 - `--per-commit`: Update the changelist once per commit it doesn't include yet, or since the base branch without
   a record, oldest first, with each commit checked out in turn. With `--shelve`, steps sleep 5 seconds between them
-  to give Perforce/Swarm time to process each shelf. `--dry-run` prints the steps, one per commit
+  to give Perforce/Swarm time to process each shelf, unless another review tool has the changelist. `--dry-run`
+  prints the steps, one per commit
 
 **Examples:**
 ```sh
@@ -675,16 +684,18 @@ are left out of it.
 
 ### Review Command
 
-Create a Swarm review with one shelf per commit. `review` is short for `git p4son new --review --per-commit`, taking the
+Create a review with one shelf per commit. `review` is short for `git p4son new --review --per-commit`, taking the
 same arguments apart from `--review`, `--per-commit`, `--shelve`, `--no-edit` and `--no-alias`. It checks out the first
 commit since the base branch and runs `git p4son new --review` on it, then checks out each later commit and runs
-`git p4son update --shelve`, and finally returns to where you started. Every step but the last sleeps 5 seconds to give
-Perforce/Swarm time to process the shelf. The commits are reviewed where they are: to review them on top of the latest
+`git p4son update --shelve`, and finally returns to where you started. With Swarm, every step but the last sleeps 5
+seconds to give Perforce/Swarm time to process the shelf. Another [review tool](#review-tools) runs once per step
+instead, with no sleep. The commits are reviewed where they are: to review them on top of the latest
 `main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks it even with
 `--dry-run`.
 
 ```sh
 git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
+                 [--review-tool NAME]
 ```
 
 **Arguments:**
@@ -941,6 +952,57 @@ Most commands that accept an alias or changelist argument default to the current
 
 The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new`) or supply an explicit
 alias name instead.
+
+## Review Tools
+
+`new --review` and `review` create a review in Swarm by default: the description gets a `#review` keyword, and Swarm
+picks up each shelf. A team that reviews with another tool, one that has to be run to post each shelf, configures the
+tool's command line under a name of its choosing in `.git-p4son/config.toml`:
+
+```toml
+[review-tool]
+default = "my-tool"
+
+[review-tool.my-tool]
+command = ["python", "tools/my-review.py", "--p4port", "$(p4port)", "--changelist", "$(changelist)"]
+new = ["create"]
+update = ["update"]
+```
+
+`--review-tool my-tool` pushes a review to it, and `default` makes it the default, so `--review-tool swarm` picks
+Swarm again. The alias records the changelist's tool, so `update --shelve` runs it again without naming it; to move a
+change to another tool, delete the changelist and its alias and create the review again. `--no-alias` is refused with
+any tool but Swarm.
+
+With a review tool other than Swarm, there is no `#review` keyword, and after each shelve of the review git-p4son runs
+`command` from the workspace root, once per commit with `review`. On the shelve of `new`, the `new` arguments are
+added to it, to create the review, and on the shelves of `update` the `update` ones, to add the new shelf as a
+revision of it. If the first run fails, the `update --shelve` that reruns it still gets the `new` arguments, as the
+review doesn't exist yet. Both are optional; without one, `command` runs as it is.
+
+`command`, `new` and `update` are lists, one string per argument; a single string is refused. No shell runs them,
+so they work the same on every platform and never need quoting. A program named by a relative path, such as
+`tools/review.exe`, is found from the workspace root, and a bare name, such as `python`, on `PATH`. A `.cmd` or `.ps1`
+script on Windows needs its interpreter named, such as `["pwsh", "-File", "tools/my-review.ps1"]`. `$(name)` in an
+argument is replaced:
+
+- `$(changelist)`: the pending changelist number
+- `$(workspace)`: the Perforce client workspace name
+- `$(user)`: the Perforce user
+- `$(p4port)`: the server address, as `p4 set P4PORT` gives it
+- any other name: the environment variable of that name, which on Windows ignores case. A name that is neither fails
+  the command before anything runs
+
+A replaced value stays within its argument, spaces and all. The command is echoed with the values in, so it can be
+rerun by hand; that also shows any token passed through an environment variable. Anything more, such as settings
+files or a sign-in, goes in a wrapper script of your own that the command runs.
+
+The first run can sign in or open a browser; later ones run once per shelve, often as the steps of a per-commit run,
+so keep them non-interactive. A tool that exits with a non-zero code fails the command. `review` then stops at that
+commit with the command that resumes it, which shelves the commit again and reruns the tool, and `new` names the
+`update <alias> --shelve` that reruns it once the tool works. `--dry-run` says which tool would run. The tool runs on
+the terminal, so its output shows as it is written and it can prompt. Like a hook, it runs under git-p4son's
+[jj lock](#locking-and-the-git-workflow), so it must not run jj commands that snapshot.
 
 ## Hooks
 

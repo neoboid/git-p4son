@@ -6,6 +6,7 @@ import contextlib
 import copy
 import io
 import itertools
+import json
 import os
 import shutil
 import stat
@@ -22,9 +23,20 @@ from git_p4son import CONFIG_DIR
 from git_p4son.backend import open_backend
 from git_p4son.changelist_store import find_record, Record
 from git_p4son.common import CommandError, RunError, RunResult
-from git_p4son.config import ensure_config_dir
+from git_p4son.config import ensure_config_dir, save_config
 from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
 from git_p4son.perforce import P4SyncPreviewFile
+
+
+# A review tool for the tests: it logs the run next to itself, then fails if it is run number fail_at.
+_REVIEW_TOOL_SCRIPT = """import json, os, sys
+log = os.path.splitext(os.path.abspath(__file__))[0] + '.jsonl'
+with open(log, 'a', encoding='utf-8') as f:
+    f.write(json.dumps({{'args': sys.argv[1:], 'cwd': os.getcwd()}}) + '\\n')
+with open(log, encoding='utf-8') as f:
+    runs = len(f.readlines())
+sys.exit(3 if runs == {fail_at} else 0)
+"""
 
 
 @contextlib.contextmanager
@@ -239,6 +251,27 @@ class WorkspaceTestCase(unittest.TestCase):
         ensure_config_dir(self.ws)
         self.write_file(os.path.join(CONFIG_DIR, 'config.toml'), text)
 
+    def write_review_tool(self, name: str, fail_at: int | None = None, **keys: Any) -> None:
+        """Configure review tool name, a script that logs each run's arguments and cwd, with new and update.
+
+        keys replace the tool's command, new or update, or with None leave them out. With fail_at, the run with
+        that number, from 1, exits with 3."""
+        script = os.path.join(CONFIG_DIR, f'{name}.py')
+        self.write_file(
+            script, _REVIEW_TOOL_SCRIPT.format(fail_at=fail_at or 0))
+        config = {'command': [sys.executable, script], 'new': ['create', '$(changelist)'],
+                  'update': ['update', '$(changelist)'], **keys}
+        save_config(self.ws, {'review-tool': {name: {key: value for key, value in config.items()
+                                                     if value is not None}}})
+
+    def review_tool_runs(self, name: str) -> list[dict[str, Any]]:
+        """The arguments and cwd of each run of review tool name, in order."""
+        path = os.path.join(self.ws, CONFIG_DIR, f'{name}.jsonl')
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding='utf-8') as f:
+            return [cast(dict[str, Any], json.loads(line)) for line in f]
+
     @contextlib.contextmanager
     def command_args(self, argv: list[str], **overrides: Any) -> Iterator[argparse.Namespace]:
         """Yield cli_args(argv, **overrides) for this workspace, with the backend open as run_command opens it."""
@@ -371,6 +404,7 @@ class FakeP4:
         self.client = client
         self.user = user
         self.options = options
+        self.port = 'ssl:perforce.example.com:1666'
         self.changes: dict[int, tuple[str, dict[str, str | None]]] = {}
         self.have = 0
         self.opened: dict[str, tuple[str, str]] = {}
@@ -433,6 +467,8 @@ class FakeP4:
                 out.append('... Update 2026/01/01 00:00:00')
         elif args[:2] == ['-ztag', 'info']:
             out = [f'... userName {self.user}']
+        elif args == ['set', '-q', 'P4PORT']:
+            out = [f'P4PORT={self.port}'] if self.port else []
         elif args[:2] == ['-ztag', 'users']:
             known = {u.lower(): u for u, _ in self.changes.values()}
             known[self.user.lower()] = self.user

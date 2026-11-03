@@ -62,6 +62,8 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
 
 def _add_new_args(parser: argparse.ArgumentParser) -> None:
     """Add the arguments new and review share."""
+    # Set by run_per_commit for the new it runs as a step.
+    parser.set_defaults(per_commit_step=False)
     _add_message_args(
         parser,
         'Changelist description message. Defaults to the HEAD commit subject, '
@@ -72,6 +74,12 @@ def _add_new_args(parser: argparse.ArgumentParser) -> None:
         '--no-commit-list',
         action='store_true',
         help='Leave the enumerated commit list out of the changelist description'
+    )
+    parser.add_argument(
+        '--review-tool',
+        metavar='NAME',
+        help='The review tool to push the review to, instead of the default one: swarm, or a [review-tool.NAME] '
+             'in .git-p4son/config.toml. Implies --review'
     )
     _add_base_branch(
         parser, 'The base the change starts from, for enumerating commits and finding changed files')
@@ -273,7 +281,7 @@ Examples:
 
     new_parser = subparsers.add_parser(
         'new',
-        help='Create a changelist, open files for edit, and optionally create a Swarm review',
+        help='Create a changelist, open files for edit, and optionally create a review',
         description='Create a Perforce changelist with a description and the '
         'enumerated git commits since the base branch, and save its number '
         'under an alias. By default also opens the changed files for edit in '
@@ -298,7 +306,8 @@ Examples:
     new_parser.add_argument(
         '--review',
         action='store_true',
-        help='Add #review keyword and shelve to create a Swarm review'
+        help='Shelve and create a review with the default review tool, review-tool.default or swarm. '
+             'For Swarm, adds the #review keyword'
     )
     new_parser.add_argument(
         '--per-commit',
@@ -450,8 +459,8 @@ Examples:
 
     review_parser = subparsers.add_parser(
         'review',
-        help='Create a Swarm review, one shelf per commit',
-        description='Create a Swarm review from the commits since the base '
+        help='Create a review, one shelf per commit',
+        description='Create a review from the commits since the base '
         'branch, oldest first, as git p4son new --review --per-commit does: '
         'check out the first and run git p4son new --review on it, then check '
         'out each later one and run git p4son update --shelve, before '

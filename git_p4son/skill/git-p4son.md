@@ -17,9 +17,9 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   user.
 - **Only touch Perforce when asked.** Run `sync`, `new`, `update` and `review` only when the user asks for exactly
   that. Otherwise draft the commits and the CL description, and let the user drive Perforce. Reviews and shelves
-  (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm. Read-only commands are always fine:
-  `alias list`, `alias show`, `list-changes`, `writable` and `sync-split-users` without an action, and any command
-  with `--dry-run`.
+  (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm, or the workspace's review tool. Read-only
+  commands are always fine: `alias list`, `alias show`, `list-changes`, `writable` and `sync-split-users` without an
+  action, and any command with `--dry-run`.
 - **Let git-p4son talk to Perforce.** Don't run `p4 sync`, `p4 edit`, `p4 add`, `p4 delete`, `p4 revert`, `p4 shelve`
   or `p4 change` on files git-p4son manages, except to recover as described under "When something refuses".
   Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes` are fine.

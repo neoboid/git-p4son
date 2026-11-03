@@ -230,6 +230,15 @@ def get_p4_user(workspace_dir: str) -> str | None:
     return None if user in (None, '', '*unknown*') else user
 
 
+def get_p4_port(workspace_dir: str) -> str:
+    """Get the P4PORT p4 connects with, from p4 set, or p4's own default when it is not set."""
+    res = run([*_P4, 'set', '-q', 'P4PORT'], cwd=workspace_dir)
+    for line in res.stdout:
+        if line.startswith('P4PORT='):
+            return line.removeprefix('P4PORT=')
+    return 'perforce:1666'
+
+
 def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
     """Return the names that are Perforce users, spelled as the server spells them."""
     res = run([*_P4, '-ztag', 'users', *names], cwd=workspace_dir,

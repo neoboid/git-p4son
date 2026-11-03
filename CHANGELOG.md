@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Review tools other than Swarm: `[review-tool.<name>]` in `.git-p4son/config.toml` configures a tool's `command`,
+  with `new` and `update` arguments and `$(changelist)`, `$(workspace)`, `$(user)`, `$(p4port)` or environment
+  variables in them. `new --review-tool <name>` and `review --review-tool <name>` push the review to it, and
+  `[review-tool] default` makes it the default. The tool runs after each shelve, once per commit with `review`, and
+  again on `update --shelve`, with the `new` arguments until a run succeeds and the `update` ones after. Swarm
+  stays the default, unchanged
 - `alias clean` no longer prompts: it deletes the aliases whose changelist is no longer pending, as it was submitted
   or deleted, and keeps the rest, each alias under a heading of its own. `--dry-run` lists them first, and
   `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use `alias delete` for the others. The Claude Code

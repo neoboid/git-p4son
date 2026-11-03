@@ -11,9 +11,6 @@ from .common import CommandError
 from .git import get_commits_since, resolve_commit
 from .log import log, plural
 
-# Seconds to give Swarm to process a shelf before the next step shelves again.
-SWARM_SHELF_DELAY = 5
-
 
 def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
            backend: Backend, base_name: str | None) -> argparse.Namespace:
@@ -29,6 +26,7 @@ def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
     args.invocation_dir = workspace_dir
     args.backend = backend
     args.base_given = base_name or base
+    args.per_commit_step = True
     return args
 
 

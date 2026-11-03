@@ -1,16 +1,20 @@
 """Tests for git_p4son.new module."""
 
+import os
 import shlex
 import unittest
 from unittest import mock
 
 from git_p4son.changelist_store import (
+    Review,
     find_record,
+    find_review,
     list_changelist_aliases,
     load_changelist_alias,
     save_changelist_alias,
 )
 from git_p4son.common import CommandError
+from git_p4son.config import save_config
 from git_p4son.new import new_command, _steps
 from git_p4son.update import update_command
 from tests.helpers import cli_args, on_jj, P4RepoTestCase, recorded, start_patch
@@ -169,6 +173,119 @@ class TestNewAlias(NewTestCase):
         self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
 
 
+class TestNewReviewTool(NewTestCase):
+    """new and update of a review pushed to the review tool my-tool."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_review_tool('my-tool')
+
+    def update(self, *argv):
+        return self.run_command(update_command, ['update', 'feat', *argv])
+
+    def actions(self):
+        return [run['args'] for run in self.review_tool_runs('my-tool')]
+
+    def commit_change_c(self):
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
+
+    def test_shelves_and_runs_the_tool_without_the_keyword(self):
+        self.new('--review-tool', 'my-tool')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(set(self.p4.shelved['101']), {
+                         'a.txt', 'b.txt', 'c.txt'})
+        self.assertEqual(self.actions(), [['create', '101']])
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', True))
+
+    def test_review_uses_the_default_tool(self):
+        save_config(self.ws, {'review-tool': {'default': 'my-tool'}})
+        self.new('--review')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(len(self.review_tool_runs('my-tool')), 1)
+
+    def test_swarm_by_name_over_the_default(self):
+        save_config(self.ws, {'review-tool': {'default': 'my-tool'}})
+        self.new('--review-tool', 'swarm')
+        self.assertEqual(self.p4.pending['101'],
+                         FEATURE_DESCRIPTION + ['', '#review'])
+        self.assertEqual(self.review_tool_runs('my-tool'), [])
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_shelve_without_review_runs_no_tool(self):
+        save_config(self.ws, {'review-tool': {'default': 'my-tool'}})
+        self.new('--shelve')
+        self.update('--shelve')
+        self.assertEqual(self.review_tool_runs('my-tool'), [])
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_an_unknown_tool_creates_nothing(self):
+        self.new_fails('--review-tool', 'other',
+                       message='Unknown review tool "other"')
+        self.assertEqual(self.p4.pending, {})
+        self.assertEqual(list_changelist_aliases(self.ws), [])
+
+    def test_no_alias_is_refused_before_creating(self):
+        self.new_fails('--review-tool', 'my-tool',
+                       '--no-alias', message='--no-alias')
+        self.assertEqual(self.p4.pending, {})
+
+    def test_dry_run_says_which_tool_would_run(self):
+        out = self.new('--review-tool', 'my-tool', '--dry-run')
+        self.assertEqual(self.review_tool_runs('my-tool'), [])
+        self.assertIn('Would run review tool my-tool for the new CL', out)
+
+    def test_update_shelve_runs_the_tool_again(self):
+        self.new('--review-tool', 'my-tool')
+        self.commit_change_c()
+        self.update('--shelve')
+        self.assertEqual(self.actions(), [
+                         ['create', '101'], ['update', '101']])
+
+    def test_update_without_shelve_runs_no_tool(self):
+        self.new('--review-tool', 'my-tool')
+        self.commit_change_c()
+        self.update()
+        self.assertEqual(len(self.review_tool_runs('my-tool')), 1)
+
+    def test_a_failed_first_run_stays_first_for_the_update_that_reruns_it(self):
+        self.write_review_tool('my-tool', fail_at=1)
+        self.new_fails('--review-tool', 'my-tool',
+                       message='Review tool my-tool failed for CL 101')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', False))
+        self.assertEqual(recorded('101', self.ws).included, [])
+        self.update('--shelve', '-b', 'main')
+        self.assertEqual(self.actions(), [
+                         ['create', '101'], ['create', '101']])
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'my-tool', True))
+        self.assertEqual(len(recorded('101', self.ws).included), 2)
+
+    def test_a_failed_first_run_says_how_to_rerun_it(self):
+        self.write_review_tool('my-tool', fail_at=1)
+        with self.assertRaises(CommandError) as raised:
+            self.new('--review-tool', 'my-tool')
+        hint = str(raised.exception).split(
+            'Once the tool works, run: git p4son ')[1]
+        self.run_command(update_command, shlex.split(hint))
+        self.assertEqual(self.actions(), [
+                         ['create', '101'], ['create', '101']])
+        self.assertEqual(len(recorded('101', self.ws).included), 2)
+
+    def test_a_failed_update_run_leaves_its_commits_out_of_the_record(self):
+        self.write_review_tool('my-tool', fail_at=2)
+        self.new('--review-tool', 'my-tool')
+        self.commit_change_c()
+        self.command_fails(
+            update_command, ['update', 'feat', '--shelve'], 'Review tool my-tool failed')
+        self.assertEqual(len(recorded('101', self.ws).included), 2)
+        self.update('--shelve')
+        self.assertEqual(len(recorded('101', self.ws).included), 3)
+        self.assertEqual(len(self.review_tool_runs('my-tool')), 3)
+
+
 class TestSteps(unittest.TestCase):
     def commands(self, *argv):
         return tuple(shlex.join(step) for step in _steps(cli_args(['new', '-b', 'main', *argv])))
@@ -304,6 +421,70 @@ class TestNewPerCommit(PerCommitTestCase):
         with self.assertRaises(CommandError) as raised:
             self.new('--force')
         self.assertNotIn('resume', str(raised.exception))
+
+
+class TestNewPerCommitReviewTool(PerCommitTestCase):
+    COMMAND = ['review', 'my-feature', '--review-tool', 'my-tool']
+
+    def setUp(self):
+        super().setUp()
+        self.write_review_tool('my-tool')
+
+    def actions(self):
+        return [run['args'][0] for run in self.review_tool_runs('my-tool')]
+
+    def fail_then_resume(self):
+        """Run COMMAND, expecting it to fail, then the command its error says resumes it."""
+        with self.assertRaises(CommandError) as raised:
+            self.new()
+        hint = str(raised.exception).split('resume with: git p4son ')[1]
+        self.run_command(update_command, shlex.split(hint))
+
+    def test_runs_the_tool_once_per_commit_without_sleeping(self):
+        out = self.new()
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(len(self.shelves()), 2)
+        self.assertEqual(self.actions(), ['create', 'update'])
+        self.sleep.assert_not_called()
+        self.assertIn('git p4son new my-feature --review-tool my-tool, then '
+                      'git p4son update my-feature --shelve\n', out)
+
+    def test_a_failure_in_the_first_step_resumes_with_a_first_run(self):
+        self.write_review_tool('my-tool', fail_at=1)
+        self.fail_then_resume()
+        self.assertEqual(self.actions(), ['create', 'create', 'update'])
+
+    def test_a_failure_in_the_first_step_gives_only_the_per_commit_hint(self):
+        self.write_review_tool('my-tool', fail_at=1)
+        with self.assertRaises(CommandError) as raised:
+            self.new()
+        self.assertNotIn('Once the tool works', str(raised.exception))
+        self.assertIn(
+            'resume with: git p4son update my-feature --shelve --per-commit', str(raised.exception))
+
+    def test_a_tool_that_cannot_start_gives_the_resume_hint(self):
+        self.write_review_tool(
+            'my-tool', command=[os.path.join(self.ws, 'no-such-program')])
+        with self.assertRaisesRegex(CommandError, 'could not start .*no-such-program.*\n.*resume with: '):
+            self.new()
+
+    def test_a_failure_in_a_later_step_resumes_at_that_commit(self):
+        self.write_review_tool('my-tool', fail_at=2)
+        self.fail_then_resume()
+        self.assertEqual(self.actions(), ['create', 'update', 'update'])
+        self.assertEqual(len(recorded('101', self.ws).included), 2)
+
+    def test_update_per_commit_does_not_sleep(self):
+        self.new()
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
+        self.edit('c.txt', 'c3\n')
+        self.commit('Change c again')
+        self.sleep.reset_mock()
+        self.run_command(update_command, [
+                         'update', 'my-feature', '--shelve', '--per-commit'])
+        self.assertEqual(len(self.review_tool_runs('my-tool')), 4)
+        self.sleep.assert_not_called()
 
 
 class TestNewPerCommitWithoutReview(PerCommitTestCase):

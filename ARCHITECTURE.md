@@ -25,16 +25,20 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
   (the branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
-  reverts the files no longer part of them through `edit_and_shelve`. `--review` adds a `#review` keyword and shelves;
-  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds
-  the changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
-  `update <alias>` on the others, both shelving with `--shelve` or `--review`.
+  reverts the files no longer part of them through `edit_and_shelve`. `--review` (or `--review-tool`) resolves the
+  review tool first (`resolve_review_tool`) and shelves; Swarm gets a `#review` keyword, and any other tool is
+  recorded in the alias and runs after the shelve (`push_review`), before the record counts the commits. `--shelve`
+  only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds the
+  changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
+  `update <alias>` on the others, both shelving with `--shelve` or `--review`, with `shelf_delay` between them.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
   in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
-  merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, and the
-  record's new count. `--per-commit` instead updates once per commit through `run_per_commit`. Requires a clean git
-  workspace unless `--no-edit` is given.
+  merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, after
+  a shelve the review tool an alias records for the CL (`find_review`, looked up once and checked before shelving),
+  through `push_review`, and the record's new count. `--per-commit` instead updates once per commit through
+  `run_per_commit`, with `shelf_delay` between shelving steps. Requires a clean git workspace unless `--no-edit` is
+  given.
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
@@ -80,8 +84,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
   `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
   before it runs, with the base resolved once to a SHA. It returns to where it started, also when a step fails, ends
-  the error with the command that resumes after the last commit that worked, and sleeps `SWARM_SHELF_DELAY` between
-  shelving steps. `base_name`, the base's name, goes to every step, as the steps get the base as a commit.
+  the error with the command that resumes after the last commit that worked, and sleeps the delay its caller gives
+  between steps. `base_name`, the base's name, goes to every step, as the steps get the base as a commit.
 
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
@@ -90,6 +94,17 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a
   failure, each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and
   `post-sync` hooks.
+
+- **`review_tools.py`** - Review tools, and every decision about what Swarm means: Swarm (`SWARM`), built in, and the
+  tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`,
+  else `[review-tool] default`, else Swarm, as None, and refuses an unknown tool; `_section` refuses a stray key in
+  `[review-tool]` and a `swarm` or `default` table.
+  `review_tool_config` checks a tool's `command`, `new` and `update` lists and their `$(name)` variables.
+  `shelf_delay` is `SWARM_SHELF_DELAY` for Swarm and none for a tool that is run. `run_review_tool` runs the command
+  with the `new` arguments until a run has succeeded and the `update` ones after, with the variables expanded and a
+  relative program joined to the workspace root, as Windows ignores `cwd` when it looks for the program,
+  through `run_interactive` from the workspace root, and raises `CommandError` when it fails; `push_review` then marks
+  the alias started.
 
 - **`scripts.py`** - `script_command`, the command that runs a workspace script: the file itself on POSIX, when
   executable, and on Windows the runner `script_runners` gives its extension, the defaults overridden by
@@ -178,7 +193,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a
   default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
-  depot root, `core.writable`, the split users, the blocking processes and the script runners.
+  depot root, `core.writable`, the split users, the blocking processes and the script runners. The review tools read
+  their own `[review-tool]` section.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files; reading
   uses `tomllib`.
@@ -197,7 +213,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands
-  run on the terminal (`run_interactive()`),
+  run on the terminal (`run_interactive()`, used by review tools),
   `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
   prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
 

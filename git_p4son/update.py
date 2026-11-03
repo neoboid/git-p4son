@@ -3,13 +3,14 @@
 import argparse
 import shlex
 from dataclasses import replace
-from .changelist_store import Record, find_record, load_changelist_alias, update_record
+from .changelist_store import Record, Review, find_record, find_review, load_changelist_alias, update_record
 from .common import CommandError
 from .git import get_head_subject, resolve_commit
 from .included import Plan, catch_up_subject, included_count, plan_update
 from .lib import edit_and_shelve, update_changelist
 from .log import log, plural
-from .per_commit import SWARM_SHELF_DELAY, message_args, run_per_commit
+from .per_commit import message_args, run_per_commit
+from .review_tools import push_review, review_tool_config, shelf_delay
 
 
 def _step(changelist: str, args: argparse.Namespace) -> list[str]:
@@ -21,11 +22,16 @@ def _step(changelist: str, args: argparse.Namespace) -> list[str]:
     return ['update', changelist, *flags]
 
 
-def _update_per_commit(changelist: str, args: argparse.Namespace) -> None:
+def _shelf_delay(review: Review | None) -> int | None:
+    """Seconds to sleep between the shelves of the CL whose review an alias records as review."""
+    return shelf_delay(None if review is None else review.tool)
+
+
+def _update_per_commit(changelist: str, review: Review | None, args: argparse.Namespace) -> None:
     """Update the changelist once per commit since the base branch."""
     # Steps name the changelist by number, as resolved once here.
     run_per_commit(_step(changelist, args), None, args.base_branch, args.workspace_dir, args.backend,
-                   sleep=SWARM_SHELF_DELAY if args.shelve else None, dry_run=args.dry_run,
+                   sleep=_shelf_delay(review) if args.shelve else None, dry_run=args.dry_run,
                    message=args.message, message_file=args.file)
 
 
@@ -81,13 +87,15 @@ def _catch_up(plan: Plan, args: argparse.Namespace, workspace_dir: str) -> bool:
     return True
 
 
-def _shelve_twice(plan: Plan, catch_up: str, changelist: str, args: argparse.Namespace, workspace_dir: str) -> None:
+def _shelve_twice(plan: Plan, catch_up: str, changelist: str, review: Review | None, args: argparse.Namespace,
+                  workspace_dir: str) -> None:
     """Shelve at the catch-up, then at the tip, so the catch-up is a patch of its own, before the new commits'."""
     rerun = shlex.join(['git', 'p4son', *_step(changelist, args),
                        *message_args(args.message, args.file)])
     try:
         run_per_commit(_step(changelist, args), None, plan.after, workspace_dir, args.backend,
-                       sleep=SWARM_SHELF_DELAY, dry_run=False, message=args.message, message_file=args.file,
+                       sleep=_shelf_delay(review), dry_run=False, message=args.message,
+                       message_file=args.file,
                        resumable=lambda: None,
                        only={catch_up, resolve_commit(args.backend.revision, workspace_dir)})
     except CommandError as error:
@@ -128,6 +136,9 @@ def update_command(args: argparse.Namespace) -> int:
         log.success(f'{args.changelist} -> CL {changelist}')
 
     revision = args.backend.revision
+    review = find_review(changelist, workspace_dir)
+    if args.shelve and review is not None:
+        review_tool_config(review.tool, workspace_dir)
     found = find_record(changelist, workspace_dir)
     plan = None
     if found is not None:
@@ -149,15 +160,15 @@ def update_command(args: argparse.Namespace) -> int:
                 plan = _plan(record, alias, changelist,
                              given, args, revision)
             if plan.catch_up is not None and not args.per_commit and len(plan.subjects) > 1:
-                _shelve_twice(plan, plan.catch_up,
-                              changelist, args, workspace_dir)
+                _shelve_twice(plan, plan.catch_up, changelist,
+                              review, args, workspace_dir)
                 return 0
         if args.per_commit:
             _check_anything_new(plan, changelist)
         args.base_branch = plan.start
 
     if args.per_commit:
-        _update_per_commit(changelist, args)
+        _update_per_commit(changelist, review, args)
         return 0
 
     if args.message is not None or not args.no_commit_list:
@@ -172,6 +183,9 @@ def update_command(args: argparse.Namespace) -> int:
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve,
                     dry_run=args.dry_run, revision=revision)
+    if args.shelve and review is not None:
+        push_review(review.alias, review.tool, changelist, first=not review.started, workspace_dir=workspace_dir,
+                    dry_run=args.dry_run)
     # Without their files opened, the new commits stay uncounted, for the next update to include.
     if plan is not None and not args.dry_run and not args.no_edit:
         # base_commit is the base of the last shelve, which a catch-up is measured from.

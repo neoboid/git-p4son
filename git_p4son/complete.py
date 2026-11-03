@@ -8,6 +8,7 @@ from .changelist_store import list_changelist_aliases
 from .common import CommandError
 from .git import get_workspace_dir
 from .log import log
+from .review_tools import SWARM, review_tool_names
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion'})
@@ -113,6 +114,13 @@ def _complete_flag_value(flag: str, workspace_dir: str | None = None,
             return [('__branch__', '')]
         backend = _backend(workspace_dir, backend_choice)
         return backend.base_candidates() if backend else []
+    if flag == '--review-tool':
+        try:
+            tools = review_tool_names(
+                workspace_dir) if workspace_dir else [SWARM]
+        except CommandError:
+            tools = [SWARM]
+        return [(name, 'Built in' if name == SWARM else '') for name in tools]
     return []
 
 

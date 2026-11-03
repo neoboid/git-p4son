@@ -2,23 +2,15 @@
 
 ## Unreleased
 
-- Review tools other than Swarm: `[review-tool.<name>]` in `.git-p4son/config.toml` configures a tool's `command`,
-  with `new` and `update` arguments and `$(changelist)`, `$(workspace)`, `$(user)`, `$(p4port)` or environment
-  variables in them. `new --review-tool <name>` and `review --review-tool <name>` push the review to it, and
-  `[review-tool] default` makes it the default. The tool runs after each shelve, once per commit with `review`, and
-  again on `update --shelve`, with the `new` arguments until a run succeeds and the `update` ones after. Swarm
-  stays the default, unchanged
-- `alias clean` no longer prompts: it deletes the aliases whose changelist is no longer pending, as it was submitted
-  or deleted, and keeps the rest, each alias under a heading of its own, then counts them under an `Alias clean done`
-  heading. `--dry-run` lists them first, and `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use
-  `alias delete` for the others. It exits with 1 if an alias couldn't be deleted. The Claude Code skill now suggests
-  it; run `skill install` again to update it
-- `alias delete --all` exits with 1 if an alias couldn't be deleted, after going on to delete the rest
-- Errors no longer come out ahead of the output before them when stdout and stderr go to the same pipe or file, as
-  with `2>&1`
-- The Windows commands that run hook scripts by extension move from `[hooks.extension-associations]` to
-  `[core.script-runners]`; the old name is still read. The `.nu` default is gone: add `".nu" = "nu.exe"` to the setting
-  to run Nushell hooks
+## 0.8.0
+
+- Review tools other than Swarm, configured under `[review-tool.<name>]` in `.git-p4son/config.toml` and chosen with
+  `--review-tool` on `new` and `review`. Swarm is still the default
+- `alias clean` no longer prompts: it deletes the aliases whose changelist was submitted or deleted and keeps the rest
+- `alias clean` and `alias delete --all` exit with 1 if an alias couldn't be deleted
+- Errors no longer come out ahead of earlier output when stdout and stderr go to the same pipe, as with `2>&1`
+- On Windows, `[hooks.extension-associations]` is renamed `[core.script-runners]`; the old name still works. `.nu`
+  hooks need `".nu" = "nu.exe"` added to run
 
 ## 0.7.0
 

@@ -2,31 +2,22 @@
 
 `git-p4son` lets you work in a Perforce workspace with a local git repository, or a colocated
 [Jujutsu (jj)](#jujutsu-jj) one, so you can use the familiar local development flow even though your project uses
-Perforce for source control.
+Perforce.
 
-A `main` branch (a bookmark in jj) is kept in sync with your Perforce workspace, one commit per changelist. You work
-on feature branches or jj changes and rebase them onto `main` after a sync; with jj, `sync` rebases the change you
-sync from for you.
+The core idea is a local `main` branch kept in sync with the Perforce workspace. Each sync commits the changes since
+the last one. You work on feature branches based on `main`, and rebase them onto it after a sync.
 
-When your changes are ready, `git-p4son` creates the changelist and shelves it for a Swarm review. It can post each
-commit as a patch of its own, so reviewers see the changes in the order you made them, much like a pull request.
-Updates fold in only the new commits.
-
-With jj, `git-p4son` works on the jj change: the changelist's alias follows the change through rewrites, the message
-comes from its description, and `jj p4son` runs every command.
-
-## On big workspaces
-Sometimes git struggles to keep entire perforce workspaces in the repo, like when working
-on a Unreal Engine game with all source code in the workspace. If so, it helps to edit
-`.gitignore` and include only the subdirectories in which you work, the rest of the files
-will still be managed by perforce of course.
+When your feature is ready, `git-p4son` creates a changelist from the commits on your branch. It can also create a
+review, in Swarm or another review tool, with each commit as its own patch, so reviewers see the changes in the order
+you made them, like the commits of a pull request on GitHub. To address feedback, commit more locally, and
+`git-p4son` adds the new commits to the changelist and the review.
 
 ## Usage Example
 
 Here's a typical workflow when developing a feature using `git-p4son`:
 
 ```sh
-# Sync main with latest changes from perforce
+# Sync main with the latest changes from Perforce
 git checkout main
 git p4son sync
 
@@ -37,11 +28,9 @@ git checkout -b my-fancy-feature
 git add .
 git commit -m "Feature part1"
 
-# Sync to the latest changelist affecting the workspace
+# Sync again, and rebase your branch onto main
 git checkout main
 git p4son sync
-
-# Rebase your changes on main
 git checkout my-fancy-feature
 git rebase main
 
@@ -49,32 +38,19 @@ git rebase main
 git add .
 git commit -m "Feature part2"
 
-# Create a Swarm review with all commits since main in one go.
-# Each commit is checked out in turn and gets a shelf of its own in the
-# review, then you are back on your branch.
-# An alias called "my-fancy-feature" (derived from the branch name) is
-# saved so you can refer to this CL by name in follow-up commands.
+# Create a review with a patch per commit, under an alias named after the branch
 git p4son review -m "My fancy feature" -b main
 
-# After review feedback, make more changes
+# Address review feedback, then add the new commit to the changelist and the review
 git add .
 git commit -m "Address review feedback"
-
-# Update the changelist with latest commit, re-open files, and re-shelve.
-# The changelist is looked up by branch name automatically.
 git p4son update --shelve
 
-# After approval, submit in p4v
-
-# Sync to the latest changelist from perforce
+# After approval, submit in P4V, then sync and clean up
 git checkout main
 git p4son sync
-
-# Force remove old branch as you don't need it anymore
-git branch -D my-fancy-feature
-
-# Remove changelist alias for the branch
-git p4son alias delete my-fancy-feature
+git branch -D my-fancy-feature    # -D, as the submitted change has other commit hashes
+git p4son alias clean             # deletes the aliases of submitted changelists
 
 # Start working on the next feature
 git checkout -b my-next-fancy-feature
@@ -96,8 +72,7 @@ jj p4son sync
 jj new -m "Feature part2"
 jj bookmark create my-fancy-feature
 
-# Create a Swarm review with every change since main, one shelf each.
-# The alias is named after the bookmark and records the jj change.
+# Create a review with a patch per change, under an alias named after the bookmark
 jj p4son review -m "My fancy feature" -b main
 
 # After review feedback, add a change and move the bookmark to it
@@ -105,11 +80,11 @@ jj new -m "Address review feedback"
 jj bookmark set my-fancy-feature -r @
 jj p4son update --shelve
 
-# After approval, submit in p4v, then abandon the submitted changes before
-# syncing, which deletes the bookmark too
+# After approval, submit in P4V, abandon the submitted changes, which deletes the
+# bookmark too, then sync and clean up
 jj abandon main..my-fancy-feature
-jj p4son alias delete my-fancy-feature
 jj p4son sync
+jj p4son alias clean
 
 # Start working on the next feature
 jj new main -m "Next fancy feature"
@@ -118,58 +93,36 @@ jj new main -m "Next fancy feature"
 `sync` only rebases the change you sync from, and the stack above it. Bring other bookmarks up to date with
 `jj rebase -b <bookmark> -d main`.
 
+## Contents
+
+- [Installation](#installation)
+- [Setup](#setup)
+- [Commands](#commands): [init](#init-command), [sync](#sync-command), [sync-split-users](#sync-split-users-command),
+  [new](#new-command), [update](#update-command), [review](#review-command), [list-changes](#list-changes-command),
+  [alias](#alias-command), [writable](#writable-command), [completion](#completion-command), [skill](#skill-command)
+- [Configuration](#configuration)
+- [Review Tools](#review-tools)
+- [Hooks](#hooks)
+- [Jujutsu (jj)](#jujutsu-jj)
+- [Claude Code Skill](#claude-code-skill)
+- [Shell Completions](#shell-completions)
+- [Development](#development)
+
 ## Installation
 
 ```sh
 pip install git-p4son
 ```
 
-Requires Python 3.11 or later.
+Requires Python 3.11 or later. For tab completion in bash, zsh and PowerShell, see
+[Shell Completions](#shell-completions). To let Claude Code drive git-p4son, see
+[Claude Code Skill](#claude-code-skill).
 
 ### Updating
 
 ```sh
 pip install --upgrade git-p4son
 ```
-
-For tab completion (zsh and PowerShell), see [Shell Completions](#shell-completions). To let Claude Code drive
-git-p4son, see [Claude Code Skill](#claude-code-skill).
-
-## Development
-
-To install from source in editable mode:
-
-```sh
-git clone https://github.com/neoboid/git-p4son.git
-cd git-p4son
-pip install -e .
-```
-
-The `-e` flag installs the package in "editable" mode, meaning changes to the code are immediately available
-without reinstalling. This is also handy if you want to auto-update git-p4son whenever you pull from GitHub.
-
-git-p4son only uses Python standard library modules - no additional packages are required.
-
-Run the tests with `python -m pytest tests/` (`pip install pytest`). With `pytest-xdist` installed, add
-`-n auto --maxprocesses 8` to run them in parallel, which is about three times faster.
-
-### Git Hooks
-
-The repository includes git hooks in the `hooks/` directory:
-
-- **pre-commit** - verifies that staged Python files are formatted with `autopep8`. Install it with
-  `pip install autopep8`.
-- **pre-push** - runs the test suite and blocks the push if any test fails. It needs `pytest` installed, and runs
-  the tests in parallel when `pytest-xdist` is too.
-
-To activate the hooks, run:
-
-```sh
-scripts/setup-hooks.sh
-```
-
-This configures `core.hooksPath` so git uses the hooks from the repository. You only need to run this once after
-cloning.
 
 ## Setup
 
@@ -187,13 +140,13 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
    cd /path/to/your/workspace    # or a subdirectory of it
    git p4son init
    ```
-   The command verifies that you are inside a P4 workspace, prompts you to select a depot
-   root (entire workspace or current directory subtree), runs `git init`, sets up `.gitignore` (copying from
-   `.p4ignore` if available), and creates an initial commit.
-   With jj 0.41 or newer installed, it also offers to colocate jj and to add the `jj p4son` alias, see
-   [Jujutsu (jj)](#jujutsu-jj).
+   Answer its questions, starting with the depot root: the whole workspace or the subtree you're in. It then runs
+   `git init`, sets up `.gitignore` and makes a first commit holding only that. See [Init Command](#init-command) for
+   what it asks.
 
-3. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded.
+3. **Review `.gitignore`.** Edit the file to ensure build artifacts and other unwanted files are excluded. In a big
+   workspace, such as an Unreal Engine game with all of the engine source in it, git can struggle to track
+   everything. Ignore all but the directories you work in; Perforce still manages the rest.
 
 4. **Add and commit all files manually the first time**
    ```sh
@@ -210,7 +163,196 @@ These steps set up git-p4son in an existing Perforce workspace. You only need to
 From here, branch off `main` for local development. See the [Usage Example](#usage-example) for a typical
 workflow.
 
-### How sync handles writable files
+## Commands
+
+git-p4son provides eleven commands:
+
+| Command | What it does |
+| --- | --- |
+| [`init`](#init-command) | Set up a git repository in a Perforce workspace |
+| [`sync`](#sync-command) | Sync the workspace from Perforce and commit the changes to `main` |
+| [`sync-split-users`](#sync-split-users-command) | Show or edit the users whose changelists `sync` commits one by one |
+| [`new`](#new-command) | Create a changelist from the commits on your branch, optionally with a review |
+| [`update`](#update-command) | Add the newer commits to an existing changelist |
+| [`review`](#review-command) | Create a review with one shelf per commit |
+| [`list-changes`](#list-changes-command) | List the commit subjects since a base branch |
+| [`alias`](#alias-command) | Manage the names that stand for changelist numbers |
+| [`writable`](#writable-command) | Keep git-tracked files writable, without `p4 edit` first |
+| [`completion`](#completion-command) | Print the path to a shell completion script |
+| [`skill`](#skill-command) | Install or show the Claude Code skill |
+
+To see help for any command, use `-h`:
+
+```sh
+git p4son -h
+git p4son sync -h
+```
+
+**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h`
+instead, or `git p4son -- --help` to force it through.
+Alternatively, call the executable directly: `git-p4son --help`.
+
+**Global options:**
+- `-v, --verbose`: Show verbose output (commands, elapsed times, raw subprocess output)
+- `--version`: Show program version
+
+### Init Command
+
+Set up git-p4son in a Perforce workspace, from anywhere inside it:
+
+```sh
+git p4son init
+```
+
+`init` checks that it runs in a Perforce workspace, then asks:
+
+- **Depot root:** which part of the workspace git-p4son syncs, the whole workspace or the subtree the git root is in.
+  It's saved as `[depot] root` in `.git-p4son/config.toml`, with a `$(workspace)` placeholder for the workspace name,
+  e.g. `//$(workspace)/Engine`, so renaming the workspace doesn't break it. A concrete name works too.
+- **Writable mode:** whether to turn on [writable mode](#writable-command), defaulting to the current setting. It only
+  saves the answer; run `git p4son writable apply` once your files are committed.
+- **Split users:** whether to sync your own changelists one by one, as a [split user](#split-users), defaulting to the
+  current setting. Yes adds a `$(user)` entry and no removes it; other split users are left alone.
+- **Claude Code skill:** if Claude Code is installed, whether to install the [skill](#claude-code-skill). An installed
+  skill is refreshed without asking.
+- **jj:** with jj 0.41 or newer, whether to colocate jj and add the `jj p4son` alias, as described below.
+
+Then it sets up the repository:
+
+- **`.gitignore`:** kept if it exists, else copied from `.p4ignore`, else created empty.
+- **git:** `git init`, and a first commit holding only `.gitignore`.
+- **Sync branch:** recorded as `[sync] branch`. In a repository it creates, that's the branch `HEAD` is on. In an
+  existing one, it's `main` if there is one, else the branch `HEAD` is on, else one you pick from the local branches.
+  A branch already set is kept.
+
+It ends by listing the next steps. Nothing in `.git-p4son/` belongs in git: the folder has its own `.gitignore` that
+ignores everything in it.
+
+For [jj](#jujutsu-jj), `init` offers:
+
+- **Colocating jj**, when the workspace has no `.jj` folder: "Use jj in this workspace too (colocated)?", default
+  no. On yes, in an existing repository it runs `jj git init --colocate` as its last step, so jj imports the branch
+  as a bookmark. It sets jj's [line endings](#line-endings) to match git's from jj's first snapshot on. In a
+  repository it creates, it lists the same commands as next steps after your initial commit instead, since jj would
+  otherwise snapshot every file before you have reviewed `.gitignore`.
+- **The [`jj p4son` alias](#the-jj-p4son-alias)**, when the workspace has a `.jj` folder, or is to get one, and
+  jj's config has no `aliases.p4son`: default yes. It adds the alias to jj's user config.
+
+Running `init` again asks neither once they are done.
+
+### Sync Command
+
+Sync the workspace from Perforce and commit what changed onto the sync branch, `main` by default:
+
+```sh
+git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--force] [--dry-run] [--split-user NAME ...]
+               [--no-split] [--ignore-blocking-processes]
+```
+
+**Arguments:**
+- `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
+  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace. Several
+  strictly increasing changelist numbers may be given to sync each in sequence, producing one commit per
+  changelist. A trailing `head` may close out such a sequence to finish at the latest changelist.
+
+**Options:**
+- `--branch BRANCH`: Commit onto this branch instead of `[sync] branch`. With the jj backend, the bookmark to move
+  to each sync commit
+- `--no-rebase`: With the jj backend, leave the changes you started from where they are, instead of rebasing them
+  onto the [sync bookmark](#syncing-a-bookmark)
+- `-f, --force`: Allow syncing to changelists older than the current one
+- `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
+  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
+  `Dry run, nothing changed`
+- `-u, --split-user NAME`: Also split out this user's changelists, on top of the configured
+  [split users](#split-users). Repeat to give several users. Each name is checked against the Perforce server.
+- `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
+  out, so `--no-split -u alice` splits out only alice's changelists.
+- `--ignore-blocking-processes`: Sync even while a [blocking process](#blocking-processes) is running.
+
+**Examples:**
+```sh
+git p4son sync              # sync to latest
+git p4son sync head         # sync to latest (explicit)
+git p4son sync 12345
+git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
+git p4son sync 123 156 head # sync 123, 156, then the latest changelist
+git p4son sync last-synced
+git p4son sync 12345 --force
+git p4son sync --dry-run    # show the changelists a sync to latest would visit
+git p4son sync -u alice     # also split out alice's changelists
+git p4son sync --no-split   # sync without splitting out the configured split users
+git p4son sync --branch p4  # commit onto the p4 branch this time
+```
+
+`sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, which `init` sets and which
+defaults to `main`. From another branch, it checks the sync branch out, syncs and commits, then returns you to
+where you started, telling you to `git rebase` your branch onto the sync branch; it doesn't rebase for you. The
+pre-sync and post-sync hooks run on the sync branch. You stay on the sync branch when:
+
+- local changes were [merged back](#how-sync-handles-writable-files) into the work tree, for you to review and
+  commit there
+- a sync fails partway, with the files as Perforce left them and the commits so far kept
+
+A failing pre-sync hook, or anything else that stops `sync` before it syncs, returns you to where you started.
+
+`sync` requires clean git and Perforce workspaces: no uncommitted changes, untracked files included, and no
+git-tracked files opened in Perforce. It checks them after any [blocking processes](#blocking-processes) and before
+the [pre-sync hooks](#pre-sync-hook).
+
+#### Blocking processes
+
+Syncing while e.g. the Unreal editor is open lets p4 replace assets the editor still has loaded, so the editor
+keeps working against files that no longer match what is on disk. List such processes in `.git-p4son/config.toml`
+and `sync` refuses to start while any of them is running:
+
+```toml
+[sync]
+blocking-processes = ["UnrealEditor", "UnrealLightmass"]
+```
+
+Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers `UnrealEditor.exe` on
+Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace checks and the pre-sync hooks. A
+[malformed setting](#configuration), or a process list that cannot be read, aborts the sync rather than silently
+skipping the check.
+
+Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.
+
+#### Split users
+
+Syncing straight to the latest changelist lumps your own submitted changelists together with everyone else's in a
+single commit. Split users fix that: for each changelist a split user submitted since the last sync, `sync` first
+syncs the changelist submitted immediately before it, so every changelist they submitted becomes a commit containing
+nothing but their own change.
+
+The split users are stored in `.git-p4son/config.toml`, and edited with the
+[`sync-split-users` command](#sync-split-users-command) or by answering yes in `init`:
+
+```toml
+[sync]
+split-users = ["$(user)", "alice"]
+```
+
+`$(user)` stands for the current Perforce user (from `p4 info`), resolved each time `sync` runs, so the config
+survives a change of user, the same way `$(workspace)` works in the depot root.
+
+For example, with the last sync at CL 100, your own changelists at 102 and 105, and the latest changelist at 106,
+`sync` visits `101 102 104 105 106`, producing five commits where CL 102 and CL 105 each hold only your change.
+Changelists given on the command line are all still visited, with the split points merged in: `sync 103 head`
+visits `101 102 103 104 105 106`.
+
+Splitting only moves forward from a previous sync. The first sync, `last-synced`, and syncing to an older changelist
+with `--force` are never split. Without any split users, `sync` makes no extra Perforce queries.
+
+Finding the split users' changelists takes one Perforce query per split user and one more, none of which scans every
+file in the range, so a large range stays within the server's `maxscanrows`. They run after the checks and the
+pre-sync hooks, so those fail first. `--dry-run` skips the checks and hooks but still shows the resulting sequence.
+
+#### Sync hooks
+
+`sync` runs the [pre-sync](#pre-sync-hook) and [post-sync](#post-sync-hook) hooks.
+
+#### How sync handles writable files
 
 When you switch branches with `git checkout`, git removes the read-only flag on every file it writes. This means
 that when you switch back to `main` for a sync, Perforce may refuse to overwrite those files because they are
@@ -257,237 +399,6 @@ sync git-p4son lists the ones Perforce skipped because they were modified locall
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
 
-## Configuration
-
-git-p4son keeps its per-repository settings in `.git-p4son/config.toml`. `init`, `writable` and `sync-split-users`
-write most of them; the rest you edit by hand.
-
-- `[depot] root` (string, set by `init`): the depot path `sync` syncs, e.g. `//$(workspace)` or
-  `//$(workspace)/Engine`. See [Init Command](#init-command)
-- `[core] writable` (`true` or `false`, default `false`): [writable mode](#writable-command), which keeps
-  git-tracked files writable
-- `[core] backend` (`"auto"`, `"git"` or `"jj"`, default `"auto"`): the tool git-p4son follows for the change, the
-  base and the branch. `auto` means jj in a [jj workspace](#jujutsu-jj) and git otherwise
-- `[sync] branch` (string, set by `init`): the sync branch, which `sync` commits onto from whatever branch you are
-  on. Without it, `sync` uses `main`. See [Sync Command](#sync-command)
-- `[sync] split-users` (list of strings, default empty): the users whose changelists `sync` gives a commit each;
-  `$(user)` stands for you. See [Split users](#split-users)
-- `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
-  [Blocking processes](#blocking-processes)
-- `[review-tool] default` (string, default `"swarm"`): the [review tool](#review-tools) `new --review` and `review`
-  push to without `--review-tool`
-- `[review-tool.<name>]` (table): a [review tool](#review-tools)'s `command`, and its `new` and `update` arguments
-- `[core.script-runners]` (table, Windows only): the command that runs a hook script, by file extension.
-  See [Hooks](#hooks). The old `[hooks.extension-associations]` is still read, and `core.script-runners` wins where
-  both name an extension
-
-For example:
-
-```toml
-[depot]
-root = "//$(workspace)"
-
-[core]
-writable = true
-
-[sync]
-split-users = ["$(user)", "alice"]
-blocking-processes = ["UnrealEditor"]
-```
-
-A value of the wrong type, such as `writable = "true"` or `split-users = "alice"`, or a file that is not valid TOML,
-stops the command with an error naming the setting, so a typo is never silently ignored.
-
-## Usage
-
-git-p4son provides eleven commands: `init`, `sync`, `sync-split-users`, `new`, `update`, `review`,
-`list-changes`, `alias`, `writable`, `completion`, and `skill`.
-
-To see help for any command, use `-h`:
-
-```sh
-git p4son -h
-git p4son sync -h
-```
-
-**Note:** When invoking via `git p4son`, the `--help` flag is intercepted by git (to look for man pages). Use `-h`
-instead, or `git p4son -- --help` to force it through.
-Alternatively, call the executable directly: `git-p4son --help`.
-
-**Global options:**
-- `-v, --verbose`: Show verbose output (commands, elapsed times, raw subprocess output)
-- `--version`: Show program version
-
-### Init Command
-
-Initialize a git repository inside a Perforce workspace:
-
-```sh
-git p4son init
-```
-
-This command checks that it runs in a Perforce workspace, then asks for the depot root, writable mode, split users,
-the Claude Code skill and jj. It then sets up `.gitignore`, runs `git init` and creates a first commit holding only
-`.gitignore`. It ends by listing the next steps.
-
-The depot root determines which part of the Perforce workspace git-p4son syncs. You can choose to sync the entire
-workspace or just the directory's subtree where the git root is placed. The selection is saved in
-`.git-p4son/config.toml` and used by all subsequent commands.
-
-Nothing in `.git-p4son/` belongs in git. The folder has its own `.gitignore` that ignores everything in it, so there
-is no need to list it in the workspace `.gitignore`.
-
-The saved root uses a `$(workspace)` placeholder for the workspace (client) name, e.g.
-`root = "//$(workspace)/Engine"`. git-p4son substitutes the live workspace name each time it runs, so renaming
-the Perforce workspace does not break the config. You can still store a concrete name (e.g. `//my-workspace/Engine`)
-by hand-editing `config.toml`; both forms work.
-
-The `.gitignore` is set up using this priority:
-- If `.gitignore` already exists, it is left as is
-- If `.p4ignore` exists, it is copied to `.gitignore` as a starting point
-- Otherwise, an empty `.gitignore` is created
-
-`init` also asks whether to turn on [writable mode](#writable-command), defaulting to the current setting. It only
-saves the answer; run `git p4son writable apply` once your files are committed to update their permissions.
-
-`init` then asks whether to sync your own changelists individually, making you a [split user](#split-users).
-The default is the current setting. Yes adds a `$(user)` entry to the split users and no removes it; other split
-users are left alone.
-
-`init` records the [sync branch](#sync-command) as `[sync] branch`. In a repository it creates, that's the branch
-`HEAD` is on. In an existing one, it's `main` if there is one, else the branch `HEAD` is on, else one you pick from
-the local branches. It keeps a branch already set.
-
-If Claude Code is installed, `init` offers to install the [Claude Code skill](#claude-code-skill). An
-already installed skill is refreshed without asking.
-
-With jj 0.41 or newer installed, `init` offers two things for [jj](#jujutsu-jj):
-
-- **Colocating jj**, when the workspace has no `.jj` folder: "Use jj in this workspace too (colocated)?", default
-  no. On yes, in an existing repository it runs `jj git init --colocate` as its last step, so jj imports the branch
-  as a bookmark. It sets jj's [line endings](#line-endings) to match git's from jj's first snapshot on. In a
-  repository it creates, it lists the same commands as next steps after your initial commit instead, since jj would
-  otherwise snapshot every file before you have reviewed `.gitignore`.
-- **The [`jj p4son` alias](#the-jj-p4son-alias)**, when the workspace has a `.jj` folder, or is to get one, and
-  jj's config has no `aliases.p4son`: default yes. It adds the alias to jj's user config.
-
-Running `init` again asks neither once they are done.
-
-### Sync Command
-
-Sync local git repository with a Perforce workspace:
-
-```sh
-git p4son sync [changelist ...] [--branch BRANCH] [--force] [--dry-run] [--split-user NAME ...] [--no-split]
-               [--ignore-blocking-processes]
-```
-
-`sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml`, which `init` sets and which
-defaults to `main`. From another branch, it checks the sync branch out, syncs and commits, then returns you to
-where you started, telling you to `git rebase` your branch onto the sync branch; it doesn't rebase for you. The
-pre-sync and post-sync hooks run on the sync branch. You stay on the sync branch when:
-
-- local changes were [merged back](#how-sync-handles-writable-files) into the work tree, for you to review and
-  commit there
-- a sync fails partway, with the files as Perforce left them and the commits so far kept
-
-A failing pre-sync hook, or anything else that stops `sync` before it syncs, returns you to where you started.
-
-**Arguments:**
-- `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
-  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace. Several
-  strictly increasing changelist numbers may be given to sync each in sequence, producing one commit per
-  changelist. A trailing `head` may close out such a sequence to finish at the latest changelist.
-
-`sync` requires clean git and Perforce workspaces: no uncommitted changes, untracked files included, and no
-git-tracked files opened in Perforce. It checks them after any [blocking processes](#blocking-processes) and before
-the [pre-sync hooks](#pre-sync-hook).
-
-**Options:**
-- `--branch BRANCH`: Commit onto this branch instead of `[sync] branch`. With the jj backend, the bookmark to move
-  to each sync commit
-- `--no-rebase`: With the jj backend, leave the changes you started from where they are, instead of rebasing them
-  onto the [sync bookmark](#syncing-a-bookmark)
-- `-f, --force`: Allow syncing to changelists older than the current one
-- `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
-  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
-  `Dry run, nothing changed`
-- `-u, --split-user NAME`: Also split out this user's changelists, on top of the configured
-  [split users](#split-users). Repeat to give several users. Each name is checked against the Perforce server.
-- `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
-  out, so `--no-split -u alice` splits out only alice's changelists.
-- `--ignore-blocking-processes`: Sync even while a [blocking process](#blocking-processes) is running.
-
-**Examples:**
-```sh
-git p4son sync              # sync to latest
-git p4son sync head         # sync to latest (explicit)
-git p4son sync 12345
-git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
-git p4son sync 123 156 head # sync 123, 156, then the latest changelist
-git p4son sync last-synced
-git p4son sync 12345 --force
-git p4son sync --dry-run    # show the changelists a sync to latest would visit
-git p4son sync -u alice     # also split out alice's changelists
-git p4son sync --no-split   # sync without splitting out the configured split users
-git p4son sync --branch p4  # commit onto the p4 branch this time
-```
-
-#### Blocking processes
-
-Syncing while e.g. the Unreal editor is open lets p4 replace assets the editor still has loaded, so the editor
-keeps working against files that no longer match what is on disk. List such processes in `.git-p4son/config.toml`
-and `sync` refuses to start while any of them is running:
-
-```toml
-[sync]
-blocking-processes = ["UnrealEditor", "UnrealLightmass"]
-```
-
-Names are matched with any `.exe` suffix stripped and case ignored, so a single entry covers `UnrealEditor.exe` on
-Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace checks and the pre-sync hooks. A
-[malformed setting](#configuration), or a process list that cannot be read, aborts the sync rather than silently
-skipping the check.
-
-Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.
-
-#### Split users
-
-Syncing straight to the latest changelist lumps your own submitted changelists together with everyone else's in a
-single commit. Split users fix that: for each changelist a split user submitted since the last sync, `sync` first
-syncs the changelist submitted immediately before it, so every changelist they submitted becomes a commit containing
-nothing but their own change.
-
-The split users are stored in `.git-p4son/config.toml`, and edited with the
-[`sync-split-users` command](#sync-split-users-command) or by answering yes in `init`:
-
-```toml
-[sync]
-split-users = ["$(user)", "alice"]
-```
-
-`$(user)` stands for the current Perforce user (from `p4 info`), resolved each time `sync` runs, so the config
-survives a change of user, the same way `$(workspace)` works in the depot root.
-
-For example, with the last sync at CL 100, your own changelists at 102 and 105, and the latest changelist at 106,
-`sync` visits `101 102 104 105 106`, producing five commits where CL 102 and CL 105 each hold only your change.
-Changelists given on the command line are all still visited, with the split points merged in: `sync 103 head`
-visits `101 102 103 104 105 106`.
-
-Splitting only moves forward from a previous sync. The first sync, `last-synced`, and syncing to an older changelist
-with `--force` are never split. Without any split users, `sync` makes no extra Perforce queries.
-
-Finding the split users' changelists costs one Perforce query per split user, listing their changelists in the range
-being synced, then one batched query that checks each changelist found touched the workspace and finds the one before
-it. None of them scans the files of every changelist in the range, which on a large range can exceed the server's
-`maxscanrows`. They run after the blocking processes check, the clean-workspace checks and the pre-sync hooks, so a
-running blocking process, a dirty workspace or a hook that aborts the sync says so before that work. `--dry-run` skips
-the checks and hooks but still shows the resulting sequence.
-
-#### Hooks
-
-`sync` runs the [pre-sync](#pre-sync-hook) and [post-sync](#post-sync-hook) hooks.
-
 ### Sync-Split-Users Command
 
 Show or edit the [split users](#split-users), the Perforce users whose changelists `sync` gives a commit each:
@@ -512,12 +423,8 @@ bash, zsh and PowerShell run `$(user)` as a command substitution.
 
 ### New Command
 
-Create a new Perforce changelist and add changed files to it. Description will contain an enumerated list of git commits
-since the base branch. Optionally creates a review, in Swarm or another [review tool](#review-tools).
-
-Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
-is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
-[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
+Create a changelist from the commits since the base branch: their files are opened in it, and its description lists
+the commits. Optionally shelve it, or create a review in Swarm or another [review tool](#review-tools):
 
 ```sh
 git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
@@ -550,13 +457,6 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
 - `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
   commit, as described below. Refuses `--no-edit` and `--no-alias`
 
-With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
-checks out each later commit and runs `git p4son update` on it, and finally returns to where you started. With
-`--shelve` or `--review`, every step shelves, so each commit shows up as its own patch in the review. With Swarm,
-every step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf; another review tool runs
-once per step instead. It needs a clean git workspace even with `--dry-run`. [`review`](#review-command) is
-`new --review --per-commit`, and describes the steps, the dry run and resuming after a failed step.
-
 **Examples:**
 ```sh
 git p4son new -m "Add feature" -b main
@@ -566,63 +466,24 @@ git p4son new -m "New feature" --review -b main
 git p4son new -m "New feature" --shelve --per-commit -b main   # a shelf per commit, without a Swarm review
 ```
 
+Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
+is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
+[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
+
+With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
+checks out each later commit and runs `git p4son update` on it, and finally returns to where you started. With
+`--shelve` or `--review`, every step shelves, so each commit shows up as its own patch in the review. With Swarm,
+every step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf; another review tool runs
+once per step instead. It needs a clean git workspace even with `--dry-run`. [`review`](#review-command) is
+`new --review --per-commit`, and describes the steps, the dry run and resuming after a failed step.
+
 ### Update Command
 
-Update an existing Perforce changelist with the commits it doesn't include yet. The message above the commit list
-is kept unless `-m` or `-F` replaces it. By default also opens changed files for edit, and reverts files that are no
-longer part of the git change (see
-[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files requires a
-clean git workspace, untracked files included; `update` refuses to run otherwise. The check is skipped with
-`--no-edit`.
-
-**Changelists made by `new` or `review`.** Their alias records the base, by name, and the commits since it the
-changelist includes, by their jj change IDs or, with git, their author dates, which survive rebases and amends.
-`update` folds in the commits it doesn't know: it appends their subjects to the commit list, opens their files, and
-records them. The entries the list already has are left as they are, so an entry you reworded in the changelist
-stays as you wrote it. Every update counts, shelved or not.
-
-- `-b` only chooses which files to open, from that commit on, for example `-b main` to open them all again after a
-  manual `p4 revert`. The commit list is still only appended to. A `-b` above the last included commit is refused,
-  as the commits it skips would be counted without being opened.
-- An included commit that is gone from the branch, dropped or squashed into another, gets a warning, and the update
-  goes on with the new commits. Its patch stays in the review: to undo a shelved commit, revert it in a new commit.
-- A new commit below included ones is refused, as its own patch would undo the included commits above it. Move it
-  after them, then update again.
-- An amend, or a squash into an included commit, keeps the commit's identity, so `update` sees no new commit. With
-  nothing new, `update` opens every file since the base, which takes in what the amend added. With new commits as
-  well, run `update -b main` to open them.
-
-**After a sync.** A shelf holds whole files, so once a sync has changed files the changelist touches, its next shelf
-would mix those changes into the next commit's patch. So when `update --shelve` finds that the base moved since the
-last shelve, the branch was rebased onto it, and it changed such a file, it first inserts an empty commit, `Rebase
-onto CL <N>`, right after the last included commit, with the commits after it rebased onto it. Its shelf is a patch
-of its own, holding what the sync changed, and its entry keeps the commit list matching the patches.
-
-- With `--per-commit`, it's the first step. Without it, `update --shelve` shelves twice: at the rebase commit, then at
-  the tip.
-- An update without `--shelve` leaves the catch-up to the next one that shelves, and a changelist that was never
-  shelved has no patches to catch up. A dry run says what it would insert.
-
-**Other changelists**, whose alias records nothing (made by `alias new` or an older git-p4son), or named by a number
-no alias holds: the commits since the base branch, `HEAD~1` by default, replace their existing entries in the
-commit list (matched by subject) and new ones are appended; entries outside the range are kept and the list is
-renumbered.
-
-With `--per-commit`, `update` runs once per commit instead of once for the whole range, the way `new --per-commit`
-and `review` do after creating the changelist. It checks out each commit in turn, oldest first, runs the update on
-it, and returns to where you started. With `--shelve`, every commit gets a shelf of its own and so shows up as its
-own patch in the Swarm review.
-
-- **With a record,** plain `update --per-commit --shelve` runs on exactly the commits the changelist doesn't include
-  yet. `-b` is refused there, as it would shelve included commits again.
-- **Without one,** pass the range: `update -b HEAD~2 --per-commit --shelve` updates the changelist with the last two
-  commits, one at a time. The base is resolved once, before the first step, so a relative base like `HEAD~2` means
-  the same commit for every step.
-
-`-m`/`-F` is applied on the first step only. It needs a clean git workspace, also with `--no-edit`. If a step
-fails, `update` returns to where you started and names the step and commit that failed. The error ends with the
-command that resumes after the last commit that worked, so earlier commits get no second shelf; with a record,
-running the same command again does the same.
+Add the commits a changelist doesn't include yet: `update` opens their files for edit and appends their subjects to
+the commit list in the description, keeping the message above it unless `-m` or `-F` replaces it. It also reverts
+files that are no longer part of the change (see
+[Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files needs a clean git
+workspace, untracked files included, unless `--no-edit` skips it.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
@@ -661,6 +522,46 @@ git p4son update --per-commit --shelve   # one shelf for each commit the changel
 git p4son update 12345 -b HEAD~2 --per-commit --shelve   # no record: the last two commits
 ```
 
+#### Which commits are new
+
+A changelist made by `new` or `review` has an alias that records its base and the commits it includes, by jj change
+ID or, with git, by author date, which survive rebases and amends. `update` adds only the commits it doesn't know,
+whether it shelves or not, and leaves the entries already in the commit list as they are, so an entry you reworded
+stays as you wrote it.
+
+- `-b` only chooses which files to open, for example `-b main` to open them all again after a manual `p4 revert`. A
+  `-b` above the last included commit is refused.
+- An included commit that is gone from the branch, dropped or squashed, gets a warning. Its patch stays in the
+  review: to undo a shelved commit, revert it in a new commit.
+- A new commit below included ones is refused, as its patch would undo the ones above it. Move it after them.
+- An amend keeps the commit's identity, so `update` sees nothing new and opens every file since the base, which
+  takes in the amend. With new commits as well, run `update -b main`.
+
+#### After a sync
+
+A shelf holds whole files, so after a sync that changed files the changelist touches, the next shelf would mix the
+sync's changes into your next patch. So when `update --shelve` finds you synced and rebased, it first inserts an
+empty commit, `Rebase onto CL <N>`, after the last included commit, and shelves it on its own: its patch holds what
+the sync changed. An update without `--shelve` leaves this to the next one that shelves, and a dry run says what it
+would insert.
+
+#### Changelists without a record
+
+For a changelist whose alias records no commits, made by `alias new` or an older git-p4son, or one named by a number
+no alias holds, `update` takes the commits since `-b`, `HEAD~1` by default. Their entries replace the ones in the
+commit list with the same subject, the others are appended, and the list is renumbered.
+
+#### One update per commit
+
+With `--per-commit`, `update` checks out each new commit in turn, oldest first, updates the changelist on it, and
+returns to where you started. With `--shelve`, each commit gets a shelf of its own, so it shows up as its own patch in
+the review. Without a record, give the range with `-b`, such as `-b HEAD~2` for the last two commits; with one, `-b`
+is refused, as it would shelve included commits again. `-m`/`-F` applies to the first step only, and the run needs a
+clean git workspace even with `--no-edit`.
+
+If a step fails, `update` returns to where you started and names the commit that failed, with the command that
+resumes after the last commit that worked. With a record, running the same command again does the same.
+
 ### Keeping the changelist in sync with git
 
 `new` and `update` open every file changed since the base branch in the changelist. A file can later stop being
@@ -684,14 +585,8 @@ are left out of it.
 
 ### Review Command
 
-Create a review with one shelf per commit. `review` is short for `git p4son new --review --per-commit`, taking the
-same arguments apart from `--review`, `--per-commit`, `--shelve`, `--no-edit` and `--no-alias`. It checks out the first
-commit since the base branch and runs `git p4son new --review` on it, then checks out each later commit and runs
-`git p4son update --shelve`, and finally returns to where you started. With Swarm, every step but the last sleeps 5
-seconds to give Perforce/Swarm time to process the shelf. Another [review tool](#review-tools) runs once per step
-instead, with no sleep. The commits are reviewed where they are: to review them on top of the latest
-`main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks it even with
-`--dry-run`.
+Create a review with one shelf per commit, so each commit is a patch of its own. `review` is short for
+`git p4son new --review --per-commit`:
 
 ```sh
 git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
@@ -712,20 +607,6 @@ git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
   each `update` step
 
-A dry run prints the plan like this, with the base resolved to the commit every step uses; the message, which only
-the first step gets, is printed below it:
-
-```
-abc1234 First commit: git p4son new my-feature --review -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
-def5678 Second commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
-ghi9012 Third commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
-```
-
-If a step fails, `review` returns to where you started and names the step and commit that failed. Once the first
-step has created the changelist, the error also says how to finish: after fixing the problem, run the
-`git p4son update my-feature --shelve --per-commit -b <commit>` it prints, which resumes after the last commit that
-worked.
-
 **Examples:**
 ```sh
 # Review all commits since main (alias defaults to branch name)
@@ -741,9 +622,30 @@ git p4son review -m "Add my feature" -b main --dry-run
 git p4son review -F description.txt -b main
 ```
 
+`review` checks out the first commit since the base branch and runs `git p4son new --review` on it, then checks out
+each later commit and runs `git p4son update --shelve`, and finally returns to where you started. With Swarm, every
+step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf; another
+[review tool](#review-tools) runs once per step instead. The commits are reviewed where they are: to review them on top
+of the latest `main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks
+it even with `--dry-run`.
+
+A dry run prints the plan like this, with the base resolved to the commit every step uses; the message, which only
+the first step gets, is printed below it:
+
+```
+abc1234 First commit: git p4son new my-feature --review -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+def5678 Second commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+ghi9012 Third commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+```
+
+If a step fails, `review` returns to where you started and names the step and commit that failed. Once the first
+step has created the changelist, the error also says how to finish: after fixing the problem, run the
+`git p4son update my-feature --shelve --per-commit -b <commit>` it prints, which resumes after the last commit that
+worked.
+
 ### List-Changes Command
 
-List commit subjects since a base branch in chronological order (oldest first):
+List the commit subjects since a base branch, oldest first and numbered, as a changelist description lists them:
 
 ```sh
 git p4son list-changes [--base-branch BASE_BRANCH] [--porcelain]
@@ -761,27 +663,17 @@ git p4son list-changes --base-branch main
 git p4son list-changes --base-branch main --porcelain
 ```
 
-This command is useful for generating changelist descriptions by listing all commit messages since the base branch,
-numbered sequentially.
-
 ### Alias Command
 
-Manage changelist aliases, stored one per file as `.git-p4son/aliases/<alias>.toml` (`changelist = 12345`, and
-with the jj backend `change = "<change ID>"`, the [jj change](#jujutsu-jj) it was made for). An alias that `new` or
-`review` saved also records the changelist's base and the commits since it it includes, which
-[`update`](#update-command) goes on from: `base`, `base_commit` and `included`, a list of the commits' identities.
-Aliases saved by older versions in `.git-p4son/changelists/` keep working, and move to `.git-p4son/aliases/` when
-written, or all at once with `alias clean`.
+Manage changelist aliases: names that stand for changelist numbers, so you can say `my-feature` instead of `12345`.
+`new` and `review` save one named after the branch, which also records what [`update`](#update-command) needs to go
+on from. Aliases are stored in `.git-p4son/aliases/`; ones saved by older versions in `.git-p4son/changelists/` keep
+working, and move when written, or all at once with `alias clean`.
 
 #### alias list
 
 List all aliases and their changelist numbers:
 
-```sh
-git p4son alias list
-```
-
-**Examples:**
 ```sh
 git p4son alias list
 ```
@@ -861,8 +753,8 @@ git p4son alias clean [-n] [--porcelain]
 ```
 
 It first moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`, then goes through the aliases
-in name order, each under a heading of its own: it looks up the alias's changelist in Perforce and deletes the alias
-if the changelist was submitted or doesn't exist. If p4 answers neither that nor pending for a changelist, it stops
+in name order: it looks up the alias's changelist in Perforce and deletes the alias if the changelist was submitted or
+doesn't exist. If p4 answers neither that nor pending for a changelist, it stops
 there, leaving that alias and the ones after it. A submit that renumbers the changelist leaves its old number behind,
 which counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist
 is still pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
@@ -957,6 +849,47 @@ Most commands that accept an alias or changelist argument default to the current
 The keyword cannot be used in a detached HEAD state. Use `--no-alias` (on `new`) or supply an explicit
 alias name instead.
 
+## Configuration
+
+git-p4son keeps its per-repository settings in `.git-p4son/config.toml`. `init`, `writable` and `sync-split-users`
+write most of them; the rest you edit by hand.
+
+- `[depot] root` (string, set by `init`): the depot path `sync` syncs, e.g. `//$(workspace)` or
+  `//$(workspace)/Engine`. See [Init Command](#init-command)
+- `[core] writable` (`true` or `false`, default `false`): [writable mode](#writable-command), which keeps
+  git-tracked files writable
+- `[core] backend` (`"auto"`, `"git"` or `"jj"`, default `"auto"`): the tool git-p4son follows for the change, the
+  base and the branch. `auto` means jj in a [jj workspace](#jujutsu-jj) and git otherwise
+- `[sync] branch` (string, set by `init`): the sync branch, which `sync` commits onto from whatever branch you are
+  on. Without it, `sync` uses `main`. See [Sync Command](#sync-command)
+- `[sync] split-users` (list of strings, default empty): the users whose changelists `sync` gives a commit each;
+  `$(user)` stands for you. See [Split users](#split-users)
+- `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
+  [Blocking processes](#blocking-processes)
+- `[review-tool] default` (string, default `"swarm"`): the [review tool](#review-tools) `new --review` and `review`
+  push to without `--review-tool`
+- `[review-tool.<name>]` (table): a [review tool](#review-tools)'s `command`, and its `new` and `update` arguments
+- `[core.script-runners]` (table, Windows only): the command that runs a hook script, by file extension.
+  See [Hooks](#hooks). The old `[hooks.extension-associations]` is still read, and `core.script-runners` wins where
+  both name an extension
+
+For example:
+
+```toml
+[depot]
+root = "//$(workspace)"
+
+[core]
+writable = true
+
+[sync]
+split-users = ["$(user)", "alice"]
+blocking-processes = ["UnrealEditor"]
+```
+
+A value of the wrong type, such as `writable = "true"` or `split-users = "alice"`, or a file that is not valid TOML,
+stops the command with an error naming the setting, so a typo is never silently ignored.
+
 ## Review Tools
 
 `new --review` and `review` create a review in Swarm by default: the description gets a `#review` keyword, and Swarm
@@ -1010,18 +943,14 @@ the terminal, so its output shows as it is written and it can prompt. Like a hoo
 
 ## Hooks
 
-Hooks work similarly to git hooks. They are executables (unix)/scripts (windows) that you place in
-the `.git-p4son/hooks/[hook-name]/` directory. These scripts will be called to add or modify behavior
-at defined times during git-p4son operations. Scripts get run in filename (lexicographically) sorted
-order.
+Like git hooks, hooks are programs git-p4son runs at set points of a command: executables, or on Windows scripts, in
+`.git-p4son/hooks/<hook-name>/`, run in filename order.
 
-The hook process CWD is the directory where git-p4son was invoked, and `GIT_P4SON_REPO_ROOT_DIR` is
-set to the git-p4son repository root. `GIT_P4SON_BACKEND` is `git` or `jj`, the [backend](#choosing-the-backend)
-the command runs with.
+A hook runs in the directory git-p4son was run from, with `GIT_P4SON_REPO_ROOT_DIR` set to the repository root and
+`GIT_P4SON_BACKEND` to `git` or `jj`, the [backend](#choosing-the-backend) the command runs with.
 
-On Windows, `.ps1`, `.sh`, and `.py` files are run with
-`powershell.exe -NoProfile -ExecutionPolicy Bypass -File`, `bash.exe`, and `python.exe` respectively.
-Customize or add Windows script runners in `.git-p4son/config.toml`:
+On Windows, `.ps1`, `.sh` and `.py` files run with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`,
+`bash.exe` and `python.exe`. Change or add script runners in `.git-p4son/config.toml`:
 
 ```toml
 [core.script-runners]
@@ -1198,44 +1127,35 @@ colocates with both settings.
 git matches `.gitignore` patterns without case when `core.ignorecase` is true, the default on Windows and macOS. jj
 always matches them with case, so it would track a `Thirdparty/` folder that git ignores through `ThirdParty/`.
 
-To keep jj from tracking them, git-p4son leaves each such folder, or file, out of jj's `snapshot.auto-track` for the
-repository, building on any value you have, for example `(all()) ~ root:Some/Plugin/Source/Thirdparty`. That's
-jj's own setting, so it works whatever `.gitignore` re-includes with `!`, which would outrank `.git/info/exclude`,
-and it leaves git alone. `jj status` then lists the folders under "Untracked paths". As the repository's value holds
-yours, a later change to your user-level `snapshot.auto-track` doesn't reach the repository.
-
-git-p4son does so when `init` colocates, passing the setting to `jj git init`, as jj snapshots straight away, and in
-the steps it lists for colocating a repository it creates by hand. It also does so at the end of each sync on the jj
-backend, as a sync can bring in new folders. To let jj track such a folder again, remove its `root:"..."` from
-`snapshot.auto-track`, with `jj config edit --repo`.
+git-p4son keeps jj from tracking them by leaving each such folder, or file, out of jj's `snapshot.auto-track` for the
+repository, building on any value you have, for example `(all()) ~ root:Some/Plugin/Source/Thirdparty`. `jj status`
+then lists them under "Untracked paths". It does so when `init` colocates, and at the end of each sync on the jj
+backend, as a sync can bring in new folders. To let jj track such a folder again, remove its `root:"..."` with
+`jj config edit --repo`. As the repository's value holds yours, a later change to your user-level
+`snapshot.auto-track` doesn't reach the repository.
 
 If jj tracks such files anyway, for example in a workspace colocated before git-p4son did this, git-p4son warns about
-the ones the change you're working on adds, unless it's a commit in the sync branch's history, which git made. The
-warning lists the `jj config set` that leaves them out and the `jj file untrack` command that stops tracking them,
-which leaves the files on disk. Both are quoted to paste into cmd, PowerShell or a POSIX shell alike. They name a
-folder only when git tracks nothing else in it, so files git tracks stay tracked. Files you track on purpose, with
-`jj file track --include-ignored`, are left alone.
+the ones your change adds. The warning lists the `jj config set` that leaves them out and the `jj file untrack` that
+stops tracking them, which leaves the files on disk. Both are quoted to paste into cmd, PowerShell or a POSIX shell.
+They name a folder only when git tracks nothing else in it, so files git tracks stay tracked. Files you track on
+purpose, with `jj file track --include-ignored`, are left alone.
 
 ### Locking, and the git workflow
 
 git-p4son holds jj's working-copy lock while commands run, including sync hooks and temporary Perforce reverts,
-so other jj processes cannot snapshot files halfway through. A busy lock stops the command. Queries during the
-command use a pinned jj operation without snapshotting.
-
-jj's first snapshot and final reconciliation happen outside the lock, and so do sync's rebase and return, so
-another jj command can import the finished git changes before git-p4son does: this is not one atomic jj
-transaction. `--verbose` logs the jj operation git-p4son pinned at the start. The lock does not keep out
-editors, git commands or other jj workspaces. If a command fails, look at the workspace before continuing: the
-lock is released, but Perforce operations that completed are not undone.
+so other jj processes cannot snapshot files halfway through. A busy lock stops the command. The lock does not keep
+out editors, git commands or other jj workspaces, and a command is not one atomic jj transaction: jj's first
+snapshot, the final import, and sync's rebase and return happen outside it. If a command fails, look at the workspace
+before continuing: Perforce operations that completed are not undone.
 
 Hooks must not run ordinary jj commands, which would wait for the lock their caller holds. Read-only queries such
-as `jj --at-op=@ log` avoid snapshotting and the git import. A hook that runs git-p4son itself needs
-`--backend git`, which reuses the caller's lock.
+as `jj --at-op=@ log` are fine, and a hook that runs git-p4son itself needs `--backend git`, which reuses the
+caller's lock.
 
-`review`, `new --per-commit` and `update --per-commit` run once per commit since the base, up to the jj change, as they
-do in git. Under jj's lock, each step puts its commit's files on disk with git, and the working change's files go back
-at the end, also when a step fails, so jj sees no change. No jj command runs, and untracked and ignored files are left
-alone. They refuse to start if files changed after jj's snapshot, as the checkouts would overwrite them:
+`review`, `new --per-commit` and `update --per-commit` run once per commit since the base, as they do in git. Under
+jj's lock, each step puts its commit's files on disk with git, and the working change's files go back at the end,
+also when a step fails, so jj sees no change. Untracked and ignored files are left alone. They refuse to start if
+files changed after jj's snapshot, as the checkouts would overwrite them:
 
 ```sh
 git p4son review -b main
@@ -1327,4 +1247,40 @@ source $(git-p4son completion zsh --jj)         # ~/.zshrc, after compinit
 
 Each loads the `git p4son` completion for its shell too. If you named the alias something other than `p4son`, set
 `GIT_P4SON_JJ_ALIAS` to its name.
+
+## Development
+
+To install from source in editable mode:
+
+```sh
+git clone https://github.com/neoboid/git-p4son.git
+cd git-p4son
+pip install -e .
+```
+
+The `-e` flag installs the package in "editable" mode, meaning changes to the code are immediately available
+without reinstalling. This is also handy if you want to auto-update git-p4son whenever you pull from GitHub.
+
+git-p4son only uses Python standard library modules - no additional packages are required.
+
+Run the tests with `python -m pytest tests/` (`pip install pytest`). With `pytest-xdist` installed, add
+`-n auto --maxprocesses 8` to run them in parallel, which is about three times faster.
+
+### Git Hooks
+
+The repository includes git hooks in the `hooks/` directory:
+
+- **pre-commit** - verifies that staged Python files are formatted with `autopep8`. Install it with
+  `pip install autopep8`.
+- **pre-push** - runs the test suite and blocks the push if any test fails. It needs `pytest` installed, and runs
+  the tests in parallel when `pytest-xdist` is too.
+
+To activate the hooks, run:
+
+```sh
+scripts/setup-hooks.sh
+```
+
+This configures `core.hooksPath` so git uses the hooks from the repository. You only need to run this once after
+cloning.
 

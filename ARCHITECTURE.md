@@ -219,4 +219,5 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
   file changes, command echo with a spinner, child process output, and quiet and verbose modes, with
-  `log.quiet()` scoping quiet mode to a block. `plural` formats counts.
+  `log.quiet()` scoping quiet mode to a block. Writes to stderr flush stdout first, so merged streams keep their order.
+  `plural` formats counts.

@@ -130,6 +130,8 @@ class Log:
     def error(self, text: str) -> None:
         """Print an error message to stderr."""
         error = _color_status('err', Color.ERROR, sys.stderr)
+        # A piped stdout is block-buffered; flush it so merged output keeps its order.
+        sys.stdout.flush()
         print(f'{error} {text}', file=sys.stderr)
 
     def command(self, cmd: str, truncate_for_spinner: bool = False) -> None:
@@ -170,6 +172,8 @@ class Log:
         """Print a line of a child process's output as is."""
         if self.quiet_mode:
             return
+        if stderr:
+            sys.stdout.flush()
         print(line, file=sys.stderr if stderr else sys.stdout)
 
     def stdin(self, text: str) -> None:

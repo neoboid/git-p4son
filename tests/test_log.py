@@ -3,6 +3,8 @@
 import contextlib
 import io
 import os
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -66,6 +68,20 @@ class TestOutput(unittest.TestCase):
             log.output('line')
             log.output('line', stderr=True)
         self.assertEqual((out.getvalue(), err.getvalue()), ('', ''))
+
+
+class TestMergedStreams(unittest.TestCase):
+    def test_stderr_lines_keep_their_place_after_stdout_lines(self):
+        """With 2>&1 into a pipe, stdout is block-buffered, so stderr would jump ahead unless stdout is flushed."""
+        script = ('from git_p4son.log import log\n'
+                  'log.info("one")\n'
+                  'log.error("two")\n'
+                  'log.info("three")\n'
+                  'log.output("four", stderr=True)\n')
+        result = subprocess.run([sys.executable, '-c', script], stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, check=True,
+                                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.assertEqual(result.stdout, 'one\n[err] two\nthree\nfour\n')
 
 
 class TestQuiet(unittest.TestCase):

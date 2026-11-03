@@ -12,6 +12,8 @@
   or deleted, and keeps the rest, each alias under a heading of its own, then counts them under an `Alias clean done`
   heading. `--dry-run` lists them first, and `--porcelain` prints one `<action> <alias> <CL>` line per alias. Use
   `alias delete` for the others. The Claude Code skill now suggests it; run `skill install` again to update it
+- Errors no longer come out ahead of the output before them when stdout and stderr go to the same pipe or file, as
+  with `2>&1`
 - The Windows commands that run hook scripts by extension move from `[hooks.extension-associations]` to
   `[core.script-runners]`; the old name is still read. The `.nu` default is gone: add `".nu" = "nu.exe"` to the setting
   to run Nushell hooks

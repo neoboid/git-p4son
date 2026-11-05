@@ -1,6 +1,5 @@
 """Tests for git_p4son.lib module."""
 
-import contextlib
 import os
 import stat
 import unittest
@@ -17,7 +16,6 @@ from git_p4son.lib import (
 )
 from tests.helpers import (
     captured_output,
-    GitRepoTestCase,
     make_run_result,
     SAMPLE_SPEC,
     SAMPLE_SPEC_NO_COMMITS,
@@ -397,9 +395,6 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
                               ('_warn_unopened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
-        # The files are not on disk, so record what would be put back instead.
-        self.mocks['_restoring'] = start_patch(
-            self, 'git_p4son.lib._restoring', side_effect=lambda *args: contextlib.nullcontext())
     # --- added files ---
 
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -562,9 +557,6 @@ class TestActionMismatch(unittest.TestCase):
                               ('_warn_unopened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
-        # The files are not on disk, so record what would be put back instead.
-        self.mocks['_restoring'] = start_patch(
-            self, 'git_p4son.lib._restoring', side_effect=lambda *args: contextlib.nullcontext())
 
     # --- edit -> delete ---
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -576,7 +568,7 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -588,7 +580,7 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'file.txt')])
 
     # --- delete -> edit ---
@@ -601,10 +593,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.mods = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
-        self.mocks['_restoring'].assert_called_once_with(
-            ['file.txt'], '/ws', False)
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'delete')))
@@ -615,10 +605,8 @@ class TestActionMismatch(unittest.TestCase):
         changes.mods = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'file.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'file.txt')])
-        self.mocks['_restoring'].assert_called_once_with(
-            ['file.txt'], '/ws', False)
 
     # --- add -> edit (keep as add, file is new to depot) ---
     @mock.patch('git_p4son.lib.opened_lookup',
@@ -652,28 +640,26 @@ class TestActionMismatch(unittest.TestCase):
         changes.dels = ['file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-                         (['p4', '-L', 'en', '-x', '-', 'revert'], 'file.txt')])
+                         (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'file.txt')])
 
 
 class TestBatchedActions(unittest.TestCase):
-    @mock.patch('git_p4son.lib._restoring', side_effect=lambda *args: contextlib.nullcontext())
     @mock.patch('git_p4son.lib._warn_unopened')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files', return_value={
         'a.txt': ('100', 'delete'), 'b.txt': ('200', 'delete'),
         'c.txt': ('200', 'edit'), 'd.txt': ('300', 'edit')})
-    def test_reverts_reopens_and_restores_in_one_call_each(
-            self, _opened, mock_run, _warn, mock_restore):
+    def test_reverts_and_reopens_in_one_call_each(
+            self, _opened, mock_run, _warn):
         changes = LocalChanges()
         changes.mods = ['a.txt', 'b.txt', 'c.txt', 'd.txt']
         with captured_output() as out:
             include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'revert'], 'a.txt\nb.txt'),
+            (['p4', '-L', 'en', '-x', '-', 'revert', '-k'], 'a.txt\nb.txt'),
             (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'a.txt\nb.txt'),
             (['p4', '-L', 'en', '-x', '-', 'reopen', '-c', '100'], 'c.txt\nd.txt'),
         ])
-        mock_restore.assert_called_once_with(['a.txt', 'b.txt'], '/ws', False)
         self.assertIn('Moving files from other changelists:\n  c.txt\n  d.txt\n',
                       out.getvalue())
 
@@ -689,7 +675,7 @@ class TestBatchedActions(unittest.TestCase):
 
 
 class TestKeepWorkingFiles(WorkspaceTestCase):
-    """A file p4 revert overwrites gets its working version back."""
+    """A file reverted to be opened with another action keeps its working version."""
 
     def setUp(self):
         super().setUp()
@@ -700,7 +686,8 @@ class TestKeepWorkingFiles(WorkspaceTestCase):
         start_patch(self, 'git_p4son.perforce.run', side_effect=self._p4)
 
     def _p4(self, command, dry_run=False, **kwargs):
-        if 'revert' in command and not dry_run:
+        # p4 revert writes the depot version, unless -k keeps the working file.
+        if 'revert' in command and '-k' not in command and not dry_run:
             path = os.path.join(self.ws, 'a.txt')
             with open(path, 'w') as f:
                 f.write('depot')
@@ -722,54 +709,6 @@ class TestKeepWorkingFiles(WorkspaceTestCase):
         self._include()
         self.assertEqual(self._read(), 'working')
 
-    def test_dry_run_says_what_it_would_put_back(self):
-        out = self._include(dry_run=True)
-        self.assertIn('Would put back 1 working file', out)
-        self.assertEqual(self._read(), 'working')
-
-
-class TestKeptFileMatchesGitsRestore(GitRepoTestCase):
-    """In a clean workspace, the kept working file is what restoring it from git would give, conversions included."""
-
-    def build_workspace(self):
-        super().build_workspace()
-        self.git('config', 'core.autocrlf', 'true')
-        self.write_file('.gitattributes', '*.txt ident\n')
-        with open(os.path.join(self.ws, 'a.txt'), 'wb') as f:
-            f.write(b'$Id$\nline\n')
-        self.commit()
-        # Have git write the file, as a checkout leaves it.
-        os.remove(os.path.join(self.ws, 'a.txt'))
-        self.git('checkout', '--', 'a.txt')
-
-    def _bytes(self):
-        with open(os.path.join(self.ws, 'a.txt'), 'rb') as f:
-            return f.read()
-
-    def test_kept_file_equals_gits_restored_one(self):
-        checked_out = self._bytes()
-        self.assertIn(b'\r\n', checked_out)
-        self.assertIn(b'$Id: ', checked_out)
-        start_patch(self, 'git_p4son.lib._warn_unopened')
-        start_patch(self, 'git_p4son.lib.get_opened_files',
-                    return_value={'a.txt': ('100', 'delete')})
-
-        def p4(command, dry_run=False, **kwargs):
-            if 'revert' in command:
-                with open(os.path.join(self.ws, 'a.txt'), 'wb') as f:
-                    f.write(b'depot\n')
-            return make_run_result()
-        start_patch(self, 'git_p4son.perforce.run', side_effect=p4)
-        changes = LocalChanges()
-        changes.mods = ['a.txt']
-        with captured_output():
-            include_changes_in_changelist(
-                changes, '100', self.ws, dry_run=False)
-        kept = self._bytes()
-        os.remove(os.path.join(self.ws, 'a.txt'))
-        self.git('restore', 'a.txt')
-        self.assertEqual(kept, self._bytes())
-
 
 class TestRevertUnchangedFiles(WorkspaceTestCase):
     """The tracked/untracked boundary decides what may be reverted."""
@@ -782,7 +721,7 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
             'tracked': mock.patch('git_p4son.lib.get_tracked_files'),
             'revert_unchanged': mock.patch(
                 'git_p4son.lib.p4_revert_unchanged', return_value=[]),
-            'revert': mock.patch('git_p4son.lib.p4_revert'),
+            'revert': mock.patch('git_p4son.lib.run_p4_batch', return_value=[]),
             'writable_mode': mock.patch(
                 'git_p4son.lib.is_writable_mode', return_value=False),
             'make_writable': mock.patch('git_p4son.writable.make_writable'),
@@ -801,6 +740,12 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
     def _unchanged_candidates(self):
         return self.mocks['revert_unchanged'].call_args.args[0]
 
+    def _reverted(self):
+        """The files reverted with -k, keeping git's working files."""
+        command, files = self.mocks['revert'].call_args.args[:2]
+        self.assertEqual(command, ['revert', '-k'])
+        return files
+
     def test_tracked_edit_is_revert_candidate(self):
         self._setup([('a.txt', 'edit')], ['a.txt'], ['a.txt'])
         revert_unchanged_files('100', self.ws, dry_run=False)
@@ -813,14 +758,13 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self._setup([('Asset.uasset', 'edit')], [], ['Asset.uasset'])
         revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.mocks['revert'].assert_not_called()
+        self.assertEqual(self._reverted(), [])
 
-    def test_tracked_deletes_present_on_disk_are_reverted_and_restored(self):
+    def test_tracked_deletes_present_on_disk_are_reverted(self):
         self._setup([('a.txt', 'delete'), ('b.txt', 'delete')],
                     ['a.txt', 'b.txt'], ['a.txt', 'b.txt'])
         revert_unchanged_files('100', self.ws, dry_run=False)
-        self.mocks['revert'].assert_called_once_with(
-            ['a.txt', 'b.txt'], self.ws, False)
+        self.assertEqual(self._reverted(), ['a.txt', 'b.txt'])
         self.assertTrue(self.out.getvalue().endswith(
             '[ok] 2 files reverted\n'))
 
@@ -828,7 +772,7 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         """Opened for delete and gone from git and disk: a real delete."""
         self._setup([('gone.txt', 'delete')], [], [])
         revert_unchanged_files('100', self.ws, dry_run=False)
-        self.mocks['revert'].assert_not_called()
+        self.assertEqual(self._reverted(), [])
         self.assertEqual(self._unchanged_candidates(), [])
 
     def test_missing_add_is_revert_candidate_tracked_or_not(self):
@@ -842,7 +786,7 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self._setup([('New.uasset', 'add')], [], ['New.uasset'])
         revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.mocks['revert'].assert_not_called()
+        self.assertEqual(self._reverted(), [])
 
     def test_tracked_add_present_on_disk_is_left_alone(self):
         """A real new file stays opened; there is no depot version to compare with."""
@@ -857,7 +801,7 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
                     ['m.txt', 'i.txt', 'b.txt'])
         revert_unchanged_files('100', self.ws, dry_run=False)
         self.assertEqual(self._unchanged_candidates(), [])
-        self.mocks['revert'].assert_not_called()
+        self.assertEqual(self._reverted(), [])
 
     def test_counts_reverted_files(self):
         self._setup([('a.txt', 'edit'), ('b.txt', 'edit'),
@@ -869,13 +813,14 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self.assertTrue(self.out.getvalue().endswith(
             '[ok] 2 files reverted\n'))
 
-    def test_dry_run_reverts_and_restores_nothing(self):
+    def test_dry_run_reverts_nothing(self):
         self._setup([('a.txt', 'edit'), ('c.txt', 'delete')],
                     ['a.txt', 'c.txt'], ['a.txt', 'c.txt'])
         revert_unchanged_files('100', self.ws, dry_run=True)
         self.mocks['revert_unchanged'].assert_called_once_with(
             ['a.txt'], '100', self.ws, True)
-        self.mocks['revert'].assert_called_once_with(['c.txt'], self.ws, True)
+        self.mocks['revert'].assert_called_once_with(
+            ['revert', '-k'], ['c.txt'], 'Reverting deletes no longer in the change', self.ws, True)
 
     def test_dry_run_placeholder_changelist_queries_nothing(self):
         revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws, dry_run=True)
@@ -895,8 +840,9 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
 
     def test_reverted_deletes_keep_the_working_files(self):
         self._setup([('c.txt', 'delete')], ['c.txt'], ['c.txt'])
-        self.mocks['revert'].side_effect = lambda files, ws, dry_run: (
-            open(os.path.join(ws, 'c.txt'), 'w').write('depot'))
+        # p4 revert writes the depot version, unless -k keeps the working file.
+        self.mocks['revert'].side_effect = lambda command, files, summary, ws, dry_run: (
+            None if '-k' in command else open(os.path.join(ws, 'c.txt'), 'w').write('depot'))
         revert_unchanged_files('100', self.ws, dry_run=False, revision='abc')
         self.mocks['tracked'].assert_called_once_with(
             ['c.txt'], self.ws, 'abc')

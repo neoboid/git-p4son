@@ -15,12 +15,22 @@ from git_p4son.alias import (
     alias_show_command,
 )
 from git_p4son.changelist_store import (
+    find_record,
     delete_changelist_alias,
     list_changelist_aliases,
     save_changelist_alias,
 )
 from git_p4son.common import CommandError, RunError
-from tests.helpers import captured_output, cli_args, FakeP4, make_run_result, WorkspaceTestCase
+from tests.helpers import (
+    captured_output,
+    cli_args,
+    FakeP4,
+    JjTestCase,
+    make_run_result,
+    on_jj,
+    P4RepoTestCase,
+    WorkspaceTestCase,
+)
 
 
 ALIASES = [('feature-a', '100'), ('feature-b', '200'), ('feature-c', '300')]
@@ -280,6 +290,74 @@ class TestAliasCleanMigrates(WorkspaceTestCase):
         self.assertNotIn('Moved', out)
         self.assertEqual(sorted(os.listdir(self.old_dir)),
                          ['feature-a', 'feature-b'])
+
+
+class TestAliasRename(P4RepoTestCase):
+    """alias rename of the alias feature, which new made for CL 101 on branch feature."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_feature()
+        self.p4son('new', '-m', 'Feature', '-b', 'main')
+
+    def rename_branch(self, name):
+        """Rename branch feature to name, as the user would before renaming its alias."""
+        if isinstance(self, JjTestCase):
+            self.jj('bookmark', 'rename', 'feature', name)
+        else:
+            self.git('branch', '-m', name)
+
+    def test_one_name_renames_the_current_alias(self):
+        found = find_record('101', self.ws)
+        assert found is not None
+        out = self.p4son('alias', 'rename', 'feature-v2')
+        self.assertIn('feature -> feature-v2 (CL 101)', out)
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feature-v2', '101')])
+        self.assertEqual(find_record('101', self.ws), ('feature-v2', found[1]))
+
+    def test_one_name_after_a_git_branch_rename_asks_for_the_old_alias(self):
+        self.rename_branch('feature-v2')
+        self.p4son_fails('alias', 'rename', 'feature-v2',
+                         message=r'the current one would be "feature-v2", which doesn\'t exist.*'
+                                 r'git p4son alias rename OLD feature-v2')
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feature', '101')])
+
+    def test_one_name_after_a_jj_bookmark_rename_finds_the_alias_by_its_change(self):
+        if not isinstance(self, JjTestCase):
+            self.skipTest('git records no change for the alias')
+        self.rename_branch('feature-v2')
+        self.p4son('alias', 'rename', 'feature-v2')
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feature-v2', '101')])
+
+    def test_two_names_rename_old_to_new(self):
+        self.p4son('alias', 'rename', 'feature', 'other')
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '101')])
+
+    def test_the_branch_keyword_as_the_new_name_is_the_renamed_branch(self):
+        self.rename_branch('feature-v2')
+        out = self.p4son('alias', 'rename', 'feature', 'branch')
+        self.assertIn('feature -> feature-v2 (CL 101)', out)
+        self.assertEqual(list_changelist_aliases(
+            self.ws), [('feature-v2', '101')])
+        self.assertEqual(self.p4son('alias', 'show'), '101\n')
+
+    def test_the_branch_keyword_as_the_old_name_is_the_current_alias(self):
+        self.p4son('alias', 'rename', 'branch', 'other')
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '101')])
+
+    def test_an_existing_new_name_needs_force(self):
+        save_changelist_alias('other', '200', self.ws, force=False)
+        self.p4son_fails('alias', 'rename', 'feature', 'other',
+                         message='Alias "other" already exists')
+        self.p4son('alias', 'rename', '-f', 'feature', 'other')
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '101')])
+
+
+TestAliasRenameOnJj = on_jj(TestAliasRename, skip={
+    'test_one_name_after_a_git_branch_rename_asks_for_the_old_alias': 'the alias records the jj change'})
 
 
 if __name__ == '__main__':

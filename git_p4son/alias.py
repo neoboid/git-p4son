@@ -1,14 +1,16 @@
 """Alias command implementation for git-p4son."""
 
 import argparse
-from .backend import Backend
+from .backend import Backend, resolve_branch_keyword
 from .changelist_store import (
     alias_changes,
+    changelist_alias_exists,
     load_changelist_alias,
     save_changelist_alias,
     list_changelist_aliases,
     delete_changelist_alias,
     migrate_changelist_aliases,
+    rename_changelist_alias,
 )
 from .common import CommandError
 from .log import log, plural
@@ -57,6 +59,27 @@ def alias_new_command(args: argparse.Namespace) -> int:
     save_changelist_alias(args.alias, args.changelist, workspace_dir,
                           force=args.force)
     log.success(f'{args.alias} -> CL {args.changelist}')
+    return 0
+
+
+def alias_rename_command(args: argparse.Namespace) -> int:
+    """Execute the 'alias rename' command."""
+    workspace_dir = args.workspace_dir
+    backend: Backend = args.backend
+    # Like git branch -m [old] new: a single name is the new one, for the current alias.
+    old, new = (args.old, args.new) if args.new is not None else (
+        'branch', args.old)
+    if new == 'branch':
+        new = resolve_branch_keyword(backend, workspace_dir, new_alias=True)
+    if old == 'branch':
+        old = resolve_branch_keyword(backend, workspace_dir, new_alias=False)
+        if not changelist_alias_exists(old, workspace_dir):
+            raise CommandError(f'Found no alias to rename: the current one would be "{old}", which doesn\'t exist. '
+                               f'Name the old alias: git p4son alias rename OLD {new}')
+
+    log.heading(f'Renaming alias {old}')
+    changelist = rename_changelist_alias(old, new, workspace_dir, args.force)
+    log.success(f'{old} -> {new} (CL {changelist})')
     return 0
 
 

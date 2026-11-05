@@ -6,7 +6,7 @@ import sys
 from importlib.resources import files
 from typing import cast
 from . import __version__, jj
-from .backend import BACKENDS, alias_for_branch, open_backend
+from .backend import BACKENDS, open_backend, resolve_branch_keyword
 from .sync import sync_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
@@ -17,6 +17,7 @@ from .alias import (
     alias_delete_command,
     alias_list_command,
     alias_new_command,
+    alias_rename_command,
     alias_show_command,
 )
 from .init import init_command
@@ -436,6 +437,25 @@ Examples:
         help='Overwrite an existing alias'
     )
 
+    alias_rename_parser = alias_subparsers.add_parser(
+        'rename',
+        help='Rename an alias, the current one by default',
+        description='Rename an alias, keeping the changelist and everything it records. With one name, renames the '
+        'current alias, the one the branch keyword names, to it. The branch keyword works for either name; as the '
+        'new name it is the current branch or bookmark name, for after renaming the branch.',
+        usage='%(prog)s [-h] [-f] [OLD] NEW'
+    )
+    alias_rename_parser.set_defaults(func=alias_rename_command)
+    alias_rename_parser.add_argument(
+        'old', metavar='OLD', help='The alias to rename. Defaults to the current alias')
+    alias_rename_parser.add_argument(
+        'new', metavar='NEW', nargs='?', help='The new alias name')
+    alias_rename_parser.add_argument(
+        '-f', '--force',
+        action='store_true',
+        help='Overwrite an existing alias of the new name'
+    )
+
     alias_delete_parser = alias_subparsers.add_parser(
         'delete',
         help='Delete a changelist alias',
@@ -644,13 +664,8 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
     branch_attr = getattr(args, 'branch_keyword_arg', None)
     if (branch_attr and getattr(args, branch_attr) == 'branch'
             and not getattr(args, 'all', False)):
-        words = backend.words
-        log.heading(
-            f'Resolving alias from current {words.tool} {words.branch}')
-        resolved = alias_for_branch(
-            backend, args.workspace_dir, getattr(args, 'new_alias', False))
-        setattr(args, branch_attr, resolved)
-        log.success(f'branch -> {resolved}')
+        setattr(args, branch_attr, resolve_branch_keyword(
+            backend, args.workspace_dir, getattr(args, 'new_alias', False)))
 
     if getattr(args, 'file', None) is not None:
         args.file = os.path.join(args.invocation_dir, args.file)

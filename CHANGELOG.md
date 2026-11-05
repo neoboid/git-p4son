@@ -5,6 +5,7 @@
 - `sync` lists the p4-opened files it ignores because git doesn't track them, not just how many
 - `new`, `update` and `review` refuse to shelve files that aren't at the latest revision; `--ignore-out-of-date`
   shelves anyway
+- `alias rename [OLD] NEW` renames an alias, the current one by default, keeping its changelist and record
 
 ## 0.8.0
 

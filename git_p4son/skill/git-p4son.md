@@ -90,7 +90,9 @@ with these translations:
 `new` and `review` save the CL they create under an alias, by default the current branch name with `/` replaced by
 `-` (`feature/login` becomes `feature-login`). `update` and `alias show` default to the same alias, so on the branch
 that created a CL you rarely need to name it. On a detached HEAD, pass the alias or CL number explicitly. Since the
-branch name becomes the alias, name the branch after the bug or feature, and keep it unique.
+branch name becomes the alias, name the branch after the bug or feature, and keep it unique. After renaming a branch
+(`git branch -m`), `git p4son alias rename <old alias> branch` renames its alias to match; with jj,
+`git p4son alias rename <new name>` renames the alias of the current change.
 
 ## Branches and commits
 

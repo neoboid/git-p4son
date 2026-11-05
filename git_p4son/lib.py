@@ -1,12 +1,8 @@
 """Bridge functions that combine git and Perforce operations."""
 
 import argparse
-import contextlib
 import os
-import shutil
-import stat
-import tempfile
-from typing import Callable, Iterator
+from typing import Callable
 
 from .common import CommandError
 from .description import Description
@@ -26,7 +22,6 @@ from .perforce import (
     get_out_of_date_files,
     OutOfDate,
     p4_create_changelist,
-    p4_revert,
     p4_revert_unchanged,
     p4_shelve_changelist,
     opened_lookup,
@@ -125,12 +120,11 @@ def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
 
 
 def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str, str] | None],
-                changelist: str) -> tuple[list[tuple[str, str]], list[str], list[str], list[str]]:
-    """Sort (file, action) pairs into (to_open, to_reopen, to_revert, to_restore) given their opened state."""
+                changelist: str) -> tuple[list[tuple[str, str]], list[str], list[str]]:
+    """Sort (file, action) pairs into (to_open, to_reopen, to_revert) given their opened state."""
     to_open = []
     to_reopen = []
     to_revert = []
-    to_restore = []
     for filename, p4_action in wanted:
         current = opened(filename)
         if current is None:
@@ -143,44 +137,13 @@ def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str
             if current_cl != changelist:
                 to_reopen.append(filename)
             continue
-        # Revert and reopen with the right action, restoring git's content p4 revert overwrote.
+        # Revert and reopen with the right action.
         to_revert.append(filename)
         # add -> delete: never in the depot, so just revert.
         if current_action == 'add' and p4_action == 'delete':
             continue
         to_open.append((filename, p4_action))
-        if p4_action != 'delete':
-            to_restore.append(filename)
-    return to_open, to_reopen, to_revert, to_restore
-
-
-@contextlib.contextmanager
-def _restoring(filepaths: list[str], workspace_dir: str, dry_run: bool) -> Iterator[None]:
-    """Put back the working files a p4 revert in the block overwrites, as they were before it."""
-    if not filepaths:
-        yield
-        return
-    if dry_run:
-        yield
-        log.info(f'Would put back {plural(len(filepaths), "working file")}')
-        return
-    with tempfile.TemporaryDirectory(prefix='git-p4son-restore-') as directory:
-        saved = []
-        for index, filename in enumerate(filepaths):
-            path = os.path.join(workspace_dir, filename)
-            backup = os.path.join(directory, str(index))
-            shutil.copy2(path, backup, follow_symlinks=False)
-            saved.append((path, backup))
-        try:
-            yield
-        finally:
-            for path, backup in saved:
-                if os.path.lexists(path):
-                    if not os.path.islink(path):
-                        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
-                    os.unlink(path)
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                shutil.copy2(backup, path, follow_symlinks=False)
+    return to_open, to_reopen, to_revert
 
 
 def _revisions(file: OutOfDate) -> str:
@@ -232,21 +195,20 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
 
     opened = opened_lookup(
         get_opened_files([f for f, _ in wanted], workspace_dir))
-    to_open, to_reopen, to_revert, to_restore = _plan_opens(
-        wanted, opened, changelist)
+    to_open, to_reopen, to_revert = _plan_opens(wanted, opened, changelist)
 
-    with _restoring(to_restore, workspace_dir, dry_run):
-        run_p4_batch(['revert'], to_revert, 'Reverting files opened with another action',
-                     workspace_dir, dry_run)
-        p4_output = []
-        for p4_action in ('add', 'edit', 'delete'):
-            p4_output += run_p4_batch(
-                [p4_action, '-c', changelist],
-                [f for f, action in to_open if action == p4_action],
-                f'Opening for {p4_action}', workspace_dir, dry_run,
-                fail_on_returncode=False)
-        run_p4_batch(['reopen', '-c', changelist], to_reopen,
-                     'Moving files from other changelists', workspace_dir, dry_run)
+    # -k: p4 writes nothing to disk, so each working file keeps git's version.
+    run_p4_batch(['revert', '-k'], to_revert, 'Reverting files opened with another action',
+                 workspace_dir, dry_run)
+    p4_output = []
+    for p4_action in ('add', 'edit', 'delete'):
+        p4_output += run_p4_batch(
+            [p4_action, '-c', changelist],
+            [f for f, action in to_open if action == p4_action],
+            f'Opening for {p4_action}', workspace_dir, dry_run,
+            fail_on_returncode=False)
+    run_p4_batch(['reopen', '-c', changelist], to_reopen,
+                 'Moving files from other changelists', workspace_dir, dry_run)
     if to_open and not dry_run:
         _warn_unopened(to_open, changelist, p4_output, workspace_dir)
     return len(to_open) + len(to_reopen)
@@ -313,10 +275,9 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     for line in reverted:
         log.info(line)
 
-    # p4 revert writes the depot version to disk.
-    with _restoring(stale_deletes, workspace_dir, dry_run):
-        if stale_deletes:
-            p4_revert(stale_deletes, workspace_dir, dry_run)
+    # -k: git has the deleted files back.
+    run_p4_batch(['revert', '-k'], stale_deletes,
+                 'Reverting deletes no longer in the change', workspace_dir, dry_run)
 
     count = len(reverted) + len(stale_deletes)
     log.success(f'{plural(count, "file")} would be reverted' if dry_run

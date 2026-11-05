@@ -580,8 +580,8 @@ in the next. Such files would otherwise stay opened as no-ops, so after opening 
 - Files opened for edit that are unchanged compared to the depot are reverted with `p4 revert -a`. Changed files
   stay opened.
 - Files opened for add that are missing from disk are reverted.
-- Files opened for delete that git still has (deleted in one commit, restored in a later one) are reverted and
-  restored from git.
+- Files opened for delete that git still has (deleted in one commit, restored in a later one) are reverted, keeping
+  git's file.
 
 Only files git-p4son has authority over are touched: files tracked by git, and files opened for add that are
 missing from disk. Anything else in the changelist, such as binaries that only exist in Perforce and were opened

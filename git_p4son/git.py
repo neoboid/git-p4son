@@ -253,7 +253,8 @@ def get_local_changes(base_branch: str, workspace_dir: str,
     """Get local git changes between base_branch and revision."""
     # ... diffs from the merge base, so changes on base_branch since the fork are left out.
     # -z: paths verbatim, not C-quoted, as "<status>\0<path>\0", with a second path for renames and copies.
-    res = run(['git', 'diff', '--name-status', '-z', f'{base_branch}...{revision}'],
+    # -M: renames whatever diff.renames says, as they open as p4 moves.
+    res = run(['git', 'diff', '--name-status', '-M', '-z', f'{base_branch}...{revision}'],
               cwd=workspace_dir, text=False)
 
     changes = LocalChanges()

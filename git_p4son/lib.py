@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from .common import CommandError
 from .description import Description
@@ -18,6 +18,7 @@ from .perforce import (
     extract_description_lines,
     get_changelist_spec,
     get_opened_files,
+    get_opened_files_and_moves,
     get_opened_files_in_changelist,
     get_out_of_date_files,
     OutOfDate,
@@ -26,6 +27,7 @@ from .perforce import (
     p4_shelve_changelist,
     opened_lookup,
     replace_description_in_spec,
+    p4_move,
     run_p4_batch,
     save_changelist_spec,
 )
@@ -131,8 +133,8 @@ def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str
             to_open.append((filename, p4_action))
             continue
         current_cl, current_action = current
-        # add -> edit: new to the depot, so it stays an add.
-        if current_action == p4_action or (current_action == 'add'
+        # add -> edit: new to the depot, so it stays an add. A move's new path stays one through later edits.
+        if current_action == p4_action or (current_action in ('add', 'move/add')
                                            and p4_action == 'edit'):
             if current_cl != changelist:
                 to_reopen.append(filename)
@@ -182,23 +184,72 @@ def check_at_latest_revision(args: argparse.Namespace, base_branch: str | None, 
     log.success(f'{plural(len(files), "file")} at the latest revision')
 
 
+class _Move(NamedTuple):
+    """A rename to open with p4 move, after opening old for edit unless edit is False."""
+    old: str
+    new: str
+    # False for the target of an earlier move in the CL, which p4 moves on from where it started.
+    edit: bool
+
+
+def _plan_moves(moves: list[tuple[str, str]], changelist: str, opened: Callable[[str], tuple[str, str] | None],
+                other_end: dict[str, str]) -> tuple[list[_Move], list[str], list[tuple[str, str]]]:
+    """Sort git's renames into (to_move, to_unmove, wanted) given what is opened and each opened move's other end.
+
+    to_unmove are the files to revert, keeping the working files, before opening anything; wanted are the (file, action)
+    pairs left to _plan_opens: a move already open, to keep or reopen, the delete and add of a file new to the depot,
+    and an edit where the rename doesn't move the file."""
+    to_move = []
+    to_unmove = []
+    wanted = []
+    for old, new in moves:
+        old_cl, old_action = opened(old) or (None, None)
+        if old_action == 'add':
+            # Added earlier in the change, so not in the depot: nothing to move.
+            wanted += [(old, 'delete'), (new, 'add')]
+        elif old.casefold() == new.casefold():
+            # The same file on a case-insensitive server, which p4 can't move onto.
+            wanted.append((old, 'edit'))
+        elif other_end.get(old) == new and old_action == 'move/delete':
+            wanted += [(old, 'move/delete'), (new, 'move/add')]
+        elif other_end.get(old) == new:
+            # Moved back to where it started: reverting the move puts it there, with any edit it kept.
+            to_unmove.append(old)
+            wanted.append((new, 'edit'))
+        else:
+            chained = (old_cl, old_action) == (changelist, 'move/add')
+            if old_action is not None and not chained:
+                to_unmove.append(old)
+            if opened(new) is not None:
+                to_unmove.append(new)
+            to_move.append(_Move(old, new, edit=not chained))
+    return to_move, to_unmove, wanted
+
+
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                                   workspace_dir: str, dry_run: bool) -> int:
-    """Open local git changes for add/edit/delete in a Perforce changelist; returns how many it opened or moved.
+    """Open local git changes for add/edit/delete, and renames for move, in a Perforce changelist; returns how many
+    it opened, moved or reopened.
 
     Files reopened with another action keep their working version."""
     wanted = ([(f, 'add') for f in changes.adds]
               + [(f, 'edit') for f in changes.mods]
               + [(f, 'delete') for f in changes.dels])
-    for from_filename, to_filename in changes.moves:
-        wanted += [(from_filename, 'delete'), (to_filename, 'add')]
-
-    opened = opened_lookup(
-        get_opened_files([f for f, _ in wanted], workspace_dir))
-    to_open, to_reopen, to_revert = _plan_opens(wanted, opened, changelist)
+    paths = [f for f, _ in wanted] + \
+        [path for move in changes.moves for path in move]
+    states, other_end = get_opened_files_and_moves(paths, workspace_dir)
+    to_move, to_unmove, move_wanted = _plan_moves(
+        changes.moves, changelist, opened_lookup(states), other_end)
+    wanted += move_wanted
+    # Reverting one end of a move reverts both, which the plan below has to see.
+    for path in to_unmove:
+        states.pop(path, None)
+        states.pop(other_end.get(path, ''), None)
+    to_open, to_reopen, to_revert = _plan_opens(
+        wanted, opened_lookup(states), changelist)
 
     # -k: p4 writes nothing to disk, so each working file keeps git's version.
-    run_p4_batch(['revert', '-k'], to_revert, 'Reverting files opened with another action',
+    run_p4_batch(['revert', '-k'], to_unmove + to_revert, 'Reverting files opened with another action',
                  workspace_dir, dry_run)
     p4_output = []
     for p4_action in ('add', 'edit', 'delete'):
@@ -209,9 +260,12 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
             fail_on_returncode=False)
     run_p4_batch(['reopen', '-c', changelist], to_reopen,
                  'Moving files from other changelists', workspace_dir, dry_run)
-    if to_open and not dry_run:
-        _warn_unopened(to_open, changelist, p4_output, workspace_dir)
-    return len(to_open) + len(to_reopen)
+    p4_output += p4_move([(move.old, move.new) for move in to_move],
+                         [move.old for move in to_move if move.edit], changelist, workspace_dir, dry_run)
+    expected = to_open + [(move.new, 'move/add') for move in to_move]
+    if expected and not dry_run:
+        _warn_unopened(expected, changelist, p4_output, workspace_dir)
+    return len(to_open) + len(to_reopen) + len(to_move)
 
 
 def _changelist_name(changelist: str) -> str:
@@ -261,6 +315,8 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
     revert_if_unchanged = []
     # Deleted in one commit and restored in a later one.
     stale_deletes = []
+    # Moves whose new path is gone, as the rename was undone; reverting one end reverts both.
+    stale_moves = []
     for path, action in opened:
         exists = os.path.lexists(os.path.join(workspace_dir, path))
         if action == 'edit' and path in tracked:
@@ -269,17 +325,19 @@ def revert_unchanged_files(changelist: str, workspace_dir: str,
             revert_if_unchanged.append(path)
         elif action == 'delete' and path in tracked and exists:
             stale_deletes.append(path)
+        elif action == 'move/add' and path not in tracked and not exists:
+            stale_moves.append(path)
 
     reverted = p4_revert_unchanged(revert_if_unchanged, changelist,
                                    workspace_dir, dry_run)
     for line in reverted:
         log.info(line)
 
-    # -k: git has the deleted files back.
-    run_p4_batch(['revert', '-k'], stale_deletes,
-                 'Reverting deletes no longer in the change', workspace_dir, dry_run)
+    # -k: git has the deleted files back, and the old paths of undone moves.
+    run_p4_batch(['revert', '-k'], stale_deletes + stale_moves,
+                 'Reverting deletes and moves no longer in the change', workspace_dir, dry_run)
 
-    count = len(reverted) + len(stale_deletes)
+    count = len(reverted) + len(stale_deletes) + len(stale_moves)
     log.success(f'{plural(count, "file")} would be reverted' if dry_run
                 else f'{plural(count, "file")} reverted')
 

@@ -302,20 +302,31 @@ def _fstat_records(res: RunResult[list[str]], workspace_dir: str,
     return records
 
 
-def get_opened_files(filenames: list[str],
-                     workspace_dir: str) -> dict[str, tuple[str, str]]:
-    """Return (changelist, action) for each of the files that is opened, keyed by workspace-relative path."""
+def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
+                               ) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
+    """Return (changelist, action) for each of the files that is opened, and the other end of each opened move whose
+    other end is among the files, keyed by workspace-relative path."""
     if not filenames:
-        return {}
+        return {}, {}
     res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
-               '-T', 'path,clientFile,action,change'],
+               '-T', 'path,clientFile,depotFile,action,change,movedFile'],
               cwd=workspace_dir, input='\n'.join(filenames),
               fail_on_returncode=False)
     # Files that are not opened, or not in the depot yet, are reported per file.
     _warn_p4_errors(res, ('not opened', 'no such file'),
                     'p4 fstat failed to list opened files:')
-    return {filename: (record.get('change', ''), record.get('action', ''))
-            for filename, record in _fstat_records(res, workspace_dir)}
+    records = _fstat_records(res, workspace_dir)
+    path_of = {record['depotFile']: filename for filename,
+               record in records if 'depotFile' in record}
+    return ({filename: (record.get('change', ''), record.get('action', '')) for filename, record in records},
+            {filename: path_of[record['movedFile']] for filename, record in records
+             if record.get('movedFile') in path_of})
+
+
+def get_opened_files(filenames: list[str],
+                     workspace_dir: str) -> dict[str, tuple[str, str]]:
+    """Return (changelist, action) for each of the files that is opened, keyed by workspace-relative path."""
+    return get_opened_files_and_moves(filenames, workspace_dir)[0]
 
 
 @dataclass(frozen=True)
@@ -363,6 +374,28 @@ def opened_lookup(opened: Mapping[str, _State]) -> Callable[[str], _State | None
     folded = {path.casefold(): state for path, state in opened.items()}
     return lambda filename: (opened.get(filename)
                              or folded.get(filename.casefold()))
+
+
+def p4_move(moves: list[tuple[str, str]], to_edit: list[str], changelist: str, workspace_dir: str,
+            dry_run: bool) -> list[str]:
+    """Open to_edit for edit, then move each (old, new) in changelist, leaving the working files as git has them.
+
+    Returns p4's lines."""
+    if not moves:
+        return []
+    log.info('Opening for move:')
+    for old, new in moves:
+        log.info(f'  {old} -> {new}')
+    output = []
+    if to_edit:
+        result = run([*_P4, '-x', '-', 'edit', '-c', changelist], cwd=workspace_dir,
+                     input='\n'.join(to_edit), dry_run=dry_run, fail_on_returncode=False)
+        output += result.stdout + result.stderr
+    # -b 2 hands p4 move the -x lines two at a time, as one old and new pair, all in one process.
+    result = run([*_P4, '-b', '2', '-x', '-', 'move', '-c', changelist, '-k'], cwd=workspace_dir,
+                 input='\n'.join(path for move in moves for path in move), dry_run=dry_run,
+                 fail_on_returncode=False)
+    return output + result.stdout + result.stderr
 
 
 def run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,

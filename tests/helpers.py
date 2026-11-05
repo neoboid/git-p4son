@@ -400,7 +400,8 @@ class FakeP4:
 
     install() puts it in place of perforce.run and run_with_stream_output; an unscripted command fails the test.
     Depot paths are //<client>/<path>, mapped to <workspace>/<path>; a submitted change without files touched
-    nothing in the client's view. opened maps paths to (changelist, action),
+    nothing in the client's view. opened maps paths to (changelist, action), moved each end of an opened move to the
+    other,
     pending changelist numbers to their description lines and shelved changelist numbers to {path: content}.
     Like run(), it carries out nothing on a dry run."""
 
@@ -414,6 +415,8 @@ class FakeP4:
         self.changes: dict[int, tuple[str, dict[str, str | None]]] = {}
         self.have = 0
         self.opened: dict[str, tuple[str, str]] = {}
+        self.moved: dict[str, str] = {}
+        self.moves_made: list[tuple[str, str]] = []
         self.pending: dict[str, list[str]] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
@@ -523,7 +526,14 @@ class FakeP4:
         elif args[:4] == ['-x', '-', 'revert', '-a']:
             out = self._revert_unchanged(files, args[-1], preview='-n' in args)
         elif args[:3] == ['-x', '-', 'revert']:
-            out = self._revert(files)
+            out = self._revert(files, keep='-k' in args)
+        elif args[:5] == ['-b', '2', '-x', '-', 'move']:
+            out = []
+            lines = [self._rel(line) for line in (input or '').splitlines()]
+            for old, new in zip(lines[::2], lines[1::2]):
+                moved, refused = self._move(args[6], old, new)
+                out += moved
+                stderr += refused
         elif args[0] == 'shelve':
             change = args[-1]
             self.shelved[change] = {
@@ -554,9 +564,31 @@ class FakeP4:
         out = []
         for path in paths:
             change, action = self.opened[path]
-            out += [f'... path {self._local(path)}', f'... action {action}',
-                    f'... change {change}', '']
+            out += [f'... path {self._local(path)}', f'... depotFile {self._depot(path)}',
+                    f'... action {action}', f'... change {change}']
+            if path in self.moved:
+                out.append(f'... movedFile {self._depot(self.moved[path])}')
+            out.append('')
         return out
+
+    def _move(self, change: str, old: str, new: str) -> tuple[list[str], list[str]]:
+        """Move old, opened for edit, add or move/add, to new, as p4 move -k does: the client files stay as they are."""
+        state = self.opened.get(old)
+        if state is None or state[1] not in ('edit', 'add', 'move/add'):
+            return [], [f'{self._depot(old)} - not opened for edit']
+        if new in self.opened or new in self.files_at(self.have):
+            return [], [f'{self._depot(new)} - can\'t move to an existing file']
+        del self.opened[old]
+        if state[1] == 'add':
+            self.opened[new] = (change, 'add')
+        else:
+            # Moving the target of a move again moves the original file.
+            source = self.moved.pop(old) if state[1] == 'move/add' else old
+            self.opened[source] = (change, 'move/delete')
+            self.opened[new] = (change, 'move/add')
+            self.moved[source], self.moved[new] = new, source
+        self.moves_made.append((old, new))
+        return [f'{self._depot(new)}#1 - moved from {self._depot(old)}#1'], []
 
     def _revisions(self, path: str, change: int | None = None) -> list[int]:
         """The changes up to change, or all of them, that touched path, one per revision."""
@@ -633,22 +665,29 @@ class FakeP4:
                 continue
             self.opened[path] = (change, action)
             local = self._local(path)
-            if action == 'edit':
+            if action in ('edit', 'delete') and os.path.exists(local):
                 os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
-            elif action == 'delete' and os.path.exists(local):
-                os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
-                os.remove(local)
+                if action == 'delete':
+                    os.remove(local)
             out.append(f'{self._depot(path)}#1 - opened for {action}')
         return out, stderr
 
-    def _revert(self, paths: list[str]) -> list[str]:
-        """Revert paths, writing the have revision to disk for the ones in the depot."""
+    def _revert(self, paths: list[str], keep: bool = False) -> list[str]:
+        """Revert paths, both ends of a move, writing the have revision to disk for the ones in the depot unless keep.
+
+        Without keep, the target of a move is removed from disk, as an add it was."""
         out = []
         in_depot = self.files_at(self.have)
+        paths = list(dict.fromkeys(
+            [*paths, *(self.moved[p] for p in paths if p in self.moved)]))
         for path in paths:
             _, action = self.opened.pop(path)
-            if path in in_depot:
-                local = self._local(path)
+            self.moved.pop(path, None)
+            local = self._local(path)
+            if not keep and action == 'move/add' and os.path.exists(local):
+                os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
+                os.remove(local)
+            elif not keep and path in in_depot:
                 if os.path.exists(local):
                     os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
                 with open(local, 'w') as f:
@@ -767,6 +806,17 @@ class P4RepoTestCase(GitRepoTestCase):
         self.commit('Change a')
         self.replace_b_with_c()
         self.commit('Replace b with c')
+
+    def move(self, old: str, new: str, content: str | None = None) -> None:
+        """Rename old to new as the user would, with new content if given."""
+        local = os.path.join(self.ws, *old.split('/'))
+        # Synced files are read-only, which some file systems won't rename.
+        os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
+        target = os.path.join(self.ws, *new.split('/'))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        os.rename(local, target)
+        if content is not None:
+            self.edit(new, content)
 
     def replace_b_with_c(self) -> None:
         """Delete b.txt and add c.txt."""

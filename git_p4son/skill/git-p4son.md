@@ -107,6 +107,8 @@ CL's commit list, and with `review` each commit becomes its own patch in Swarm. 
 - Put small, behaviour-preserving refactors first and the actual fix on top, as small as possible. An unrelated fix
   found on the way gets a commit of its own.
 - Write the subject as one short sentence saying what the commit does.
+- Move or rename files with `git mv`, or any rename git detects, ideally in a commit of their own with few edits:
+  git-p4son opens a rename as `p4 move`, so Perforce keeps the file's history and reviewers see only what changed.
 - Rewriting history (amend, squash, reorder) is fine until the review is posted. After that, leave the reviewed
   commits as they are: reviewers' comments belong to the posted patches, and `update` matches commit list entries by
   subject. Put every fix in a new commit on top. Rebasing the branch onto a newer `main` is still fine.

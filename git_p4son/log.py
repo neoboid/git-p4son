@@ -191,13 +191,14 @@ class Log:
         print(f'elapsed: {duration}')
 
     def file_change(self, filename: str, change: str) -> None:
-        """Print a file change line ('add', 'delete', 'modify', 'untracked') with colored prefix."""
+        """Print a file change line ('add', 'delete', 'modify', 'move', 'untracked') with colored prefix."""
         if self.quiet_mode:
             return
         prefixes = {
             'add': ('+', Color.ADD),
             'delete': ('-', Color.DELETE),
             'modify': ('~', Color.MODIFY),
+            'move': ('>', Color.MODIFY),
             'untracked': ('?', Color.UNTRACKED),
         }
         symbol, color = prefixes.get(change, ('?', _RESET))

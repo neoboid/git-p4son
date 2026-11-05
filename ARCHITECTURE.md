@@ -172,11 +172,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   step reads, and the working change's files back at the end, so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
-  `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
-  `revert_unchanged_files`, `edit_and_shelve`, which `new` and `update` share, and `check_at_latest_revision`, which
-  lists and refuses the files `perforce.get_out_of_date_files` finds behind the head revision before a shelve. They read
-  the change from the backend's `revision` and revert with `p4 revert -k`, so p4 never writes over a working file. On a
-  dry run of `new` the changelist is `DRY_RUN_CHANGELIST`.
+  `update_changelist`, `include_changes_in_changelist` (returns how many files it opened, moved or reopened; one
+  `perforce.get_opened_files_and_moves` query gives what is opened and each move's other end, `_plan_moves` sorts git's
+  renames into one batched `p4 move` and leaves a move already open to `_plan_opens`), `revert_unchanged_files`,
+  `edit_and_shelve`, which `new` and `update` share, and `check_at_latest_revision`, which lists and refuses the files
+  `perforce.get_out_of_date_files` finds behind the head revision before a shelve. They read the change from the
+  backend's `revision` and revert with `p4 revert -k`, so p4 never writes over a working file. On a dry run of `new` the
+  changelist is `DRY_RUN_CHANGELIST`.
 
 - **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`

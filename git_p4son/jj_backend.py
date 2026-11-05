@@ -50,8 +50,7 @@ def _refuse_bookmark_at_working(workspace: Workspace, bookmark: str) -> NoReturn
     for path in changes.dels:
         log.file_change(path, 'delete')
     for old, new in changes.moves:
-        log.file_change(old, 'delete')
-        log.file_change(new, 'add')
+        log.file_change(f'{old} -> {new}', 'move')
     raise CommandError(f'{error} Keep the files above out of {bookmark} with: {move_back}. '
                        'Or keep them as a change: jj describe, then jj new.')
 

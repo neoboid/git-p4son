@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `sync` lists the p4-opened files it ignores because git doesn't track them, not just how many
+
 ## 0.8.0
 
 - Review tools other than Swarm, configured under `[review-tool.<name>]` in `.git-p4son/config.toml` and chosen with

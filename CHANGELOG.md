@@ -2,16 +2,15 @@
 
 ## Unreleased
 
-- `sync` lists the p4-opened files it ignores because git doesn't track them, not just how many
-- `new`, `update` and `review` refuse to shelve files that aren't at the latest revision; `--ignore-out-of-date`
-  shelves anyway
-- `alias rename [OLD] NEW` renames an alias, the current one by default, keeping its changelist and record
-- With jj, commands find the current alias from changes stacked on top of the one it records, up to the first
-  bookmark below them
-- With jj, `-b` takes a change without a bookmark, which the alias records by its change ID
-- `update -b` records a new base when the one the alias records no longer resolves
-- `new` and `update` open a file git sees as renamed with `p4 move`, keeping its Perforce history, instead of a delete
-  and an add. A changelist made by an earlier version turns its delete and add into a move on its next update
+## 0.9.0
+
+- Renamed files open as `p4 move`, keeping their Perforce history; existing changelists switch on their next update
+- `new`, `update` and `review` refuse to shelve files not at the latest revision, unless `--ignore-out-of-date`
+- `alias rename [OLD] NEW` renames an alias, the current one by default
+- `sync` lists the p4-opened files it ignores, not just how many
+- `update -b` records a new base when the recorded one no longer resolves
+- With jj, the current alias is found from changes stacked on top of the one it records
+- With jj, `-b` takes a change without a bookmark, recorded by its change ID
 
 ## 0.8.0
 

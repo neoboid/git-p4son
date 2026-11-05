@@ -86,6 +86,8 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str, sync_revision
             'Workspace has p4-opened files tracked by git. Revert them first: '
             '"p4 revert -a" reverts the unchanged ones and leaves edited ones opened.')
     if opened_files:
+        for filename, change in opened_files:
+            log.file_change(filename, change)
         log.warning(
             f'Ignoring {plural(len(opened_files), "p4-opened file")} '
             'not tracked by git')

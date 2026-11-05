@@ -319,8 +319,9 @@ class TestSync(SyncTestCase):
     def test_untracked_files_opened_in_perforce_are_allowed(self):
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.p4.opened = {'Content/level.umap': ('default', 'edit')}
-        self.sync()
+        out = self.sync()
         self.assertEqual(self.synced_commits(), [101])
+        self.assertIn('~ Content/level.umap', out)
 
 
 class TestSyncLocalChanges(SyncTestCase):

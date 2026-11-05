@@ -60,6 +60,12 @@ def _add_no_edit(parser: argparse.ArgumentParser) -> None:
                         help='Skip opening changed files for edit in Perforce')
 
 
+def _add_ignore_out_of_date(parser: argparse.ArgumentParser) -> None:
+    """Add --ignore-out-of-date, which skips checking the files are at the latest revision before shelving."""
+    parser.add_argument('--ignore-out-of-date', action='store_true',
+                        help='Shelve even if files in the change are not synced to the latest revision')
+
+
 def _add_new_args(parser: argparse.ArgumentParser) -> None:
     """Add the arguments new and review share."""
     # Set by run_per_commit for the new it runs as a step.
@@ -90,6 +96,7 @@ def _add_new_args(parser: argparse.ArgumentParser) -> None:
         action='store_true',
         help='Overwrite an existing alias'
     )
+    _add_ignore_out_of_date(parser)
 
 
 def _add_message_args(parser: argparse.ArgumentParser, message_help: str,
@@ -328,8 +335,9 @@ Examples:
         'unless -m or -F replaces it. By default also opens changed files '
         'for edit.'
     )
+    # per_commit_step is set by run_per_commit for the update it runs as a step.
     update_parser.set_defaults(
-        func=update_command, needs_clean=_needs_clean_to_edit)
+        func=update_command, needs_clean=_needs_clean_to_edit, per_commit_step=False)
     _add_branch_keyword_arg(update_parser, 'changelist',
                             'Changelist number or named alias to update')
     _add_message_args(
@@ -354,6 +362,7 @@ Examples:
         action='store_true',
         help='Re-shelve the changelist after updating'
     )
+    _add_ignore_out_of_date(update_parser)
     update_parser.add_argument(
         '--per-commit',
         action='store_true',

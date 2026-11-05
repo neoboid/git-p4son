@@ -14,7 +14,7 @@ from .changelist_store import (
 from .common import CommandError
 from .git import resolve_commit
 from .included import new_record
-from .lib import create_changelist, edit_and_shelve
+from .lib import check_at_latest_revision, create_changelist, edit_and_shelve
 from .log import log
 from .per_commit import run_per_commit
 from .review_tools import push_review, resolve_review_tool, shelf_delay
@@ -25,6 +25,9 @@ def new_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
     args.review = args.review or args.review_tool is not None
     tool = _review_tool(args)
+    if args.shelve or args.review:
+        check_at_latest_revision(
+            args, args.base_branch, None, args.backend.revision)
     if args.per_commit:
         _new_per_commit(args, tool)
         return 0
@@ -68,7 +71,7 @@ def new_command(args: argparse.Namespace) -> int:
             if args.per_commit_step:
                 raise
             rerun = shlex.join(
-                ['git', 'p4son', 'update', args.alias, '--shelve'])
+                ['git', 'p4son', 'update', args.alias, '--shelve', *_ignore_out_of_date(args)])
             raise CommandError(f'{error}\nCL {changelist} is created and shelved. Once the tool works, run: {rerun}',
                                error.returncode) from error
     if record is not None:
@@ -97,14 +100,20 @@ def _check_one_alias_per_change(alias: str, change: str | None, workspace_dir: s
                        f'"git p4son update {name}" to update it, or pass --force to move the record to "{alias}".')
 
 
+def _ignore_out_of_date(args: argparse.Namespace) -> list[str]:
+    """--ignore-out-of-date if given, for the commands that carry on this run."""
+    return ['--ignore-out-of-date'] if args.ignore_out_of_date else []
+
+
 def _steps(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     """The new step for the first commit and the update step for the others, both shelving if new would."""
     shelve = (['--review-tool', args.review_tool] if args.review_tool is not None
               else ['--review'] if args.review else ['--shelve'] if args.shelve else [])
     commit_list = ['--no-commit-list'] if args.no_commit_list else []
     force = ['--force'] if args.force else []
-    return (['new', args.alias, *shelve, *force, *commit_list],
-            ['update', args.alias, *(['--shelve'] if shelve else []), *commit_list])
+    ignore = _ignore_out_of_date(args)
+    return (['new', args.alias, *shelve, *force, *commit_list, *ignore],
+            ['update', args.alias, *(['--shelve'] if shelve else []), *commit_list, *ignore])
 
 
 def _new_per_commit(args: argparse.Namespace, tool: str | None) -> None:

@@ -7,7 +7,7 @@ from .changelist_store import Record, Review, find_record, find_review, load_cha
 from .common import CommandError
 from .git import get_head_subject, resolve_commit
 from .included import Plan, catch_up_subject, included_count, plan_update
-from .lib import edit_and_shelve, update_changelist
+from .lib import check_at_latest_revision, edit_and_shelve, update_changelist
 from .log import log, plural
 from .per_commit import message_args, run_per_commit
 from .review_tools import push_review, review_tool_config, shelf_delay
@@ -18,7 +18,8 @@ def _step(changelist: str, args: argparse.Namespace) -> list[str]:
     flags = [flag for flag, on in (
         ('--no-commit-list', args.no_commit_list),
         ('--no-edit', args.no_edit),
-        ('--shelve', args.shelve)) if on]
+        ('--shelve', args.shelve),
+        ('--ignore-out-of-date', args.ignore_out_of_date)) if on]
     return ['update', changelist, *flags]
 
 
@@ -141,7 +142,11 @@ def update_command(args: argparse.Namespace) -> int:
         review_tool_config(review.tool, workspace_dir)
     found = find_record(changelist, workspace_dir)
     plan = None
-    if found is not None:
+    if found is None:
+        if args.shelve:
+            check_at_latest_revision(
+                args, None if args.no_edit else args.base_branch, changelist, revision)
+    else:
         # As typed for messages, and resolved by the backend, as a jj revision means nothing to git.
         given = None if args.base_given is None else (
             args.base_given, args.base_branch)
@@ -153,6 +158,9 @@ def update_command(args: argparse.Namespace) -> int:
                 update_record(plan.alias, plan.kept, workspace_dir)
             _check_per_commit(plan, changelist, args.no_edit,
                               given is not None, workspace_dir)
+        if args.shelve:
+            check_at_latest_revision(
+                args, None if args.no_edit else plan.start, changelist, revision)
         if args.shelve and not args.no_edit:
             if _catch_up(plan, args, workspace_dir):
                 revision = args.backend.revision

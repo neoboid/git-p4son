@@ -291,6 +291,10 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   CL made by `new` or `review` are opened too, and usually unchanged while `main` is checked out; reverting them
   keeps the shelf and the Swarm review. `git p4son update -b main` opens them again later; add `--shelve` only when
   the user asks to re-shelve, as a shelve from a narrower base would drop the other commits' files.
+- **A shelve refuses because files are not at the latest revision** ("Files in the change are not at the latest
+  revision. ..."). Someone submitted the listed files since the last sync, so the review would show them against an
+  older revision. Tell the user, and offer to sync (`git p4son sync`) and rebase the branch onto it, which they may
+  want to drive themselves. Pass `--ignore-out-of-date` only when the user says to shelve anyway.
 - **The alias already exists.** An earlier attempt saved it. `-f` overwrites it, or `git p4son alias delete` removes
   it; ask the user first if the old CL may still be in use.
 - **A tracked file turned read-only**, for example after a manual `p4 revert`. With writable mode on,

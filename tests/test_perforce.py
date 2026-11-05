@@ -7,6 +7,7 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
+    OutOfDate,
     extract_description_lines,
     get_changelist_spec,
     get_client_spec,
@@ -15,6 +16,7 @@ from git_p4son.perforce import (
     get_latest_changes,
     get_opened_files,
     get_opened_files_in_changelist,
+    get_out_of_date_files,
     get_p4_user,
     get_user_changes,
     get_writable_files,
@@ -737,6 +739,52 @@ class TestGetOpenedFiles(unittest.TestCase):
         ])
         opened = get_opened_files(['Script/a.as'], 'D:\\p4\\Games')
         self.assertEqual(opened, {'Script/a.as': ('100', 'edit')})
+
+
+class TestGetOutOfDateFiles(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_files_whose_have_revision_is_not_the_head(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... path /ws/current.txt', '... haveRev 3', '... headRev 3', '... headAction edit', '',
+            '... path /ws/behind.txt', '... haveRev 2', '... headRev 5', '... headAction edit', '',
+            '... path /ws/deleted.txt', '... haveRev 1', '... headRev 2', '... headAction delete', '',
+            '... path /ws/moved.txt', '... haveRev 1', '... headRev 2', '... headAction move/delete', '',
+            '... path /ws/added.txt', '... headRev 1', '... headAction add', '',
+            '... path /ws/gone.txt', '... headRev 4', '... headAction delete', '',
+            '... path /ws/opened-for-add.txt',
+        ])
+        files = ['current.txt', 'behind.txt', 'deleted.txt', 'moved.txt', 'added.txt', 'gone.txt',
+                 'opened-for-add.txt']
+        self.assertEqual(get_out_of_date_files(files, '/ws'),
+                         [OutOfDate('behind.txt', '2', '5', False), OutOfDate('deleted.txt', '1', '2', True),
+                          OutOfDate('moved.txt', '1', '2', True), OutOfDate('added.txt', None, '1', False)])
+        self.assertEqual(mock_run.call_args.args[0],
+                         ['p4', '-L', 'en', '-x', '-', '-ztag', 'fstat', '-Op',
+                          '-T', 'path,clientFile,haveRev,headRev,headAction'])
+        self.assertEqual(mock_run.call_args.kwargs['input'], '\n'.join(files))
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_no_files_makes_no_query(self, mock_run):
+        self.assertEqual(get_out_of_date_files([], '/ws'), [])
+        mock_run.assert_not_called()
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_files_not_in_the_depot_or_the_client_view_are_not_errors(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['new.txt - no such file(s).', 'sub/never.txt - file(s) not in client view.'])
+        with captured_output() as out:
+            self.assertEqual(get_out_of_date_files(
+                ['new.txt', 'sub/never.txt'], '/ws'), [])
+        self.assertEqual(out.getvalue(), '')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_other_errors_fail(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['Perforce password (P4PASSWD) invalid.'])
+        with captured_output() as out, \
+                self.assertRaisesRegex(CommandError, 'latest revision.*Pass --ignore-out-of-date'):
+            get_out_of_date_files(['a.txt'], '/ws')
+        self.assertIn('Perforce password (P4PASSWD) invalid.', out.getvalue())
 
 
 class TestOpenedLookup(unittest.TestCase):

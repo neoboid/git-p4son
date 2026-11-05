@@ -3,6 +3,8 @@
 ## Unreleased
 
 - `sync` lists the p4-opened files it ignores because git doesn't track them, not just how many
+- `new`, `update` and `review` refuse to shelve files that aren't at the latest revision; `--ignore-out-of-date`
+  shelves anyway
 
 ## 0.8.0
 

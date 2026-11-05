@@ -17,7 +17,7 @@ from git_p4son.common import CommandError
 from git_p4son.config import save_config
 from git_p4son.new import new_command, _steps
 from git_p4son.update import update_command
-from tests.helpers import cli_args, on_jj, P4RepoTestCase, recorded, start_patch
+from tests.helpers import CHECK_REVISIONS, cli_args, on_jj, OUT_OF_DATE, P4RepoTestCase, recorded, start_patch
 
 
 FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
@@ -40,7 +40,7 @@ class NewTestCase(P4RepoTestCase):
             **overrides)
 
     def new_fails(self, *argv, message):
-        self.command_fails(
+        return self.command_fails(
             new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main', *argv],
             message)
 
@@ -263,6 +263,17 @@ class TestNewReviewTool(NewTestCase):
                          Review('feat', 'my-tool', True))
         self.assertEqual(len(recorded('101', self.ws).included), 2)
 
+    def test_the_rerun_after_a_failed_first_run_keeps_ignore_out_of_date(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        self.write_review_tool('my-tool', fail_at=1)
+        with self.assertRaises(CommandError) as raised:
+            self.new('--review-tool', 'my-tool', '--ignore-out-of-date')
+        hint = str(raised.exception).split(
+            'Once the tool works, run: git p4son ')[1]
+        self.assertIn('--ignore-out-of-date', hint)
+        self.run_command(update_command, shlex.split(hint))
+        self.assertEqual(len(self.actions()), 2)
+
     def test_a_failed_first_run_says_how_to_rerun_it(self):
         self.write_review_tool('my-tool', fail_at=1)
         with self.assertRaises(CommandError) as raised:
@@ -310,6 +321,10 @@ class TestSteps(unittest.TestCase):
                          ('new feat --review --force --no-commit-list',
                           'update feat --shelve --no-commit-list'))
 
+    def test_ignore_out_of_date_goes_to_both_steps(self):
+        self.assertEqual(self.commands('feat', '--review', '--ignore-out-of-date'),
+                         ('new feat --review --ignore-out-of-date', 'update feat --shelve --ignore-out-of-date'))
+
     def test_alias_with_special_chars(self):
         first, rest = self.commands('my feature')
         self.assertIn("'my feature'", first)
@@ -338,7 +353,7 @@ class PerCommitTestCase(P4RepoTestCase):
         return self.run_command(new_command, self.argv(*argv))
 
     def new_fails(self, *argv, message):
-        self.command_fails(new_command, self.argv(*argv), message)
+        return self.command_fails(new_command, self.argv(*argv), message)
 
 
 class TestNewPerCommit(PerCommitTestCase):
@@ -531,6 +546,74 @@ class TestNewPerCommitWithoutReview(PerCommitTestCase):
         self.assertEqual(self.p4.pending, {})
 
 
+class TestNewOutOfDate(NewTestCase):
+    """new on a change whose files were submitted again since the workspace's last sync."""
+
+    def test_shelving_refuses_an_edit_behind_the_head_before_creating(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        for argv in (['--shelve'], ['--review'], ['--review', '--dry-run']):
+            with self.subTest(argv=argv):
+                out = self.new_fails(*argv, message=OUT_OF_DATE)
+                self.assertIn('a.txt (have #1, head #2)', out)
+        self.assertEqual(self.p4.pending, {})
+        self.assertEqual(self.p4.opened, {})
+        self.assertEqual(list_changelist_aliases(self.ws), [])
+
+    def test_a_delete_of_a_file_deleted_at_head_is_out_of_date(self):
+        self.p4.submit(102, {'b.txt': None})
+        out = self.new_fails('--shelve', message=OUT_OF_DATE)
+        self.assertIn('b.txt (have #1, deleted at head #2)', out)
+
+    def test_an_add_of_a_file_someone_else_added_is_out_of_date(self):
+        self.p4.submit(102, {'c.txt': 'theirs\n'})
+        out = self.new_fails('--shelve', message=OUT_OF_DATE)
+        self.assertIn('c.txt (not synced, head #1)', out)
+
+    def test_files_the_change_leaves_alone_dont_count(self):
+        self.p4.submit(102, {'d.txt': 'd1\n'})
+        out = self.new('--shelve')
+        self.assertIn(CHECK_REVISIONS, out)
+        self.assertIn('3 files at the latest revision', out)
+        self.assertEqual(set(self.p4.shelved['103']), {
+                         'a.txt', 'b.txt', 'c.txt'})
+
+    def test_without_shelving_there_is_no_check(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.new()
+        self.assertNotIn(CHECK_REVISIONS, out)
+        self.assertEqual(self.p4.opened['a.txt'], ('103', 'edit'))
+
+    def test_ignore_out_of_date_shelves_anyway(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.new('--review', '--ignore-out-of-date')
+        self.assertNotIn(CHECK_REVISIONS, out)
+        self.assertEqual(set(self.p4.shelved['103']), {
+                         'a.txt', 'b.txt', 'c.txt'})
+
+
+class TestNewPerCommitOutOfDate(PerCommitTestCase):
+    """new --review --per-commit, as review runs it, on a file submitted again since the last sync."""
+
+    COMMAND = TestNewPerCommit.COMMAND
+
+    def test_refuses_before_the_first_step(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.new_fails(message=OUT_OF_DATE)
+        self.assertNotIn('Step 1', out)
+        self.assertEqual(self.p4.pending, {})
+
+    def test_checks_once_for_all_the_commits_not_in_each_step(self):
+        out = self.new()
+        self.assertEqual(
+            out.count(CHECK_REVISIONS), 1)
+        self.assertEqual(len(self.shelves()), 2)
+
+    def test_ignore_out_of_date_shelves_each_commit(self):
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        self.new('--ignore-out-of-date')
+        self.assertEqual(len(self.shelves()), 2)
+
+
 class TestNewPerCommitRelativeBase(P4RepoTestCase):
     """new --review --per-commit with a relative base, on a feature branch above two sync commits on main."""
 
@@ -555,6 +638,7 @@ TestNewPerCommitOnJj = on_jj(TestNewPerCommit, skip={
                              'test_dirty_workspace': _STRAY_FILE})
 TestNewOnJj = on_jj(TestNew)
 TestNewAliasOnJj = on_jj(TestNewAlias)
+TestNewOutOfDateOnJj = on_jj(TestNewOutOfDate)
 
 if __name__ == '__main__':
     unittest.main()

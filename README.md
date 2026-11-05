@@ -429,6 +429,7 @@ the commits. Optionally shelve it, or create a review in Swarm or another [revie
 ```sh
 git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
               [--no-alias] [--no-commit-list] [--shelve] [--review] [--review-tool NAME] [--per-commit]
+              [--ignore-out-of-date]
 ```
 
 **Arguments:**
@@ -456,6 +457,8 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
   `update --shelve` then runs
 - `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
   commit, as described below. Refuses `--no-edit` and `--no-alias`
+- `--ignore-out-of-date`: Shelve even if files in the change are not at the latest revision (see
+  [Shelving only files at the latest revision](#shelving-only-files-at-the-latest-revision))
 
 **Examples:**
 ```sh
@@ -487,7 +490,7 @@ workspace, untracked files included, unless `--no-edit` skips it.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
-                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit]
+                 [--no-commit-list] [--no-edit] [--shelve] [--per-commit] [--ignore-out-of-date]
 ```
 
 **Arguments:**
@@ -510,6 +513,8 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   a record, oldest first, with each commit checked out in turn. With `--shelve`, steps sleep 5 seconds between them
   to give Perforce/Swarm time to process each shelf, unless another review tool has the changelist. `--dry-run`
   prints the steps, one per commit
+- `--ignore-out-of-date`: Shelve even if files in the change or the changelist are not at the latest revision (see
+  [Shelving only files at the latest revision](#shelving-only-files-at-the-latest-revision))
 
 **Examples:**
 ```sh
@@ -583,6 +588,17 @@ Shelving (`--shelve`, `--review`) replaces the whole shelf with the changelist's
 `p4 shelve -r -a leaveunchanged`, so the shelf never holds stale files, and unchanged files that are still opened
 are left out of it.
 
+#### Shelving only files at the latest revision
+
+Before shelving, `new`, `update` and `review` check that the files are synced to the latest revision in the depot:
+the change's files, and for `update` also the files already opened in the changelist, or with `--no-edit` only
+those. A file is out of date when someone has submitted a newer revision, deleted it, or added a file of that name
+since your last sync. Shelved, it would show in the review against an older revision, and the changelist would need a
+resolve before it is submitted, so the command lists the files and refuses, before it changes anything. Run
+`git p4son sync`, rebase the change onto it and run the command again, or pass `--ignore-out-of-date` to shelve
+anyway; the command it gives to resume or rerun after a failure keeps the option. With `--per-commit`, the check
+covers every commit once, before the first step. Without shelving there is no check.
+
 ### Review Command
 
 Create a review with one shelf per commit, so each commit is a patch of its own. `review` is short for
@@ -590,7 +606,7 @@ Create a review with one shelf per commit, so each commit is a patch of its own.
 
 ```sh
 git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
-                 [--review-tool NAME]
+                 [--review-tool NAME] [--ignore-out-of-date]
 ```
 
 **Arguments:**
@@ -606,6 +622,8 @@ git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--
 - `-n, --dry-run`: Print the steps, one per commit, without running them. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and
   each `update` step
+- `--ignore-out-of-date`: Shelve even if files in the change are not at the latest revision (see
+  [Shelving only files at the latest revision](#shelving-only-files-at-the-latest-revision))
 
 **Examples:**
 ```sh

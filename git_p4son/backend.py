@@ -6,7 +6,7 @@ from typing import ContextManager, Protocol
 
 from . import jj
 from .common import CommandError
-from .changelist_store import alias_for_change
+from .changelist_store import aliases_by_change
 from .config import ConfigError, get_setting
 from .git_backend import GitBackend
 from .jj_backend import JjBackend
@@ -47,6 +47,10 @@ class Backend(Protocol):
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids that still exist; all of them for git."""
+
+    def nearest_change(self, change_ids: list[str]) -> str | None:
+        """The one of change_ids nearest the change in its chain, above the nearest bookmark below it and not empty;
+        None for none or several, and for git."""
 
     def subject(self) -> str:
         """The change's default message; raise CommandError if there is none."""
@@ -121,10 +125,15 @@ def completion_backend(workspace_dir: str, choice: str | None) -> Backend:
 
 
 def alias_for_branch(backend: Backend, workspace_dir: str, new_alias: bool) -> str:
-    """The alias the branch keyword names: the one recording the jj change, unless new_alias, else the suggested one."""
+    """The alias the branch keyword names: the one recording the jj change, or the nearest change below it in its chain,
+    unless new_alias, else the suggested one."""
     change = backend.change_id()
     if change is not None and not new_alias:
-        found = alias_for_change(change, workspace_dir)
+        by_change = aliases_by_change(workspace_dir)
+        found = by_change.get(change)
+        if found is None:
+            nearest = backend.nearest_change(sorted(by_change))
+            found = None if nearest is None else by_change.get(nearest)
         if found is not None:
             return found
     return backend.suggested_alias()

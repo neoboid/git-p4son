@@ -143,20 +143,20 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 ## Shared modules
 
-- **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend`
-  interface: the commit to read the change from (`revision`), the base (`resolve_base`, None for the default),
-  the alias the branch or bookmark suggests, the jj change aliases record (`change_id`, `existing_changes`), the
-  default message, the clean check (`check_clean`, which sync shares), `-b` completions, `checkouts` for the
-  per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use,
-  whose `tool` hooks get as `GIT_P4SON_BACKEND`.
-  `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace.
-  `open_backend` holds jj's lock and operation for the whole command and yields the backend in `run_command` as
-  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once
-  the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the
-  alias recording the change, else the suggested name, unless the command (`new_alias=True` on its parser) names a
-  new one; `resolve_branch_keyword` does so under a heading, for `run_command` and `alias rename`.
-  `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
-  command branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
+- **`backend.py`** - The backend: what a command asks of the tool holding the change, as the `Backend` interface: the
+  commit to read the change from (`revision`), the base (`resolve_base`, None for the default), the alias the branch or
+  bookmark suggests, the jj change aliases record (`change_id`, `existing_changes`), the default message, the clean
+  check (`check_clean`, which sync shares), `-b` completions, `checkouts` for the per-commit loop, sync's commits
+  (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as
+  `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj
+  in a jj workspace. `open_backend` holds jj's lock and operation for the whole command and yields the backend in
+  `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
+  `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
+  `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its chain, else the
+  suggested name, unless the command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so
+  under a heading, for `run_command` and `alias rename`. `completion_backend` gives one without the lock, and
+  `workspace_lock` is `init`'s lock-only path. No command branches on jj outside the backend modules and `jj.py`, apart
+  from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
@@ -185,11 +185,11 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch keyword. An alias made by `new` holds a
   `Record`: the base's name, its commit, and the identities of the commits since it the CL includes, and an inserted
   catch-up commit until it is included (`find_record`, `update_record`). An alias may record a jj change (`change =
-  "..."`), at most one alias per change, as saving moves the record: `alias_for_change` and `alias_changes`. An alias
-  can record a review tool (`review_tool`) and, once the tool has run for the CL, `review_started` (`find_review`,
-  `mark_review_started`). `_write_alias` writes a whole `_Alias`, so every write keeps them. The old
-  `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
-  which `alias clean` runs first, moves the rest.
+  "..."`), at most one alias per change, as saving moves the record: `alias_for_change`, `aliases_by_change` and
+  `alias_changes`. An alias can record a review tool (`review_tool`) and, once the tool has run for the CL,
+  `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a whole `_Alias`, so every write keeps
+  them. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
+  `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
   `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.

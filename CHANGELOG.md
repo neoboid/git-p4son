@@ -6,6 +6,8 @@
 - `new`, `update` and `review` refuse to shelve files that aren't at the latest revision; `--ignore-out-of-date`
   shelves anyway
 - `alias rename [OLD] NEW` renames an alias, the current one by default, keeping its changelist and record
+- With jj, commands find the current alias from changes stacked on top of the one it records, up to the first
+  bookmark below them
 
 ## 0.8.0
 

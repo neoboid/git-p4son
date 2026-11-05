@@ -58,7 +58,10 @@ with these translations:
   its `snapshot.max-new-file-size`, make commands refuse: tell the user, who either ignores them in `.gitignore` or
   has jj track them. Don't use `git stash`, which moves files behind jj's back.
 - **Aliases follow the change.** `new` names the alias after the change's one bookmark, or the first 8 letters of
-  its change ID, and records the change, so `update` finds it after rewording or moving bookmarks.
+  its change ID, and records the change, so `update` finds it after rewording or moving bookmarks, and from changes
+  stacked on top of it, up to the first bookmark below them. jj doesn't move bookmarks on `jj new`: after adding
+  changes above a bookmarked change with a CL, suggest moving the bookmark to the tip (`jj bookmark move <name>
+  --to @-`) so `update` finds the alias.
 - **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent.
 - **Branching off `main`** is `jj new main -m "..."` and `jj bookmark create <name>`. **Switching to a change**, as
   `git checkout feature-a` does in the stacks walkthrough, is `jj edit <bookmark>` to amend that change, or

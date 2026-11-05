@@ -101,6 +101,9 @@ class GitBackend:
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return set(change_ids)
 
+    def nearest_change(self, change_ids: list[str]) -> None:
+        return None
+
     def subject(self) -> str:
         """The HEAD commit's subject; raise CommandError if there is no commit."""
         subject = get_head_subject(self.workspace_dir)

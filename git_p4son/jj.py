@@ -268,6 +268,12 @@ def _resolve(directory: str, operation: str, revision: str) -> Revision:
     return resolved
 
 
+def _present(change_ids: list[str]) -> str:
+    """A revset of the change_ids jj still has, with every revision of a divergent one, leaving out the rest."""
+    # present() fails on a divergent change ID; change_id() selects all its revisions, and none for a gone one.
+    return ' | '.join(f'change_id({change})' for change in change_ids)
+
+
 @dataclass
 class Workspace:
     """A colocated jj workspace at one operation, with the change git-p4son works on at tip."""
@@ -356,13 +362,28 @@ class Workspace:
         change_of = dict(line.split(' ', 1) for line in lines)
         return [change_of[commit] for commit in commits]
 
+    def _changes(self, revset: str) -> list[str]:
+        """The change IDs of the revisions revset names."""
+        return self.run('log', '-r', revset, '--no-graph', '-T', 'change_id ++ "\\n"').stdout
+
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids jj still has."""
         if not change_ids:
             return set()
-        revset = ' | '.join(
-            f'present({change})' for change in change_ids)
-        return set(self.run('log', '-r', revset, '--no-graph', '-T', 'change_id ++ "\\n"').stdout)
+        return set(self._changes(_present(change_ids)))
+
+    def nearest_change(self, change_ids: list[str]) -> str | None:
+        """The one of change_ids nearest the tip in its chain, above the nearest bookmark below it and not empty; None
+        for none or several."""
+        if not change_ids:
+            return None
+        tip = self.tip.commit
+        # The tip's own bookmark doesn't bound the search, as its parents start it.
+        # A sync leaves submitted changes empty.
+        nearest = self._changes(
+            f'heads(({_present(change_ids)}) & ::{tip} ~ ::(::{tip}- & bookmarks()) ~ empty())')
+        # A divergent change's revisions can all be heads.
+        return nearest[0] if len(set(nearest)) == 1 else None
 
     def resolve_base(self, base: str | None) -> str:
         """Resolve the base, None for the tip's parent, and reject conflicted changes in the selected range."""

@@ -280,10 +280,17 @@ def alias_changes(workspace_dir: str) -> dict[str, str]:
     return {name: alias.change for name, alias in _records(workspace_dir).items() if alias.change is not None}
 
 
+def aliases_by_change(workspace_dir: str) -> dict[str, str]:
+    """The alias that records each jj change, the first by name where several do."""
+    by_change: dict[str, str] = {}
+    for name, change in sorted(alias_changes(workspace_dir).items()):
+        by_change.setdefault(change, name)
+    return by_change
+
+
 def alias_for_change(change: str, workspace_dir: str) -> str | None:
     """The alias that records change, or None."""
-    return next((name for name, recorded in sorted(alias_changes(workspace_dir).items())
-                 if recorded == change), None)
+    return aliases_by_change(workspace_dir).get(change)
 
 
 def _load_alias(name: str, workspace_dir: str) -> _Alias:

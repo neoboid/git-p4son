@@ -107,6 +107,9 @@ class JjBackend:
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         return self.workspace.existing_changes(change_ids)
 
+    def nearest_change(self, change_ids: list[str]) -> str | None:
+        return self.workspace.nearest_change(change_ids)
+
     def subject(self) -> str:
         """The first line of the change's description; raise CommandError if it has none."""
         lines = self.workspace.tip.description.splitlines()

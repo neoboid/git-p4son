@@ -530,6 +530,122 @@ class TestJjNew(JjP4RepoTestCase):
         self.p4son_fails('alias', 'show', 'branch', message='detached HEAD')
 
 
+class TestJjAliasInChain(JjP4RepoTestCase):
+    """The branch keyword on a tip whose own change no alias records, but one further down the chain does."""
+
+    def change(self, message, path, content, parent=None):
+        """Start a change on parent, or on the working change, that edits path; returns its change ID."""
+        self.jj('new', *([parent] if parent else []), '-m', message)
+        self.edit(path, content)
+        return self.describe('@', 'change_id')
+
+    def bookmark(self, name):
+        self.jj('bookmark', 'set', name, '-r', '@')
+
+    def test_an_alias_named_by_change_id_is_found_under_a_bookmark_added_later(self):
+        widget = self.change('Add widget', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', '-b', 'main')
+        self.change('Handle errors', 'b.txt', 'b2\n')
+        self.change('Polish', 'c.txt', 'c1\n')
+        self.bookmark('my-feature')
+        self.jj('new')
+        self.assertEqual(self.p4son('alias', 'show'), '101\n')
+        self.assertIn(f'branch -> {widget[:8]}',
+                      self.p4son('update', '--no-edit'))
+
+    def test_a_stack_of_changes_without_bookmarks_finds_the_alias_below(self):
+        widget = self.change('Add widget', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', '-b', 'main')
+        self.change('Handle errors', 'b.txt', 'b2\n')
+        self.change('Polish', 'c.txt', 'c1\n')
+        self.jj('new')
+        self.assertEqual(self.p4son('alias', 'show'), '101\n')
+        self.assertIn(f'branch -> {widget[:8]}',
+                      self.p4son('update', '--no-edit'))
+
+    def test_an_emptied_recorded_change_is_skipped(self):
+        # After a submit and a sync, the rebase onto main leaves the submitted changes empty.
+        old = self.change('Old work', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', '-b', 'main')
+        self.jj('restore', '--changes-in', old)
+        self.change('Next work', 'b.txt', 'b2\n')
+        self.jj('new')
+        self.p4son_fails('alias', 'show', message='No changelist alias found')
+
+    def test_the_nearest_of_two_recorded_changes_wins(self):
+        self.change('A: code', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('base-of-b')
+        self.p4son('new', 'a-cl', '-b', 'main')
+        self.change('B: code', 'b.txt', 'b2\n')
+        self.p4son('new', 'b-cl', '-b', 'base-of-b')
+        # Without a bookmark between them, both recorded changes are in the tip's chain.
+        self.jj('bookmark', 'delete', 'base-of-b')
+        self.change('B: tests', 'c.txt', 'c1\n')
+        self.bookmark('feature-b')
+        self.jj('new')
+        self.assertEqual(self.p4son('alias', 'show'), '102\n')
+
+    def test_a_bookmark_below_the_tip_stops_the_search(self):
+        # B is stacked on A, but has no CL of its own yet: A's alias must not stand in for it.
+        self.change('A: code', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('feature-a')
+        self.p4son('new', '-b', 'main')
+        self.change('B: code', 'b.txt', 'b2\n')
+        self.bookmark('feature-b')
+        self.jj('new')
+        self.p4son_fails(
+            'alias', 'show', message='No changelist alias found: feature-b')
+
+    def test_a_bookmark_above_the_recorded_change_stops_the_search(self):
+        # Old work left in the chain, its alias on a change below its bookmark, with new work on top.
+        self.change('Old: code', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', 'old-work', '-b', 'main')
+        self.change('Old: polish', 'b.txt', 'b2\n')
+        self.bookmark('old-feature')
+        self.change('Next: code', 'c.txt', 'c1\n')
+        self.bookmark('next-thing')
+        self.jj('new')
+        self.p4son_fails(
+            'alias', 'show', message='No changelist alias found: next-thing')
+
+    def test_a_divergent_change_another_alias_records_doesnt_break_the_lookup(self):
+        other = self.change('Other work', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', 'other', '-b', 'main')
+        # Rewriting the change at an earlier operation too leaves two revisions of it: a divergent change.
+        earlier = self.jj('op', 'log', '--no-graph', '-n', '1', '-T', 'id')
+        self.jj('describe', '-r', other, '-m', 'Other work, reworded')
+        self.jj('--at-op', earlier, 'describe', '-r', other,
+                '-m', 'Other work, reworded elsewhere')
+        self.change('Mine', 'b.txt', 'b2\n', parent='main')
+        self.bookmark('mine')
+        self.jj('new')
+        self.p4son_fails(
+            'alias', 'show', message='No changelist alias found: mine')
+
+    def test_a_bookmark_left_behind_hides_the_alias_until_moved_to_the_tip(self):
+        self.change('Add widget', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('my-feature')
+        self.p4son('new', '-b', 'main')
+        self.change('Handle errors', 'b.txt', 'b2\n')
+        self.jj('new')
+        self.p4son_fails('alias', 'show', message='No changelist alias found')
+        self.jj('bookmark', 'move', 'my-feature', '--to', '@-')
+        self.assertEqual(self.p4son('alias', 'show'), '101\n')
+
+    def test_two_aliased_chains_merged_fall_back_to_the_tip(self):
+        self.change('X', 'a.txt', 'a2\n', parent='main')
+        self.p4son('new', 'x', '-b', 'main')
+        x = self.describe('@', 'commit_id')
+        self.change('Y', 'b.txt', 'b2\n', parent='main')
+        self.p4son('new', 'y', '-b', 'main')
+        y = self.describe('@', 'commit_id')
+        self.jj('new', x, y, '-m', 'Merge')
+        self.bookmark('merged')
+        self.jj('new')
+        self.p4son_fails(
+            'alias', 'show', message='No changelist alias found: merged')
+
+
 class TestJjPerCommit(JjP4RepoTestCase):
     """review over Change a and Replace b with c, with bookmark feat on the second; TestReviewOnJj covers the rest."""
 

@@ -1072,6 +1072,12 @@ With the jj backend in a jj workspace:
 - `new` records the change's ID in the alias it saves, so later commands find the alias by change, whatever the
   change's bookmarks or description have become since. A new alias is named after the one local bookmark at the
   change, with `/` replaced by `-`, or, with no bookmark or several, after the first 8 letters of its change ID.
+- When no alias records the change itself, as after adding changes on top of the one `new` recorded, the current
+  alias is the one recording the nearest change below it. The search stops at the first bookmark below the change,
+  so a bookmarked change stacked on another's CL doesn't take that CL's alias, and skips empty changes, which a sync
+  leaves behind for submitted CLs. In a stack without bookmarks, every change above `main` counts. jj doesn't move
+  a bookmark on `jj new`, so a bookmark left on the change `new` recorded stops the search from the changes above
+  it: move it to the tip with `jj bookmark move <name> --to @-`, or `--to @` when the working change has content.
 - An alias records one change, and a change one alias: `new` refuses a change another alias records, naming it, and
   `--force` moves the record to the new alias. `alias new` records no change. `alias list` shows each recorded change,
   marked `(gone)` once jj no longer has it.

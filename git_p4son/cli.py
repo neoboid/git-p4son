@@ -46,7 +46,7 @@ def _add_branch_keyword_arg(parser: argparse.ArgumentParser, dest: str, help: st
     (group or parser).add_argument(
         dest, nargs='?', default='branch',
         help=f'{help}. Defaults to the current branch name, or with the jj backend the alias recorded for the jj '
-        'change, else its bookmark or the start of its change ID')
+        'change or the nearest one below it, else its bookmark or the start of its change ID')
     parser.set_defaults(branch_keyword_arg=dest)
 
 

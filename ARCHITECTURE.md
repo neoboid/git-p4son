@@ -31,14 +31,17 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds the
   changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
   `update <alias>` on the others, both shelving with `--shelve` or `--review`, with `shelf_delay` between them.
+  Before shelving, `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
+  `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps (`per_commit_step`) skip it.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
   in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
   merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, after
   a shelve the review tool an alias records for the CL (`find_review`, looked up once and checked before shelving),
-  through `push_review`, and the record's new count. `--per-commit` instead updates once per commit through
-  `run_per_commit`, with `shelf_delay` between shelving steps. Requires a clean git workspace unless `--no-edit` is
-  given.
+  through `push_review`, and the record's new count. A shelving update first runs `check_at_latest_revision` over the
+  files since where the new commits start and the files opened in the CL, unless `--ignore-out-of-date` or a step.
+  `--per-commit` instead updates once per commit through `run_per_commit`, with `shelf_delay` between shelving steps.
+  Requires a clean git workspace unless `--no-edit` is given.
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
@@ -165,9 +168,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),
-  `revert_unchanged_files`, and `edit_and_shelve`, which `new` and `update` share. They read the change from the
-  backend's `revision` and keep the working files around Perforce reverts. On a dry run of `new` the changelist is
-  `DRY_RUN_CHANGELIST`.
+  `revert_unchanged_files`, `edit_and_shelve`, which `new` and `update` share, and `check_at_latest_revision`, which
+  lists and refuses the files `perforce.get_out_of_date_files` finds behind the head revision before a shelve. They
+  read the change from the backend's `revision` and keep the working files around Perforce reverts. On a dry run of
+  `new` the changelist is `DRY_RUN_CHANGELIST`.
 
 - **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`

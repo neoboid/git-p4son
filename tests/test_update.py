@@ -10,6 +10,8 @@ from git_p4son.git import author_dates
 from git_p4son.new import new_command
 from git_p4son.update import _step, update_command
 from tests.helpers import (
+    CHECK_REVISIONS,
+    OUT_OF_DATE,
     on_jj,
     captured_output,
     cli_args,
@@ -50,8 +52,8 @@ class UpdateTestCase(P4RepoTestCase):
         return self.run_command(update_command, ['update', '101', '-b', 'main', *argv])
 
     def update_fails(self, *argv, message):
-        self.command_fails(update_command, ['update', '101', '-b', 'main', *argv],
-                           message)
+        return self.command_fails(update_command, ['update', '101', '-b', 'main', *argv],
+                                  message)
 
     def commit_change_c(self):
         self.edit('c.txt', 'c2\n')
@@ -186,8 +188,8 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(self.commands(), 'update 100')
 
     def test_flags(self):
-        self.assertEqual(self.commands(no_commit_list=True, no_edit=True, shelve=True),
-                         'update 100 --no-commit-list --no-edit --shelve')
+        self.assertEqual(self.commands(no_commit_list=True, no_edit=True, shelve=True, ignore_out_of_date=True),
+                         'update 100 --no-commit-list --no-edit --shelve --ignore-out-of-date')
 
 
 class TestUpdatePerCommit(UpdateTestCase):
@@ -320,7 +322,7 @@ class IncludedTestCase(UpdateTestCase):
         return self.run_command(update_command, ['update', 'feat', *argv])
 
     def update_fails(self, *argv, message):
-        self.command_fails(update_command, ['update', 'feat', *argv], message)
+        return self.command_fails(update_command, ['update', 'feat', *argv], message)
 
     def reword_first_entry(self):
         """Reword the first entry in the CL's commit list, as a user does in P4V."""
@@ -438,6 +440,80 @@ TestUpdateOnJj = on_jj(TestUpdate)
 TestUpdateChecksOnceOnJj = on_jj(TestUpdateChecksOnce)
 
 
+class TestUpdateOutOfDate(IncludedTestCase):
+    """update of CL 101 on files submitted again since the workspace's last sync."""
+
+    def test_shelving_refuses_a_file_only_the_included_commits_opened(self):
+        self.commit_change_c()
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        for argv in (['--shelve'], ['--shelve', '--dry-run']):
+            with self.subTest(argv=argv):
+                out = self.update_fails(*argv, message=OUT_OF_DATE)
+                self.assertIn('a.txt (have #1, head #2)', out)
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.shelved, {})
+        self.assertEqual(self.included(), 2)
+
+    def test_shelving_refuses_a_file_a_new_commit_adds(self):
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.p4.submit(102, {'d.txt': 'theirs\n'})
+        out = self.update_fails('--shelve', message=OUT_OF_DATE)
+        self.assertIn('d.txt (not synced, head #1)', out)
+
+    def test_no_edit_checks_only_the_files_the_changelist_has_opened(self):
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.p4.submit(102, {'d.txt': 'theirs\n'})
+        out = self.update('--no-edit', '--shelve')
+        self.assertIn('3 files at the latest revision', out)
+        self.p4.submit(103, {'a.txt': 'a3\n'})
+        out = self.update_fails('--no-edit', '--shelve', message=OUT_OF_DATE)
+        self.assertIn('a.txt (have #1, head #2)', out)
+        self.assertNotIn('d.txt', out.split(CHECK_REVISIONS)[1])
+
+    def test_without_shelving_there_is_no_check(self):
+        self.commit_change_c()
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.update()
+        self.assertNotIn(CHECK_REVISIONS, out)
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+
+    def test_ignore_out_of_date_shelves_anyway(self):
+        self.commit_change_c()
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.update('--shelve', '--ignore-out-of-date')
+        self.assertNotIn(CHECK_REVISIONS, out)
+        self.assertEqual(self.p4.shelved['101']['c.txt'], 'c2\n')
+
+    def test_per_commit_checks_once_not_in_its_steps(self):
+        self.commit_change_c()
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        out = self.update('--shelve', '--per-commit')
+        self.assertEqual(out.count(CHECK_REVISIONS), 1)
+        self.assertEqual(len(self.shelves()), 2)
+
+    def test_per_commit_refuses_before_the_first_step(self):
+        self.commit_change_c()
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.update_fails(
+            '--shelve', '--per-commit', message=OUT_OF_DATE)
+        self.assertNotIn('Step 1', out)
+        self.assertEqual(self.p4.shelved, {})
+
+
+class TestUpdateOutOfDateWithoutRecord(UpdateTestCase):
+    """update --shelve of CL 101, whose alias records no commits, so the files since -b are the change's."""
+
+    def test_shelving_refuses_a_file_behind_the_head(self):
+        save_changelist_alias('feat', '101', self.ws, force=True)
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        out = self.update_fails('--shelve', message=OUT_OF_DATE)
+        self.assertIn('a.txt (have #1, head #2)', out)
+        self.assertEqual(self.p4.shelved, {})
+
+
 class TestUpdateIncludedGitRewrites(IncludedTestCase):
     """Rewrites made with git, which jj would see as new changes; TestJjPerCommit makes them with jj."""
 
@@ -508,6 +584,7 @@ class TestUpdateIncludedGitRewrites(IncludedTestCase):
 
 TestUpdateIncludedOnJj = on_jj(TestUpdateIncluded)
 TestUpdatePerCommitOnJj = on_jj(TestUpdatePerCommit)
+TestUpdateOutOfDateOnJj = on_jj(TestUpdateOutOfDate)
 
 if __name__ == '__main__':
     unittest.main()

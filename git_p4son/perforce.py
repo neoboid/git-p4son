@@ -270,12 +270,18 @@ def is_changelist_gone(changelist: str, workspace_dir: str) -> bool:
 
 # --- file operations ---
 
+def _unexpected_p4_errors(res: RunResult[list[str]], expected: tuple[str, ...]) -> list[str]:
+    """The stderr lines of a failed p4 command that match none of the expected messages."""
+    if res.returncode == 0:
+        return []
+    return [line for line in res.stderr if not any(message in line for message in expected)]
+
+
 def _warn_p4_errors(res: RunResult[list[str]], expected: tuple[str, ...],
                     summary: str) -> None:
     """Warn with the stderr lines of a failed p4 command that match none of the expected messages."""
-    errors = [line for line in res.stderr
-              if not any(message in line for message in expected)]
-    if res.returncode != 0 and errors:
+    errors = _unexpected_p4_errors(res, expected)
+    if errors:
         log.warning(summary)
         for line in errors:
             log.info(f'  {line}')
@@ -310,6 +316,42 @@ def get_opened_files(filenames: list[str],
                     'p4 fstat failed to list opened files:')
     return {filename: (record.get('change', ''), record.get('action', ''))
             for filename, record in _fstat_records(res, workspace_dir)}
+
+
+@dataclass(frozen=True)
+class OutOfDate:
+    """A file whose have revision isn't the head; have is None when the file isn't synced."""
+    path: str
+    have: str | None
+    head: str
+    deleted_at_head: bool
+
+
+def get_out_of_date_files(filenames: list[str], workspace_dir: str) -> list[OutOfDate]:
+    """Return the files that aren't synced to their head revision, files not in the depot left out.
+
+    Raises CommandError if p4 fails for another reason, after logging its lines."""
+    if not filenames:
+        return []
+    res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Op',
+               '-T', 'path,clientFile,haveRev,headRev,headAction'],
+              cwd=workspace_dir, input='\n'.join(filenames),
+              fail_on_returncode=False)
+    # Files outside the client view are left to the open step, which warns about them.
+    errors = _unexpected_p4_errors(res, ('no such file', 'not in client view'))
+    if errors:
+        for line in errors:
+            log.info(f'  {line}')
+        raise CommandError('p4 fstat failed to tell whether the files are at the latest revision. Pass '
+                           '--ignore-out-of-date to shelve without the check.', returncode=res.returncode)
+    stale = []
+    for filename, record in _fstat_records(res, workspace_dir):
+        have, head = record.get('haveRev'), record.get('headRev')
+        # Deleted at head (delete or move/delete): having no revision is up to date.
+        deleted = record.get('headAction', '').endswith('delete')
+        if head is not None and have != (None if deleted else head):
+            stale.append(OutOfDate(filename, have, head, deleted))
+    return stale
 
 
 _State = TypeVar('_State')

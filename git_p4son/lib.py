@@ -1,5 +1,6 @@
 """Bridge functions that combine git and Perforce operations."""
 
+import argparse
 import contextlib
 import os
 import shutil
@@ -22,6 +23,8 @@ from .perforce import (
     get_changelist_spec,
     get_opened_files,
     get_opened_files_in_changelist,
+    get_out_of_date_files,
+    OutOfDate,
     p4_create_changelist,
     p4_revert,
     p4_revert_unchanged,
@@ -178,6 +181,42 @@ def _restoring(filepaths: list[str], workspace_dir: str, dry_run: bool) -> Itera
                     os.unlink(path)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 shutil.copy2(backup, path, follow_symlinks=False)
+
+
+def _revisions(file: OutOfDate) -> str:
+    """How far behind the head revision file is, for listing it."""
+    if file.have is None:
+        return f'not synced, head #{file.head}'
+    if file.deleted_at_head:
+        return f'have #{file.have}, deleted at head #{file.head}'
+    return f'have #{file.have}, head #{file.head}'
+
+
+def check_at_latest_revision(args: argparse.Namespace, base_branch: str | None, changelist: str | None,
+                             revision: str) -> None:
+    """Raise CommandError, after listing them, if files opened in changelist, or of the change since base_branch when
+    given, aren't at the latest revision; --ignore-out-of-date and per-commit steps skip the check."""
+    # The steps of a per-commit run, or of the shelves at an update's catch-up, leave it to the run's own check.
+    if args.ignore_out_of_date or args.per_commit_step:
+        return
+    workspace_dir = args.workspace_dir
+    log.heading('Checking files are at the latest revision')
+    files = []
+    if base_branch is not None:
+        changes = get_local_changes(base_branch, workspace_dir, revision)
+        files += [*changes.adds, *changes.mods, *changes.dels,
+                  *(path for move in changes.moves for path in move)]
+    if changelist is not None:
+        files += [path for path,
+                  _ in get_opened_files_in_changelist(changelist, workspace_dir)]
+    files = list(dict.fromkeys(files))
+    stale = get_out_of_date_files(files, workspace_dir)
+    if stale:
+        for file in stale:
+            log.info(f'{file.path} ({_revisions(file)})')
+        raise CommandError('Files in the change are not at the latest revision. Run "git p4son sync", rebase the '
+                           'change onto it and try again, or pass --ignore-out-of-date to shelve anyway.')
+    log.success(f'{plural(len(files), "file")} at the latest revision')
 
 
 def include_changes_in_changelist(changes: LocalChanges, changelist: str,

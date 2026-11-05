@@ -315,13 +315,14 @@ class WorkspaceTestCase(unittest.TestCase):
         return out.getvalue()
 
     def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
-                      message: str) -> None:
-        """Run command with command_args(argv), expecting a CommandError matching message."""
+                      message: str) -> str:
+        """Run command with command_args(argv), expecting a CommandError matching message; returns what it printed."""
         from git_p4son.cli import check_clean_workspace
-        with captured_output(), self.assertRaisesRegex(CommandError, message), \
+        with captured_output() as out, self.assertRaisesRegex(CommandError, message), \
                 self.command_args(argv) as args:
             check_clean_workspace(args)
             command(args)
+        return out.getvalue()
 
 
 class GitRepoTestCase(WorkspaceTestCase):
@@ -387,6 +388,11 @@ class GitRepoTestCase(WorkspaceTestCase):
         """Assert HEAD is commit, on branch, or detached for an empty branch."""
         self.assertEqual(self.git('branch', '--show-current'), branch)
         self.assertEqual(self.git('rev-parse', 'HEAD'), commit)
+
+
+# The refusal and the heading of the check that shelved files are at the latest revision.
+OUT_OF_DATE = 'not at the latest revision'
+CHECK_REVISIONS = '# Checking files are at the latest revision'
 
 
 class FakeP4:
@@ -498,6 +504,8 @@ class FakeP4:
             out = self._fstat_opened(self.opened)
         elif args[:5] == ['-x', '-', '-ztag', 'fstat', '-Ro']:
             out = self._fstat_opened(p for p in files if p in self.opened)
+        elif args[:5] == ['-x', '-', '-ztag', 'fstat', '-Op']:
+            out, stderr = self._fstat_revisions(files)
         elif args[:4] == ['-x', '-', '-ztag', 'fstat']:
             out = []
             for path in files:
@@ -549,6 +557,33 @@ class FakeP4:
             out += [f'... path {self._local(path)}', f'... action {action}',
                     f'... change {change}', '']
         return out
+
+    def _revisions(self, path: str, change: int | None = None) -> list[int]:
+        """The changes up to change, or all of them, that touched path, one per revision."""
+        return sorted(c for c in self.changes
+                      if (change is None or c <= change) and path in self.changes[c][1])
+
+    def _fstat_revisions(self, paths: list[str]) -> tuple[list[str], list[str]]:
+        """The have and head revisions of paths, as fstat -T haveRev,headRev,headAction prints them."""
+        out: list[str] = []
+        stderr: list[str] = []
+        in_depot = self.files_at(self.have)
+        for path in paths:
+            head = self._revisions(path)
+            if not head:
+                if path in self.opened:
+                    out += [f'... path {self._local(path)}', '']
+                else:
+                    stderr.append(f'{self._local(path)} - no such file(s).')
+                continue
+            deleted = self.changes[head[-1]][1][path] is None
+            out += [f'... path {self._local(path)}', f'... headRev {len(head)}',
+                    f'... headAction {"delete" if deleted else "edit"}']
+            if path in in_depot:
+                out.append(
+                    f'... haveRev {len(self._revisions(path, self.have))}')
+            out.append('')
+        return out, stderr
 
     def _describe(self, change: str) -> tuple[list[str], list[str]]:
         """A changelist as p4 -ztag describe -s -m1 prints it, or the warning for one that doesn't exist."""

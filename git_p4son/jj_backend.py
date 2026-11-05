@@ -8,7 +8,7 @@ from typing import NoReturn
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import commit_all, get_head_commit, get_local_changes
-from .jj import Workspace, leave_out_case_only_ignored
+from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch
 from .words import Words, named_base
@@ -88,10 +88,17 @@ class JjBackend:
         return self.workspace.tip.change_id
 
     def base_name(self, base: str) -> str:
-        """The bookmark base names, or the one bookmark at the commit it names; raise CommandError otherwise."""
+        """The bookmark base names, or the one bookmark at the change it names, else that change by its ID; raise
+        CommandError for a change with several."""
         workspace = self.workspace
-        return named_base(base, self.words, lambda name: name in workspace.bookmarks,
-                          lambda base: workspace.bookmarks_at(self.resolve_base(base)))
+        if base in workspace.bookmarks:
+            return base
+        commit = self.resolve_base(base)
+        names = workspace.bookmarks_at(commit)
+        if not names:
+            # It resolves the change's current commit after a rebase, and fails for a gone or divergent one.
+            return changes_revset([workspace.resolve(commit).change_id])
+        return named_base(base, self.words, lambda _: False, lambda _: names)
 
     def commit_identities(self, commits: list[str]) -> list[str]:
         """The change IDs, which survive rebases and rewording."""

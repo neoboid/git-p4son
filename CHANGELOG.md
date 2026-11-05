@@ -8,6 +8,8 @@
 - `alias rename [OLD] NEW` renames an alias, the current one by default, keeping its changelist and record
 - With jj, commands find the current alias from changes stacked on top of the one it records, up to the first
   bookmark below them
+- With jj, `-b` takes a change without a bookmark, which the alias records by its change ID
+- `update -b` records a new base when the one the alias records no longer resolves
 
 ## 0.8.0
 

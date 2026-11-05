@@ -1,11 +1,11 @@
 """The commits a changelist includes: the record new saves with its alias, and the update planned from it."""
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .backend import Backend
 from .changelist_store import Record
-from .common import CommandError
+from .common import CommandError, RevisionNotFoundError
 from .git import (
     changed_paths, commit_subject, get_commits_since, git_last_synced_changelist, merge_base, resolve_commit,
 )
@@ -25,7 +25,8 @@ def included_count(record: Record) -> int:
 class Plan:
     """What update does for a CL whose alias holds a record."""
     alias: str
-    # The record as it stands, and as it will once the update is done.
+    # The record as it stands, with the base -b replaced if the recorded one no longer resolves, and as it will be
+    # once the update is done.
     current: Record
     next: Record
     # The base for the files to open and the per-commit loop.
@@ -72,10 +73,23 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
                 workspace_dir: str, revision: str) -> Plan:
     """Plan an update of changelist through revision, starting at given, the -b as typed and resolved, if not None.
 
-    Raises CommandError if a commit the CL doesn't include sits below ones it does, or given skips commits it doesn't
-    include."""
-    base_commit = resolve_commit(
-        backend.resolve_base(record.base), workspace_dir)
+    Raises CommandError if a commit the CL doesn't include sits below ones it does, given skips commits it doesn't
+    include, or the recorded base no longer resolves and given isn't below every commit the CL includes."""
+    fix = f'Pass the base the CL started from, below its first commit: git p4son update {alias} -b <base>'
+    # The -b that replaced a base that no longer resolves.
+    new_base: str | None = None
+    try:
+        base_commit = resolve_commit(
+            backend.resolve_base(record.base), workspace_dir)
+    except RevisionNotFoundError as error:
+        if given is None:
+            raise CommandError(
+                f'CL {changelist} records the base {record.base}, which no longer resolves. {fix}') from error
+        # Only a base that no longer resolves is replaced, so -b keeps meaning where the new commits start. The plan's
+        # kept record carries the new base, so update saves it.
+        record = replace(record, base=backend.base_name(given[0]))
+        base_commit = resolve_commit(given[1], workspace_dir)
+        new_base = given[0]
     commits = get_commits_since(base_commit, workspace_dir, revision)
     shas = [sha for sha, _ in commits]
     identities = backend.commit_identities(shas)
@@ -105,6 +119,11 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
             f'-b {given[0]} skips {plural(position - included, "commit")} CL {changelist} doesn\'t include yet, which '
             f'would be counted without being opened. Start at or below commit {included} since {record.base}.')
     dropped = _dropped(record.included, unmatched)
+    if new_base is not None and dropped:
+        # Commits at or below a new base aren't gone from the branch, so they mustn't be recorded as dropped.
+        positions = ', '.join(str(position) for position in dropped)
+        raise CommandError(f'-b {new_base} is at or above commits CL {changelist} includes (number {positions}), so '
+                           f'it can\'t be its base. {fix}')
     # The base the branch is on, which the shelf follows: a sync moves the base before the branch is rebased.
     on = merge_base(base_commit, revision, workspace_dir)
     slots = [DROPPED if position in dropped else identity for position,

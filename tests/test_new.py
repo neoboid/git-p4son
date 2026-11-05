@@ -637,7 +637,8 @@ _STRAY_FILE = 'jj makes a stray file part of the working change, which the loop 
 TestNewPerCommitOnJj = on_jj(TestNewPerCommit, skip={
                              'test_dirty_workspace': _STRAY_FILE})
 TestNewOnJj = on_jj(TestNew)
-TestNewAliasOnJj = on_jj(TestNewAlias)
+TestNewAliasOnJj = on_jj(TestNewAlias, skip={
+    'test_a_base_no_branch_names_is_refused_before_creating': 'jj records a change without a bookmark by its ID'})
 TestNewOutOfDateOnJj = on_jj(TestNewOutOfDate)
 
 if __name__ == '__main__':

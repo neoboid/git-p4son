@@ -442,9 +442,10 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description, so it holds only the
   message
 - `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, for enumerating commits and finding
-  changed files: a branch or bookmark, or a commit exactly one points at. The alias records it by name, as a commit
-  would go stale after a sync and rebase, along with the commits since it the changelist includes, so `update`
-  knows where the next ones start. With `--no-alias` any commit will do
+  changed files: a branch or bookmark, or a commit exactly one points at, or with jj a change without a bookmark. The
+  alias records it by name, or a jj change by its change ID, as a commit would go stale after a sync and rebase, along
+  with the commits since it the changelist includes, so `update` knows where the next ones start. With `--no-alias`
+  any commit will do
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-edit`: Skip opening changed files for edit in Perforce
@@ -501,7 +502,10 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
   kept and updated as usual, and so is a Swarm `#review` keyword on a line of its own at the end of the description
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
 - `-b, --base-branch BASE_BRANCH`: Where the commits to fold in start, for the commit list and the files to open.
-  Defaults to after the last commit the changelist includes, when its alias records that, else to `HEAD~1`
+  Defaults to after the last commit the changelist includes, when its alias records that, else to `HEAD~1`. When the
+  base the alias records no longer resolves, as a deleted branch or an abandoned or divergent jj change, `update`
+  refuses without `-b`, and with it records the new base, as `new` does. That base has to sit below the changelist's
+  first commit
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
   touched at all
@@ -1084,7 +1088,8 @@ With the jj backend in a jj workspace:
 - The default message is the first line of the change's description. Use `jj describe`, `-m` or `-F`.
 - `-b/--base-branch` takes a jj revision that resolves to one change, such as a bookmark, change ID or commit ID.
   Where it has a default, it's the change's parent rather than git's `HEAD~1`. `new` and `review` record it as a
-  bookmark, so it has to name one, or resolve to a commit exactly one points at.
+  bookmark when it names one or resolves to a commit exactly one points at, and as its change ID when it has none, so
+  a local change kept under a stack, never submitted, can be the base. Several bookmarks at it is an error.
 - `new` and `update` use jj's snapshot of the working copy, check that it did not change while git-p4son took the
   lock, and refuse files jj left untracked. You do not need a separate committed change before opening files in
   Perforce. Before a Perforce revert overwrites a file, git-p4son saves the working file and puts it back

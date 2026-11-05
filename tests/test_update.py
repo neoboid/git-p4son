@@ -7,6 +7,7 @@ from unittest import mock
 from git_p4son.changelist_store import find_record, Record, save_changelist_alias
 from git_p4son.common import CommandError
 from git_p4son.git import author_dates
+from git_p4son.git_backend import GitBackend
 from git_p4son.new import new_command
 from git_p4son.update import _step, update_command
 from tests.helpers import (
@@ -512,6 +513,44 @@ class TestUpdateOutOfDateWithoutRecord(UpdateTestCase):
         out = self.update_fails('--shelve', message=OUT_OF_DATE)
         self.assertIn('a.txt (have #1, head #2)', out)
         self.assertEqual(self.p4.shelved, {})
+
+
+class TestUpdateLostBase(P4RepoTestCase):
+    """update of CL 101, whose alias records a base branch that was deleted after new."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('branch', 'base-b', 'main')
+        self.commit_feature()
+        self.run_command(
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'base-b'])
+        self.git('branch', '-D', 'base-b')
+
+    def test_update_refuses_and_names_the_fix(self):
+        self.command_fails(update_command, ['update', 'feat'],
+                           message=r'base-b.*git p4son update feat -b <base>')
+
+    def test_another_resolve_error_is_not_taken_for_a_lost_base(self):
+        resolve_base = GitBackend.resolve_base
+
+        def conflicted_at_the_recorded_base(backend, base):
+            # Such as jj's check for conflicts up to the tip, which resolve_base runs too.
+            if base == 'base-b':
+                raise CommandError('The selected jj changes have conflicts')
+            return resolve_base(backend, base)
+        with mock.patch.object(GitBackend, 'resolve_base', autospec=True, side_effect=conflicted_at_the_recorded_base):
+            for argv in ([], ['-b', 'main']):
+                with self.subTest(argv=argv):
+                    self.command_fails(
+                        update_command, ['update', 'feat', *argv], message='^The selected jj changes')
+        self.assertEqual(recorded('101', self.ws).base, 'base-b')
+
+    def test_update_with_b_records_the_new_base(self):
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
+        self.run_command(update_command, ['update', 'feat', '-b', 'main'])
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
 
 
 class TestUpdateIncludedGitRewrites(IncludedTestCase):

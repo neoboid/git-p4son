@@ -139,6 +139,10 @@ class CommandError(Exception):
         self.returncode = returncode
 
 
+class RevisionNotFoundError(CommandError):
+    """Raised when a revision names no commit, or several."""
+
+
 class RunError(CommandError):
     """Raised when a subprocess command fails."""
 

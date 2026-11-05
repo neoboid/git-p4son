@@ -45,8 +45,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
-  and what it appends. `catch_up_subject` says whether a base moved since the last shelve needs an empty catch-up
-  commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
+  and what it appends. A recorded base that no longer resolves (`RevisionNotFoundError`) is an error, unless `-b` is
+  given, which then becomes the recorded base. `catch_up_subject` says whether a base moved since the last shelve needs
+  an empty catch-up commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
 
 - **`review`** - Has no module: its parser runs `new_command` as `new --review --per-commit`.
 
@@ -162,12 +163,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
   `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
 
-- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. Its sync refuses a sync bookmark
-  at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and moves the
-  bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
-  <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back
-  changes are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and
-  clean check a step reads, and the working change's files back at the end, so jj sees no change.
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. `base_name` records a base without
+  a bookmark as `change_id(<ID>)` (`jj.changes_revset`), which resolves the change's current commit. Its sync refuses a
+  sync bookmark at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and
+  moves the bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
+  <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back changes
+  are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and clean check a
+  step reads, and the working change's files back at the end, so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
   `update_changelist`, `include_changes_in_changelist` (returns how many files it opened or moved),

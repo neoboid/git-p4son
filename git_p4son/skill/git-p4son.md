@@ -62,7 +62,9 @@ with these translations:
   stacked on top of it, up to the first bookmark below them. jj doesn't move bookmarks on `jj new`: after adding
   changes above a bookmarked change with a CL, suggest moving the bookmark to the tip (`jj bookmark move <name>
   --to @-`) so `update` finds the alias.
-- **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent.
+- **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent. A change without a
+  bookmark, such as a local-only change kept under the stack, is recorded by its change ID. If `update` says the
+  recorded base no longer resolves, `update -b <base>` records a new one.
 - **Branching off `main`** is `jj new main -m "..."` and `jj bookmark create <name>`. **Switching to a change**, as
   `git checkout feature-a` does in the stacks walkthrough, is `jj edit <bookmark>` to amend that change, or
   `jj new <bookmark>` to add a change on top.

@@ -18,7 +18,7 @@ from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
-    requires_jj, run_jj, start_patch, WorkspaceTestCase,
+    recorded, requires_jj, run_jj, start_patch, WorkspaceTestCase,
 )
 
 
@@ -122,13 +122,13 @@ class JjRepoTestCase(WorkspaceTestCase):
 class TestJjBackend(JjRepoTestCase):
     """JjBackend over the workspace, whose tip is the feature change with bookmark feat on main."""
 
-    def test_a_bookmark_names_itself_and_its_commit(self):
+    def test_a_bookmark_names_itself_and_its_commit_and_a_change_without_one_its_change_id(self):
         with self.operation() as workspace:
             backend = JjBackend(workspace)
             self.assertEqual(backend.base_name('main'), 'main')
             self.assertEqual(backend.base_name(self.commit_of('main')), 'main')
-            with self.assertRaisesRegex(CommandError, '@ names no bookmark'):
-                backend.base_name('@')
+            self.assertEqual(backend.base_name(
+                '@'), f'change_id({workspace.working.change_id})')
 
     def test_a_commit_s_identity_is_its_change_id(self):
         with self.operation() as workspace:
@@ -415,6 +415,15 @@ class JjP4RepoTestCase(JjTestCase, P4RepoTestCase):
         self.jj('status')
         return self.describe('@', 'commit_id')
 
+    def change(self, message, path, content, parent=None):
+        """Start a change on parent, or on the working change, that edits path; returns its change ID."""
+        self.jj('new', *([parent] if parent else []), '-m', message)
+        self.edit(path, content)
+        return self.describe('@', 'change_id')
+
+    def bookmark(self, name):
+        self.jj('bookmark', 'set', name, '-r', '@')
+
 
 class TestJjNew(JjP4RepoTestCase):
     def build_workspace(self):
@@ -533,15 +542,6 @@ class TestJjNew(JjP4RepoTestCase):
 class TestJjAliasInChain(JjP4RepoTestCase):
     """The branch keyword on a tip whose own change no alias records, but one further down the chain does."""
 
-    def change(self, message, path, content, parent=None):
-        """Start a change on parent, or on the working change, that edits path; returns its change ID."""
-        self.jj('new', *([parent] if parent else []), '-m', message)
-        self.edit(path, content)
-        return self.describe('@', 'change_id')
-
-    def bookmark(self, name):
-        self.jj('bookmark', 'set', name, '-r', '@')
-
     def test_an_alias_named_by_change_id_is_found_under_a_bookmark_added_later(self):
         widget = self.change('Add widget', 'a.txt', 'a2\n', parent='main')
         self.p4son('new', '-b', 'main')
@@ -644,6 +644,91 @@ class TestJjAliasInChain(JjP4RepoTestCase):
         self.jj('new')
         self.p4son_fails(
             'alias', 'show', message='No changelist alias found: merged')
+
+
+class TestJjChangeBase(JjP4RepoTestCase):
+    """-b naming a jj change without a bookmark: a local change kept under feat, never submitted."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.local = self.change(
+            'local: ignore tool output', 'local.txt', 'local\n', parent='main')
+        self.change('Change a', 'a.txt', 'a2\n')
+        self.bookmark('feat')
+        self.jj('new')
+
+    def base(self):
+        return recorded('101', self.ws).base
+
+    def test_new_records_a_change_without_a_bookmark_by_its_change_id(self):
+        self.p4son('new', '-b', self.local[:8])
+        self.assertEqual(self.base(), f'change_id({self.local})')
+        self.assertEqual(self.p4.pending['101'], [
+                         'Change a', '', 'Changes included:', '1. Change a'])
+        self.assertEqual(self.p4.opened, {'a.txt': ('101', 'edit')})
+
+    def test_update_finds_the_base_change_after_it_is_rewritten(self):
+        self.p4son('new', '-b', self.local[:8])
+        self.jj('describe', '-r', self.local, '-m',
+                'local: ignore more tool output')
+        self.change('Change b', 'b.txt', 'b2\n', parent='feat')
+        self.bookmark('feat')
+        self.jj('new')
+        self.p4son('update')
+        self.assertEqual(self.p4.pending['101'][-1], '2. Change b')
+        self.assertNotIn('local.txt', self.p4.opened)
+
+    def test_a_gone_base_change_refuses_update_and_names_the_fix(self):
+        self.p4son('new', '-b', self.local[:8])
+        self.jj('abandon', self.local)
+        self.p4son_fails(
+            'update', message=rf'change_id\({self.local}\).*git p4son update feat -b <base>')
+
+    def test_update_with_b_records_a_new_base_for_a_gone_one(self):
+        self.p4son('new', '-b', self.local[:8])
+        self.jj('abandon', self.local)
+        self.p4son('update', '-b', 'main')
+        self.assertEqual(self.base(), 'main')
+        self.assertEqual(self.p4.pending['101'][-1], '1. Change a')
+
+    def test_after_a_lost_base_b_at_the_cl_s_own_commit_refuses(self):
+        self.p4son('new', '-b', self.local[:8])
+        self.jj('abandon', self.local)
+        self.change('Change b', 'b.txt', 'b2\n', parent='feat')
+        self.bookmark('feat')
+        self.jj('new')
+        self.p4son_fails('update', '-b', 'feat-',
+                         message=r'includes \(number 1\).*below its first commit: git p4son update feat -b <base>')
+        self.assertEqual(self.base(), f'change_id({self.local})')
+
+    def test_review_records_a_change_base_for_every_step(self):
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+        self.change('Change b', 'b.txt', 'b2\n', parent='feat')
+        self.bookmark('feat')
+        self.jj('new')
+        self.p4son('review', '-m', 'Feature', '-b', self.local[:8])
+        self.assertEqual(self.base(), f'change_id({self.local})')
+        self.assertEqual(self.p4.pending['101'][2:5], [
+                         'Changes included:', '1. Change a', '2. Change b'])
+        self.assertNotIn('local.txt', self.p4.shelved['101'])
+        self.assertEqual(len(self.shelves()), 2)
+
+    def test_a_divergent_base_change_refuses_update(self):
+        self.p4son('new', '-b', self.local[:8])
+        # Diverging a change diverges its descendants too, the tip with them, so move the feature off it first.
+        self.jj('rebase', '-s', 'feat', '-d', 'main')
+        earlier = self.jj('op', 'log', '--no-graph', '-n', '1', '-T', 'id')
+        self.jj('describe', '-r', self.local, '-m', 'local, reworded')
+        self.jj('--at-op', earlier, 'describe', '-r',
+                self.local, '-m', 'local, reworded elsewhere')
+        # A plain jj command merges the two operations.
+        self.jj('status')
+        self.p4son_fails(
+            'update', message=r'which no longer resolves.*git p4son update feat -b <base>')
+
+    def test_a_revision_with_a_bookmark_still_records_the_bookmark(self):
+        self.p4son('new', '-b', 'main')
+        self.assertEqual(self.base(), 'main')
 
 
 class TestJjPerCommit(JjP4RepoTestCase):

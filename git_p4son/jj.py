@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from .common import CommandError, RunResult, normalize_workspace_path, run
+from .common import CommandError, RevisionNotFoundError, RunResult, normalize_workspace_path, run
 from .git import (
     EOL_FOR_AUTOCRLF, added_files, case_only, case_only_ignored, checkout_detached, is_ancestor,
     get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
@@ -253,7 +253,7 @@ def _resolve(directory: str, operation: str, revision: str) -> Revision:
     lines = _run(directory, 'log', '-r', revision, '--no-graph',
                  '-T', _REVISION_TEMPLATE, operation=operation).stdout
     if len(lines) != 1:
-        raise CommandError(
+        raise RevisionNotFoundError(
             f'jj revision "{revision}" names {len(lines)} changes. Name exactly one.')
     resolved = Revision.parse(lines[0])
     if resolved.conflict:
@@ -268,7 +268,7 @@ def _resolve(directory: str, operation: str, revision: str) -> Revision:
     return resolved
 
 
-def _present(change_ids: list[str]) -> str:
+def changes_revset(change_ids: list[str]) -> str:
     """A revset of the change_ids jj still has, with every revision of a divergent one, leaving out the rest."""
     # present() fails on a divergent change ID; change_id() selects all its revisions, and none for a gone one.
     return ' | '.join(f'change_id({change})' for change in change_ids)
@@ -370,7 +370,7 @@ class Workspace:
         """The change_ids jj still has."""
         if not change_ids:
             return set()
-        return set(self._changes(_present(change_ids)))
+        return set(self._changes(changes_revset(change_ids)))
 
     def nearest_change(self, change_ids: list[str]) -> str | None:
         """The one of change_ids nearest the tip in its chain, above the nearest bookmark below it and not empty; None
@@ -381,7 +381,7 @@ class Workspace:
         # The tip's own bookmark doesn't bound the search, as its parents start it.
         # A sync leaves submitted changes empty.
         nearest = self._changes(
-            f'heads(({_present(change_ids)}) & ::{tip} ~ ::(::{tip}- & bookmarks()) ~ empty())')
+            f'heads(({changes_revset(change_ids)}) & ::{tip} ~ ::(::{tip}- & bookmarks()) ~ empty())')
         # A divergent change's revisions can all be heads.
         return nearest[0] if len(set(nearest)) == 1 else None
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from .common import (
     CommandError,
+    RevisionNotFoundError,
     RunError,
     normalize_workspace_path,
     run,
@@ -387,7 +388,7 @@ def resolve_commit(revision: str, workspace_dir: str) -> str:
     result = run(['git', 'rev-parse', '--verify', '--quiet', f'{revision}^{{commit}}'],
                  cwd=workspace_dir, fail_on_returncode=False)
     if result.returncode != 0 or not result.stdout:
-        raise CommandError(f'"{revision}" is not a commit')
+        raise RevisionNotFoundError(f'"{revision}" is not a commit')
     return result.stdout[0].strip()
 
 

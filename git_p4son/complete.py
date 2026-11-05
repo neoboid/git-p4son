@@ -143,6 +143,13 @@ def _get_branch_candidates(prefix: str, workspace_dir: str | None,
     return [(keyword, f'Use current {branch} name')]
 
 
+def _branch_or_alias_candidates(prefix: str, workspace_dir: str | None, backend_choice: str | None,
+                                new_alias: bool) -> Candidates:
+    """The branch keyword and the existing aliases that match prefix."""
+    return (_get_branch_candidates(prefix, workspace_dir, backend_choice, new_alias)
+            + _filter(_get_alias_names(workspace_dir), prefix))
+
+
 def _complete_positional(command: str, subcommand: str | None, positional_count: int,
                          prefix: str, workspace_dir: str | None,
                          command_parser: argparse.ArgumentParser,
@@ -156,9 +163,8 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
                    and not isinstance(a, argparse._SubParsersAction)]
     if dest and positional_count < len(positionals) \
             and positionals[positional_count].dest == dest:
-        new_alias = bool(target.get_default('new_alias'))
-        return (_get_branch_candidates(prefix, workspace_dir, backend_choice, new_alias)
-                + _filter(_get_alias_names(workspace_dir), prefix))
+        return _branch_or_alias_candidates(prefix, workspace_dir, backend_choice,
+                                           bool(target.get_default('new_alias')))
 
     if command == 'sync':
         if positional_count == 0:
@@ -176,6 +182,12 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
         candidates = [(ca.dest, ca.help or '')
                       for ca in actions._choices_actions]
         return _filter(candidates, prefix)
+
+    if command == 'alias' and subcommand == 'rename':
+        # OLD, or NEW alone: an existing alias. NEW after OLD: the branch name, as no existing alias is free.
+        if positional_count == 0:
+            return _branch_or_alias_candidates(prefix, workspace_dir, backend_choice, new_alias=False)
+        return _get_branch_candidates(prefix, workspace_dir, backend_choice, new_alias=True)
 
     if command == 'sync-split-users' and subcommand == 'delete':
         return _filter(_get_split_user_names(workspace_dir), prefix)

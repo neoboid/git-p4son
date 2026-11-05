@@ -739,6 +739,36 @@ git p4son alias new 12345 myfeature
 git p4son alias new 67890 myfeature -f
 ```
 
+#### alias rename
+
+Rename an alias, keeping its changelist and everything it records for `update`:
+
+```sh
+git p4son alias rename [OLD] NEW [--force]
+```
+
+As with `git branch -m`, a single name is the new name for the current alias, the one the current branch names, or
+with jj the one that records the jj change. The `branch` keyword works for either name; as `NEW` it is the current
+branch or bookmark name, so the alias can follow a renamed branch.
+
+**Arguments:**
+- `OLD` (optional): The alias to rename. Defaults to the current alias
+- `NEW`: The new alias name
+
+**Options:**
+- `-f, --force`: Overwrite an existing alias of the new name
+
+**Examples:**
+```sh
+git p4son alias rename my-feature-v2              # the current alias, then: git branch -m my-feature-v2
+git p4son alias rename my-feature branch          # after git branch -m: follow the branch's new name
+git p4son alias rename my-feature my-feature-v2
+```
+
+With git, renaming the branch first means the branch no longer names the alias, so name both:
+`alias rename OLD branch`. With jj, `alias rename NEW` works before or after `jj bookmark rename`, as the alias
+records the jj change.
+
 #### alias delete
 
 Delete a changelist alias, or all of them:

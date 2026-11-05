@@ -286,14 +286,24 @@ def alias_for_change(change: str, workspace_dir: str) -> str | None:
                  if recorded == change), None)
 
 
-def load_changelist_alias(name: str, workspace_dir: str) -> str:
-    """Load a changelist number from a named alias; raise CommandError if there is none."""
+def _load_alias(name: str, workspace_dir: str) -> _Alias:
+    """Everything a named alias holds, from the new store before the old; raise CommandError if there is none."""
     path, old_path = _alias_paths(name, workspace_dir)
     if os.path.exists(path):
-        return _read_alias_file(path, name).changelist
+        return _read_alias_file(path, name)
     if os.path.exists(old_path):
-        return _read_old_alias(old_path, name)
+        return _Alias(_read_old_alias(old_path, name), None, None)
     raise _no_alias(name)
+
+
+def load_changelist_alias(name: str, workspace_dir: str) -> str:
+    """Load a changelist number from a named alias; raise CommandError if there is none."""
+    return _load_alias(name, workspace_dir).changelist
+
+
+def changelist_alias_exists(name: str, workspace_dir: str) -> bool:
+    """Whether an alias of that name is in either store; raise CommandError if the name is invalid."""
+    return any(os.path.exists(path) for path in _alias_paths(name, workspace_dir))
 
 
 def list_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
@@ -310,6 +320,27 @@ def delete_changelist_alias(name: str, workspace_dir: str) -> None:
     if os.path.exists(path):
         os.remove(path)
     _remove_old_alias(old_path, workspace_dir)
+
+
+def rename_changelist_alias(old: str, new: str, workspace_dir: str, force: bool) -> str:
+    """Move alias old, with all it records, to new, and return its changelist.
+
+    Raises CommandError if old doesn't exist, new is old, or new is invalid or, without force, taken."""
+    alias = _load_alias(old, workspace_dir)
+    if new == old:
+        raise CommandError(f'Alias "{old}" is already named {new}')
+    # A name differing only in case is the same file on a case-insensitive file system, in either store.
+    same_file = any(os.path.exists(old_path) and os.path.exists(new_path) and os.path.samefile(old_path, new_path)
+                    for old_path, new_path in zip(_alias_paths(old, workspace_dir), _alias_paths(new, workspace_dir)))
+    if same_file:
+        # Deleted before writing, as deleting after would delete what was written.
+        delete_changelist_alias(old, workspace_dir)
+        _write_alias(new, alias, workspace_dir)
+    else:
+        check_alias_usable(new, workspace_dir, force)
+        _write_alias(new, alias, workspace_dir)
+        delete_changelist_alias(old, workspace_dir)
+    return alias.changelist
 
 
 def migrate_changelist_aliases(workspace_dir: str) -> int:

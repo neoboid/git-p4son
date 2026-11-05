@@ -54,10 +54,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `--porcelain` sets the parser's `quiet`, as `alias show` does, so `run_command` runs it under `log.quiet` and only
   the list, printed directly, reaches stdout.
 
-- **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `delete`, `clean`), each an `alias_*_command` built on
-  `changelist_store.py`. `clean` deletes the aliases whose changelist `is_changelist_gone` finds submitted or
-  missing; it and `delete --all` go on past an alias that fails to delete, then raise `CommandError` with the
-  count. `clean --porcelain` sets `quiet`, as `list-changes --porcelain` does, and prints one line per alias directly.
+- **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `rename`, `delete`, `clean`), each an `alias_*_command`
+  built on `changelist_store.py`. `rename` takes one or two names, as `git branch -m` does, and resolves the `branch`
+  keyword for each itself: the current alias as the old name, the suggested one as the new. `clean` deletes the aliases
+  whose changelist `is_changelist_gone` finds submitted or missing; it and `delete --all` go on past an alias that fails
+  to delete, then raise `CommandError` with the count. `clean --porcelain` sets `quiet`, as `list-changes --porcelain`
+  does, and prints one line per alias directly.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
@@ -152,7 +154,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once
   the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the
   alias recording the change, else the suggested name, unless the command (`new_alias=True` on its parser) names a
-  new one. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
+  new one; `resolve_branch_keyword` does so under a heading, for `run_command` and `alias rename`.
+  `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No
   command branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the current branch,
@@ -178,13 +181,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   own the layout; `new` and `update` build descriptions through it.
 
 - **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
-  delete, name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
-  keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and the identities of the commits since
-  it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
-  may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
-  `alias_for_change` and `alias_changes`. An alias can record a review tool (`review_tool`) and, once the tool has run
-  for the CL, `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a whole `_Alias`, so
-  every write keeps them. The old
+  delete, rename (`rename_changelist_alias`, which moves everything an alias holds), name validation, the reserved
+  keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch keyword. An alias made by `new` holds a
+  `Record`: the base's name, its commit, and the identities of the commits since it the CL includes, and an inserted
+  catch-up commit until it is included (`find_record`, `update_record`). An alias may record a jj change (`change =
+  "..."`), at most one alias per change, as saving moves the record: `alias_for_change` and `alias_changes`. An alias
+  can record a review tool (`review_tool`) and, once the tool has run for the CL, `review_started` (`find_review`,
+  `mark_review_started`). `_write_alias` writes a whole `_Alias`, so every write keeps them. The old
   `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
   which `alias clean` runs first, moves the rest.
 

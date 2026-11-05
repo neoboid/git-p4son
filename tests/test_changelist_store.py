@@ -20,6 +20,7 @@ from git_p4son.changelist_store import (
     list_changelist_aliases,
     load_changelist_alias,
     migrate_changelist_aliases,
+    rename_changelist_alias,
     save_changelist_alias,
     update_record,
     validate_alias_name,
@@ -66,8 +67,8 @@ class TestAliasStoreValidatesNames(WorkspaceTestCase):
         self.assertTrue(os.path.exists(outside))
 
 
-class TestAliasStoreLocations(WorkspaceTestCase):
-    """The store in .git-p4son/aliases/, with the old .git-p4son/changelists/ still read."""
+class AliasStoreTestCase(WorkspaceTestCase):
+    """A workspace whose alias store files the tests write directly."""
 
     def path(self, *parts):
         return os.path.join(self.ws, CONFIG_DIR, *parts)
@@ -81,6 +82,10 @@ class TestAliasStoreLocations(WorkspaceTestCase):
         os.makedirs(self.path('aliases'), exist_ok=True)
         with open(self.path('aliases', f'{name}.toml'), 'w') as f:
             f.write(content)
+
+
+class TestAliasStoreLocations(AliasStoreTestCase):
+    """The store in .git-p4son/aliases/, with the old .git-p4son/changelists/ still read."""
 
     def test_save_writes_a_toml_file(self):
         save_changelist_alias('feature', '123456', self.ws, force=False)
@@ -309,6 +314,72 @@ class TestReview(WorkspaceTestCase):
                               force=False, review_tool='my-tool')
         self.assertEqual(find_review('101', self.ws),
                          Review('b', 'my-tool', False))
+
+
+class TestRenameAlias(AliasStoreTestCase):
+    """rename_changelist_alias, which moves everything an alias holds to a new name."""
+
+    def test_moves_the_changelist_change_record_and_review(self):
+        record = Record('main', 'abc', ['1'])
+        save_changelist_alias('feat', '101', self.ws, force=False, change='zzzz', record=record,
+                              review_tool='my-tool')
+        mark_review_started('feat', self.ws)
+        self.assertEqual(rename_changelist_alias(
+            'feat', 'other', self.ws, force=False), '101')
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '101')])
+        self.assertEqual(find_record('101', self.ws), ('other', record))
+        self.assertEqual(alias_changes(self.ws), {'other': 'zzzz'})
+        self.assertEqual(find_review('101', self.ws),
+                         Review('other', 'my-tool', True))
+
+    def test_an_alias_in_the_old_store_moves_to_the_new_one(self):
+        self.write_old('feat', '100\n')
+        rename_changelist_alias('feat', 'other', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '100')])
+        self.assertFalse(os.path.exists(self.path('changelists')))
+
+    def test_a_missing_alias_fails(self):
+        with self.assertRaisesRegex(CommandError, 'No changelist alias found: feat'):
+            rename_changelist_alias('feat', 'other', self.ws, force=False)
+
+    def test_an_existing_new_name_needs_force(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        save_changelist_alias('other', '200', self.ws, force=False)
+        with self.assertRaisesRegex(CommandError, 'Alias "other" already exists'):
+            rename_changelist_alias('feat', 'other', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [
+                         ('feat', '101'), ('other', '200')])
+        rename_changelist_alias('feat', 'other', self.ws, force=True)
+        self.assertEqual(list_changelist_aliases(self.ws), [('other', '101')])
+
+    def test_the_same_name_fails(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        with self.assertRaisesRegex(CommandError, 'Alias "feat" is already named feat'):
+            rename_changelist_alias('feat', 'feat', self.ws, force=True)
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
+
+    def test_a_new_name_differing_only_in_case_keeps_the_alias(self):
+        # On a case-insensitive file system both names are the same file.
+        save_changelist_alias('Feat', '101', self.ws, force=False)
+        rename_changelist_alias('Feat', 'feat', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
+
+    def test_an_old_store_alias_renamed_only_in_case_moves_to_the_new_store(self):
+        self.write_old('feat', '100\n')
+        rename_changelist_alias('feat', 'Feat', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [('Feat', '100')])
+        self.assertFalse(os.path.exists(self.path('changelists')))
+
+    def test_a_failed_write_keeps_the_old_alias(self):
+        self.write_old('feat', '12a\n')
+        with self.assertRaisesRegex(CommandError, 'Invalid changelist number: 12a'):
+            rename_changelist_alias('feat', 'other', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '12a')])
+
+    def test_an_invalid_new_name_fails(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        with self.assertRaisesRegex(CommandError, 'reserved keyword'):
+            rename_changelist_alias('feat', 'head', self.ws, force=False)
 
 
 class TestBranchToAlias(unittest.TestCase):

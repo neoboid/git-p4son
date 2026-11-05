@@ -10,6 +10,7 @@ from .changelist_store import alias_for_change
 from .config import ConfigError, get_setting
 from .git_backend import GitBackend
 from .jj_backend import JjBackend
+from .log import log
 from .words import Words
 
 BACKENDS = ('git', 'jj')
@@ -127,6 +128,15 @@ def alias_for_branch(backend: Backend, workspace_dir: str, new_alias: bool) -> s
         if found is not None:
             return found
     return backend.suggested_alias()
+
+
+def resolve_branch_keyword(backend: Backend, workspace_dir: str, new_alias: bool) -> str:
+    """alias_for_branch under a heading of its own, which shows what the branch keyword resolved to."""
+    words = backend.words
+    log.heading(f'Resolving alias from current {words.tool} {words.branch}')
+    resolved = alias_for_branch(backend, workspace_dir, new_alias)
+    log.success(f'branch -> {resolved}')
+    return resolved
 
 
 @contextlib.contextmanager

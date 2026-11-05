@@ -267,11 +267,22 @@ class TestComplete(unittest.TestCase):
         self.assertIn('new', names)
         self.assertIn('delete', names)
         self.assertIn('clean', names)
+        self.assertIn('rename', names)
 
     def test_alias_show_completes_aliases(self, _ws, _aliases):
         result = _complete(self.parser, ['alias', 'show', ''],
                            workspace_dir='/ws')
         self.assertIn('myalias', self._names(result))
+
+    def test_alias_rename_completes_aliases_as_the_first_name(self, _ws, _aliases):
+        result = _complete(self.parser, ['alias', 'rename', ''],
+                           workspace_dir='/ws')
+        self.assertIn('myalias', self._names(result))
+
+    def test_alias_rename_does_not_offer_existing_aliases_as_the_new_name(self, _ws, _aliases):
+        result = _complete(self.parser, ['alias', 'rename', 'myalias', ''],
+                           workspace_dir='/ws')
+        self.assertNotIn('myalias', self._names(result))
 
     def test_writable_actions(self, _ws, _aliases):
         result = _complete(self.parser, ['writable', ''], workspace_dir='/ws')

@@ -701,7 +701,7 @@ class TestGetOpenedFiles(unittest.TestCase):
         mock_run.assert_called_once()
         self.assertEqual(mock_run.call_args.args[0],
                          ['p4', '-L', 'en', '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
-                          '-T', 'path,clientFile,action,change'])
+                          '-T', 'path,clientFile,depotFile,action,change,movedFile'])
         self.assertEqual(mock_run.call_args.kwargs['input'],
                          'a.txt\nsub/b.txt\nc.txt')
 

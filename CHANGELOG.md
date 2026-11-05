@@ -10,6 +10,8 @@
   bookmark below them
 - With jj, `-b` takes a change without a bookmark, which the alias records by its change ID
 - `update -b` records a new base when the one the alias records no longer resolves
+- `new` and `update` open a file git sees as renamed with `p4 move`, keeping its Perforce history, instead of a delete
+  and an add. A changelist made by an earlier version turns its delete and add into a move on its next update
 
 ## 0.8.0
 

@@ -344,8 +344,8 @@ class TestOpenWarnings(unittest.TestCase):
     def _run(self, adds, opened_after, output):
         changes = LocalChanges()
         changes.adds = adds
-        with mock.patch('git_p4son.lib.get_opened_files',
-                        side_effect=[{}, opened_after]) as mock_opened, \
+        with mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {})), \
+                mock.patch('git_p4son.lib.get_opened_files', return_value=opened_after) as mock_opened, \
                 mock.patch('git_p4son.perforce.run',
                            return_value=make_run_result(
                                returncode=1, stdout=output)), \
@@ -375,11 +375,11 @@ class TestOpenWarnings(unittest.TestCase):
             ['new.txt'], {'new.txt': ('100', 'add')},
             ['//depot/new.txt#1 - opened for add'])
         self.assertNotIn('[warn]', out)
-        self.assertEqual(mock_opened.call_args_list[1].args,
+        self.assertEqual(mock_opened.call_args_list[0].args,
                          (['new.txt'], '/ws'))
 
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
-    @mock.patch('git_p4son.lib.get_opened_files', return_value={})
+    @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {}))
     def test_dry_run_does_not_ask_again(self, mock_opened, _run):
         changes = LocalChanges()
         changes.adds = ['new.txt']
@@ -391,7 +391,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
 
     def setUp(self):
         self.mocks = {}
-        for target, value in (('get_opened_files', {}),
+        for target, value in (('get_opened_files_and_moves', ({}, {})),
                               ('_warn_unopened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
@@ -505,13 +505,27 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.moves = [('old.txt', 'new.txt')]
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new.txt'),
-            (['p4', '-L', 'en', '-x', '-', 'delete', '-c', '100'], 'old.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'old.txt'),
+            (['p4', '-L', 'en', '-b', '2', '-x', '-', 'move', '-c', '100', '-k'], 'old.txt\nnew.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
-                return_value=mock.Mock(side_effect=[('200', 'delete'), ('200', 'add')]))
+                return_value=mock.Mock(return_value=None))
     @mock.patch('git_p4son.perforce.run')
-    def test_reopens_moved_files_in_different_changelist(self, mock_run, mock_check):
+    def test_a_rename_of_only_the_case_is_an_edit(self, mock_run, mock_check):
+        # The same file on a case-insensitive server, which p4 can't move onto.
+        mock_run.return_value = make_run_result()
+        changes = LocalChanges()
+        changes.moves = [('m.txt', 'M.txt')]
+        include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
+        self.assertEqual(_commands(mock_run), [
+            (['p4', '-L', 'en', '-x', '-', 'edit', '-c', '100'], 'm.txt')])
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_reopens_moved_files_in_different_changelist(self, mock_run):
+        self.mocks['get_opened_files_and_moves'].return_value = (
+            {'old.txt': ('200', 'move/delete'),
+             'new.txt': ('200', 'move/add')},
+            {'old.txt': 'new.txt', 'new.txt': 'old.txt'})
         mock_run.return_value = make_run_result()
         changes = LocalChanges()
         changes.moves = [('old.txt', 'new.txt')]
@@ -535,7 +549,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
 
 class TestOneOpenedQuery(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
-    @mock.patch('git_p4son.lib.get_opened_files', return_value={})
+    @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {}))
     def test_every_path_in_one_query(self, mock_opened, _run):
         changes = LocalChanges()
         changes.adds = ['new.txt']
@@ -543,9 +557,8 @@ class TestOneOpenedQuery(unittest.TestCase):
         changes.dels = ['gone.txt']
         changes.moves = [('old.txt', 'renamed.txt')]
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
-        self.assertEqual(
-            mock_opened.call_args_list[0].args,
-            (['new.txt', 'mod.txt', 'gone.txt', 'old.txt', 'renamed.txt'], '/ws'))
+        mock_opened.assert_called_once_with(
+            ['new.txt', 'mod.txt', 'gone.txt', 'old.txt', 'renamed.txt'], '/ws')
 
 
 class TestActionMismatch(unittest.TestCase):
@@ -553,7 +566,7 @@ class TestActionMismatch(unittest.TestCase):
 
     def setUp(self):
         self.mocks = {}
-        for target, value in (('get_opened_files', {}),
+        for target, value in (('get_opened_files_and_moves', ({}, {})),
                               ('_warn_unopened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
@@ -646,9 +659,9 @@ class TestActionMismatch(unittest.TestCase):
 class TestBatchedActions(unittest.TestCase):
     @mock.patch('git_p4son.lib._warn_unopened')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
-    @mock.patch('git_p4son.lib.get_opened_files', return_value={
+    @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({
         'a.txt': ('100', 'delete'), 'b.txt': ('200', 'delete'),
-        'c.txt': ('200', 'edit'), 'd.txt': ('300', 'edit')})
+        'c.txt': ('200', 'edit'), 'd.txt': ('300', 'edit')}, {}))
     def test_reverts_and_reopens_in_one_call_each(
             self, _opened, mock_run, _warn):
         changes = LocalChanges()
@@ -664,8 +677,8 @@ class TestBatchedActions(unittest.TestCase):
                       out.getvalue())
 
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
-    @mock.patch('git_p4son.lib.get_opened_files',
-                return_value={'a.txt': ('200', 'delete')})
+    @mock.patch('git_p4son.lib.get_opened_files_and_moves',
+                return_value=({'a.txt': ('200', 'delete')}, {}))
     def test_dry_run_reaches_every_batch(self, _opened, mock_run):
         changes = LocalChanges()
         changes.mods = ['a.txt']
@@ -681,8 +694,8 @@ class TestKeepWorkingFiles(WorkspaceTestCase):
         super().setUp()
         self.write_file('a.txt', 'working')
         start_patch(self, 'git_p4son.lib._warn_unopened')
-        start_patch(self, 'git_p4son.lib.get_opened_files',
-                    return_value={'a.txt': ('100', 'delete')})
+        start_patch(self, 'git_p4son.lib.get_opened_files_and_moves',
+                    return_value=({'a.txt': ('100', 'delete')}, {}))
         start_patch(self, 'git_p4son.perforce.run', side_effect=self._p4)
 
     def _p4(self, command, dry_run=False, **kwargs):
@@ -803,6 +816,12 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self.assertEqual(self._unchanged_candidates(), [])
         self.assertEqual(self._reverted(), [])
 
+    def test_a_move_whose_new_path_git_no_longer_has_is_reverted(self):
+        self._setup([('old.txt', 'move/delete'), ('new.txt',
+                    'move/add')], ['old.txt'], ['old.txt'])
+        revert_unchanged_files('100', self.ws, dry_run=False)
+        self.assertEqual(self._reverted(), ['new.txt'])
+
     def test_counts_reverted_files(self):
         self._setup([('a.txt', 'edit'), ('b.txt', 'edit'),
                      ('c.txt', 'delete')],
@@ -820,7 +839,7 @@ class TestRevertUnchangedFiles(WorkspaceTestCase):
         self.mocks['revert_unchanged'].assert_called_once_with(
             ['a.txt'], '100', self.ws, True)
         self.mocks['revert'].assert_called_once_with(
-            ['revert', '-k'], ['c.txt'], 'Reverting deletes no longer in the change', self.ws, True)
+            ['revert', '-k'], ['c.txt'], 'Reverting deletes and moves no longer in the change', self.ws, True)
 
     def test_dry_run_placeholder_changelist_queries_nothing(self):
         revert_unchanged_files(DRY_RUN_CHANGELIST, self.ws, dry_run=True)

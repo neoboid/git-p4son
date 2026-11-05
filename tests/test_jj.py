@@ -1010,6 +1010,12 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertIn('~ b.txt', files)
         self.assertIn('+ new.txt', files)
 
+    def test_the_refusal_lists_a_rename_as_a_move(self):
+        self.move('b.txt', 'moved/b.txt')
+        out = self.assert_sync_refused('jj describe')
+        self.assertIn('> b.txt -> moved/b.txt',
+                      out[out.index('# Checking sync bookmark main'):])
+
     def test_sync_refuses_when_the_bookmark_points_at_an_empty_working_change(self):
         self.assert_sync_refused(
             'Move it back first: jj bookmark set main -r @- --allow-backwards')

@@ -573,7 +573,15 @@ resumes after the last commit that worked. With a record, running the same comma
 
 ### Keeping the changelist in sync with git
 
-`new` and `update` open every file changed since the base branch in the changelist. A file can later stop being
+`new` and `update` open every file changed since the base branch in the changelist. A file git sees as renamed is
+opened as a `p4 move` from its old path to its new one, carrying any edit along, so Perforce keeps its history and the
+review shows the move with only the lines that changed. git finds a rename as `git diff -M` does, by at least half
+the content matching, whatever `diff.renames` says. A file renamed again later moves on from where it started, and an
+existing move stays opened through later edits. A file added earlier in the same change is renamed as an add, as it
+isn't in the depot yet, and a rename that only changes the case of the name is an edit, as a case-insensitive server
+sees one file.
+
+A file can later stop being
 part of the change, for example when a later commit undoes an edit, or a file is added in one commit and deleted
 in the next. Such files would otherwise stay opened as no-ops, so after opening files both commands revert them:
 
@@ -582,11 +590,12 @@ in the next. Such files would otherwise stay opened as no-ops, so after opening 
 - Files opened for add that are missing from disk are reverted.
 - Files opened for delete that git still has (deleted in one commit, restored in a later one) are reverted, keeping
   git's file.
+- Moves whose new path git no longer has, as the rename was undone, are reverted, which reverts both ends.
 
 Only files git-p4son has authority over are touched: files tracked by git, and files opened for add that are
 missing from disk. Anything else in the changelist, such as binaries that only exist in Perforce and were opened
-by hand, is left alone even when unchanged. Files opened with other actions (`move/add`, `integrate`, ...) are
-also left alone. This step is skipped with `--no-edit`.
+by hand, is left alone even when unchanged. Files opened with other actions (`integrate`, `branch`, ...) are also
+left alone. This step is skipped with `--no-edit`.
 
 Shelving (`--shelve`, `--review`) replaces the whole shelf with the changelist's opened files using
 `p4 shelve -r -a leaveunchanged`, so the shelf never holds stale files, and unchanged files that are still opened

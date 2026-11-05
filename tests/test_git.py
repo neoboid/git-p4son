@@ -923,7 +923,7 @@ class TestGetLocalChanges(unittest.TestCase):
         self.assertEqual(changes.dels, ['deleted.txt'])
         self.assertEqual(changes.moves, [('old_name.txt', 'new_name.txt')])
         self.assertEqual(mock_run.call_args.args[0],
-                         ['git', 'diff', '--name-status', '-z', 'main...HEAD'])
+                         ['git', 'diff', '--name-status', '-M', '-z', 'main...HEAD'])
 
     @mock.patch('git_p4son.git.run')
     def test_typechange_treated_as_modify(self, mock_run):

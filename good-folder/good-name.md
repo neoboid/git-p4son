@@ -1,3 +1,6 @@
-# Hello, I am bad
-This file is intentionally left in a folder where it does not belong
-, and its very poorly named.
+# Hello, I am now good
+The history of this file is dark, it used to live somewhere it did
+not belong, and had a horrible name.
+But now, the file has moved, and it also known by a new shiny name.
+
+The sun is shining today.

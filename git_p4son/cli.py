@@ -203,9 +203,15 @@ Examples:
              'changelist affecting the workspace'
     )
     sync_parser.add_argument(
+        '--allow-backwards',
+        action='store_true',
+        help='Allow syncing to changelists older than the last synced one'
+    )
+    # Deprecated in favour of --allow-backwards
+    sync_parser.add_argument(
         '-f', '--force',
         action='store_true',
-        help='Allow syncing to changelists older than the current one'
+        help=argparse.SUPPRESS
     )
     _add_dry_run(
         sync_parser, 'Print the resolved sync sequence without syncing')

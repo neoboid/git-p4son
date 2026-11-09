@@ -261,17 +261,26 @@ class TestSync(SyncTestCase):
         self.assertEqual(self.p4.synced(), [])
         self.assertEqual(read_log(), [])
 
-    def test_older_changelist_needs_force(self):
+    def test_older_changelist_needs_allow_backwards(self):
         self.p4.submit(50, {'a.txt': 'old\n'})
-        self.sync_fails('50', message='without --force')
-        self.sync('--force', '50')
+        self.sync_fails('50', message='without --allow-backwards')
+        out = self.sync('--allow-backwards', '50')
+        self.assertIn(
+            '[warn] Syncing to older CL 50 (currently at CL 100)\n', out)
         self.assertEqual(self.synced_commits(), [50])
         self.assertEqual(self.read('a.txt'), 'old\n')
 
-    def test_force_sequence_may_start_before_the_last_sync(self):
+    def test_deprecated_force_allows_backwards_with_a_warning(self):
+        self.p4.submit(50, {'a.txt': 'old\n'})
+        out = self.sync('-n', '-f', '50')
+        self.assertIn(
+            '--force is deprecated, use --allow-backwards instead', out)
+        self.assertIn('Syncing to older CL 50', out)
+
+    def test_sequence_may_start_before_the_last_sync(self):
         self.p4.submit(50, {'a.txt': 'old\n'})
         self.p4.submit(101, {'a.txt': 'a2\n'})
-        self.sync('--force', '50', '101')
+        self.sync('--allow-backwards', '50', '101')
         self.assertEqual(self.synced_commits(), [50, 101])
 
     def test_invalid_arguments_fail_before_any_work(self):
@@ -281,7 +290,7 @@ class TestSync(SyncTestCase):
                 (['102', '101'], 'strictly increasing'),
                 (['head', '101'], 'must come last'),
                 (['last-synced', '101'], 'cannot be combined'),
-                (['50', '101'], 'without --force'),
+                (['50', '101'], 'without --allow-backwards'),
                 (['12a'], 'Invalid changelist number')):
             with self.subTest(argv=argv):
                 self.sync_fails(*argv, message=message)
@@ -559,7 +568,7 @@ class TestSyncDryRun(SyncTestCase):
         self.assertIn('100 (last synced)', out)
 
     def test_invalid_arguments_still_fail(self):
-        self.sync_fails('-n', '50', message='without --force')
+        self.sync_fails('-n', '50', message='without --allow-backwards')
 
 
 class TestSyncSplitting(SyncTestCase):

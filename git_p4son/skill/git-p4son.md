@@ -154,7 +154,7 @@ git rebase main             # then bring the current branch up to date
 `sync` commits onto the sync branch, `[sync] branch` in `.git-p4son/config.toml` (usually `main`), and returns to
 the branch it started from, unless it merged local changes back: then it stays on the sync branch with them.
 
-- `sync 12345` syncs to a specific CL. Syncing backwards needs `--force`; only do that when the user asks.
+- `sync 12345` syncs to a specific CL. Syncing backwards needs `--allow-backwards`; only do that when the user asks.
 - Changelists submitted by the split users each get a sync commit of their own, so they stand apart on `main`
   (`git p4son sync-split-users` lists them). When the user asks to split out someone else's changelists too, pass
   `-u <p4 user>` for that sync, and preview the resulting sync sequence with `--dry-run`. Add them for good with

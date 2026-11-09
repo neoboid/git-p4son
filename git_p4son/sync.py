@@ -234,7 +234,7 @@ def _latest_target(depot_root: str, workspace_dir: str) -> tuple[int, str]:
 
 def _resolve_sync_targets(
         raw: list[str], last_synced: int | None, depot_root: str,
-        workspace_dir: str, force: bool) -> list[tuple[int, str]]:
+        workspace_dir: str, allow_backwards: bool) -> list[tuple[int, str]]:
     """Resolve the ordered (changelist, label) targets a sync will visit.
 
     Returns [] when already at the only target; raises CommandError for invalid arguments.
@@ -261,13 +261,13 @@ def _resolve_sync_targets(
                                f'got {prev} then {curr}')
 
     if last_synced and numbers[0] < last_synced:
-        if not force:
+        if not allow_backwards:
             raise CommandError(
                 f'Cannot sync to CL {numbers[0]} '
-                f'(currently at CL {last_synced}) without --force')
+                f'(currently at CL {last_synced}) without --allow-backwards')
         log.warning(
             f'Syncing to older CL {numbers[0]} '
-            f'(currently at CL {last_synced}) with --force')
+            f'(currently at CL {last_synced})')
 
     if last_synced in numbers:
         log.info(f'Skipping CL {last_synced} (already synced)')
@@ -325,7 +325,7 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
         targets = []
     else:
         targets = _resolve_sync_targets(
-            args.changelist, last_synced, depot_root, workspace_dir, args.force)
+            args.changelist, last_synced, depot_root, workspace_dir, args.allow_backwards)
         if not targets:
             log.heading('Checking sync targets')
             log.success(f'Already at CL {last_synced}, nothing to sync')
@@ -381,6 +381,9 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend:
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
+    if args.force:
+        log.warning('--force is deprecated, use --allow-backwards instead')
+        args.allow_backwards = True
     backend = args.backend
     sync_revision = backend.prepare_sync(args.branch)
     plan = _plan_sync(args, sync_revision)

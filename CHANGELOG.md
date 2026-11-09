@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `writable apply`, `enable` and `disable` say whether files were made writable or read-only
+- `sync --force` is renamed to `sync --allow-backwards`. `-f` and `--force` still work for now, with a warning
 
 ## 0.9.0
 

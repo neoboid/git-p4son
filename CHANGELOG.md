@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `writable apply`, `enable` and `disable` say whether files were made writable or read-only
+
 ## 0.9.0
 
 - Renamed files open as `p4 move`, keeping their Perforce history; existing changelists switch on their next update

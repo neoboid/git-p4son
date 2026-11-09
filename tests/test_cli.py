@@ -69,20 +69,25 @@ class TestCreateParser(unittest.TestCase):
     def test_sync_command_no_changelist(self):
         args = self.parser.parse_args(['sync'])
         self.assertEqual(args.changelist, [])
-        self.assertFalse(args.force)
+        self.assertFalse(args.allow_backwards)
 
     def test_sync_command_multiple_changelists(self):
         args = self.parser.parse_args(['sync', '123', '156', '178'])
         self.assertEqual(args.changelist, ['123', '156', '178'])
 
-    def test_sync_command_with_force(self):
-        args = self.parser.parse_args(['sync', '12345', '--force'])
+    def test_sync_command_allow_backwards(self):
+        args = self.parser.parse_args(['sync', '12345', '--allow-backwards'])
         self.assertEqual(args.changelist, ['12345'])
-        self.assertTrue(args.force)
+        self.assertTrue(args.allow_backwards)
 
-    def test_sync_command_short_force(self):
-        args = self.parser.parse_args(['sync', '100', '-f'])
-        self.assertTrue(args.force)
+    def test_sync_force_hidden_from_help(self):
+        for flag in ('--force', '-f'):
+            self.assertTrue(self.parser.parse_args(
+                ['sync', '100', flag]).force)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(['sync', '--help'])
+        self.assertNotIn('--force', out.getvalue())
 
     def test_sync_command_split_options(self):
         args = self.parser.parse_args(['sync'])

@@ -203,8 +203,7 @@ class TestComplete(unittest.TestCase):
     def test_sync_flags(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', '-'], workspace_dir='/ws')
         names = self._names(result)
-        self.assertIn('-f', names)
-        self.assertIn('--force', names)
+        self.assertIn('--allow-backwards', names)
         self.assertIn('-n', names)
         self.assertIn('--dry-run', names)
         self.assertIn('--split-user', names)

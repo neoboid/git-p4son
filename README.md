@@ -245,8 +245,8 @@ Running `init` again asks neither once they are done.
 Sync the workspace from Perforce and commit what changed onto the sync branch, `main` by default:
 
 ```sh
-git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--force] [--dry-run] [--split-user NAME ...]
-               [--no-split] [--ignore-blocking-processes]
+git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--allow-backwards] [--dry-run]
+               [--split-user NAME ...] [--no-split] [--ignore-blocking-processes]
 ```
 
 **Arguments:**
@@ -260,7 +260,8 @@ git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--force] [--dry
   to each sync commit
 - `--no-rebase`: With the jj backend, leave the changes you started from where they are, instead of rebasing them
   onto the [sync bookmark](#syncing-a-bookmark)
-- `-f, --force`: Allow syncing to changelists older than the current one
+- `--allow-backwards`: Allow syncing to changelists older than the last synced one. `-f, --force` still works for
+  now, with a warning
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
   real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
   `Dry run, nothing changed`
@@ -278,7 +279,7 @@ git p4son sync 12345
 git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
 git p4son sync 123 156 head # sync 123, 156, then the latest changelist
 git p4son sync last-synced
-git p4son sync 12345 --force
+git p4son sync 12345 --allow-backwards
 git p4son sync --dry-run    # show the changelists a sync to latest would visit
 git p4son sync -u alice     # also split out alice's changelists
 git p4son sync --no-split   # sync without splitting out the configured split users
@@ -342,7 +343,7 @@ Changelists given on the command line are all still visited, with the split poin
 visits `101 102 103 104 105 106`.
 
 Splitting only moves forward from a previous sync. The first sync, `last-synced`, and syncing to an older changelist
-with `--force` are never split. Without any split users, `sync` makes no extra Perforce queries.
+with `--allow-backwards` are never split. Without any split users, `sync` makes no extra Perforce queries.
 
 Finding the split users' changelists takes one Perforce query per split user and one more, none of which scans every
 file in the range, so a large range stays within the server's `maxscanrows`. They run after the checks and the

@@ -78,17 +78,18 @@ def _tracked_paths(workspace_dir: str, revision: str,
             for rel in list_tracked_files(workspace_dir, revision) if not skip(rel)]
 
 
-def _change_modes(action: Callable[[list[str]], int], paths: list[str]) -> None:
+def _change_modes(paths: list[str], writable: bool) -> None:
     start = time.monotonic()
-    changed = action(paths)
+    changed = _set_user_write(paths, writable)
     log.elapsed(timedelta(seconds=time.monotonic() - start))
-    log.success(f'{changed} of {plural(len(paths), "tracked file")} changed')
+    outcome = 'made writable' if writable else 'made read-only'
+    log.success(f'{changed} of {plural(len(paths), "tracked file")} {outcome}')
 
 
 def _apply_on(workspace_dir: str, revision: str) -> None:
     """Make every tracked file writable."""
     log.heading('Making git-tracked files writable')
-    _change_modes(make_writable, _tracked_paths(workspace_dir, revision))
+    _change_modes(_tracked_paths(workspace_dir, revision), True)
 
 
 def _apply_off(workspace_dir: str, revision: str) -> None:
@@ -111,8 +112,8 @@ def _apply_off(workspace_dir: str, revision: str) -> None:
     log.success(f'{plural(len(opened), "file")} opened')
 
     log.heading('Making git-tracked files read-only')
-    _change_modes(make_read_only,
-                  _tracked_paths(workspace_dir, revision, opened_lookup(opened)))
+    paths = _tracked_paths(workspace_dir, revision, opened_lookup(opened))
+    _change_modes(paths, False)
 
 
 def writable_command(args: argparse.Namespace) -> int:

@@ -197,7 +197,10 @@ class TestWritableCommand(GitRepoTestCase):
     def test_apply_on_makes_tracked_files_writable(self):
         set_writable_mode(self.ws, True)
         self._set_all(stat.S_IRUSR)
-        self.assertEqual(self._run('apply'), 0)
+        with captured_output() as out:
+            self.assertEqual(self._run('apply'), 0)
+        self.assertIn(
+            '[ok] 2 of 3 tracked files made writable\n', out.getvalue())
         self.assertTrue(self._writable(self.tracked))
         self.assertTrue(self._writable(self.opened))
         self.assertFalse(self._writable(self.ignored))
@@ -212,7 +215,10 @@ class TestWritableCommand(GitRepoTestCase):
         mock_opened.return_value = [('src/open.cpp', 'modify')]
         self._set_all(stat.S_IRUSR | stat.S_IWUSR)
 
-        self.assertEqual(self._run('apply'), 0)
+        with captured_output() as out:
+            self.assertEqual(self._run('apply'), 0)
+        self.assertIn(
+            '[ok] 2 of 2 tracked files made read-only\n', out.getvalue())
         self.assertFalse(self._writable(self.tracked))
         self.assertTrue(self._writable(self.opened))
         self.assertTrue(self._writable(self.ignored))

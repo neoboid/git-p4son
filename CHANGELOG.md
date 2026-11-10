@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.2
+
 - With jj on Windows, commands no longer refuse a same-size edit as changed after jj's snapshot, again on every retry
 
 ## 0.9.1

@@ -1031,6 +1031,19 @@ class TestJjSync(JjP4RepoTestCase):
         self.assertEqual(
             (self.read('b.txt'), self.read('c.txt')), ('b2\n', 'c1\n'))
 
+    def test_a_same_size_edit_in_the_second_git_recorded_the_file_is_synced(self):
+        # jj keeps git's stat for b1 in the index it writes, and Git for Windows compares mtimes in whole seconds.
+        path = os.path.join(self.ws, 'b.txt')
+        second = (os.stat(path).st_mtime_ns // 10**9 - 100) * 10**9
+        os.utime(path, ns=(second, second + 10**8))
+        self.git('update-index', '-q', '--refresh')
+        self.edit('b.txt', 'b2\n')
+        os.utime(path, ns=(second, second + 5 * 10**8))
+        self.p4.submit(101, {'c.txt': 'c1\n'})
+        self.p4son('sync')
+        self.assertEqual(
+            (self.read('b.txt'), self.read('c.txt')), ('b2\n', 'c1\n'))
+
 
 class TestJjSyncFromAnywhere(JjP4RepoTestCase):
     """sync from a stack: Change a with bookmark feat on main, and an empty working change above it."""

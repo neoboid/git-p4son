@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- With jj on Windows, `sync` no longer copies a same-size edit into a new change on the sync bookmark and moves there,
+  away from the working change that already holds it
+
 ## 0.9.2
 
 - With jj on Windows, commands no longer refuse a same-size edit as changed after jj's snapshot, again on every retry

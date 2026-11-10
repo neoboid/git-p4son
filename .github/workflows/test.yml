@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # publish.yml runs these jobs before publishing, so a release tests what pull requests test.
+  # publish.yml runs these jobs before publishing a commit that main's run has not tested, as a manual run can.
   workflow_call:
 
 permissions:

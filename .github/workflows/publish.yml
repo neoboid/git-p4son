@@ -10,11 +10,43 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The release commit is merged to main before it is tagged, so main's Tests run has usually tested it already.
+  tested:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      tested: ${{ steps.find.outputs.tested }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while true; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+              --jq '.workflow_runs |
+                    if any(.conclusion == "success") then "success"
+                    elif length == 0 then "none"
+                    elif any(.status != "completed") then "running"
+                    else "failure" end')
+            echo "Tests on $GITHUB_SHA: $state"
+            case $state in
+              success) echo tested=true >> "$GITHUB_OUTPUT"; exit 0 ;;
+              none) echo tested=false >> "$GITHUB_OUTPUT"; exit 0 ;;
+              running) sleep 30 ;;
+              *) echo "::error::The Tests run for $GITHUB_SHA failed; re-run it, then this workflow."; exit 1 ;;
+            esac
+          done
+
+  # No Tests run for the commit, as for a manual run on a commit not on main: run them here.
   test:
+    needs: tested
+    if: needs.tested.outputs.tested == 'false'
     uses: ./.github/workflows/test.yml
 
   publish:
-    needs: test
+    needs: [tested, test]
+    if: ${{ !cancelled() && (needs.tested.outputs.tested == 'true' || needs.test.result == 'success') }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

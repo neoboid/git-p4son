@@ -788,6 +788,8 @@ class TestGetChangedFiles(GitRepoTestCase):
         os.utime(path, ns=(second, second + 5 * 10**8))
         self.write_bytes('d.txt', b'changed\n')
         self.assertEqual(get_changed_files('HEAD', self.ws, 'none'), ['d.txt'])
+        # Without the stale stat data, git reads b.txt and finds it differs from the index.
+        self.assertEqual(self.git('diff', '--name-only'), 'b.txt\nd.txt')
 
 
 class TestGetDirtyFiles(unittest.TestCase):

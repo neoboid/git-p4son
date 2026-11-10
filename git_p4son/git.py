@@ -140,7 +140,10 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
 
 
 def get_changed_files(revision: str, workspace_dir: str, eol_conversion: str | None = None) -> list[str]:
-    """The tracked files whose working contents differ from revision, read with jj's eol_conversion if given."""
+    """The tracked files whose working contents differ from revision, read with jj's eol_conversion if given.
+
+    The index entries whose stale stat data made git list a file that matches revision lose their stat data, so
+    later git commands read those files again."""
     res = run([*_git_for(eol_conversion), 'diff', '--name-only', '-z', revision, '--'],
               cwd=workspace_dir, text=False)
     listed = _nul_fields(res.stdout)
@@ -149,15 +152,33 @@ def get_changed_files(revision: str, workspace_dir: str, eol_conversion: str | N
     # The index can trust stale stat data for a same-size edit, so recheck those listed against an index without any.
     changed = []
     with _index_from(revision, workspace_dir) as env:
-        for start in range(0, len(listed), _PATHS_PER_COMMAND):
-            res = run([*_git_for(eol_conversion), '--literal-pathspecs', 'diff', '--name-only', '-z', '--',
-                       *listed[start:start + _PATHS_PER_COMMAND]], cwd=workspace_dir, env=env, text=False)
+        for paths in _batches(listed):
+            res = run([*_git_for(eol_conversion), '--literal-pathspecs', 'diff', '--name-only', '-z', '--', *paths],
+                      cwd=workspace_dir, env=env, text=False)
             changed.extend(_nul_fields(res.stdout))
+    unchanged = set(listed) - set(changed)
+    _clear_index_stat(
+        [path for path in listed if path in unchanged], workspace_dir)
     return changed
+
+
+def _clear_index_stat(paths: list[str], workspace_dir: str) -> None:
+    """Keep paths' index entries but drop their stat data, so git reads the files to compare them."""
+    entries = b''.join(run(['git', '--literal-pathspecs', 'ls-files', '--stage', '-z', '--', *batch],
+                           cwd=workspace_dir, text=False).stdout for batch in _batches(paths))
+    if entries:
+        run(['git', 'update-index', '-z', '--index-info'],
+            cwd=workspace_dir, input=entries, text=False)
 
 
 # Keeps a command line well under Windows' 32767 characters.
 _PATHS_PER_COMMAND = 50
+
+
+def _batches(paths: list[str]) -> Iterator[list[str]]:
+    """paths in lists short enough for one command line."""
+    for start in range(0, len(paths), _PATHS_PER_COMMAND):
+        yield paths[start:start + _PATHS_PER_COMMAND]
 
 
 def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:

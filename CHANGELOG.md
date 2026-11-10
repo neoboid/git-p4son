@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- With jj on Windows, commands no longer refuse a same-size edit as changed after jj's snapshot, again on every retry
+
 ## 0.9.1
 
 - `writable apply`, `enable` and `disable` say whether files were made writable or read-only

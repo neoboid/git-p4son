@@ -141,10 +141,23 @@ def get_dirty_files(workspace_dir: str) -> list[tuple[str, str]]:
 
 def get_changed_files(revision: str, workspace_dir: str, eol_conversion: str | None = None) -> list[str]:
     """The tracked files whose working contents differ from revision, read with jj's eol_conversion if given."""
-    # git diff re-reads files whose stat data the index no longer matches, as jj leaves it, so contents decide.
     res = run([*_git_for(eol_conversion), 'diff', '--name-only', '-z', revision, '--'],
               cwd=workspace_dir, text=False)
-    return _nul_fields(res.stdout)
+    listed = _nul_fields(res.stdout)
+    if not listed:
+        return []
+    # The index can trust stale stat data for a same-size edit, so recheck those listed against an index without any.
+    changed = []
+    with _index_from(revision, workspace_dir) as env:
+        for start in range(0, len(listed), _PATHS_PER_COMMAND):
+            res = run([*_git_for(eol_conversion), '--literal-pathspecs', 'diff', '--name-only', '-z', '--',
+                       *listed[start:start + _PATHS_PER_COMMAND]], cwd=workspace_dir, env=env, text=False)
+            changed.extend(_nul_fields(res.stdout))
+    return changed
+
+
+# Keeps a command line well under Windows' 32767 characters.
+_PATHS_PER_COMMAND = 50
 
 
 def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:

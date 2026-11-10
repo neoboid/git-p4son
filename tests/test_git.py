@@ -5,6 +5,7 @@ import io
 import os
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -771,6 +772,22 @@ class TestGetChangedFiles(GitRepoTestCase):
         self.assertEqual(get_changed_files('HEAD', self.ws, 'none'), [])
         self.assertEqual(get_changed_files(
             'HEAD~1', self.ws, 'none'), ['b.txt'])
+
+    def test_a_same_size_edit_in_the_second_the_index_recorded_is_read(self):
+        # The index holds b.txt's old blob, with the stat of a write earlier in the same second as the edit, which
+        # Git for Windows takes as unchanged, as it compares whole seconds.
+        self.write_bytes('b.txt', b'b.TXT\n')
+        self.git('commit', '-q', '-a', '-m', 'change b')
+        self.git('reset', '-q', 'HEAD~1', '--', 'b.txt')
+        second = (int(time.time()) - 100) * 10**9
+        path = os.path.join(self.ws, 'b.txt')
+        self.write_bytes('b.txt', b'b.txt\n')
+        os.utime(path, ns=(second, second + 10**8))
+        self.git('update-index', '-q', '--refresh')
+        self.write_bytes('b.txt', b'b.TXT\n')
+        os.utime(path, ns=(second, second + 5 * 10**8))
+        self.write_bytes('d.txt', b'changed\n')
+        self.assertEqual(get_changed_files('HEAD', self.ws, 'none'), ['d.txt'])
 
 
 class TestGetDirtyFiles(unittest.TestCase):

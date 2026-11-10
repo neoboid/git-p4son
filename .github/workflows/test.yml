@@ -12,7 +12,7 @@ permissions:
 
 # The jj versions the tests run against: the newest release, and the oldest git-p4son supports.
 env:
-  JJ_LATEST: 0.46.0
+  JJ_LATEST: 0.47.1
   JJ_FLOOR: 0.41.0
 
 # A newer push to a pull request replaces its run in progress; runs on main all finish.

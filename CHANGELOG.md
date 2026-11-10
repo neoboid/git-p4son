@@ -2,12 +2,11 @@
 
 ## Unreleased
 
-- With jj on Windows, `sync` no longer copies a same-size edit into a new change on the sync bookmark and moves there,
-  away from the working change that already holds it
+## 0.9.3
 
-## 0.9.2
-
-- With jj on Windows, commands no longer refuse a same-size edit as changed after jj's snapshot, again on every retry
+- With jj on Windows, an edit that keeps a file's size, made within a second of git writing it, no longer makes
+  commands refuse to run on every retry, or makes `sync` copy the edit into a new change and move away from yours
+- 0.9.2 was never published to PyPI; its fix is part of this release
 
 ## 0.9.1
 

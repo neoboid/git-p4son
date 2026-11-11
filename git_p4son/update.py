@@ -35,20 +35,16 @@ def _update_per_commit(changelist: str, plan: Plan | None, review: Review | None
     run_per_commit(_step(changelist, args), None, args.base_branch if plan is None else plan.after,
                    args.workspace_dir, args.backend, sleep=_shelf_delay(
                        review) if args.shelve else None,
-                   dry_run=args.dry_run, message=args.message, message_file=args.file, give_base=plan is None)
+                   dry_run=args.dry_run, message=args.message, message_file=args.file,
+                   base_to='every step' if plan is None else 'no step')
 
 
-def _check_per_commit(plan: Plan, changelist: str, no_edit: bool, given: bool, workspace_dir: str) -> None:
-    """Raise CommandError unless the per-commit loop would start right after the commits the CL includes."""
+def _check_per_commit(changelist: str, no_edit: bool) -> None:
+    """Raise CommandError if the per-commit loop can't run, as with --no-edit."""
     if no_edit:
         raise CommandError(f'--no-edit opens no files, so CL {changelist} can\'t include its new commits, and '
                            '--per-commit has nothing to do. Leave out --no-edit, or --per-commit to change only the '
                            'description.')
-    # The resume hint after a failed step names the last commit that worked, which is where the loop starts.
-    if given and resolve_commit(plan.start, workspace_dir) != plan.after:
-        raise CommandError(f'--per-commit runs on the commits CL {changelist} doesn\'t include yet, the ones after '
-                           f'commit {included_count(plan.kept)} since {plan.current.base}, so -b would shelve '
-                           'included ones again. Leave out -b.')
 
 
 def _check_anything_new(plan: Plan, changelist: str) -> None:
@@ -102,7 +98,7 @@ def _shelve_twice(plan: Plan, catch_up: str, changelist: str, review: Review | N
                        resumable=lambda: None,
                        only={catch_up, resolve_commit(
                            args.backend.revision, workspace_dir)},
-                       give_base=False)
+                       base_to='no step')
     except CommandError as error:
         # The record keeps the catch-up until it is included, so the same command finishes either step.
         raise CommandError(
@@ -157,11 +153,11 @@ def update_command(args: argparse.Namespace) -> int:
         plan = _plan(found[1], found[0], changelist, given, args, revision)
         _warn_dropped(plan, changelist)
         if args.per_commit:
-            # Recorded now, so neither the steps, each planning on its own, nor a refused run warns about them again.
-            if plan.dropped and not args.dry_run:
+            # Recorded now: the steps, each planning on its own from the record, find a -b that replaced a lost base,
+            # and neither they nor a refused run warn about dropped commits again.
+            if (plan.dropped or plan.current.base != found[1].base) and not args.dry_run:
                 update_record(plan.alias, plan.kept, workspace_dir)
-            _check_per_commit(plan, changelist, args.no_edit,
-                              given is not None, workspace_dir)
+            _check_per_commit(changelist, args.no_edit)
         if args.shelve:
             check_at_latest_revision(
                 args, None if args.no_edit else plan.start, changelist, revision)

@@ -34,16 +34,16 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   Before shelving, `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
   `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps (`per_commit_step`) skip it.
 
-- **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds
-  in the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it
-  merges the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, after
-  a shelve the review tool an alias records for the CL (`find_review`, looked up once and checked before shelving),
-  through `push_review`, and the record's new count. It opens files from the record's base commit, where the branch
-  leaves the depot, or `-b`: a diff from the last included commit would replay earlier updates' renames and deletes
-  against what p4 has opened. A shelving update first runs `check_at_latest_revision` over the files since there and
-  the files opened in the CL, unless `--ignore-out-of-date` or a step. `--per-commit` instead updates once per commit
-  after the included ones through `run_per_commit`, with `shelf_delay` between shelving steps, each step without
-  `-b`, so it opens files from the record's base commit too.
+- **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds in
+  the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it merges
+  the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, after a shelve
+  the review tool an alias records for the CL (`find_review`, looked up once and checked before shelving), through
+  `push_review`, and the record's new count. It opens files from the record's base commit, where the branch leaves the
+  depot: a diff from the last included commit would replay earlier updates' renames and deletes against what p4 has
+  opened. `plan_update` refuses `-b` unless it replaces a base that no longer resolves. A shelving update first runs
+  `check_at_latest_revision` over the files since there and the files opened in the CL, unless `--ignore-out-of-date` or
+  a step. `--per-commit` instead updates once per commit after the included ones through `run_per_commit`, with
+  `shelf_delay` between shelving steps, each step without `-b`, so it opens files from the record's base commit too.
   Requires a clean git workspace unless `--no-edit` is given.
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
@@ -92,7 +92,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
   `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
-  before it runs, with the base resolved once to a SHA and given as `-b`, unless `give_base` is false. It returns to
+  before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to` names. It returns to
   where it started, also when a step fails, ends the error with the command that resumes after the last commit that
   worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name, goes to every step, as
   the steps get the base as a commit.

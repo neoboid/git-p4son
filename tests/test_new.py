@@ -256,7 +256,7 @@ class TestNewReviewTool(NewTestCase):
         self.assertEqual(find_review('101', self.ws),
                          Review('feat', 'my-tool', False))
         self.assertEqual(recorded('101', self.ws).included, [])
-        self.update('--shelve', '-b', 'main')
+        self.update('--shelve')
         self.assertEqual(self.actions(), [
                          ['create', '101'], ['create', '101']])
         self.assertEqual(find_review('101', self.ws),
@@ -413,13 +413,12 @@ class TestNewPerCommit(PerCommitTestCase):
         self.assertEqual(self.p4.pending, {})
 
     def test_failure_after_the_changelist_exists_says_how_to_resume(self):
-        """The hint resumes after the last commit that worked, so earlier commits get no second shelf."""
+        """The record says which commits the CL includes, so the hinted update gives earlier ones no second shelf."""
         start_patch(self, 'git_p4son.cli.update_command',
                     side_effect=CommandError('p4 said no'))
-        first_commit = self.git('rev-parse', 'HEAD~1')
         self.new_fails(message=r'Step 2 of 2 failed at \w+ Replace b with c: p4 said no\n'
                                r'CL 101 exists. After fixing the problem, resume with: '
-                               rf'git p4son update my-feature --shelve --per-commit -b {first_commit}$')
+                               r'git p4son update my-feature --shelve --per-commit$')
         self.assert_at('feature', self.feature_head)
 
     def test_failure_before_the_changelist_exists_has_no_rerun_hint(self):
@@ -522,9 +521,8 @@ class TestNewPerCommitWithoutReview(PerCommitTestCase):
     def test_failure_says_how_to_resume_without_shelving(self):
         start_patch(self, 'git_p4son.cli.update_command',
                     side_effect=CommandError('p4 said no'))
-        first_commit = self.git('rev-parse', 'HEAD~1')
         self.new_fails(
-            message=rf'resume with: git p4son update my-feature --per-commit -b {first_commit}$')
+            message=r'resume with: git p4son update my-feature --per-commit$')
 
     def test_the_hint_after_the_first_step_fails_past_creating_resumes(self):
         """The record includes no commit until its files are opened, so the hinted update redoes the first."""

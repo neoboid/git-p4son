@@ -50,10 +50,10 @@ class UpdateTestCase(P4RepoTestCase):
 
     def update(self, *argv):
         """Run update of CL 101 with argv; returns everything it printed."""
-        return self.run_command(update_command, ['update', '101', '-b', 'main', *argv])
+        return self.run_command(update_command, ['update', '101', *argv])
 
     def update_fails(self, *argv, message):
-        return self.command_fails(update_command, ['update', '101', '-b', 'main', *argv],
+        return self.command_fails(update_command, ['update', '101', *argv],
                                   message)
 
     def commit_change_c(self):
@@ -90,8 +90,7 @@ class TestUpdate(UpdateTestCase):
 
     def test_alias_names_the_changelist(self):
         self.commit_change_c()
-        out = self.run_command(
-            update_command, ['update', 'feat', '-b', 'main'])
+        out = self.run_command(update_command, ['update', 'feat'])
         self.assertIn('feat -> CL 101', out)
         self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
 
@@ -204,7 +203,7 @@ class TestUpdatePerCommit(UpdateTestCase):
         self.p4.calls.clear()
 
     def update(self, *argv):
-        return super().update('--per-commit', *argv)
+        return super().update('--per-commit', '-b', 'main', *argv)
 
     def test_updates_once_per_commit_and_returns(self):
         self.p4.pending['101'] = ['Feature']
@@ -362,14 +361,6 @@ class TestUpdateIncluded(IncludedTestCase):
         self.assertTrue(section.endswith(
             '[ok] 2 commits included, 1 new'), section)
 
-    def test_an_explicit_base_reopens_the_files_but_still_only_appends(self):
-        self.reword_first_entry()
-        self.commit_change_c()
-        self.update('-b', 'main')
-        self.assertEqual(self.p4.pending['101'][3:], [
-                         '1. Change a, reworded', '2. Replace b with c', '3. Change c'])
-        self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
-
     def test_per_commit_shelves_only_the_new_commits(self):
         self.commit_change_c()
         self.edit('d.txt', 'd1\n')
@@ -384,15 +375,37 @@ class TestUpdateIncluded(IncludedTestCase):
         self.update_fails(
             '--per-commit', message='CL 101 already includes the 2 commits since main')
 
-    def test_per_commit_with_a_base_is_refused(self):
+    def test_per_commit_refuses_a_base(self):
         self.commit_change_c()
-        self.update_fails('--per-commit', '-b', 'main', message='Leave out -b')
+        self.update_fails('--per-commit', '-b', 'main',
+                          message='Leave out -b main')
+        self.assertEqual(self.included(), 2)
 
-    def test_a_base_above_the_last_included_commit_is_refused(self):
+    def test_a_base_other_than_the_recorded_one_is_refused(self):
+        self.commit_change_c()
+        for base in ('main', *self.git('rev-list', 'main..HEAD').split()):
+            with self.subTest(base=base):
+                self.command_fails(update_command, ['update', '101', '-b', base],
+                                   message=f'Leave out -b {base}')
+        self.assertEqual(self.included(), 2)
+
+    def test_a_failed_per_commit_step_resumes_without_a_base(self):
         self.commit_change_c()
         self.commit('Change d')
-        self.update_fails(
-            '-b', 'HEAD~1', message='-b HEAD~1 skips 1 commit CL 101 doesn\'t include yet')
+        calls = []
+        real = update_command
+
+        def fail_second(args):
+            calls.append(args)
+            if len(calls) == 2:
+                raise CommandError('p4 said no')
+            return real(args)
+        start_patch(self, 'git_p4son.cli.update_command',
+                    side_effect=fail_second)
+        self.command_fails(update_command, ['update', '101', '--per-commit'],
+                           message=r'resume with: git p4son update 101 --per-commit$')
+        self.update('--per-commit')
+        self.assertEqual(self.included(), 4)
 
     def test_a_dry_run_leaves_the_record(self):
         self.commit_change_c()
@@ -544,6 +557,17 @@ class TestUpdateLostBase(P4RepoTestCase):
                     self.command_fails(
                         update_command, ['update', 'feat', *argv], message='^The selected jj changes')
         self.assertEqual(recorded('101', self.ws).base, 'base-b')
+
+    def test_per_commit_with_b_records_the_new_base_before_its_steps(self):
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
+        self.edit('c.txt', 'c3\n')
+        self.commit('Change c again')
+        self.run_command(update_command, [
+                         'update', 'feat', '--per-commit', '-b', 'main'])
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+        self.assertEqual(self.p4.pending['101'][-2:], [
+                         '3. Change c', '4. Change c again'])
 
     def test_update_with_b_records_the_new_base(self):
         self.edit('c.txt', 'c2\n')

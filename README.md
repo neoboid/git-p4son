@@ -502,10 +502,11 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-m, --message MESSAGE`: Replace the changelist description message above the commit list. The commit list is
   kept and updated as usual, and so is a Swarm `#review` keyword on a line of its own at the end of the description
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
-- `-b, --base-branch BASE_BRANCH`: Where the files to open start, and for a changelist without a record, the commits
-  to fold in. Defaults to the base its alias records, else to `HEAD~1`. When the base the alias records no longer
-  resolves, as a deleted branch or an abandoned or divergent jj change, `update` refuses without `-b`, and with it
-  records the new base, as `new` does. That base has to sit below the changelist's first commit
+- `-b, --base-branch BASE_BRANCH`: For a changelist without a record, where the commits to fold in and the files to
+  open start, `HEAD~1` by default. With a record, `update` opens every file since the base it records, so it takes
+  `-b` only when that base no longer resolves, as a deleted branch or an abandoned or divergent jj change. `update`
+  refuses without `-b` then, and with it records the new base, as `new` does. That base has to sit below the
+  changelist's first commit
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
   touched at all
@@ -539,8 +540,8 @@ stays as you wrote it.
 
 - `update` opens every file of the change since the base, so a commit that undoes an earlier one, such as a file
   deleted and then restored, is opened against the depot, and so are files a manual `p4 revert` took out. A file of
-  the change that you moved to another changelist is moved back. `-b` only narrows which files to open, and a `-b`
-  above the last included commit is refused.
+  the change that you moved to another changelist is moved back. So `-b` is refused while the recorded base
+  resolves: a diff from a commit the changelist already includes would replay its changes against what p4 has opened.
 - An included commit that is gone from the branch, dropped or squashed, gets a warning. Its patch stays in the
   review: to undo a shelved commit, revert it in a new commit.
 - A new commit below included ones is refused, as its patch would undo the ones above it. Move it after them.
@@ -661,19 +662,19 @@ step but the last sleeps 5 seconds to give Perforce/Swarm time to process the sh
 of the latest `main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks
 it even with `--dry-run`.
 
-A dry run prints the plan like this, with the base resolved to the commit every step uses; the message, which only
-the first step gets, is printed below it:
+A dry run prints the plan like this, with the base resolved to the commit the first step uses; the later steps find
+it in the changelist's record. The message, which only the first step gets, is printed below it:
 
 ```
 abc1234 First commit: git p4son new my-feature --review -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
-def5678 Second commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
-ghi9012 Third commit: git p4son update my-feature --shelve -b 5f1d0e9c2a7b4e8d9c0b1a2f3e4d5c6b7a8f9e0d
+def5678 Second commit: git p4son update my-feature --shelve
+ghi9012 Third commit: git p4son update my-feature --shelve
 ```
 
 If a step fails, `review` returns to where you started and names the step and commit that failed. Once the first
 step has created the changelist, the error also says how to finish: after fixing the problem, run the
-`git p4son update my-feature --shelve --per-commit -b <commit>` it prints, which resumes after the last commit that
-worked.
+`git p4son update my-feature --shelve --per-commit` it prints, which resumes after the last commit that worked, as
+the changelist's record says which commits it includes.
 
 ### List-Changes Command
 
@@ -1228,7 +1229,7 @@ files changed after jj's snapshot, as the checkouts would overwrite them:
 
 ```sh
 git p4son review -b main
-git p4son update --per-commit --shelve -b main
+git p4son update --per-commit --shelve
 ```
 
 To use the git workflow on purpose, put `--backend git` **before** the command. This uses git branches, `HEAD` and

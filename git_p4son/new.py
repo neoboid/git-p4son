@@ -146,4 +146,5 @@ def _new_per_commit(args: argparse.Namespace, tool: str | None) -> None:
     first, rest = _steps(args)
     run_per_commit(first, rest, args.base_branch, workspace_dir, args.backend,
                    sleep=shelf_delay(tool) if args.review or args.shelve else None, dry_run=args.dry_run,
-                   message=args.message, message_file=args.file, resumable=resumable, base_name=base_name)
+                   message=args.message, message_file=args.file, resumable=resumable, base_name=base_name,
+                   base_to='the first step')

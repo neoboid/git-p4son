@@ -71,10 +71,10 @@ def catch_up_subject(plan: Plan, workspace_dir: str, revision: str) -> str | Non
 
 def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, str] | None, backend: Backend,
                 workspace_dir: str, revision: str) -> Plan:
-    """Plan an update of changelist through revision, starting at given, the -b as typed and resolved, if not None.
+    """Plan an update of changelist through revision, given the -b as typed and resolved, if not None.
 
-    Raises CommandError if a commit the CL doesn't include sits below ones it does, given skips commits it doesn't
-    include, or the recorded base no longer resolves and given isn't below every commit the CL includes."""
+    Raises CommandError if a commit the CL doesn't include sits below ones it does, given is passed while the recorded
+    base resolves, or the recorded base no longer resolves and given isn't below every commit the CL includes."""
     fix = f'Pass the base the CL started from, below its first commit: git p4son update {alias} -b <base>'
     # The -b that replaced a base that no longer resolves.
     new_base: str | None = None
@@ -90,6 +90,10 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
         record = replace(record, base=backend.base_name(given[0]))
         base_commit = resolve_commit(given[1], workspace_dir)
         new_base = given[0]
+    if given is not None and new_base is None:
+        # A -b would diff from a commit p4 has files opened from, take in the base's own changes, or do nothing.
+        raise CommandError(
+            f'CL {changelist} already records its base, {record.base}. Leave out -b {given[0]}.')
     commits = get_commits_since(base_commit, workspace_dir, revision)
     shas = [sha for sha, _ in commits]
     identities = backend.commit_identities(shas)
@@ -109,28 +113,20 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
             unmatched[identity] -= 1
     included = len(identities) if first_new is None else first_new
     after = shas[included - 1] if included else base_commit
-    if given is None:
-        # Only a diff from where the branch leaves the depot names git actions that match it.
-        start = base_commit
-    elif (position := _position(resolve_commit(given[1], workspace_dir), shas)) <= included:
-        start = given[1]
-    else:
-        raise CommandError(
-            f'-b {given[0]} skips {plural(position - included, "commit")} CL {changelist} doesn\'t include yet, which '
-            f'would be counted without being opened. Start at or below commit {included} since {record.base}.')
+    # The base the branch is on, which the shelf follows: a sync moves the base before the branch is rebased.
+    on = merge_base(base_commit, revision, workspace_dir)
     dropped = _dropped(record.included, unmatched)
     if new_base is not None and dropped:
         # Commits at or below a new base aren't gone from the branch, so they mustn't be recorded as dropped.
         positions = ', '.join(str(position) for position in dropped)
         raise CommandError(f'-b {new_base} is at or above commits CL {changelist} includes (number {positions}), so '
                            f'it can\'t be its base. {fix}')
-    # The base the branch is on, which the shelf follows: a sync moves the base before the branch is rebased.
-    on = merge_base(base_commit, revision, workspace_dir)
     slots = [DROPPED if position in dropped else identity for position,
              identity in enumerate(record.included, 1)]
     catch_up = shas[included] if included < len(
         shas) and record.catch_up == identities[included] else None
-    return Plan(alias, record, Record(record.base, on, slots + identities[included:]), start, after,
+    # Only a diff from where the branch leaves the depot names git actions that match it.
+    return Plan(alias, record, Record(record.base, on, slots + identities[included:]), base_commit, after,
                 [commit_subject(sha, subject) for sha, subject in commits[included:]], dropped, catch_up)
 
 
@@ -143,8 +139,3 @@ def _dropped(included: list[str], unmatched: Counter[str]) -> list[int]:
             left[identity] -= 1
             positions.append(position)
     return positions
-
-
-def _position(commit: str, shas: list[str]) -> int:
-    """Commit's 1-based position among the commits since the base, 0 at or below it."""
-    return shas.index(commit) + 1 if commit in shas else 0

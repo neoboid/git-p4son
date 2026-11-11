@@ -304,8 +304,10 @@ def _fstat_records(res: RunResult[list[str]], workspace_dir: str,
 
 def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
                                ) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
-    """Return (changelist, action) for each of the files that is opened, and the other end of each opened move whose
-    other end is among the files, keyed by workspace-relative path."""
+    """Return (changelist, action) for each of the files that is opened, and the other end of each opened move, keyed
+    by workspace-relative path.
+
+    The other end is a workspace-relative path when it is among the files, else a depot path."""
     if not filenames:
         return {}, {}
     res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
@@ -319,8 +321,8 @@ def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
     path_of = {record['depotFile']: filename for filename,
                record in records if 'depotFile' in record}
     return ({filename: (record.get('change', ''), record.get('action', '')) for filename, record in records},
-            {filename: path_of[record['movedFile']] for filename, record in records
-             if record.get('movedFile') in path_of})
+            {filename: path_of.get(record['movedFile'], record['movedFile']) for filename, record in records
+             if 'movedFile' in record})
 
 
 def get_opened_files(filenames: list[str],

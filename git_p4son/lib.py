@@ -249,7 +249,11 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
         wanted, opened_lookup(states), changelist)
 
     # -k: p4 writes nothing to disk, so each working file keeps git's version.
-    run_p4_batch(['revert', '-k'], to_unmove + to_revert, 'Reverting files opened with another action',
+    to_revert = to_unmove + to_revert
+    # p4 refuses to revert a move/delete without its move/add.
+    to_revert += [other_end[path] for path in to_revert
+                  if other_end.get(path, path) not in to_revert]
+    run_p4_batch(['revert', '-k'], to_revert, 'Reverting files opened with another action',
                  workspace_dir, dry_run)
     p4_output = []
     for p4_action in ('add', 'edit', 'delete'):

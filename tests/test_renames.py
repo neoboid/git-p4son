@@ -176,6 +176,13 @@ class TestRenames(RenameTestCase):
             self.commit(f'Change {number}')
         return self.update('--per-commit', '--shelve')
 
+    def test_per_commit_deletes_a_file_a_later_step_deletes_after_moving_it(self):
+        out = self.per_commit_after_review(lambda: self.move('m.txt', 'src/m.txt'),
+                                           lambda: self.git('rm', '-q', 'src/m.txt'))
+        self.assertEqual(self.p4.opened, {
+                         'n.txt': ('102', 'add'), 'm.txt': ('102', 'delete')})
+        self.assertNotIn('[warn]', out)
+
     def test_per_commit_edits_a_file_a_later_step_restores_edited(self):
         out = self.per_commit_after_review(lambda: self.git('rm', '-q', 'm.txt'),
                                            lambda: self.write_file('m.txt', M_EDITED))

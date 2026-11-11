@@ -579,8 +579,10 @@ class TestBranchExists(GitRepoTestCase):
     def test_only_a_branch_of_that_exact_name_exists(self):
         self.commit('Base')
         self.commit('Next')
+        self.git('branch', 'dir/x')
         self.assertTrue(branch_exists('main', self.ws))
-        for name in ('main~1', 'main^', 'main@{0}', 'nope'):
+        self.assertTrue(branch_exists('dir/x', self.ws))
+        for name in ('main~1', 'main^', 'main@{0}', 'nope', 'dir', 'MAIN'):
             with self.subTest(name=name):
                 self.assertFalse(branch_exists(name, self.ws))
 

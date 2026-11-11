@@ -438,11 +438,12 @@ def switch_branch(branch: str, workspace_dir: str) -> None:
 
 
 def branch_exists(branch: str, workspace_dir: str) -> bool:
-    """Whether a local branch of that name exists."""
-    # Not rev-parse, which takes refs/heads/main~1 as a revision of main.
-    result = run(['git', 'show-ref', '--verify', '--quiet', f'refs/heads/{branch}'],
-                 cwd=workspace_dir, fail_on_returncode=False)
-    return result.returncode == 0
+    """Whether a local branch of exactly that name exists."""
+    ref = f'refs/heads/{branch}'
+    # A lookup takes main~1 as a revision and, on a case-insensitive file system, finds MAIN's loose ref file. The
+    # listing matches by prefix, so the name is compared in full.
+    return ref in run(['git', 'for-each-ref', '--format=%(refname)', ref], cwd=workspace_dir,
+                      fail_on_returncode=False).stdout
 
 
 def branches_at(commit: str, workspace_dir: str) -> list[str]:

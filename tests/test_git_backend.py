@@ -1,5 +1,6 @@
 """Tests for git_p4son.git_backend and git_p4son.backend."""
 
+import os
 import unittest
 from unittest import mock
 
@@ -112,6 +113,14 @@ class TestGitBackendBase(GitRepoTestCase):
     def test_a_revision_relative_to_a_branch_is_no_sync_branch(self):
         with self.assertRaisesRegex(CommandError, 'Sync branch "feat~1" does not exist'):
             self.backend.prepare_sync('feat~1')
+
+    def test_a_branch_in_another_case_is_named_as_git_spells_it(self):
+        """A loose ref is a file, which a case-insensitive file system finds as MAIN too; a packed one isn't."""
+        if not os.path.exists(os.path.join(self.ws, '.git', 'refs', 'heads', 'MAIN')):
+            self.skipTest('the file system is case-sensitive')
+        self.assertEqual(self.backend.base_name('MAIN'), 'main')
+        with self.assertRaisesRegex(CommandError, 'Sync branch "MAIN" does not exist'):
+            self.backend.prepare_sync('MAIN')
 
     def test_a_commit_s_identity_is_its_author_date(self):
         commits = [self.git('rev-parse', 'HEAD'),

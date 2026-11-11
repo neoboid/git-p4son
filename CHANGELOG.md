@@ -10,6 +10,8 @@
 - With git, a base given as a revision relative to a branch, such as `-b main~1`, is no longer recorded as if it were
   a branch's name, which pointed elsewhere after the next sync. It's named by the one branch at its commit, or refused,
   and `sync main~1` is refused as a sync branch that doesn't exist
+- On Windows and macOS, a branch name in the wrong case, such as `-b MAIN`, is named as git spells it, `main`, where
+  it was recorded as given and stopped resolving once git packed its refs
 
 ## 0.9.3
 

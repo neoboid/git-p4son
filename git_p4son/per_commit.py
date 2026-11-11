@@ -5,6 +5,7 @@ import contextlib
 import shlex
 import time
 from collections.abc import Callable
+from typing import Literal
 
 from .backend import Backend
 from .common import CommandError
@@ -26,7 +27,7 @@ def _parse(step: list[str], base: str | None, message: str | None, workspace_dir
     args.workspace_dir = workspace_dir
     args.invocation_dir = workspace_dir
     args.backend = backend
-    args.base_given = base_name or base
+    args.base_given = None if base is None else base_name or base
     args.per_commit_step = True
     return args
 
@@ -43,14 +44,16 @@ def message_args(message: str | None, message_file: str | None) -> list[str]:
     return ['-F', message_file] if message_file else [f'--message={message}']
 
 
-def _resume_hint(rest: list[str], resume_after: str, message: str | None, message_file: str | None,
+def _resume_hint(rest: list[str], resume_after: str | None, message: str | None, message_file: str | None,
                  resumable: Callable[[], str | None] | None) -> str | None:
-    """How to resume after resume_after, or None when resumable says there is nothing to resume."""
+    """How to resume after resume_after, or without -b if None, or None when resumable says there is nothing to
+    resume."""
     note = resumable() if resumable else ''
     if note is None:
         return None
+    base = [] if resume_after is None else ['-b', resume_after]
     command = shlex.join(['git', 'p4son', *rest, '--per-commit',
-                          *message_args(message, message_file), '-b', resume_after])
+                          *message_args(message, message_file), *base])
     return f'{note} After fixing the problem, resume with: {command}'.lstrip()
 
 
@@ -58,9 +61,11 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
                    resumable: Callable[[], str | None] | None = None, base_name: str | None = None,
-                   only: set[str] | None = None, give_base: bool = True) -> None:
+                   only: set[str] | None = None,
+                   base_to: Literal['every step', 'the first step', 'no step'] = 'every step') -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one,
-    each with -b at base_branch unless not give_base.
+    with -b at base_branch for the steps base_to names. Steps without -b, and the resume hint unless every step gets
+    it, leave it to a record to say where to start.
 
     A failing step raises CommandError naming it and the command that resumes after the last commit that worked,
     unless resumable returns None; any text it returns goes before that command."""
@@ -103,12 +108,14 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
             checkout(commit)
             log.success(f'Checked out, running git p4son {shlex.join(step)}')
             step_message = message if number == 1 else None
-            args = _parse(step, base if give_base else None, step_message,
+            with_base = base_to == 'every step' or (
+                base_to == 'the first step' and number == 1)
+            args = _parse(step, base if with_base else None, step_message,
                           workspace_dir, backend, base_name)
             try:
                 args.func(args)
             except CommandError as error:
-                hint = _resume_hint(rest, resume_after, step_message,
+                hint = _resume_hint(rest, resume_after if base_to == 'every step' else None, step_message,
                                     message_file, resumable)
                 raise CommandError(f'Step {name} failed at {label}: {error}'
                                    + (f'\n{hint}' if hint else ''), error.returncode) from error

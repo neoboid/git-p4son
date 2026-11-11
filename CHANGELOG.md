@@ -5,6 +5,8 @@
 - `update`, with or without `--per-commit`, opens every file of the change since the base its alias records, so a
   commit that renames, deletes or restores a file an earlier commit changed is opened as such, where p4 refused it
   and the change went missing from the shelf
+- With a record, `update -b` is refused unless it replaces a recorded base that no longer resolves, and
+  `--per-commit`'s resume hint no longer passes `-b`
 
 ## 0.9.3
 

@@ -65,7 +65,7 @@ class TestRenames(RenameTestCase):
         self.new()
         self.p4.calls.clear()
         self.p4.moves_made.clear()
-        self.update('-b', 'main')
+        self.update()
         self.assert_moved('m.txt', 'src/m.txt')
         self.assertEqual(self.moves(), [])
         self.assertFalse(
@@ -96,7 +96,7 @@ class TestRenames(RenameTestCase):
         self.new()
         self.move('src/m.txt', 'm.txt')
         self.commit('Move m back')
-        self.update('-b', 'main')
+        self.update()
         self.assertEqual(self.p4.opened, {})
         self.assertEqual(self.git('status', '--porcelain'), '')
 

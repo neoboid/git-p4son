@@ -774,12 +774,6 @@ class TestJjPerCommit(JjP4RepoTestCase):
         self.p4son_fails(
             'update', 'feat', message='"Add x" sits below commits CL 101 already includes')
 
-    def test_update_takes_a_jj_revision_as_its_base(self):
-        """-b is the backend's: a change ID resolves through jj, as it does without a record."""
-        self.p4son('new', '-b', 'main', '--no-edit')
-        self.p4son('update', 'feat', '-b', self.describe('main', 'change_id'))
-        self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
-
     def add_d(self):
         """Describe the working change as Add d, adding d.txt; returns its commit."""
         self.jj('describe', '-m', 'Add d')

@@ -166,35 +166,58 @@ class TestRenames(RenameTestCase):
         self.assertEqual(self.p4.opened, {'m.txt': ('102', 'edit')})
         self.assertNotIn('[warn]', out)
 
-    def per_commit_after_review(self, *changes):
-        """Review a commit adding n.txt, then make each change in a commit of its own and update per commit."""
+    def update_after_review(self, *changes, per_commit):
+        """Review a commit adding n.txt, then make each change in a commit of its own, updating per commit after the
+        last or plainly after each; returns what the updates printed."""
         self.write_file('n.txt', 'new\n')
         self.commit('Add n')
         self.review()
+        out = ''
         for number, change in enumerate(changes, 1):
             change()
             self.commit(f'Change {number}')
-        return self.update('--per-commit', '--shelve')
+            if not per_commit:
+                out += self.update('--shelve')
+        return self.update('--per-commit', '--shelve') if per_commit else out
 
-    def test_per_commit_deletes_a_file_a_later_step_deletes_after_moving_it(self):
-        out = self.per_commit_after_review(lambda: self.move('m.txt', 'src/m.txt'),
-                                           lambda: self.git('rm', '-q', 'src/m.txt'))
+    def check_a_move_then_a_delete_deletes(self, per_commit):
+        out = self.update_after_review(lambda: self.move('m.txt', 'src/m.txt'),
+                                       lambda: self.git('rm', '-q', 'src/m.txt'), per_commit=per_commit)
         self.assertEqual(self.p4.opened, {
                          'n.txt': ('102', 'add'), 'm.txt': ('102', 'delete')})
         self.assertNotIn('[warn]', out)
 
-    def test_per_commit_edits_a_file_a_later_step_restores_edited(self):
-        out = self.per_commit_after_review(lambda: self.git('rm', '-q', 'm.txt'),
-                                           lambda: self.write_file('m.txt', M_EDITED))
+    def check_a_delete_then_an_edited_restore_edits(self, per_commit):
+        out = self.update_after_review(lambda: self.git('rm', '-q', 'm.txt'),
+                                       lambda: self.write_file('m.txt', M_EDITED), per_commit=per_commit)
         self.assertEqual(self.p4.opened, {
                          'n.txt': ('102', 'add'), 'm.txt': ('102', 'edit')})
         self.assertEqual(self.p4.shelved['102']['m.txt'], M_EDITED)
         self.assertNotIn('[warn]', out)
 
+    def test_per_commit_deletes_a_file_a_later_step_deletes_after_moving_it(self):
+        self.check_a_move_then_a_delete_deletes(per_commit=True)
+
+    def test_an_update_deletes_a_file_an_earlier_update_moved(self):
+        self.check_a_move_then_a_delete_deletes(per_commit=False)
+
+    def test_per_commit_edits_a_file_a_later_step_restores_edited(self):
+        self.check_a_delete_then_an_edited_restore_edits(per_commit=True)
+
+    def test_an_update_edits_a_file_an_earlier_update_deleted(self):
+        self.check_a_delete_then_an_edited_restore_edits(per_commit=False)
+
     def test_per_commit_opens_nothing_for_a_file_a_later_step_restores_unchanged(self):
-        out = self.per_commit_after_review(lambda: self.git('rm', '-q', 'm.txt'),
-                                           lambda: self.write_file('m.txt', M))
+        out = self.update_after_review(lambda: self.git('rm', '-q', 'm.txt'),
+                                       lambda: self.write_file('m.txt', M), per_commit=True)
         self.assertEqual(self.p4.opened, {'n.txt': ('102', 'add')})
+        self.assertNotIn('[warn]', out)
+
+    def test_an_update_keeps_the_add_of_a_file_an_earlier_update_renamed(self):
+        out = self.update_after_review(lambda: self.move('n.txt', 'src/n.txt'),
+                                       lambda: self.write_file('src/n.txt', 'newer\n'), per_commit=False)
+        self.assertEqual(self.p4.opened, {'src/n.txt': ('102', 'add')})
+        self.assertEqual(self.p4.shelved['102'], {'src/n.txt': 'newer\n'})
         self.assertNotIn('[warn]', out)
 
 

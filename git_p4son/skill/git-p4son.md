@@ -238,8 +238,7 @@ after fixing it, run the same command again, which skips the commits that worked
 - **"... sits below commits CL N already includes"** means a new commit was moved under reviewed ones. Ask the user
   before moving it after them with a rebase.
 - **After amending or squashing into an included commit**, such as `jj squash` into a reviewed change, `update` sees
-  nothing new there. With no new commits it opens every file since the base anyway; with new ones as well, pass
-  `-b main` so the amend's files are opened.
+  nothing new there, but it opens every file since the base, so the amend's files are opened.
 - **After a sync**, `update --shelve` may insert an empty commit, "Rebase onto CL N", after the included commits, so
   the sync's changes get a patch of their own. That's expected: leave it on the branch.
 - **A CL whose alias records nothing**, made by `alias new` or an older git-p4son, needs the range: count the new
@@ -298,8 +297,8 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   example checked out but never edited, revert just those with `p4 revert -a <files>`: `-a` only reverts files
   whose content is unchanged, so edited files stay opened for the user to deal with. Ask the user first. Files in a
   CL made by `new` or `review` are opened too, and usually unchanged while `main` is checked out; reverting them
-  keeps the shelf and the Swarm review. `git p4son update -b main` opens them again later; add `--shelve` only when
-  the user asks to re-shelve, as a shelve from a narrower base would drop the other commits' files.
+  keeps the shelf and the Swarm review. `git p4son update` opens them again later; add `--shelve` only when the user
+  asks to re-shelve.
 - **A shelve refuses because files are not at the latest revision** ("Files in the change are not at the latest
   revision. ..."). Someone submitted the listed files since the last sync, so the review would show them against an
   older revision. Tell the user, and offer to sync (`git p4son sync`) and rebase the branch onto it, which they may

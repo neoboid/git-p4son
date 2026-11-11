@@ -29,7 +29,7 @@ class Plan:
     # once the update is done.
     current: Record
     next: Record
-    # The base for the files to open and the per-commit loop.
+    # The base for the files to open: the record's base commit, or -b.
     start: str
     # The last commit the CL includes, or the base's commit if none, where the commits it doesn't include start.
     after: str
@@ -110,8 +110,8 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
     included = len(identities) if first_new is None else first_new
     after = shas[included - 1] if included else base_commit
     if given is None:
-        # With nothing new, every file since the base, as an amend keeps a commit's identity but can add files.
-        start = after if included < len(shas) else base_commit
+        # Only a diff from where the branch leaves the depot names git actions that match it.
+        start = base_commit
     elif (position := _position(resolve_commit(given[1], workspace_dir), shas)) <= included:
         start = given[1]
     else:

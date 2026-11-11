@@ -612,13 +612,24 @@ class TestUpdateIncludedGitRewrites(IncludedTestCase):
             update_command(args)
         self.assertNotIn('Gone from the branch', out.getvalue())
 
-    def test_an_amend_that_adds_a_file_is_opened_by_the_next_update(self):
-        """An amend keeps the commit's identity, so with nothing new update opens every file since the base."""
+    def amend_adding_n(self):
+        """Amend the last commit with a new file, n.txt, keeping its identity."""
         self.edit('n.txt', 'n1\n')
         self.git('add', '-A')
         self.git('commit', '-q', '--amend', '--no-edit')
+
+    def test_an_amend_that_adds_a_file_is_opened_by_the_next_update(self):
+        """An amend keeps the commit's identity, and update opens every file since the base."""
+        self.amend_adding_n()
         self.update()
         self.assertIn('n.txt', self.p4.opened)
+
+    def test_an_amend_is_opened_with_a_new_commit_after_it(self):
+        self.amend_adding_n()
+        self.commit_change_c()
+        self.update()
+        self.assertIn('n.txt', self.p4.opened)
+        self.assertIn('c.txt', self.p4.opened)
 
 
 TestUpdateIncludedOnJj = on_jj(TestUpdateIncluded)

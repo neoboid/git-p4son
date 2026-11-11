@@ -12,12 +12,13 @@ from .git import get_commits_since, resolve_commit
 from .log import log, plural
 
 
-def _parse(step: list[str], base: str, message: str | None, workspace_dir: str,
+def _parse(step: list[str], base: str | None, message: str | None, workspace_dir: str,
            backend: Backend, base_name: str | None) -> argparse.Namespace:
-    """Parse a step's arguments with base and message, set up as run_command would, base_name as the base given."""
+    """Parse a step's arguments with base, if any, and message, set up as run_command would, base_name as the base
+    given."""
     # Imported here: cli imports the commands that import this module.
     from .cli import create_parser
-    argv = [*step, '-b', base]
+    argv = [*step, *(['-b', base] if base is not None else [])]
     if message is not None:
         # One argument: argparse would read a message starting with - after -m as an option.
         argv.append(f'--message={message}')
@@ -57,9 +58,9 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
                    resumable: Callable[[], str | None] | None = None, base_name: str | None = None,
-                   only: set[str] | None = None, step_base: str | None = None) -> None:
+                   only: set[str] | None = None, give_base: bool = True) -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one,
-    each with -b at step_base, or base_branch without it.
+    each with -b at base_branch unless not give_base.
 
     A failing step raises CommandError naming it and the command that resumes after the last commit that worked,
     unless resumable returns None; any text it returns goes before that command."""
@@ -102,7 +103,7 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
             checkout(commit)
             log.success(f'Checked out, running git p4son {shlex.join(step)}')
             step_message = message if number == 1 else None
-            args = _parse(step, step_base or base, step_message,
+            args = _parse(step, base if give_base else None, step_message,
                           workspace_dir, backend, base_name)
             try:
                 args.func(args)

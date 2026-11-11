@@ -502,11 +502,10 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 - `-m, --message MESSAGE`: Replace the changelist description message above the commit list. The commit list is
   kept and updated as usual, and so is a Swarm `#review` keyword on a line of its own at the end of the description
 - `-F, --file FILE`: Like `-m`, but read the message from a file. The message may span multiple lines
-- `-b, --base-branch BASE_BRANCH`: Where the commits to fold in start, for the commit list and the files to open.
-  Defaults to after the last commit the changelist includes, when its alias records that, else to `HEAD~1`. When the
-  base the alias records no longer resolves, as a deleted branch or an abandoned or divergent jj change, `update`
-  refuses without `-b`, and with it records the new base, as `new` does. That base has to sit below the changelist's
-  first commit
+- `-b, --base-branch BASE_BRANCH`: Where the files to open start, and for a changelist without a record, the commits
+  to fold in. Defaults to the base its alias records, else to `HEAD~1`. When the base the alias records no longer
+  resolves, as a deleted branch or an abandoned or divergent jj change, `update` refuses without `-b`, and with it
+  records the new base, as `new` does. That base has to sit below the changelist's first commit
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list as it is. Without `-m` or `-F` the description is not
   touched at all
@@ -526,7 +525,6 @@ git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRA
 git p4son update              # fold the new commits into the changelist for the current branch
 git p4son update --shelve     # update and re-shelve
 git p4son update 12345
-git p4son update myalias -b main   # open every file of the change again
 git p4son update -F description.txt   # replace the message, e.g. after review feedback
 git p4son update --per-commit --shelve   # one shelf for each commit the changelist doesn't include yet
 git p4son update 12345 -b HEAD~2 --per-commit --shelve   # no record: the last two commits
@@ -539,13 +537,15 @@ ID or, with git, by author date, which survive rebases and amends. `update` adds
 whether it shelves or not, and leaves the entries already in the commit list as they are, so an entry you reworded
 stays as you wrote it.
 
-- `-b` only chooses which files to open, for example `-b main` to open them all again after a manual `p4 revert`. A
-  `-b` above the last included commit is refused.
+- `update` opens every file of the change since the base, so a commit that undoes an earlier one, such as a file
+  deleted and then restored, is opened against the depot, and so are files a manual `p4 revert` took out. A file of
+  the change that you moved to another changelist is moved back. `-b` only narrows which files to open, and a `-b`
+  above the last included commit is refused.
 - An included commit that is gone from the branch, dropped or squashed, gets a warning. Its patch stays in the
   review: to undo a shelved commit, revert it in a new commit.
 - A new commit below included ones is refused, as its patch would undo the ones above it. Move it after them.
-- An amend keeps the commit's identity, so `update` sees nothing new and opens every file since the base, which
-  takes in the amend. With new commits as well, run `update -b main`.
+- An amend keeps the commit's identity, so `update` sees it as included, and opening every file since the base takes
+  in what it changed.
 
 #### After a sync
 
@@ -1118,7 +1118,7 @@ jj new main -m "Fix login"
 jj bookmark create fix-login
 jj p4son new -b main --review
 # Edit more files
-jj p4son update -b main --shelve
+jj p4son update --shelve
 ```
 
 ### Syncing a bookmark

@@ -104,6 +104,15 @@ class TestGitBackendBase(GitRepoTestCase):
         with self.assertRaisesRegex(CommandError, 'HEAD~2 names no branch.*also-main, main'):
             self.backend.base_name('HEAD~2')
 
+    def test_a_revision_relative_to_a_branch_is_named_by_the_branch_at_its_commit(self):
+        self.assertEqual(self.backend.base_name('feat~2'), 'main')
+        with self.assertRaisesRegex(CommandError, 'feat~1 names no branch'):
+            self.backend.base_name('feat~1')
+
+    def test_a_revision_relative_to_a_branch_is_no_sync_branch(self):
+        with self.assertRaisesRegex(CommandError, 'Sync branch "feat~1" does not exist'):
+            self.backend.prepare_sync('feat~1')
+
     def test_a_commit_s_identity_is_its_author_date(self):
         commits = [self.git('rev-parse', 'HEAD'),
                    self.git('rev-parse', 'HEAD~1')]

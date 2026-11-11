@@ -14,6 +14,7 @@ from git_p4son.git import (
     add_all_files,
     case_only_ignored,
     add_files,
+    branch_exists,
     commit,
     find_base_commits,
     format_sync_subject,
@@ -572,6 +573,16 @@ class TestMergeFile(unittest.TestCase):
             self.assertFalse(clean)
             self.assertIn(b'<<<<<<< Perforce\n', merged)
             self.assertIn(b'>>>>>>> local\n', merged)
+
+
+class TestBranchExists(GitRepoTestCase):
+    def test_only_a_branch_of_that_exact_name_exists(self):
+        self.commit('Base')
+        self.commit('Next')
+        self.assertTrue(branch_exists('main', self.ws))
+        for name in ('main~1', 'main^', 'main@{0}', 'nope'):
+            with self.subTest(name=name):
+                self.assertFalse(branch_exists(name, self.ws))
 
 
 class TestGetCurrentBranch(GitRepoTestCase):

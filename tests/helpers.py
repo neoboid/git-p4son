@@ -526,7 +526,7 @@ class FakeP4:
         elif args[:4] == ['-x', '-', 'revert', '-a']:
             out = self._revert_unchanged(files, args[-1], preview='-n' in args)
         elif args[:3] == ['-x', '-', 'revert']:
-            out = self._revert(files, keep='-k' in args)
+            out, stderr = self._revert(files, keep='-k' in args)
         elif args[:5] == ['-b', '2', '-x', '-', 'move']:
             out = []
             lines = [self._rel(line) for line in (input or '').splitlines()]
@@ -550,6 +550,9 @@ class FakeP4:
                 for line in (f'... change {number}', f'... user {self.changes[number][0]}', '')]
 
     def _rel(self, path: str) -> str:
+        depot = f'//{self.client}/'
+        if path.startswith(depot):
+            return path[len(depot):]
         return os.path.relpath(os.path.join(self.ws, path),
                                self.ws).replace(os.sep, '/')
 
@@ -672,14 +675,21 @@ class FakeP4:
             out.append(f'{self._depot(path)}#1 - opened for {action}')
         return out, stderr
 
-    def _revert(self, paths: list[str], keep: bool = False) -> list[str]:
-        """Revert paths, both ends of a move, writing the have revision to disk for the ones in the depot unless keep.
+    def _revert(self, paths: list[str], keep: bool = False) -> tuple[list[str], list[str]]:
+        """Revert paths, writing the have revision to disk for the ones in the depot unless keep; returns (stdout,
+        stderr) as p4 prints them.
 
-        Without keep, the target of a move is removed from disk, as an add it was."""
-        out = []
+        Reverting the target of a move reverts its source too, and without keep removes the target from disk, as an add
+        it was. The source of a move is refused unless its target is reverted with it."""
+        out: list[str] = []
+        stderr: list[str] = []
         in_depot = self.files_at(self.have)
+        refused = [p for p in paths if self.opened.get(p, ('', ''))[1] == 'move/delete'
+                   and self.moved[p] not in paths]
+        stderr += [f'{self._depot(p)}#1 - has been moved, not reverted' for p in refused]
         paths = list(dict.fromkeys(
-            [*paths, *(self.moved[p] for p in paths if p in self.moved)]))
+            [*(p for p in paths if p not in refused),
+             *(self.moved[p] for p in paths if p in self.moved and p not in refused)]))
         for path in paths:
             _, action = self.opened.pop(path)
             self.moved.pop(path, None)
@@ -694,7 +704,7 @@ class FakeP4:
                     f.write(in_depot[path])
                 os.chmod(local, stat.S_IRUSR)
             out.append(f'{self._depot(path)}#1 - was {action}, reverted')
-        return out
+        return out, stderr
 
     def _revert_unchanged(self, paths: list[str], change: str, preview: bool) -> list[str]:
         """Revert the edits matching the depot and the adds missing on disk, as revert -a does."""
@@ -710,7 +720,7 @@ class FakeP4:
         if preview:
             return [f'{self._depot(p)}#1 - was {self.opened[p][1]}, reverted'
                     for p in unchanged]
-        return self._revert(unchanged)
+        return self._revert(unchanged)[0]
 
     def stream(self, command: list[str], on_output: Callable[[str, IO[str]], None],
                cwd: str = '.', keep_stdout: bool = True) -> RunResult[list[str]]:

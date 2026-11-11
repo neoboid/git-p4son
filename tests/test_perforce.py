@@ -15,6 +15,7 @@ from git_p4son.perforce import (
     get_latest_changelist,
     get_latest_changes,
     get_opened_files,
+    get_opened_files_and_moves,
     get_opened_files_in_changelist,
     get_out_of_date_files,
     get_p4_user,
@@ -704,6 +705,21 @@ class TestGetOpenedFiles(unittest.TestCase):
                           '-T', 'path,clientFile,depotFile,action,change,movedFile'])
         self.assertEqual(mock_run.call_args.kwargs['input'],
                          'a.txt\nsub/b.txt\nc.txt')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_the_other_end_of_a_move_by_depot_path_when_not_among_the_files(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... path /ws/a.txt', '... depotFile //ws/a.txt', '... action move/delete', '... change 100',
+            '... movedFile //ws/b.txt', '',
+            '... path /ws/b.txt', '... depotFile //ws/b.txt', '... action move/add', '... change 100',
+            '... movedFile //ws/a.txt', '',
+            '... path /ws/c.txt', '... depotFile //ws/c.txt', '... action move/delete', '... change 100',
+            '... movedFile //ws/d.txt', '',
+        ])
+        _, other_end = get_opened_files_and_moves(
+            ['a.txt', 'b.txt', 'c.txt'], '/ws')
+        self.assertEqual(
+            other_end, {'a.txt': 'b.txt', 'b.txt': 'a.txt', 'c.txt': '//ws/d.txt'})
 
     @mock.patch('git_p4son.perforce.run')
     def test_no_files_makes_no_query(self, mock_run):

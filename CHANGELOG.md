@@ -7,6 +7,9 @@
   and the change went missing from the shelf
 - With a record, `update -b` is refused unless it replaces a recorded base that no longer resolves, and
   `--per-commit`'s resume hint no longer passes `-b`
+- With git, a base given as a revision relative to a branch, such as `-b main~1`, is no longer recorded as if it were
+  a branch's name, which pointed elsewhere after the next sync. It's named by the one branch at its commit, or refused,
+  and `sync main~1` is refused as a sync branch that doesn't exist
 
 ## 0.9.3
 

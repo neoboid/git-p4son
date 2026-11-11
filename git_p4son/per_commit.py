@@ -57,8 +57,9 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
                    resumable: Callable[[], str | None] | None = None, base_name: str | None = None,
-                   only: set[str] | None = None) -> None:
-    """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one.
+                   only: set[str] | None = None, step_base: str | None = None) -> None:
+    """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one,
+    each with -b at step_base, or base_branch without it.
 
     A failing step raises CommandError naming it and the command that resumes after the last commit that worked,
     unless resumable returns None; any text it returns goes before that command."""
@@ -101,7 +102,7 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
             checkout(commit)
             log.success(f'Checked out, running git p4son {shlex.join(step)}')
             step_message = message if number == 1 else None
-            args = _parse(step, base, step_message,
+            args = _parse(step, step_base or base, step_message,
                           workspace_dir, backend, base_name)
             try:
                 args.func(args)

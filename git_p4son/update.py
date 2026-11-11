@@ -23,23 +23,19 @@ def _step(changelist: str, args: argparse.Namespace) -> list[str]:
     return ['update', changelist, *flags]
 
 
-def _step_base(plan: Plan | None) -> str | None:
-    """The base the steps of a per-commit loop open files from: where the branch leaves the depot, if recorded."""
-    # Not the last included commit: a step diffing from there replays the earlier steps' changes against p4.
-    return None if plan is None else plan.next.base_commit
-
-
 def _shelf_delay(review: Review | None) -> int | None:
     """Seconds to sleep between the shelves of the CL whose review an alias records as review."""
     return shelf_delay(None if review is None else review.tool)
 
 
 def _update_per_commit(changelist: str, plan: Plan | None, review: Review | None, args: argparse.Namespace) -> None:
-    """Update the changelist once per commit since the base branch."""
-    # Steps name the changelist by number, as resolved once here.
-    run_per_commit(_step(changelist, args), None, args.base_branch, args.workspace_dir, args.backend,
-                   sleep=_shelf_delay(review) if args.shelve else None, dry_run=args.dry_run,
-                   message=args.message, message_file=args.file, step_base=_step_base(plan))
+    """Update the changelist once per commit it doesn't include yet, or since the base branch without a record."""
+    # Steps name the changelist by number, as resolved once here. With a record they get no -b, so each opens files
+    # from the record's base: a diff from the last included commit would replay earlier steps' changes against p4.
+    run_per_commit(_step(changelist, args), None, args.base_branch if plan is None else plan.after,
+                   args.workspace_dir, args.backend, sleep=_shelf_delay(
+                       review) if args.shelve else None,
+                   dry_run=args.dry_run, message=args.message, message_file=args.file, give_base=plan is None)
 
 
 def _check_per_commit(plan: Plan, changelist: str, no_edit: bool, given: bool, workspace_dir: str) -> None:
@@ -106,7 +102,7 @@ def _shelve_twice(plan: Plan, catch_up: str, changelist: str, review: Review | N
                        resumable=lambda: None,
                        only={catch_up, resolve_commit(
                            args.backend.revision, workspace_dir)},
-                       step_base=_step_base(plan))
+                       give_base=False)
     except CommandError as error:
         # The record keeps the catch-up until it is included, so the same command finishes either step.
         raise CommandError(

@@ -104,10 +104,9 @@ class TestRunPerCommit(GitRepoTestCase):
         main = self.git('rev-parse', 'main')
         self.assertEqual([base for _, _, base, _ in self.ran], [main, main])
 
-    def test_step_base_goes_to_every_step(self):
-        self.run_steps(step_base='step-base')
-        self.assertEqual([base for _, _, base, _ in self.ran],
-                         ['step-base', 'step-base'])
+    def test_steps_get_no_base_unless_given_one(self):
+        self.run_steps(give_base=False)
+        self.assertEqual([base for _, _, base, _ in self.ran], [None, None])
 
     def test_sleeps_between_steps_but_not_after_the_last(self):
         self.run_steps(sleep=5)

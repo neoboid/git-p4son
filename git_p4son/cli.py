@@ -353,8 +353,8 @@ Examples:
         'Replace the changelist description message above the commit list '
         'with the contents of the given file')
     _add_base_branch(
-        update_parser, 'Where the commits to fold in start, for the commit list and the files to open',
-        'Defaults to after the last commit the CL includes, when its alias records that, '
+        update_parser, 'Where the files to open start, and without a record the commits to fold in',
+        'Defaults to the base the CL\'s alias records, '
         'else to HEAD~1, or with the jj backend the parent of the jj change')
     _add_dry_run(
         update_parser, 'Pretend and print what would be done, but do not execute')

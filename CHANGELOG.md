@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `update`, with or without `--per-commit`, opens every file of the change since the base its alias records, so a
+  commit that renames, deletes or restores a file an earlier commit changed is opened as such, where p4 refused it
+  and the change went missing from the shelf
+
 ## 0.9.3
 
 - With jj on Windows, an edit that keeps a file's size, made within a second of git writing it, no longer makes

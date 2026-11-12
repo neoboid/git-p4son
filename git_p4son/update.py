@@ -10,7 +10,7 @@ from .included import Plan, catch_up_subject, included_count, plan_update
 from .lib import check_at_latest_revision, check_own_pending, edit_and_shelve, update_changelist
 from .log import log, plural
 from .per_commit import message_args, run_per_commit
-from .review_tools import push_review, review_tool_config, shelf_delay
+from .review_tools import push_review, review_tool_config, runs_command, shelf_delay
 
 
 def _step(changelist: str, args: argparse.Namespace) -> list[str]:
@@ -143,7 +143,7 @@ def update_command(args: argparse.Namespace) -> int:
 
     revision = args.backend.revision
     review = find_review(changelist, workspace_dir)
-    if args.shelve and review is not None:
+    if args.shelve and review is not None and runs_command(review.tool):
         review_tool_config(review.tool, workspace_dir)
     found = find_record(changelist, workspace_dir)
     plan = None
@@ -196,7 +196,7 @@ def update_command(args: argparse.Namespace) -> int:
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve,
                     dry_run=args.dry_run, revision=revision)
-    if args.shelve and review is not None:
+    if args.shelve and review is not None and runs_command(review.tool):
         push_review(review.alias, review.tool, changelist, first=not review.started, workspace_dir=workspace_dir,
                     dry_run=args.dry_run)
     # Without their files opened, the new commits stay uncounted, for the next update to include.

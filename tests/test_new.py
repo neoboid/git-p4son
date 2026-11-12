@@ -211,7 +211,13 @@ class TestNewReviewTool(NewTestCase):
         self.assertEqual(self.p4.pending['101'],
                          FEATURE_DESCRIPTION + ['', '#review'])
         self.assertEqual(self.review_tool_runs('my-tool'), [])
-        self.assertIsNone(find_review('101', self.ws))
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'swarm', False))
+
+    def test_a_swarm_review_is_recorded_when_swarm_is_the_default(self):
+        self.new('--review')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feat', 'swarm', False))
 
     def test_shelve_without_review_runs_no_tool(self):
         save_config(self.ws, {'review-tool': {'default': 'my-tool'}})

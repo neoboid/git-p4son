@@ -23,15 +23,15 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command
   (`list`, `add`, `delete`).
 
-- **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it
-  (the branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
+- **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it (the
+  branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
   reverts the files no longer part of them through `edit_and_shelve`. `--review` (or `--review-tool`) resolves the
-  review tool first (`resolve_review_tool`) and shelves; Swarm gets a `#review` keyword, and any other tool is
-  recorded in the alias and runs after the shelve (`push_review`), before the record counts the commits. `--shelve`
-  only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds the
-  changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and
-  `update <alias>` on the others, both shelving with `--shelve` or `--review`, with `shelf_delay` between them.
-  Before shelving, `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
+  review tool first (`resolve_review_tool`) and shelves, recording the tool in the alias, Swarm included; Swarm gets a
+  `#review` keyword, and any other tool runs after the shelve (`push_review`), before the record counts the commits.
+  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds the
+  changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and `update <alias>`
+  on the others, both shelving with `--shelve` or `--review`, with `shelf_delay` between them. Before shelving,
+  `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
   `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps (`per_commit_step`) skip it.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias, once `check_own_pending` accepts it (once
@@ -110,15 +110,18 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `post-sync` hooks.
 
 - **`review_tools.py`** - Review tools, and every decision about what Swarm means: Swarm (`SWARM`), built in, and the
-  tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`,
-  else `[review-tool] default`, else Swarm, as None, and refuses an unknown tool; `_section` refuses a stray key in
-  `[review-tool]` and a `swarm` or `default` table.
-  `review_tool_config` checks a tool's `command`, `new` and `update` lists and their `$(name)` variables.
-  `shelf_delay` is `SWARM_SHELF_DELAY` for Swarm and none for a tool that is run. `run_review_tool` runs the command
-  with the `new` arguments until a run has succeeded and the `update` ones after, with the variables expanded and a
-  relative program joined to the workspace root, as Windows ignores `cwd` when it looks for the program,
-  through `run_interactive` from the workspace root, and raises `CommandError` when it fails; `push_review` then marks
-  the alias started.
+  tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`, else
+  `[review-tool] default` (`default_review_tool`), else Swarm, and refuses an unknown tool through `check_review_tool`;
+  `_section` refuses a stray key in `[review-tool]` and a `swarm` or `default` table. `runs_command` is whether a tool
+  is run after a shelve: any but Swarm, which takes the shelve itself. `review_tool_config` checks a tool's `command`,
+  `new` and `update` lists and their `$(name)` variables. `shelf_delay` is `SWARM_SHELF_DELAY` for Swarm and none for a
+  tool that is run. `run_review_tool` runs the command with the `new` arguments until a run has succeeded and the
+  `update` ones after, with the variables expanded and a relative program joined to the workspace root, as Windows
+  ignores `cwd` when it looks for the program, through `run_interactive` from the workspace root, and raises
+  `CommandError` when it fails; `push_review` then marks the alias started. `review_tool_command` is the `review-tool`
+  command: `list`, `default`, which writes `[review-tool] default`, `set`, which records a tool in an alias as started
+  (`set_review_tool`), `show` (`alias_review`), and without an action the list and the current alias's tool, if the
+  branch keyword names an existing alias.
 
 - **`scripts.py`** - `script_command`, the command that runs a workspace script: the file itself on POSIX, when
   executable, and on Windows the runner `script_runners` gives its extension, the defaults overridden by
@@ -202,9 +205,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
   may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
   `alias_for_change`, `aliases_by_change` and `alias_changes`. An alias can record a review tool (`review_tool`) and,
-  once the tool has run for the CL, `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a
-  whole `_Alias`, so every write keeps them. The old `.git-p4son/changelists/<name>` store is still read; writes move an
-  alias out of it, and `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
+  once the tool has run for the CL, `review_started` (`find_review`, `alias_review`, `set_review_tool`,
+  `mark_review_started`). `_write_alias` writes a whole `_Alias`, so every write keeps them. The old
+  `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and `migrate_changelist_aliases`,
+  which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
   `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.
@@ -213,9 +217,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `resolve_depot_root`, which returns it with the client spec (`ResolvedDepot`) for `sync`. `check_depot_root` and
   `subdirectory_depot_root` back `init`'s choice.
 
-- **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a
-  default and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file. Holds the
-  depot root, `core.writable`, the split users, the blocking processes and the script runners. The review tools read
+- **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a default
+  and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file, rewriting it, and
+  `set_setting_in_place` edits one string setting's line, leaving the rest as written, for `review-tool default`. Holds
+  the depot root, `core.writable`, the split users, the blocking processes and the script runners. The review tools read
   their own `[review-tool]` section.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files, escaping

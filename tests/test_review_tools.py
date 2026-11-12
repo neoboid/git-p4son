@@ -4,15 +4,16 @@ import os
 import sys
 from unittest import mock
 
+from git_p4son.changelist_store import Record, alias_changes, find_record, find_review, Review, save_changelist_alias
 from git_p4son.common import CommandError, RunResult
-from git_p4son.config import save_config
+from git_p4son.config import load_config, save_config
 from git_p4son.review_tools import SWARM, resolve_review_tool, review_tool_names, run_review_tool
-from tests.helpers import FakeP4, WorkspaceTestCase, captured_output
+from tests.helpers import FakeP4, P4RepoTestCase, WorkspaceTestCase, captured_output
 
 
 class TestResolveReviewTool(WorkspaceTestCase):
     def test_swarm_is_the_default(self):
-        self.assertIsNone(resolve_review_tool(None, self.ws))
+        self.assertEqual(resolve_review_tool(None, self.ws), SWARM)
 
     def test_the_configured_default(self):
         self.write_review_tool('my-tool')
@@ -22,7 +23,7 @@ class TestResolveReviewTool(WorkspaceTestCase):
     def test_a_named_tool_over_the_default(self):
         self.write_review_tool('my-tool')
         save_config(self.ws, {'review-tool': {'default': 'my-tool'}})
-        self.assertIsNone(resolve_review_tool(SWARM, self.ws))
+        self.assertEqual(resolve_review_tool(SWARM, self.ws), SWARM)
 
     def test_the_tools_are_swarm_then_the_configured_ones(self):
         self.write_review_tool('zeta')
@@ -214,3 +215,123 @@ class TestRunReviewTool(WorkspaceTestCase):
             self.run_tool()
         self.assertEqual(self.review_tool_runs('my-tool')
                          [0]['args'], ['create', '101'])
+
+
+class TestReviewToolCommand(P4RepoTestCase):
+    """The review-tool command, on branch feature, whose alias names CL 101, with alias other for CL 102."""
+
+    def setUp(self):
+        super().setUp()
+        self.git('switch', '-q', '-c', 'feature')
+        self.write_review_tool('my-tool')
+        save_changelist_alias('feature', '101', self.ws, force=False)
+        save_changelist_alias('other', '102', self.ws, force=False)
+
+    def report(self, *argv):
+        """What review-tool printed from its first heading on."""
+        out = self.p4son('review-tool', *argv)
+        return out[min(out.index(heading) for heading in ('# Review tool', '# Setting', '# Default')
+                       if heading in out):]
+
+    def test_set_records_the_tool_in_the_current_alias_as_started(self):
+        self.assertEqual(self.report('set', 'my-tool'),
+                         '# Setting the review tool of alias feature\n[ok] my-tool, review started\n')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feature', 'my-tool', True))
+
+    def test_set_keeps_what_the_alias_records(self):
+        record = Record('main', 'abc', ['1'])
+        save_changelist_alias('feature', '101', self.ws,
+                              force=True, change='kkkk', record=record)
+        self.p4son('review-tool', 'set', 'my-tool')
+        self.assertEqual(find_record('101', self.ws), ('feature', record))
+        self.assertEqual(alias_changes(self.ws), {'feature': 'kkkk'})
+
+    def test_set_on_another_alias(self):
+        self.p4son('review-tool', 'set', 'my-tool', 'other')
+        self.assertEqual(find_review('102', self.ws),
+                         Review('other', 'my-tool', True))
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_set_swarm_records_swarm(self):
+        self.p4son('review-tool', 'set', 'my-tool')
+        self.assertEqual(self.report(
+            'set', 'swarm'), '# Setting the review tool of alias feature\n[ok] swarm\n')
+        self.assertEqual(find_review('101', self.ws),
+                         Review('feature', 'swarm', True))
+
+    def test_set_refuses_an_unknown_tool(self):
+        self.p4son_fails('review-tool', 'set', 'nope',
+                         message='^Unknown review tool "nope". The review tools are: swarm, my-tool$')
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_set_refuses_a_tool_whose_configuration_is_not_valid(self):
+        self.write_review_tool('broken', command=None)
+        self.p4son_fails('review-tool', 'set', 'broken',
+                         message='has no command')
+        self.assertIsNone(find_review('101', self.ws))
+
+    def test_set_refuses_an_alias_that_does_not_exist(self):
+        self.p4son_fails('review-tool', 'set', 'my-tool', 'nope',
+                         message='No changelist alias found: nope')
+
+    def test_show_the_current_alias(self):
+        self.p4son('review-tool', 'set', 'my-tool')
+        self.assertEqual(self.report('show'),
+                         '# Review tool of alias feature\n[ok] my-tool, review started\n')
+
+    def test_show_an_alias_without_a_tool(self):
+        self.assertEqual(self.report('show', 'other'),
+                         '# Review tool of alias other\n[ok] None recorded\n')
+
+    def test_show_an_alias_that_does_not_exist(self):
+        self.p4son_fails('review-tool', 'show', 'nope',
+                         message='No changelist alias found: nope')
+
+    def test_default_is_swarm_without_a_setting(self):
+        self.assertEqual(self.report('default'),
+                         '# Default review tool\n[ok] swarm\n')
+
+    def test_default_sets_the_setting(self):
+        self.assertEqual(self.report('default', 'my-tool'),
+                         '# Setting the default review tool\n[ok] my-tool\n')
+        self.assertEqual(resolve_review_tool(None, self.ws), 'my-tool')
+
+    def test_default_keeps_the_comments_of_the_tool_tables(self):
+        text = ('[review-tool.my-tool]\n'
+                '# Pinned build.\n'
+                'command = [\n'
+                '    "tool",\n'
+                ']\n')
+        self.write_config(text)
+        self.p4son('review-tool', 'default', 'my-tool')
+        with open(os.path.join(self.ws, '.git-p4son', 'config.toml'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), text +
+                             '\n[review-tool]\ndefault = "my-tool"\n')
+
+    def test_default_swarm_sets_swarm(self):
+        self.p4son('review-tool', 'default', 'my-tool')
+        self.p4son('review-tool', 'default', 'swarm')
+        self.assertEqual(load_config(self.ws)[
+                         'review-tool']['default'], 'swarm')
+        self.assertEqual(resolve_review_tool(None, self.ws), 'swarm')
+
+    def test_default_refuses_an_unknown_tool(self):
+        self.p4son_fails('review-tool', 'default', 'nope',
+                         message='^Unknown review tool "nope". The review tools are: swarm, my-tool$')
+        self.assertNotIn('default', load_config(self.ws)['review-tool'])
+
+    def test_list_marks_the_default(self):
+        self.p4son('review-tool', 'default', 'my-tool')
+        self.assertEqual(self.report('list'),
+                         '# Review tools\nswarm, built in\nmy-tool, default\n')
+
+    def test_without_an_action_lists_the_tools_and_shows_the_current_alias(self):
+        self.p4son('review-tool', 'set', 'my-tool')
+        self.assertEqual(self.report(), '# Review tools\nswarm, built in, default\nmy-tool\n'
+                         '\n# Review tool of alias feature\n[ok] my-tool, review started\n')
+
+    def test_without_an_action_and_no_current_alias_only_lists(self):
+        self.git('switch', '-q', '-c', 'lonely')
+        self.assertEqual(
+            self.report(), '# Review tools\nswarm, built in, default\nmy-tool\n')

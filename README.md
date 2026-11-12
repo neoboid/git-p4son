@@ -99,7 +99,8 @@ jj new main -m "Next fancy feature"
 - [Setup](#setup)
 - [Commands](#commands): [init](#init-command), [sync](#sync-command), [sync-split-users](#sync-split-users-command),
   [new](#new-command), [update](#update-command), [review](#review-command), [list-changes](#list-changes-command),
-  [alias](#alias-command), [writable](#writable-command), [completion](#completion-command), [skill](#skill-command)
+  [alias](#alias-command), [review-tool](#review-tool-command), [writable](#writable-command),
+  [completion](#completion-command), [skill](#skill-command)
 - [Configuration](#configuration)
 - [Review Tools](#review-tools)
 - [Hooks](#hooks)
@@ -165,7 +166,7 @@ workflow.
 
 ## Commands
 
-git-p4son provides eleven commands:
+git-p4son provides twelve commands:
 
 | Command | What it does |
 | --- | --- |
@@ -177,6 +178,7 @@ git-p4son provides eleven commands:
 | [`review`](#review-command) | Create a review with one shelf per commit |
 | [`list-changes`](#list-changes-command) | List the commit subjects since a base branch |
 | [`alias`](#alias-command) | Manage the names that stand for changelist numbers |
+| [`review-tool`](#review-tool-command) | Show or set the default review tool, and the one an alias records |
 | [`writable`](#writable-command) | Keep git-tracked files writable, without `p4 edit` first |
 | [`completion`](#completion-command) | Print the path to a shell completion script |
 | [`skill`](#skill-command) | Install or show the Claude Code skill |
@@ -455,8 +457,8 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
 - `--review`: Shelve and create a review with the default [review tool](#review-tools), Swarm unless
   `[review-tool] default` names another. For Swarm, adds the `#review` keyword
 - `--review-tool NAME`: Push the review to this review tool instead of the default one: `swarm`, or a
-  `[review-tool.NAME]` in `.git-p4son/config.toml`. Implies `--review`. The alias records the tool, which
-  `update --shelve` then runs
+  `[review-tool.NAME]` in `.git-p4son/config.toml`. Implies `--review`. The alias records the tool, Swarm included,
+  which `update --shelve` then runs
 - `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
   commit, as described below. Refuses `--no-edit` and `--no-alias`
 - `--ignore-out-of-date`: Shelve even if files in the change are not at the latest revision (see
@@ -852,6 +854,28 @@ git p4son alias clean
 git p4son alias clean --porcelain   # e.g. "deleted feature-login 12345"
 ```
 
+### Review-Tool Command
+
+Show or set the default [review tool](#review-tools), and the tool an alias records for its changelist's review:
+
+```sh
+git p4son review-tool                          # list the tools, and show the current alias's tool
+git p4son review-tool list                     # list the tools, marking the default
+git p4son review-tool default                  # show the default tool
+git p4son review-tool default my-tool          # make my-tool the default
+git p4son review-tool show [alias]             # show the tool an alias records
+git p4son review-tool set my-tool [alias]      # record my-tool in an alias
+```
+
+- `default` sets `[review-tool] default` in `.git-p4son/config.toml`, refusing a tool that isn't configured. It
+  edits only that line, so the rest of the file keeps its comments and layout. Without the setting, Swarm is the
+  default. A review keeps the tool it was created with.
+- `set` records the tool of a review that exists, such as one whose alias was recreated with `alias new`, or one
+  created by hand, so `update --shelve` runs the tool's `update` arguments after each shelve. It keeps everything else
+  the alias records.
+- `show` prints the tool and whether it has run for the review, or `None recorded`.
+- The alias is the last argument and defaults to the current one, as with `alias new`.
+
 ### Writable Command
 
 Writable mode keeps git-tracked files writable, so you can edit them without running `p4 edit` first. git-p4son
@@ -980,9 +1004,10 @@ update = ["update"]
 ```
 
 `--review-tool my-tool` pushes a review to it, and `default` makes it the default, so `--review-tool swarm` picks
-Swarm again. The alias records the changelist's tool, so `update --shelve` runs it again without naming it; to move a
-change to another tool, delete the changelist and its alias and create the review again. `--no-alias` is refused with
-any tool but Swarm.
+Swarm again. The alias records the changelist's tool by name, Swarm included, so `update --shelve` runs it again
+without naming it, and a review stays on its tool when the default changes. `update` never falls back to the default:
+an alias that records no tool, such as one made by `alias new`, gets no tool run until
+[`review-tool set`](#review-tool-command) records one. `--no-alias` is refused with any tool but Swarm.
 
 With a review tool other than Swarm, there is no `#review` keyword, and after each shelve of the review git-p4son runs
 `command` from the workspace root, once per commit with `review`. On the shelve of `new`, the `new` arguments are

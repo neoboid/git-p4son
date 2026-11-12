@@ -1,12 +1,13 @@
 """Per-repo configuration stored in .git-p4son/config.toml."""
 
 import os
+import re
 import tomllib
 from typing import Any, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
-from .toml_writer import format_toml
+from .toml_writer import format_string, format_toml
 
 
 def ensure_config_dir(workspace_dir: str) -> None:
@@ -91,3 +92,50 @@ def save_config(workspace_dir: str, config: dict[str, dict[str, Any]]) -> None:
     # tomllib reads strict UTF-8, so write UTF-8 explicitly.
     with open(config_path(workspace_dir), 'w', encoding='utf-8') as f:
         f.write(format_toml(merged))
+
+
+def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str) -> None:
+    """Set a string setting by editing its line of config.toml, leaving the rest of the file as written.
+
+    Raises ConfigError, leaving the file alone, when the edited file doesn't read back with the value."""
+    path = config_path(workspace_dir)
+    try:
+        with open(path, encoding='utf-8', newline='') as f:
+            text = f.read()
+    except FileNotFoundError:
+        text = ''
+    lines = text.splitlines(keepends=True)
+    header = re.compile(rf'^\s*\[\s*{re.escape(section)}\s*\]\s*(#.*)?$')
+    start = next((i for i, text_line in enumerate(
+        lines) if header.match(text_line)), None)
+    if start is None:
+        if text and not text.endswith('\n'):
+            text += '\n'
+        text += ('\n' if text else '') + \
+            f'[{section}]\n{key} = {format_string(value)}\n'
+    else:
+        if not lines[start].endswith('\n'):
+            lines[start] += '\n'
+        # Ended as the header is, so a CRLF file stays CRLF.
+        line = f'{key} = {format_string(value)}' + \
+            ('\r\n' if lines[start].endswith('\r\n') else '\n')
+        end = next((i for i in range(start + 1, len(lines))
+                   if lines[i].lstrip().startswith('[')), len(lines))
+        assignment = re.compile(rf'^\s*{re.escape(key)}\s*=')
+        found = next((i for i in range(start + 1, end)
+                     if assignment.match(lines[i])), None)
+        if found is None:
+            lines.insert(start + 1, line)
+        else:
+            lines[found] = line
+        text = ''.join(lines)
+    try:
+        written = tomllib.loads(text).get(section, {}).get(key)
+    except tomllib.TOMLDecodeError:
+        written = None
+    if written != value:
+        raise ConfigError(f'{path} holds {section}.{key} in a form git-p4son can\'t edit. '
+                          f'Set {key} in [{section}] by hand.')
+    ensure_config_dir(workspace_dir)
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        f.write(text)

@@ -139,6 +139,14 @@ def alias_for_branch(backend: Backend, workspace_dir: str, new_alias: bool) -> s
     return backend.suggested_alias()
 
 
+def alias_for_branch_or_none(backend: Backend, workspace_dir: str, new_alias: bool) -> str | None:
+    """alias_for_branch, or None when the backend can't tell."""
+    try:
+        return alias_for_branch(backend, workspace_dir, new_alias)
+    except (CommandError, OSError):
+        return None
+
+
 def resolve_branch_keyword(backend: Backend, workspace_dir: str, new_alias: bool) -> str:
     """alias_for_branch under a heading of its own, which shows what the branch keyword resolved to."""
     words = backend.words

@@ -13,6 +13,7 @@ from git_p4son.config import (
     get_setting,
     load_config,
     save_config,
+    set_setting_in_place,
 )
 from tests.helpers import init_git_repo, WorkspaceTestCase
 
@@ -131,6 +132,63 @@ class TestSaveConfig(unittest.TestCase):
             save_config(tmpdir, {'depot': {'root': '//second'}})
             self.assertEqual(
                 load_config(tmpdir), {'depot': {'root': '//second'}})
+
+
+class TestSetSettingInPlace(WorkspaceTestCase):
+    """set_setting_in_place edits one line of config.toml and leaves the rest as written."""
+
+    HAND_WRITTEN = (
+        '# Workspace settings, edited by hand.\n'
+        '[review-tool]\n'
+        '\n'
+        '# Our reviewer.\n'
+        '[review-tool.reviewer]\n'
+        'command = [\n'
+        '    "C:/tools/reviewer.exe",   # pinned build\n'
+        ']\n')
+
+    def text(self):
+        with open(config_path(self.ws), encoding='utf-8') as f:
+            return f.read()
+
+    def test_inserts_the_key_after_the_header_keeping_the_rest(self):
+        self.write_config(self.HAND_WRITTEN)
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'reviewer')
+        self.assertEqual(self.text(), self.HAND_WRITTEN.replace(
+            '[review-tool]\n', '[review-tool]\ndefault = "reviewer"\n', 1))
+
+    def test_replaces_the_line_in_its_own_table_only(self):
+        self.write_config(
+            '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "a"  # old\nx = 2\n')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
+        self.assertEqual(self.text(
+        ), '[core]\ndefault = 1\n\n[review-tool]  # tools\ndefault = "b"\nx = 2\n')
+
+    def test_a_crlf_file_stays_crlf(self):
+        ensure_config_dir(self.ws)
+        with open(config_path(self.ws), 'w', encoding='utf-8', newline='') as f:
+            f.write('[review-tool]\r\n# c\r\n')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'a')
+        with open(config_path(self.ws), encoding='utf-8', newline='') as f:
+            self.assertEqual(
+                f.read(), '[review-tool]\r\ndefault = "a"\r\n# c\r\n')
+
+    def test_appends_the_table_when_there_is_none(self):
+        self.write_config('[core]\nwritable = true')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'a')
+        self.assertEqual(
+            self.text(), '[core]\nwritable = true\n\n[review-tool]\ndefault = "a"\n')
+
+    def test_creates_the_file(self):
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'a')
+        self.assertEqual(self.text(), '[review-tool]\ndefault = "a"\n')
+        self.assertEqual(_read_config_gitignore(self.ws), '*\n')
+
+    def test_refuses_a_file_it_cannot_edit_leaving_it_alone(self):
+        self.write_config('review-tool.default = "a"\n')
+        with self.assertRaisesRegex(ConfigError, 'Set default in \\[review-tool\\] by hand'):
+            set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
+        self.assertEqual(self.text(), 'review-tool.default = "a"\n')
 
 
 class TestLoadConfigInvalid(unittest.TestCase):

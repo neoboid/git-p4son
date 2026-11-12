@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `review-tool` command: list the review tools, show or set the default, and show or set the tool an alias
+  records, such as for an alias recreated with `alias new`, whose review `update --shelve` otherwise left alone
+- An alias records Swarm as its review tool too, so a review's tool shows and stays put when the default changes.
+  An older git-p4son's `update --shelve` refuses such an alias
 - Strings with control characters, such as a newline in a review tool's argument, are escaped in the files git-p4son
   writes, where they made `config.toml` invalid
 - `alias new` and `update` refuse a changelist that isn't pending, is owned by another user, such as Swarm's copy of

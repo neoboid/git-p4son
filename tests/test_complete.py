@@ -6,6 +6,7 @@ import io
 import unittest
 from unittest import mock
 
+from git_p4son.changelist_store import save_changelist_alias
 from git_p4son.cli import create_parser
 from git_p4son.common import CommandError
 from git_p4son.complete import (
@@ -126,7 +127,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('sync-split-users', names)
         self.assertIn('writable', names)
         self.assertIn('skill', names)
-        self.assertEqual(len(names), 10)
+        self.assertIn('review-tool', names)
+        self.assertEqual(len(names), 11)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
@@ -539,6 +541,25 @@ class TestCompleteReviewTool(WorkspaceTestCase):
         result = _complete(create_parser(), [
                            'review', '--review-tool', ''], workspace_dir=self.ws)
         self.assertEqual([name for name, _ in result], ['swarm', 'my-tool'])
+
+    def names(self, *words):
+        return [name for name, _ in _complete(create_parser(), list(words), workspace_dir=self.ws)]
+
+    def test_the_actions(self):
+        self.assertEqual(self.names('review-tool', ''),
+                         ['list', 'default', 'set', 'show'])
+
+    def test_set_and_default_complete_the_tools(self):
+        self.write_review_tool('my-tool')
+        self.assertEqual(self.names('review-tool', 'set', ''),
+                         ['swarm', 'my-tool'])
+        self.assertEqual(self.names(
+            'review-tool', 'default', 'm'), ['my-tool'])
+
+    def test_set_completes_the_alias_after_the_tool(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        self.assertEqual(self.names(
+            'review-tool', 'set', 'swarm', 'f'), ['feat'])
 
     def test_a_broken_config_completes_swarm(self):
         self.write_config('review-tool = "x"\n')

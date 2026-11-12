@@ -206,6 +206,11 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         self.assertEqual(self.text(), '[sync]\n# Who gets a commit of their own.\nsplit-users = ["carol", "$(user)"]\n'
                          'branch = "main"\n')
 
+    def test_a_bool(self):
+        self.write_config('# Mine.\n[core]\nwritable = false\n')
+        set_setting_in_place(self.ws, 'core', 'writable', True)
+        self.assertEqual(self.text(), '# Mine.\n[core]\nwritable = true\n')
+
     def test_an_empty_list(self):
         set_setting_in_place(self.ws, 'sync', 'split-users', [])
         self.assertEqual(self.text(), '[sync]\nsplit-users = []\n')

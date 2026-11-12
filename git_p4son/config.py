@@ -102,8 +102,8 @@ def _load(text: str) -> dict[str, Any] | None:
         return None
 
 
-def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | list[str]) -> None:
-    """Set a string or list setting in config.toml, replacing only its value and leaving the rest as written.
+def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | bool | list[str]) -> None:
+    """Set a setting in config.toml, replacing only its value and leaving the rest as written.
 
     Raises ConfigError, leaving the file alone, when the edited file doesn't read back with the value."""
     path = config_path(workspace_dir)

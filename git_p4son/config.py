@@ -121,6 +121,22 @@ def _statements(lines: list[str]) -> list[tuple[int, int]]:
     return statements
 
 
+def _comments(span: list[str]) -> list[tuple[int, int]]:
+    """Where each comment in a statement's lines starts, as (line, column), in order."""
+    value = _load(''.join(span))
+    if value is None:
+        return []
+    comments = []
+    for n, line in enumerate(span):
+        # A # starts a comment when cutting the line there leaves the value as it was; in a string it doesn't.
+        for column in (i for i, char in enumerate(line) if char == '#'):
+            cut = [*span[:n], line[:column] + _newline(line), *span[n + 1:]]
+            if _load(''.join(cut)) == value:
+                comments.append((n, column))
+                break
+    return comments
+
+
 def _path(data: object) -> tuple[tuple[str, ...], object]:
     """The keys down through tables of one key each, and what they lead to."""
     path: list[str] = []
@@ -155,8 +171,19 @@ def _set_in_lines(lines: list[str], section: str, key: str, value: str | bool | 
             if not lines[first].lstrip().startswith('[') and (found := _key(lines[first]))]
 
     def replace(first: int, last: int, end: int, new_value: object) -> None:
-        lines[first:last + 1] = [f'{lines[first][:end].rstrip()} = {format_value(new_value)}'
-                                 f'{_newline(lines[first])}']
+        newline = _newline(lines[first])
+        indent = lines[first][:len(lines[first]) - len(lines[first].lstrip())]
+        comments = _comments(lines[first:last + 1])
+        # The last line's comment stays after the value; the ones inside it go above the key.
+        trailing = comments.pop(
+        ) if comments and comments[-1][0] == last - first else None
+        line = f'{lines[first][:end].rstrip()} = {format_value(new_value)}'
+        if trailing is not None:
+            before = lines[last][:trailing[1]]
+            line += (before[len(before.rstrip()):] or ' ') + \
+                lines[last][trailing[1]:].rstrip('\r\n')
+        lines[first:last + 1] = [f'{indent}{lines[first + n][column:].rstrip()}{newline}' for n, column in comments] \
+            + [f'{line}{newline}']
 
     top = [entry for entry in keys if entry[0] < first_header]
     for first, last, path, end in top:

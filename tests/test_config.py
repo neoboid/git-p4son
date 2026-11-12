@@ -162,7 +162,7 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "a"  # old\nx = 2\n')
         set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
         self.assertEqual(self.text(
-        ), '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "b"\nx = 2\n')
+        ), '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "b"  # old\nx = 2\n')
 
     def test_a_crlf_file_stays_crlf(self):
         ensure_config_dir(self.ws)
@@ -196,15 +196,23 @@ class TestSetSettingInPlace(WorkspaceTestCase):
     def test_replaces_a_value_written_over_several_lines(self):
         self.write_config('[sync]\n'
                           '# Who gets a commit of their own.\n'
-                          'split-users = [\n'
+                          '  split-users = [  # by name\n'
                           '    "alice",  # lead\n'
+                          '    # contractors\n'
                           '    "bob",\n'
-                          ']\n'
+                          ']  # end\n'
                           'branch = "main"\n')
         set_setting_in_place(
             self.ws, 'sync', 'split-users', ['carol', '$(user)'])
-        self.assertEqual(self.text(), '[sync]\n# Who gets a commit of their own.\nsplit-users = ["carol", "$(user)"]\n'
+        self.assertEqual(self.text(), '[sync]\n# Who gets a commit of their own.\n'
+                         '  # by name\n  # lead\n  # contractors\n'
+                         '  split-users = ["carol", "$(user)"]  # end\n'
                          'branch = "main"\n')
+
+    def test_a_hash_in_a_string_is_not_a_comment(self):
+        self.write_config('[sync]\nbranch = "a#b"  # c\n')
+        set_setting_in_place(self.ws, 'sync', 'branch', 'x#y')
+        self.assertEqual(self.text(), '[sync]\nbranch = "x#y"  # c\n')
 
     def test_a_bool(self):
         self.write_config('# Mine.\n[core]\nwritable = false\n')
@@ -263,7 +271,7 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             '# Mine.\nreview-tool.default = "a"  # old\n\n[core]\nwritable = true\n')
         set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
         self.assertEqual(
-            self.text(), '# Mine.\nreview-tool.default = "b"\n\n[core]\nwritable = true\n')
+            self.text(), '# Mine.\nreview-tool.default = "b"  # old\n\n[core]\nwritable = true\n')
 
     def test_a_new_key_beside_dotted_keys_is_dotted(self):
         self.write_config(
@@ -277,7 +285,7 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             'depot = { root = "//a", other = 1 }  # depot\n[core]\nwritable = true\n')
         set_setting_in_place(self.ws, 'depot', 'root', '//b')
         self.assertEqual(
-            self.text(), 'depot = { root = "//b", other = 1 }\n[core]\nwritable = true\n')
+            self.text(), 'depot = { root = "//b", other = 1 }  # depot\n[core]\nwritable = true\n')
 
     def test_a_new_key_in_an_inline_table(self):
         self.write_config('sync = { branch = "main" }\n')

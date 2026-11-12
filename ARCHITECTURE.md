@@ -61,9 +61,11 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `rename`, `delete`, `clean`), each an `alias_*_command`
   built on `changelist_store.py`. `rename` takes one or two names, as `git branch -m` does, and resolves the `branch`
   keyword for each itself: the current alias as the old name, the suggested one as the new. `clean` deletes the aliases
-  whose changelist `is_changelist_gone` finds submitted or missing; it and `delete --all` go on past an alias that fails
-  to delete, then raise `CommandError` with the count. `clean --porcelain` sets `quiet`, as `list-changes --porcelain`
-  does, and prints one line per alias directly.
+  whose changelist `is_changelist_gone` finds submitted or missing, or whose file holds no changelist
+  (`unreadable_aliases`), after giving the aliases an older version saved in another case or under a now reserved name a
+  free lowercase one (`lowercase_aliases`, `migrate_changelist_aliases`); it and `delete --all` go on past an alias that
+  fails to delete, then raise `CommandError` with the count. `clean --porcelain` sets `quiet`, as `list-changes
+  --porcelain` does, and prints one line per alias directly.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets

@@ -816,12 +816,15 @@ Delete the aliases whose changelist is no longer pending, as it was submitted or
 git p4son alias clean [-n] [--porcelain]
 ```
 
-It first moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`, then goes through the aliases
-in name order: it looks up the alias's changelist in Perforce and deletes the alias if the changelist was submitted or
-doesn't exist. If p4 answers neither that nor pending for a changelist, it stops
-there, leaving that alias and the ones after it. A submit that renumbers the changelist leaves its old number behind,
-which counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist
-is still pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
+It first renames aliases an older version saved under a name that isn't lowercase, or is reserved once lowercased (such
+as `HEAD`), to their lowercase name, and moves any aliases still in `.git-p4son/changelists/` to `.git-p4son/aliases/`
+the same way. A name already taken, or reserved, gets `-1`, `-2` and so on appended, so `HEAD` becomes `head-1`. Until
+then, such an alias isn't listed or found, except one only in another case on Windows or macOS. Each rename is listed.
+Then it goes through the aliases in name order: it looks up the alias's changelist in Perforce and deletes the alias if
+the changelist was submitted or doesn't exist. If p4 answers neither that nor pending for a changelist, it stops there,
+leaving that alias and the ones after it. A submit that renumbers the changelist leaves its old number behind, which
+counts as gone too. With the jj backend, an alias whose [jj change](#jujutsu-jj) is gone but whose changelist is still
+pending is kept; `alias list` marks it `(gone)`, and `alias delete` removes it.
 
 It ends under an `Alias clean done` heading with how many aliases it deleted and kept. If any couldn't be deleted,
 that line is a warning with how many failed, followed by an error, and the command exits with 1.
@@ -829,7 +832,7 @@ that line is a warning with how many failed, followed by an error, and the comma
 To delete specific aliases, use `alias list` and `alias delete`.
 
 **Options:**
-- `-n, --dry-run`: List the aliases that would be deleted, without deleting or moving any. Ends with
+- `-n, --dry-run`: List the aliases that would be deleted, without deleting, renaming or moving any. Ends with
   `Dry run, nothing changed`
 - `--porcelain`: Print only one `<action> <alias> <CL>` line per alias, for scripts and agents. The action is `kept`,
   `deleted`, or `failed` when the alias couldn't be deleted; with `-n` it is `would-keep` or `would-delete`. Errors

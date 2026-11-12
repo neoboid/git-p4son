@@ -3,6 +3,7 @@
 import os
 import re
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple, TypeVar
@@ -169,7 +170,8 @@ def _remove_old_alias(old_path: str, workspace_dir: str) -> None:
         pass
 
 
-def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
+def _write_alias(name: str, alias: _Alias, workspace_dir: str, remove_old: bool = True) -> None:
+    """Write alias under name, and remove the old store's copy of it unless not remove_old."""
     path, old_path = _alias_paths(name, workspace_dir)
     changelist, change, record = alias.changelist, alias.change, alias.record
     if not changelist.isdigit():
@@ -193,22 +195,28 @@ def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
         data['review_started'] = alias.review_started
     with open(path, 'w', encoding='utf-8') as f:
         f.write(format_toml(data))
-    _remove_old_alias(old_path, workspace_dir)
+    if remove_old:
+        _remove_old_alias(old_path, workspace_dir)
 
 
-def _listed(directory: str, suffix: str, read: Callable[[str, str], _Read]) -> dict[str, _Read]:
-    """The readable aliases in a store directory, by lowercased name; files that hold none, or that their lowercased
-    name doesn't reach, as an older version saved them, are left out."""
+def _listed(directory: str, suffix: str, read: Callable[[str, str], _Read], as_stored: bool = False
+            ) -> dict[str, _Read]:
+    """The readable aliases in a store directory, by name; files that hold none are left out.
+
+    Unless as_stored, a file that its lowercased name doesn't reach, as an older version saved it, is left out too,
+    until alias clean renames it."""
     if not os.path.isdir(directory):
         return {}
     aliases = {}
     for entry in os.listdir(directory):
         path = os.path.join(directory, entry)
-        name = entry.removesuffix(suffix).lower()
+        name = entry.removesuffix(suffix)
+        if not as_stored:
+            name = name.lower()
         reached = os.path.join(directory, name + suffix)
         # A case-insensitive file system reaches Feat.toml as feat.toml; HEAD.toml lowercases to a reserved name.
         if (not entry.endswith(suffix) or not os.path.isfile(path) or validate_alias_name(name)
-                or not (os.path.exists(reached) and os.path.samefile(reached, path))):
+                or not (as_stored or os.path.exists(reached) and os.path.samefile(reached, path))):
             continue
         try:
             aliases[name] = read(path, name)
@@ -347,18 +355,74 @@ def rename_changelist_alias(old: str, new: str, workspace_dir: str, force: bool)
     return alias.changelist
 
 
-def migrate_changelist_aliases(workspace_dir: str) -> int:
-    """Move the aliases in the old store to the new one, and return how many moved.
+def _free_name(name: str, taken: Callable[[str], bool]) -> str:
+    """name lowercased, or with -1, -2 and so on appended, the first that is a valid alias name and not taken."""
+    base = candidate = name.lower()
+    number = 0
+    while validate_alias_name(candidate) is not None or taken(candidate):
+        number += 1
+        candidate = f'{base}-{number}'
+    return candidate
 
-    An alias in both stores keeps the new one, as reads do.
-    """
-    current = _listed_new(workspace_dir)
-    moved = 0
-    for name, changelist in _listed_old(workspace_dir).items():
-        if name in current:
-            _remove_old_alias(_alias_paths(
-                name, workspace_dir)[1], workspace_dir)
-        else:
-            _write_alias(name, _Alias(changelist, None, None), workspace_dir)
-            moved += 1
+
+def lowercase_aliases(workspace_dir: str) -> list[tuple[str, str]]:
+    """Rename each alias in the store whose name an older version allowed but isn't lowercase, or is reserved once
+    lowercased, to a free lowercase name, and return (old, new) for each.
+
+    Raises CommandError if a rename fails."""
+    directory = _aliases_dir(workspace_dir)
+    if not os.path.isdir(directory):
+        return []
+    entries = sorted(entry for entry in os.listdir(directory)
+                     if entry.endswith('.toml') and os.path.isfile(os.path.join(directory, entry)))
+    # Every file counts, as a case-insensitive file system takes Head-1.toml for head-1.toml.
+    taken = Counter(entry.removesuffix('.toml').lower() for entry in entries)
+    renamed: list[tuple[str, str]] = []
+    for entry in entries:
+        name = entry.removesuffix('.toml')
+        # Never an alias name, or already lowercase and valid.
+        if validate_alias_name(name) is not None or (name == name.lower() and validate_alias_name(name) is None):
+            continue
+        taken[name.lower()] -= 1
+        new = _free_name(name, lambda candidate: taken[candidate] > 0)
+        try:
+            os.replace(os.path.join(directory, entry),
+                       os.path.join(directory, f'{new}.toml'))
+        except OSError as error:
+            done = ', '.join(f'{old} -> {to}' for old, to in renamed)
+            before = f'. Renamed before it: {done}' if renamed else ''
+            raise CommandError(
+                f'Could not rename alias {name} to {new}: {error}{before}') from error
+        taken[new] += 1
+        renamed.append((name, new))
+    return renamed
+
+
+def migrate_changelist_aliases(workspace_dir: str) -> list[tuple[str, str]]:
+    """Move the aliases in the old store to the new one, and return (old, new) name for each moved.
+
+    An alias in both stores under the same name keeps the new one, as reads do; any other name the store holds gets
+    a free one."""
+    old_dir = _old_aliases_dir(workspace_dir)
+    current = {name.lower() for name in _listed_new(workspace_dir)}
+    old = sorted(_listed(old_dir, '', _read_old_alias, as_stored=True).items())
+    # The old aliases still to move keep their own names free.
+    waiting = Counter(name.lower() for name, _ in old)
+    taken = set(current)
+    moved = []
+    for name, changelist in old:
+        waiting[name.lower()] -= 1
+        if name not in current:
+            new = _free_name(
+                name, lambda candidate: candidate in taken or waiting[candidate] > 0)
+            # Not removing the old store's copy of new, which may be another alias still to move.
+            _write_alias(new, _Alias(changelist, None, None),
+                         workspace_dir, remove_old=False)
+            taken.add(new)
+            moved.append((name, new))
+        os.remove(os.path.join(old_dir, name))
+    try:
+        os.rmdir(old_dir)
+    except OSError:
+        pass
     return moved

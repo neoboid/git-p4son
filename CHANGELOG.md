@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0
+
 - New `review-tool` command: list the review tools, and show or set the default and the tool an alias records, such
   as after recreating an alias with `alias new`
 - An alias records its review tool even when it's Swarm, so a review stays on its tool when the default changes.

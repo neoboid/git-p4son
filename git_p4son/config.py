@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
-from .toml_writer import format_key, format_toml, format_value
+from .toml_writer import format_key, format_value
 
 
 def ensure_config_dir(workspace_dir: str) -> None:
@@ -80,17 +80,6 @@ def get_setting(workspace_dir: str, section: str, key: str, expected: type[_Valu
         raise ConfigError(f'{section}.{key} in config.toml must be '
                           f'{_TYPE_DESCRIPTIONS[expected]}')
     return value
-
-
-def save_config(workspace_dir: str, config: dict[str, dict[str, Any]]) -> None:
-    """Merge config into the config file, preserving sections and keys not named in config."""
-    merged = load_config(workspace_dir)
-    for section, values in config.items():
-        merged.setdefault(section, {}).update(values)
-    ensure_config_dir(workspace_dir)
-    # tomllib reads strict UTF-8, so write UTF-8 explicitly.
-    with open(config_path(workspace_dir), 'w', encoding='utf-8') as f:
-        f.write(format_toml(merged))
 
 
 def _load(text: str) -> dict[str, Any] | None:

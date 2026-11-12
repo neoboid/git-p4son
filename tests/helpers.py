@@ -23,7 +23,8 @@ from git_p4son import CONFIG_DIR
 from git_p4son.backend import open_backend
 from git_p4son.changelist_store import find_record, Record
 from git_p4son.common import CommandError, RunError, RunResult
-from git_p4son.config import ensure_config_dir, save_config
+from git_p4son.config import config_path, ensure_config_dir, load_config
+from git_p4son.toml_writer import format_toml
 from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
 from git_p4son.perforce import P4SyncPreviewFile
 
@@ -187,6 +188,16 @@ def init_git_repo(path: str) -> None:
 
 # The workspaces build_workspace built, by the class defining it: (directory, the attributes it set).
 _built_workspaces: dict[type, tuple[str, dict[str, Any]]] = {}
+
+
+def save_config(workspace_dir: str, config: dict[str, dict[str, Any]]) -> None:
+    """Merge config into the workspace's config.toml, rewriting the file, as a test's setup."""
+    merged = load_config(workspace_dir)
+    for section, values in config.items():
+        merged.setdefault(section, {}).update(values)
+    ensure_config_dir(workspace_dir)
+    with open(config_path(workspace_dir), 'w', encoding='utf-8') as f:
+        f.write(format_toml(merged))
 
 
 class WorkspaceTestCase(unittest.TestCase):

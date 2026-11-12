@@ -14,10 +14,9 @@ from git_p4son.changelist_store import (
     save_changelist_alias,
 )
 from git_p4son.common import CommandError
-from git_p4son.config import save_config
 from git_p4son.new import new_command, _steps
 from git_p4son.update import update_command
-from tests.helpers import CHECK_REVISIONS, cli_args, on_jj, OUT_OF_DATE, P4RepoTestCase, recorded, start_patch
+from tests.helpers import CHECK_REVISIONS, cli_args, on_jj, OUT_OF_DATE, P4RepoTestCase, recorded, start_patch, save_config
 
 
 FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',

@@ -12,7 +12,6 @@ from git_p4son.config import (
     ensure_config_dir,
     get_setting,
     load_config,
-    save_config,
     set_setting_in_place,
 )
 from tests.helpers import init_git_repo, WorkspaceTestCase
@@ -38,13 +37,13 @@ class TestEnsureConfigDir(WorkspaceTestCase):
         ensure_config_dir(self.ws)
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
 
-    def test_save_config_ensures_gitignore(self):
-        save_config(self.ws, {'depot': {'root': '//ws/...'}})
+    def test_setting_a_value_ensures_gitignore(self):
+        set_setting_in_place(self.ws, 'depot', 'root', '//ws/...')
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
 
     def test_git_ignores_config_dir(self):
         init_git_repo(self.ws)
-        save_config(self.ws, {'depot': {'root': '//ws/...'}})
+        set_setting_in_place(self.ws, 'depot', 'root', '//ws/...')
         status = subprocess.run(
             ['git', 'status', '--porcelain', '--untracked-files=all'],
             cwd=self.ws, check=True, capture_output=True, text=True)
@@ -71,67 +70,6 @@ class TestLoadConfig(unittest.TestCase):
                 f.write('[depot]\nroot = "//my-workspace"\n')
             config = load_config(tmpdir)
             self.assertEqual(config, {'depot': {'root': '//my-workspace'}})
-
-
-class TestSaveConfig(unittest.TestCase):
-    def test_creates_file_and_dirs(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = {'depot': {'root': '//my-workspace'}}
-            save_config(tmpdir, config)
-            self.assertTrue(os.path.exists(config_path(tmpdir)))
-
-    def test_round_trip(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = {'depot': {'root': '//my-workspace/Engine/Source'}}
-            save_config(tmpdir, config)
-            loaded = load_config(tmpdir)
-            self.assertEqual(loaded, config)
-
-    def test_preserves_other_sections(self):
-        """Saving one section keeps the other sections, like [hooks]."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = config_path(tmpdir)
-            os.makedirs(os.path.dirname(path))
-            with open(path, 'w') as f:
-                f.write('[depot]\n'
-                        'root = "//old-root"\n'
-                        '\n'
-                        '[hooks.extension-associations]\n'
-                        '".py" = ["python", "-u"]\n'
-                        '".sh" = "bash"\n')
-
-            save_config(tmpdir, {'depot': {'root': '//new-root'}})
-
-            loaded = load_config(tmpdir)
-            self.assertEqual(loaded, {
-                'depot': {'root': '//new-root'},
-                'hooks': {'extension-associations': {
-                    '.py': ['python', '-u'],
-                    '.sh': 'bash',
-                }},
-            })
-
-    def test_round_trip_nested_tables_and_lists(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = {'hooks': {'extension-associations': {
-                '.py': ['python', '-u'],
-                '.sh': 'bash',
-            }}}
-            save_config(tmpdir, config)
-            self.assertEqual(load_config(tmpdir), config)
-
-    def test_escapes_quotes_and_backslashes(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = {'depot': {'root': 'D:\\p4\\"games"'}}
-            save_config(tmpdir, config)
-            self.assertEqual(load_config(tmpdir), config)
-
-    def test_updates_existing_key(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            save_config(tmpdir, {'depot': {'root': '//first'}})
-            save_config(tmpdir, {'depot': {'root': '//second'}})
-            self.assertEqual(
-                load_config(tmpdir), {'depot': {'root': '//second'}})
 
 
 class TestSetSettingInPlace(WorkspaceTestCase):

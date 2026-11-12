@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError
-from git_p4son.config import ConfigError, config_path, load_config, save_config
+from git_p4son.config import ConfigError, config_path, load_config
 from git_p4son.writable import (
     is_user_writable,
     is_writable_mode,
@@ -17,7 +17,7 @@ from git_p4son.writable import (
     set_writable_mode,
     writable_command,
 )
-from tests.helpers import captured_output, cli_args, GitRepoTestCase
+from tests.helpers import captured_output, cli_args, GitRepoTestCase, save_config
 
 
 def _mode(path):

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Strings with control characters, such as a newline in a review tool's argument, are escaped in the files git-p4son
+  writes, where they made `config.toml` invalid
 - `alias new` and `update` refuse a changelist that isn't pending, is owned by another user, such as Swarm's copy of
   a review, or belongs to another client. `update` used to fail on it with p4's own error, after rewriting the
   description of the user's CL from another client

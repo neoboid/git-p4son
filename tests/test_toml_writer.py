@@ -26,6 +26,10 @@ class TestFormatToml(unittest.TestCase):
                 'sync': {'split-users': ['alice', 'bob'], 'flag': False}}
         self.assertEqual(tomllib.loads(format_toml(data)), data)
 
+    def test_control_characters_round_trip(self):
+        data = {'s': 'a\nb\rc\td\be\ff\x00g\x1fh\x7fi'}
+        self.assertEqual(tomllib.loads(format_toml(data)), data)
+
     def test_unsupported_value_raises(self):
         with self.assertRaises(ValueError):
             format_toml({'when': None})

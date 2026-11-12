@@ -103,7 +103,7 @@ def _load(text: str) -> dict[str, Any] | None:
 
 
 def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | list[str]) -> None:
-    """Set a string or list setting by editing its line of config.toml, leaving the rest as written.
+    """Set a string or list setting in config.toml, replacing only its value and leaving the rest as written.
 
     Raises ConfigError, leaving the file alone, when the edited file doesn't read back with the value."""
     path = config_path(workspace_dir)
@@ -138,7 +138,10 @@ def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str 
     if found is None:
         lines.insert(start + 1, line)
     else:
-        lines[found] = line
+        # The value runs to the first line that completes it as TOML, as a value may span several.
+        last = next((i for i in range(found, end) if _load(
+            ''.join(lines[found:i + 1])) is not None), found)
+        lines[found:last + 1] = [line]
     text = ''.join(lines)
     written = (_load(text) or {}).get(section, {}).get(key)
     if written != value:

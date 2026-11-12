@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
-from .toml_writer import format_string, format_toml
+from .toml_writer import format_toml, format_value
 
 
 def ensure_config_dir(workspace_dir: str) -> None:
@@ -94,8 +94,16 @@ def save_config(workspace_dir: str, config: dict[str, dict[str, Any]]) -> None:
         f.write(format_toml(merged))
 
 
-def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str) -> None:
-    """Set a string setting by editing its line of config.toml, leaving the rest of the file as written.
+def _load(text: str) -> dict[str, Any] | None:
+    """text parsed as TOML, or None if it isn't valid TOML."""
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return None
+
+
+def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | list[str]) -> None:
+    """Set a string or list setting by editing its line of config.toml, leaving the rest as written.
 
     Raises ConfigError, leaving the file alone, when the edited file doesn't read back with the value."""
     path = config_path(workspace_dir)
@@ -109,30 +117,30 @@ def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str)
     start = next((i for i, text_line in enumerate(
         lines) if header.match(text_line)), None)
     if start is None:
-        if text and not text.endswith('\n'):
-            text += '\n'
-        text += ('\n' if text else '') + \
-            f'[{section}]\n{key} = {format_string(value)}\n'
+        # Ended as the file's last line is, so a CRLF file stays CRLF.
+        newline = '\r\n' if lines and lines[-1].endswith('\r\n') else '\n'
+        if lines:
+            if not lines[-1].endswith('\n'):
+                lines[-1] += newline
+            lines.append(newline)
+        lines.append(f'[{section}]{newline}')
+        start = len(lines) - 1
+    elif not lines[start].endswith('\n'):
+        lines[start] += '\n'
+    # Ended as the header is, so a CRLF file stays CRLF.
+    line = f'{key} = {format_value(value)}' + \
+        ('\r\n' if lines[start].endswith('\r\n') else '\n')
+    end = next((i for i in range(start + 1, len(lines))
+               if lines[i].lstrip().startswith('[')), len(lines))
+    assignment = re.compile(rf'^\s*{re.escape(key)}\s*=')
+    found = next((i for i in range(start + 1, end)
+                 if assignment.match(lines[i])), None)
+    if found is None:
+        lines.insert(start + 1, line)
     else:
-        if not lines[start].endswith('\n'):
-            lines[start] += '\n'
-        # Ended as the header is, so a CRLF file stays CRLF.
-        line = f'{key} = {format_string(value)}' + \
-            ('\r\n' if lines[start].endswith('\r\n') else '\n')
-        end = next((i for i in range(start + 1, len(lines))
-                   if lines[i].lstrip().startswith('[')), len(lines))
-        assignment = re.compile(rf'^\s*{re.escape(key)}\s*=')
-        found = next((i for i in range(start + 1, end)
-                     if assignment.match(lines[i])), None)
-        if found is None:
-            lines.insert(start + 1, line)
-        else:
-            lines[found] = line
-        text = ''.join(lines)
-    try:
-        written = tomllib.loads(text).get(section, {}).get(key)
-    except tomllib.TOMLDecodeError:
-        written = None
+        lines[found] = line
+    text = ''.join(lines)
+    written = (_load(text) or {}).get(section, {}).get(key)
     if written != value:
         raise ConfigError(f'{path} holds {section}.{key} in a form git-p4son can\'t edit. '
                           f'Set {key} in [{section}] by hand.')

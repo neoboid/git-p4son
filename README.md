@@ -741,6 +741,10 @@ Save a changelist number under a named alias:
 git p4son alias new <changelist> [alias] [--force]
 ```
 
+The changelist must be pending, yours and on this workspace's client, as `update` can only edit those. A changelist
+another user owns is refused, such as the copy Swarm keeps of a review, which usually takes the number just after yours
+and is the one the review's URL shows.
+
 **Arguments:**
 - `changelist`: Changelist number to save
 - `alias` (optional): Alias name to save the changelist number under. Defaults to the current branch name.

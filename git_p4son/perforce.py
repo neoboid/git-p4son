@@ -222,12 +222,19 @@ def get_user_changes(user: str, start: int, end: int, workspace_dir: str) -> lis
     return [int(r['change']) for r in parse_ztag_multi_output(res.stdout) if 'change' in r]
 
 
+def get_p4_user_and_client(workspace_dir: str) -> tuple[str | None, str | None]:
+    """The user and client names of the current connection, each None if the server does not know it."""
+    res = run([*_P4, '-ztag', 'info'], cwd=workspace_dir)
+    info = parse_ztag_output(res.stdout)
+    # The server reports a user or client it has no spec for as *unknown*.
+    user, client = (None if info.get(key) in (None, '', '*unknown*') else info[key]
+                    for key in ('userName', 'clientName'))
+    return user, client
+
+
 def get_p4_user(workspace_dir: str) -> str | None:
     """Get the Perforce user name of the current connection, or None if the server does not know it."""
-    res = run([*_P4, '-ztag', 'info'], cwd=workspace_dir)
-    user = parse_ztag_output(res.stdout).get('userName')
-    # The server reports a user it has no spec for as *unknown*.
-    return None if user in (None, '', '*unknown*') else user
+    return get_p4_user_and_client(workspace_dir)[0]
 
 
 def get_p4_port(workspace_dir: str) -> str:
@@ -251,20 +258,32 @@ def get_existing_p4_users(names: list[str], workspace_dir: str) -> list[str]:
             if 'User' in record]
 
 
+def describe_changelist(changelist: str, workspace_dir: str) -> tuple[dict[str, str] | None, list[str]]:
+    """The changelist's describe record, with its status and user, and p4's stderr.
+
+    The record is None for a changelist that doesn't exist."""
+    # One changelist per describe: a batched describe drops the changelist after one that doesn't exist.
+    res = run([*_P4, '-ztag', 'describe', '-s',
+              '-m1', changelist], cwd=workspace_dir)
+    if any('no such changelist' in line for line in res.stderr):
+        return None, res.stderr
+    return parse_ztag_output(res.stdout), res.stderr
+
+
 def is_changelist_gone(changelist: str, workspace_dir: str) -> bool:
     """Report whether the changelist was submitted or doesn't exist, rather than pending.
 
     Raise CommandError when p4 reports none of these."""
-    # One changelist per describe: a batched describe drops the changelist after one that doesn't exist.
-    res = run([*_P4, '-ztag', 'describe', '-s',
-              '-m1', changelist], cwd=workspace_dir)
-    status = parse_ztag_output(res.stdout).get('status')
-    if status == 'submitted' or any('no such changelist' in line for line in res.stderr):
+    record, stderr = describe_changelist(changelist, workspace_dir)
+    if record is None:
+        return True
+    status = record.get('status')
+    if status == 'submitted':
         return True
     if status != 'pending':
         # p4's lines go in the error, as --porcelain silences log.info.
         raise CommandError(
-            '\n'.join([f'Cannot tell whether CL {changelist} is pending', *res.stderr]))
+            '\n'.join([f'Cannot tell whether CL {changelist} is pending', *stderr]))
     return False
 
 

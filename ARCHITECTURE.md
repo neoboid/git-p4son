@@ -19,9 +19,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
   on the sync branch.
 
-- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, resolving the
-  `$(user)` placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command
-  (`list`, `add`, `delete`).
+- **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, written in place
+  (`set_setting_in_place`) so the rest of `config.toml` keeps its comments and layout, resolving the `$(user)`
+  placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command (`list`, `add`,
+  `delete`).
 
 - **`new.py`** - Creates a Perforce changelist from the git change (`create_changelist`) and saves an alias for it (the
   branch name by default; `--no-alias` skips it) with the record `included.py` builds, then opens the changes and
@@ -221,13 +222,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a default
   and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file, rewriting it.
-  `set_setting_in_place` writes `review-tool default`'s setting: it finds the setting's table and key as TOML reads
-  them, in whichever form they're written (a table, a dotted key, an inline table, which is rewritten from its parsed
-  entries), replaces its value over every line it spans, keeping the comments on those lines (the ones inside a value
-  move above its key), and leaves the rest of the file as written. It refuses, leaving the file alone, a file that isn't
-  valid TOML, with `load_config`'s error, and a setting the file can't take without replacing what it holds there, such
-  as a table at its key. Holds the depot root, `core.writable`, the split users, the blocking processes and the script
-  runners. The review tools read their own `[review-tool]` section.
+  `set_setting_in_place` writes `review-tool default`'s setting and the split users: it finds the setting's table and
+  key as TOML reads them, in whichever form they're written (a table, a dotted key, an inline table, which is rewritten
+  from its parsed entries), replaces its value over every line it spans, keeping the comments on those lines (the ones
+  inside a value move above its key), and leaves the rest of the file as written. It refuses, leaving the file alone, a
+  file that isn't valid TOML, with `load_config`'s error, and a setting the file can't take without replacing what it
+  holds there, such as a table at its key. Holds the depot root, `core.writable`, the split users, the blocking
+  processes and the script runners. The review tools read their own `[review-tool]` section.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files, escaping
   control characters in strings; reading uses `tomllib`.

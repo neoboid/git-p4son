@@ -23,6 +23,7 @@ from .perforce import (
     get_opened_files_in_changelist,
     get_out_of_date_files,
     get_p4_user_and_client,
+    is_ignored_add,
     OutOfDate,
     p4_create_changelist,
     p4_revert_unchanged,
@@ -126,17 +127,16 @@ def update_changelist(changelist_nr: str, base_branch: str, workspace_dir: str, 
         workspace_dir)
 
 
-def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
-                   p4_output: list[str], workspace_dir: str) -> None:
-    """Warn about the files p4 did not open as asked; p4 still exits 0 for most of them."""
+def _check_opened(to_open: list[tuple[str, str]], changelist: str,
+                  p4_output: list[str], workspace_dir: str) -> None:
+    """Raise CommandError, after listing them and what p4 said, if p4 did not open files as asked."""
     opened = opened_lookup(
         get_opened_files([f for f, _ in to_open], workspace_dir))
     unopened = [(f, action) for f, action in to_open
                 if opened(f) != (changelist, action)]
     if not unopened:
         return
-    log.warning(
-        f'p4 did not open {len(unopened)} of {plural(len(to_open), "file")}:')
+    log.info('p4 did not open:')
     for filename, action in unopened:
         log.info(f'  {filename} (for {action})')
     messages = [line for line in p4_output if 'opened for' not in line]
@@ -144,6 +144,10 @@ def _warn_unopened(to_open: list[tuple[str, str]], changelist: str,
         log.info('p4 said:')
         for line in messages:
             log.info(f'  {line}')
+    hint = ('Leave the files p4 ignores out of the commits, or change .p4ignore so p4 takes them.'
+            if any(is_ignored_add(line) for line in messages) else 'Fix what p4 said.')
+    raise CommandError(
+        f'p4 did not open {len(unopened)} of {plural(len(to_open), "file")} in CL {changelist}. {hint}')
 
 
 def _plan_opens(wanted: list[tuple[str, str]], opened: Callable[[str], tuple[str, str] | None],
@@ -293,7 +297,7 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                          [move.old for move in to_move if move.edit], changelist, workspace_dir, dry_run)
     expected = to_open + [(move.new, 'move/add') for move in to_move]
     if expected and not dry_run:
-        _warn_unopened(expected, changelist, p4_output, workspace_dir)
+        _check_opened(expected, changelist, p4_output, workspace_dir)
     return len(to_open) + len(to_reopen) + len(to_move)
 
 

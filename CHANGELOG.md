@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `new` and `update` fail before shelving when p4 doesn't open a file of the change, listing the files and what p4
+  said, where they warned, reported every file as opened and shelved without it. A file `.p4ignore` matches fails the
+  same way: leave it out of the commits, or change `.p4ignore` first
 - New `review-tool` command: list the review tools, show or set the default, and show or set the tool an alias
   records, such as for an alias recreated with `alias new`, whose review `update --shelve` otherwise left alone
 - An alias records Swarm as its review tool too, so a review's tool shows and stays put when the default changes.

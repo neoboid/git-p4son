@@ -9,6 +9,7 @@ from .changelist_store import (
     save_changelist_alias,
     list_changelist_aliases,
     lowercase_aliases,
+    unreadable_aliases,
     delete_changelist_alias,
     migrate_changelist_aliases,
     rename_changelist_alias,
@@ -147,13 +148,27 @@ def alias_clean_command(args: argparse.Namespace) -> int:
                         'to .git-p4son/aliases/')
 
     aliases = list_changelist_aliases(workspace_dir)
-    if not aliases:
+    unreadable = unreadable_aliases(workspace_dir)
+    if not aliases and not unreadable:
         log.heading('Alias clean done')
         log.success('No changelist aliases to clean')
         return 0
 
     gone: dict[str, bool] = {}
     actions: list[str] = []
+    for name in unreadable:
+        log.heading(name)
+        if args.dry_run:
+            action = 'would-delete'
+            log.success('Would delete, it holds no changelist')
+        elif _delete_listed(name, workspace_dir):
+            action = 'deleted'
+            log.success('Deleted, it holds no changelist')
+        else:
+            action = 'failed'
+        actions.append(action)
+        if args.quiet:
+            print(f'{action} {name} -')
     for name, changelist in aliases:
         log.heading(f'{name} -> CL {changelist}')
         if changelist not in gone:

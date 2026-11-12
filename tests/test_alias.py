@@ -295,8 +295,8 @@ class TestAliasCleanMigrates(WorkspaceTestCase):
 class TestAliasCleanNormalizesNames(WorkspaceTestCase):
     """alias clean with aliases an older version saved under names that aren't lowercase or are reserved lowercased.
 
-    CL 101 is pending and CL 102 is gone. The store holds Feat.toml (CL 101), HEAD.toml (CL 101) and Branch.toml (CL
-    102); the old store holds HEAD (CL 101). .DS_Store, feat~ and
+    CL 101 is pending and CL 102 is gone. The store holds Feat.toml (CL 101), HEAD.toml (CL 101), Branch.toml (CL 102)
+    and Last-Synced.toml, which holds no changelist; the old store holds HEAD (CL 101). .DS_Store, feat~ and
     .hidden.toml were never alias names."""
 
     def setUp(self):
@@ -310,7 +310,8 @@ class TestAliasCleanNormalizesNames(WorkspaceTestCase):
         for directory, name, content in (
                 (self.store, 'Feat.toml', 'changelist = 101\n'), (self.store,
                                                                   'HEAD.toml', 'changelist = 101\n'),
-                (self.store, 'Branch.toml', 'changelist = 102\n'),
+                (self.store, 'Branch.toml', 'changelist = 102\n'), (self.store,
+                                                                    'Last-Synced.toml', 'not toml'),
                 (self.store, '.hidden.toml',
                  'changelist = 104\n'), (self.old_store, 'HEAD', '101\n'),
                 (self.old_store, '.DS_Store', '104\n'), (self.old_store, 'feat~', '104\n')):
@@ -325,27 +326,31 @@ class TestAliasCleanNormalizesNames(WorkspaceTestCase):
         self.assertEqual(sorted(os.listdir(self.old_store)),
                          ['.DS_Store', 'feat~'])
         self.assertIn('# Lowercasing alias names\nBranch -> branch-1\nFeat -> feat\nHEAD -> head-1\n'
-                      '[ok] Renamed 3 aliases to lowercase\n', out)
+                      'Last-Synced -> last-synced-1\n[ok] Renamed 4 aliases to lowercase\n', out)
         self.assertIn(
             '# Moving old aliases\nHEAD -> head-2\n[ok] Moved 1 alias to .git-p4son/aliases/\n', out)
+        self.assertIn(
+            '# last-synced-1\n[ok] Deleted, it holds no changelist\n', out)
         self.assertIn(
             '# branch-1 -> CL 102\n[ok] Deleted, CL 102 is not pending\n', out)
         self.assertIn(
             '# head-2 -> CL 101\n[ok] Kept, CL 101 is pending\n', out)
         self.assertNotIn('104', out)
         self.assertTrue(out.endswith(
-            '# Alias clean done\n[ok] Deleted 1 alias, kept 3\n'), out)
+            '# Alias clean done\n[ok] Deleted 2 aliases, kept 3\n'), out)
 
     def test_dry_run_renames_nothing(self):
         out = self.run_command(alias_clean_command, [
                                'alias', 'clean', '--dry-run'])
         self.assertEqual(sorted(os.listdir(self.store)), [
-                         '.hidden.toml', 'Branch.toml', 'Feat.toml', 'HEAD.toml'])
+                         '.hidden.toml', 'Branch.toml', 'Feat.toml', 'HEAD.toml', 'Last-Synced.toml'])
         self.assertNotIn('Lowercasing', out)
+        self.assertIn(
+            '# Last-Synced\n[ok] Would delete, it holds no changelist\n', out)
 
     def test_porcelain_lists_the_aliases_under_their_new_names(self):
         self.assertEqual(self.p4son('alias', 'clean', '--porcelain'),
-                         'deleted branch-1 102\nkept feat 101\nkept head-1 101\n'
+                         'deleted last-synced-1 -\ndeleted branch-1 102\nkept feat 101\nkept head-1 101\n'
                          'kept head-2 101\n')
 
     def test_a_failed_rename_stops_with_an_error(self):

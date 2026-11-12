@@ -20,6 +20,7 @@ from git_p4son.changelist_store import (
     delete_changelist_alias,
     list_changelist_aliases,
     load_changelist_alias,
+    lowercase_aliases,
     migrate_changelist_aliases,
     rename_changelist_alias,
     save_changelist_alias,
@@ -155,7 +156,8 @@ class TestAliasStoreLocations(AliasStoreTestCase):
         self.write_old('feature', '100\n')
         self.write_old('other', '300\n')
         self.write_new('other', 'changelist = 400\n')
-        self.assertEqual(migrate_changelist_aliases(self.ws), 1)
+        self.assertEqual(migrate_changelist_aliases(
+            self.ws), [('feature', 'feature')])
         self.assertFalse(os.path.exists(self.path('changelists')))
         self.assertEqual(list_changelist_aliases(self.ws),
                          [('feature', '100'), ('other', '400')])
@@ -348,13 +350,16 @@ class TestAliasNamesIgnoreCase(AliasStoreTestCase):
             rename_changelist_alias('feat', 'Feat', self.ws, force=False)
         self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
 
-    def test_a_name_lowercasing_makes_reserved_is_not_listed(self):
+    def test_a_name_lowercasing_makes_reserved_is_not_listed_until_renamed(self):
         save_changelist_alias('feat', '101', self.ws,
                               force=False, record=Record('main', 'abc', ['1']))
         os.rename(self.path('aliases', 'feat.toml'),
                   self.path('aliases', 'HEAD.toml'))
         self.assertEqual(list_changelist_aliases(self.ws), [])
         self.assertIsNone(find_record('101', self.ws))
+        lowercase_aliases(self.ws)
+        self.assertEqual(find_record('101', self.ws),
+                         ('head-1', Record('main', 'abc', ['1'])))
 
     def test_a_name_in_another_case_is_listed_lowercased_where_lookups_find_it(self):
         save_changelist_alias('feat', '101', self.ws,
@@ -367,8 +372,47 @@ class TestAliasNamesIgnoreCase(AliasStoreTestCase):
             update_record('feat', Record('main', 'abc', ['1', '2']), self.ws)
             self.assertEqual(load_changelist_alias('feat', self.ws), '101')
         else:
-            # A case-sensitive file system: lookups miss it, so listing leaves it out.
+            # A case-sensitive file system: lookups miss it, so listing leaves it out until alias clean.
             self.assertEqual(list_changelist_aliases(self.ws), [])
+            lowercase_aliases(self.ws)
+            self.assertEqual(list_changelist_aliases(
+                self.ws), [('feat', '101')])
+
+    def test_lowercasing_gives_each_alias_a_free_lowercase_name(self):
+        self.write_new('Feat', 'changelist = 101\n')
+        self.write_new('HEAD', 'changelist = 102\n')
+        self.write_new('head-1', 'changelist = 103\n')
+        self.assertEqual(lowercase_aliases(self.ws), [
+                         ('Feat', 'feat'), ('HEAD', 'head-2')])
+        self.assertEqual(self.files('aliases'), [
+                         'feat.toml', 'head-1.toml', 'head-2.toml'])
+        self.assertEqual(load_changelist_alias('head-2', self.ws), '102')
+
+    def test_lowercasing_leaves_files_that_were_never_aliases(self):
+        self.write_new('.hidden', 'changelist = 101\n')
+        self.write_new('feat', 'changelist = 102\n')
+        self.assertEqual(lowercase_aliases(self.ws), [])
+        self.assertEqual(self.files('aliases'), ['.hidden.toml', 'feat.toml'])
+
+    def test_lowercasing_a_case_only_twin_gives_it_a_number(self):
+        self.write_new('feat', 'changelist = 101\n')
+        self.write_new('Feat', 'changelist = 102\n')
+        if len(self.files('aliases')) != 2:
+            self.skipTest('the file system is case-insensitive')
+        self.assertEqual(lowercase_aliases(self.ws), [('Feat', 'feat-1')])
+        self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+        self.assertEqual(load_changelist_alias('feat-1', self.ws), '102')
+
+    def test_moving_the_old_store_gives_each_alias_a_free_lowercase_name(self):
+        self.write_new('feat', 'changelist = 101\n')
+        self.write_old('Feat', '102\n')
+        self.write_old('HEAD', '103\n')
+        self.write_old('feat-1', '104\n')
+        self.assertEqual(migrate_changelist_aliases(self.ws), [
+                         ('Feat', 'feat-2'), ('HEAD', 'head-1'), ('feat-1', 'feat-1')])
+        self.assertFalse(os.path.exists(self.path('changelists')))
+        self.assertEqual(list_changelist_aliases(self.ws), [
+            ('feat', '101'), ('feat-1', '104'), ('feat-2', '102'), ('head-1', '103')])
 
 
 class TestRenameAlias(AliasStoreTestCase):

@@ -8,6 +8,7 @@ from .changelist_store import (
     load_changelist_alias,
     save_changelist_alias,
     list_changelist_aliases,
+    lowercase_aliases,
     delete_changelist_alias,
     migrate_changelist_aliases,
     rename_changelist_alias,
@@ -124,15 +125,25 @@ def _delete_listed(name: str, workspace_dir: str) -> bool:
     return True
 
 
+def _report_renames(heading: str, renames: list[tuple[str, str]], verb: str, where: str) -> None:
+    """List the aliases alias clean renamed or moved, with their new names where they changed."""
+    if not renames:
+        return
+    log.heading(heading)
+    for old, new in renames:
+        if old != new:
+            log.info(f'{old} -> {new}')
+    log.success(f'{verb} {plural(len(renames), "alias", "aliases")} {where}')
+
+
 def alias_clean_command(args: argparse.Namespace) -> int:
     """Execute the 'alias clean' command."""
     workspace_dir = args.workspace_dir
 
     if not args.dry_run:
-        moved = migrate_changelist_aliases(workspace_dir)
-        if moved:
-            log.heading('Moving old aliases')
-            log.success(f'Moved {plural(moved, "alias", "aliases")} '
+        _report_renames('Lowercasing alias names', lowercase_aliases(
+            workspace_dir), 'Renamed', 'to lowercase')
+        _report_renames('Moving old aliases', migrate_changelist_aliases(workspace_dir), 'Moved',
                         'to .git-p4son/aliases/')
 
     aliases = list_changelist_aliases(workspace_dir)

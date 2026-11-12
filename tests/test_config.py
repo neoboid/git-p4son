@@ -249,6 +249,20 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         self.assertEqual(
             self.text(), "'sync' . \"split\\u002Dusers\" = [\"b\"]\n")
 
+    def test_refuses_a_file_that_is_not_valid_toml_naming_the_error(self):
+        broken = '[review-tool.x]\ncommand = ["x"\n\n[sync]\nsplit-users = ["a"]\n'
+        self.write_config(broken)
+        with self.assertRaisesRegex(ConfigError, r'config\.toml is not valid TOML: '):
+            set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])
+        self.assertEqual(self.text(), broken)
+
+    def test_refuses_a_value_left_unfinished_at_the_key_being_set(self):
+        broken = '[sync]\nsplit-users = ["a",\nbranch = "main"\n'
+        self.write_config(broken)
+        with self.assertRaisesRegex(ConfigError, 'is not valid TOML'):
+            set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])
+        self.assertEqual(self.text(), broken)
+
     def test_refuses_an_array_of_tables(self):
         self.write_config('[[sync]]\nbranch = "x"\n')
         with self.assertRaisesRegex(ConfigError, 'by hand'):

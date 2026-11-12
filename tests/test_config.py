@@ -193,6 +193,19 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         self.assertEqual(self.text(), '[review-tool]\ndefault = "a"\n')
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
 
+    def test_replaces_a_value_written_over_several_lines(self):
+        self.write_config('[sync]\n'
+                          '# Who gets a commit of their own.\n'
+                          'split-users = [\n'
+                          '    "alice",  # lead\n'
+                          '    "bob",\n'
+                          ']\n'
+                          'branch = "main"\n')
+        set_setting_in_place(
+            self.ws, 'sync', 'split-users', ['carol', '$(user)'])
+        self.assertEqual(self.text(), '[sync]\n# Who gets a commit of their own.\nsplit-users = ["carol", "$(user)"]\n'
+                         'branch = "main"\n')
+
     def test_an_empty_list(self):
         set_setting_in_place(self.ws, 'sync', 'split-users', [])
         self.assertEqual(self.text(), '[sync]\nsplit-users = []\n')

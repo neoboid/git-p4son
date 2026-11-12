@@ -93,7 +93,14 @@ class TestAliasDeleteCommand(unittest.TestCase):
 
 
 class TestAliasNewAndList(WorkspaceTestCase):
-    """alias new and alias list against a real alias store."""
+    """alias new and alias list against a real alias store and a scripted Perforce server, where CLs 100 and 200 are
+    pending and the current user's."""
+
+    def setUp(self):
+        super().setUp()
+        self.p4 = FakeP4(self.ws)
+        self.p4.install(self)
+        self.p4.pending.update({'100': ['A'], '200': ['B']})
 
     def _new(self, changelist, alias, force=False):
         return alias_new_command(cli_args(
@@ -127,6 +134,56 @@ class TestAliasNewAndList(WorkspaceTestCase):
              'w').close()
         self.assertEqual(self._list(), ['Found 1 alias',
                                         'feature-a -> CL 100'])
+
+    def test_new_refuses_another_users_changelist_even_with_force(self):
+        self._new('100', 'feature-a')
+        self.p4.pending['201'] = ['Swarm\'s copy of 200']
+        self.p4.owners['201'] = 'swarm'
+        with self.assertRaisesRegex(CommandError, "^CL 201 belongs to swarm, not me. If it is a Swarm review's copy, "
+                                    'alias your own CL instead, often the number just before it.$'):
+            self._new('201', 'feature-a', force=True)
+        self.assertEqual(
+            self._list(), ['Found 1 alias', 'feature-a -> CL 100'])
+
+    def test_new_checks_the_alias_is_free_before_asking_perforce(self):
+        self._new('100', 'feature-a')
+        calls = len(self.p4.calls)
+        with self.assertRaisesRegex(CommandError, 'Alias "feature-a" already exists'):
+            self._new('200', 'feature-a')
+        self.assertEqual(len(self.p4.calls), calls)
+
+    def test_new_takes_the_owner_in_another_case(self):
+        self.p4.owners['200'] = 'ME'
+        self.assertEqual(self._new('200', 'feature-a'), 0)
+
+    def test_new_refuses_when_perforce_does_not_know_the_current_user(self):
+        self.p4.owners['200'] = 'me'
+        self.p4.user = '*unknown*'
+        with self.assertRaisesRegex(CommandError, "^Perforce doesn't know the current user, so CL 200 can't be "
+                                    'checked as yours.$'):
+            self._new('200', 'feature-a')
+
+    def test_new_refuses_a_changelist_of_another_client(self):
+        self.p4.clients['200'] = 'otherws'
+        with self.assertRaisesRegex(CommandError, "^CL 200 belongs to client otherws, not myclient, so update can't "
+                                    'open files in it.$'):
+            self._new('200', 'feature-a')
+        self.assertEqual(self._list(), ['No aliases defined'])
+
+    def test_new_takes_the_client_in_another_case(self):
+        self.p4.clients['200'] = 'MyClient'
+        self.assertEqual(self._new('200', 'feature-a'), 0)
+
+    def test_new_refuses_a_changelist_that_does_not_exist(self):
+        with self.assertRaisesRegex(CommandError, '^CL 300 does not exist.$'):
+            self._new('300', 'feature-a')
+        self.assertEqual(self._list(), ['No aliases defined'])
+
+    def test_new_refuses_a_submitted_changelist(self):
+        self.p4.submit(300, {}, user='me')
+        with self.assertRaisesRegex(CommandError, '^CL 300 is submitted, not pending.$'):
+            self._new('300', 'feature-a')
+        self.assertEqual(self._list(), ['No aliases defined'])
 
     def test_new_refuses_a_non_numeric_changelist(self):
         with self.assertRaisesRegex(CommandError,

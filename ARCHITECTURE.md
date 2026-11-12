@@ -59,13 +59,14 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   the list, printed directly, reaches stdout.
 
 - **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `rename`, `delete`, `clean`), each an `alias_*_command`
-  built on `changelist_store.py`. `rename` takes one or two names, as `git branch -m` does, and resolves the `branch`
-  keyword for each itself: the current alias as the old name, the suggested one as the new. `clean` deletes the aliases
-  whose changelist `is_changelist_gone` finds submitted or missing, or whose file holds no changelist
-  (`unreadable_aliases`), after giving the aliases an older version saved in another case or under a now reserved name a
-  free lowercase one (`lowercase_aliases`, `migrate_changelist_aliases`); it and `delete --all` go on past an alias that
-  fails to delete, then raise `CommandError` with the count. `clean --porcelain` sets `quiet`, as `list-changes
-  --porcelain` does, and prints one line per alias directly.
+  built on `changelist_store.py`. `new` refuses a CL that `describe_changelist` doesn't find pending and owned by the
+  current user and client (`get_p4_user_and_client`, ignoring case), as `update` can't edit it. `rename` takes one or
+  two names, as `git branch -m` does, and resolves the `branch` keyword for each itself: the current alias as the old
+  name, the suggested one as the new. `clean` deletes the aliases whose changelist `is_changelist_gone` finds submitted
+  or missing, or whose file holds no changelist (`unreadable_aliases`), after giving the aliases an older version saved
+  in another case or under a now reserved name a free lowercase one (`lowercase_aliases`, `migrate_changelist_aliases`);
+  it and `delete --all` go on past an alias that fails to delete, then raise `CommandError` with the count.
+  `clean --porcelain` sets `quiet`, as `list-changes --porcelain` does, and prints one line per alias directly.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
@@ -225,9 +226,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),
-  reverts, shelving, submitted changes and users, whether a changelist is gone (one `describe` each, as a batched
-  one skips the changelist after a missing one), and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor`
-  parsing streamed progress and raising `P4SyncClobberError` or `P4SyncAbortError`.
+  reverts, shelving, submitted changes and users, a changelist's status and owner (`describe_changelist`) and whether
+  it is gone (one `describe` each, as a batched one skips the changelist after a missing one), and
+  `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing streamed progress and raising `P4SyncClobberError`
+  or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands

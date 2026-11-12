@@ -479,6 +479,7 @@ class TestJjNew(JjP4RepoTestCase):
         self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
 
     def test_alias_new_records_no_change(self):
+        self.p4.pending['555'] = ['Made elsewhere']
         self.p4son('alias', 'new', '555', 'named')
         self.assertEqual(alias_changes(self.ws), {})
 

@@ -19,6 +19,7 @@ from git_p4son.perforce import (
     get_opened_files_in_changelist,
     get_out_of_date_files,
     get_p4_user,
+    get_p4_user_and_client,
     get_user_changes,
     get_writable_files,
     is_changelist_gone,
@@ -379,6 +380,24 @@ class TestGetP4User(unittest.TestCase):
         mock_run.return_value = make_run_result(
             stdout=['... userName *unknown*'])
         self.assertIsNone(get_p4_user('/ws'))
+
+
+class TestGetP4UserAndClient(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_reads_both_from_one_info(self, mock_run):
+        mock_run.return_value = make_run_result(stdout=[
+            '... userName andreas',
+            '... clientName my-ws',
+        ])
+        self.assertEqual(get_p4_user_and_client('/ws'), ('andreas', 'my-ws'))
+        mock_run.assert_called_once_with(
+            ['p4', '-L', 'en', '-ztag', 'info'], cwd='/ws')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_unknown_to_the_server(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['... userName *unknown*', '... clientName *unknown*'])
+        self.assertEqual(get_p4_user_and_client('/ws'), (None, None))
 
 
 class TestGetExistingP4Users(unittest.TestCase):

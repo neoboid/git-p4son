@@ -402,7 +402,8 @@ class FakeP4:
     Depot paths are //<client>/<path>, mapped to <workspace>/<path>; a submitted change without files touched
     nothing in the client's view. opened maps paths to (changelist, action), moved each end of an opened move to the
     other,
-    pending changelist numbers to their description lines and shelved changelist numbers to {path: content}.
+    pending changelist numbers to their description lines, owners and clients those of another user or client to it,
+    and shelved changelist numbers to {path: content}.
     Like run(), it carries out nothing on a dry run."""
 
     def __init__(self, workspace_dir: str, client: str = 'myclient', user: str = 'me',
@@ -418,6 +419,8 @@ class FakeP4:
         self.moved: dict[str, str] = {}
         self.moves_made: list[tuple[str, str]] = []
         self.pending: dict[str, list[str]] = {}
+        self.owners: dict[str, str] = {}
+        self.clients: dict[str, str] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
         self.in_workspace = True
@@ -475,7 +478,8 @@ class FakeP4:
             if self.in_workspace:
                 out.append('... Update 2026/01/01 00:00:00')
         elif args[:2] == ['-ztag', 'info']:
-            out = [f'... userName {self.user}']
+            out = [f'... userName {self.user}',
+                   f'... clientName {self.client}']
         elif args == ['set', '-q', 'P4PORT']:
             out = [f'P4PORT={self.port}'] if self.port else []
         elif args[:2] == ['-ztag', 'users']:
@@ -623,9 +627,11 @@ class FakeP4:
     def _describe(self, change: str) -> tuple[list[str], list[str]]:
         """A changelist as p4 -ztag describe -s -m1 prints it, or the warning for one that doesn't exist."""
         if change in self.pending:
-            return [f'... change {change}', '... status pending'], []
+            return [f'... change {change}', f'... user {self.owners.get(change, self.user)}',
+                    f'... client {self.clients.get(change, self.client)}', '... status pending'], []
         if int(change) in self.changes:
-            return [f'... change {change}', '... status submitted'], []
+            return [f'... change {change}', f'... user {self.changes[int(change)][0]}',
+                    '... status submitted'], []
         return [], [f'{change} - no such changelist.']
 
     def _spec(self, change: str) -> list[str]:

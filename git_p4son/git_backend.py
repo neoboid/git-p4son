@@ -8,10 +8,11 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, resolve_commit, switch_branch, switch_detached,
+    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, resolve_commit, switch_branch,
+    switch_detached,
 )
 from .lib import check_git_workspace_clean
-from .sync_branch import choose_sync_branch
+from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
 from .words import Words, named_base
 
@@ -67,6 +68,41 @@ class GitBackend:
         base = DEFAULT_BASE if base is None else base
         resolve_commit(base, self.workspace_dir)
         return base
+
+    def implicit_base(self) -> tuple[str, str]:
+        """The local branch the current branch tracks, and "upstream of <branch>".
+
+        Raises CommandError, saying -b is required, without one, or when it is not below HEAD or the commits since it
+        take in the sync branch's."""
+        workspace_dir = self.workspace_dir
+        branch = get_current_branch(workspace_dir)
+        if branch is None:
+            raise CommandError(
+                '-b is required on a detached HEAD. Name the base the change starts from.')
+        base = local_upstream(branch, workspace_dir)
+        if base is None:
+            raise CommandError(f'-b is required, as {branch} has no local upstream. Name the base the change starts '
+                               'from, or make it the default with "git branch -u <base>".')
+        sync_branch = sync_branch_name(workspace_dir)
+        if base == sync_branch:
+            # Moving on after the fork is harmless, as the commits since it leave out what HEAD can't reach.
+            return base, f'upstream of {branch}'
+        # Rewritten or moved on, the commits since it would take in its old ones.
+        if not is_ancestor(f'refs/heads/{base}', self.revision, workspace_dir):
+            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is not below it, such as after '
+                               f'{base} was amended or rebased. Name the base, or rebase {branch} onto {base}.')
+        if not branch_exists(sync_branch, workspace_dir):
+            return base, f'upstream of {branch}'
+        sync_ref = f'refs/heads/{sync_branch}'
+        fix = f'Name the base, or move the upstream, such as with "git branch -u {sync_branch}".'
+        if is_ancestor(f'refs/heads/{base}', sync_ref, workspace_dir):
+            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is in the history of '
+                               f'{sync_branch}, such as when left on an old sync commit. {fix}')
+        # A merge of the sync branch above the upstream brings sync commits into the commits since it.
+        if not is_ancestor(merge_base(self.revision, sync_ref, workspace_dir), f'refs/heads/{base}', workspace_dir):
+            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, would take in commits of '
+                               f'{sync_branch}, such as after a merge of it. {fix}')
+        return base, f'upstream of {branch}'
 
     def suggested_alias(self) -> str:
         """The alias the current branch suggests; raise CommandError on a detached HEAD."""

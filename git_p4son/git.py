@@ -446,6 +446,17 @@ def branch_exists(branch: str, workspace_dir: str) -> bool:
                       fail_on_returncode=False).stdout
 
 
+def local_upstream(branch: str, workspace_dir: str) -> str | None:
+    """The local branch that branch tracks; None for none, one on a remote, or one that no longer exists."""
+    # A remote's branch is under refs/remotes/; git marks a deleted one [gone].
+    lines = run(['git', 'for-each-ref', '--format=%(upstream) %(upstream:track)', f'refs/heads/{branch}'],
+                cwd=workspace_dir).stdout
+    upstream, _, track = lines[0].partition(' ') if lines else ('', '', '')
+    if not upstream.startswith('refs/heads/') or track == '[gone]':
+        return None
+    return upstream.removeprefix('refs/heads/')
+
+
 def branches_at(commit: str, workspace_dir: str) -> list[str]:
     """The local branches pointing at commit, by name."""
     # Full names, as a tag of the same name makes refname:short say heads/<name>.

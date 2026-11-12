@@ -77,6 +77,27 @@ class JjBackend:
         # -b's documented default is git's HEAD~1, which users type; jj has no HEAD, so it means the default here.
         return self.workspace.resolve_base(None if base == 'HEAD~1' else base)
 
+    def implicit_base(self) -> tuple[str, str]:
+        """The nearest bookmark below the change, and "nearest bookmark below".
+
+        Raises CommandError, saying -b is required, for none or several, or one in the sync bookmark's history."""
+        workspace = self.workspace
+        names = workspace.nearest_bookmarks()
+        sync = workspace.sync_bookmark()
+        such_as = f', such as {sync}' if sync is not None else ''
+        if not names:
+            raise CommandError(
+                f'-b is required, as no bookmark is below the change. Name the base it starts from{such_as}.')
+        if len(names) > 1:
+            raise CommandError(f'-b is required, as {", ".join(names)} are the nearest bookmarks below the change. '
+                               'Name the one it starts from.')
+        name = names[0]
+        if name != sync and workspace.in_sync_history(name):
+            raise CommandError(f'-b is required, as {name}, the nearest bookmark below the change, is in the history '
+                               f'of {sync}, such as after its change was submitted. Name the base the change starts '
+                               f'from{such_as}.')
+        return name, 'nearest bookmark below'
+
     def suggested_alias(self) -> str:
         """The alias the one bookmark at the tip suggests, else the first 8 letters of its change ID."""
         bookmark = self.workspace.only_bookmark()

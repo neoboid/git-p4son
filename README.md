@@ -430,7 +430,7 @@ Create a changelist from the commits since the base branch: their files are open
 the commits. Optionally shelve it, or create a review in Swarm or another [review tool](#review-tools):
 
 ```sh
-git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
+git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
               [--no-alias] [--no-commit-list] [--shelve] [--review] [--review-tool NAME] [--per-commit]
               [--ignore-out-of-date]
 ```
@@ -444,11 +444,11 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
   multiple lines
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description, so it holds only the
   message
-- `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, for enumerating commits and finding
-  changed files: a branch or bookmark, or a commit exactly one points at, or with jj a change without a bookmark. The
-  alias records it by name, or a jj change by its change ID, as a commit would go stale after a sync and rebase, along
-  with the commits since it the changelist includes, so `update` knows where the next ones start. With `--no-alias`
-  any commit will do
+- `-b, --base-branch BASE_BRANCH`: The base the change starts from, for enumerating commits and finding changed
+  files: a branch or bookmark, or a commit exactly one points at, or with jj a change without a bookmark. The alias
+  records it by name, or a jj change by its change ID, as a commit would go stale after a sync and rebase, along with
+  the commits since it the changelist includes, so `update` knows where the next ones start. With `--no-alias` any
+  commit will do. Left out, it defaults to the [branch's local upstream or the bookmark below](#the-default-base)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-edit`: Skip opening changed files for edit in Perforce
@@ -463,6 +463,25 @@ git p4son new -b BASE_BRANCH [-m <message> | -F <file>] [alias] [--force] [--dry
   commit, as described below. Refuses `--no-edit` and `--no-alias`
 - `--ignore-out-of-date`: Shelve even if files in the change are not at the latest revision (see
   [Shelving only files at the latest revision](#shelving-only-files-at-the-latest-revision))
+
+#### The default base
+
+Without `-b`, `new` and `review` take the base from where the change sits, and the `Resolving base` step says which:
+
+- **git:** the current branch's upstream, when that is a local branch: `git switch -c my-fix --track main`, or
+  `git branch -u main` on an existing branch. In a stack, track the branch below. An upstream on a remote, such as
+  `origin/main`, doesn't count. Other than the sync branch, the upstream must be below the branch: once it was amended
+  or rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it is
+  refused, as the commits since it would include others.
+- **jj:** the nearest bookmark below the change, such as `main`, or the bookmark below in a stack.
+
+Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused too, as
+it would take in the sync commits since it. So is a git upstream below a merge of the sync branch. Rebase onto the
+base, or with git move the upstream with `git branch -u main`.
+
+Without one, or with two bookmarks on the nearest commit below, `-b` is required. `branch.autoSetupMerge = always`
+sets the upstream on every new branch, but with `push.default = upstream` a bare `git push` then pushes the branch
+into its local upstream, such as `main`.
 
 **Examples:**
 ```sh
@@ -623,7 +642,7 @@ Create a review with one shelf per commit, so each commit is a patch of its own.
 `git p4son new --review --per-commit`:
 
 ```sh
-git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
+git p4son review [-b BASE_BRANCH] [alias] [-m <message> | -F <file>] [--force] [--dry-run] [--no-commit-list]
                  [--review-tool NAME] [--ignore-out-of-date]
 ```
 
@@ -634,8 +653,9 @@ git p4son review -b BASE_BRANCH [alias] [-m <message> | -F <file>] [--force] [--
 - `-m, --message MESSAGE`: Changelist description message. Defaults to the HEAD commit subject
 - `-F, --file FILE`: Read the changelist description message from a file instead of `-m`. The message may span
   multiple lines
-- `-b, --base-branch BASE_BRANCH`: Required. The base the change starts from, to find commits since: a branch or
-  bookmark, or a commit exactly one points at, which the alias records as for [`new`](#new-command)
+- `-b, --base-branch BASE_BRANCH`: The base the change starts from, to find commits since: a branch or bookmark, or
+  a commit exactly one points at, which the alias records as for [`new`](#new-command). Left out, it defaults to the
+  [branch's local upstream or the bookmark below](#the-default-base)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the steps, one per commit, without running them. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and

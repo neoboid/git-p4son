@@ -17,7 +17,7 @@ from .git import (
 )
 from .jj_lock import working_copy_lock
 from .log import log, plural
-from .sync_branch import DEFAULT_SYNC_BRANCH, get_sync_branch_setting
+from .sync_branch import sync_branch_name
 from .toml_writer import format_string
 
 
@@ -324,6 +324,33 @@ class Workspace:
         return [name for name, targets in self.bookmarks.items()
                 if commit in targets]
 
+    def _bookmarked_below(self) -> str:
+        """A revset of the commits below the tip with a local bookmark; the tip's own doesn't count."""
+        return f'::{self.tip.commit}- & bookmarks()'
+
+    def sync_bookmark(self) -> str | None:
+        """The sync bookmark, [sync] branch else main, or None if it isn't a local bookmark."""
+        name = sync_branch_name(self.directory)
+        return name if any(target is not None for target in self.bookmarks.get(name, [])) else None
+
+    def nearest_bookmarks(self) -> list[str]:
+        """The local bookmarks on the nearest commits below the tip that have any, by name."""
+        commits = self.run('log', '-r', f'heads({self._bookmarked_below()})', '--no-graph',
+                           '-T', 'commit_id ++ "\\n"').stdout
+        return sorted(name for commit in commits for name in self.bookmarks_at(commit))
+
+    def in_sync_history(self, name: str) -> bool:
+        """Whether bookmark name is the sync bookmark's commit or below it."""
+        sync = self.sync_bookmark()
+        if sync is None:
+            return False
+        sync_commits = ' | '.join(
+            target for target in self.bookmarks[sync] if target is not None)
+        commits = ' | '.join(
+            target for target in self.bookmarks[name] if target is not None)
+        return bool(self.run('log', '-r', f'({commits}) & ::({sync_commits})', '--no-graph',
+                             '-T', 'commit_id ++ "\\n"').stdout)
+
     def only_bookmark(self) -> str | None:
         """The one unconflicted local bookmark at the tip, or None for none or several."""
         names = self.bookmarks_at(self.tip.commit)
@@ -381,7 +408,7 @@ class Workspace:
         # The tip's own bookmark doesn't bound the search, as its parents start it.
         # A sync leaves submitted changes empty.
         nearest = self._changes(
-            f'heads(({changes_revset(change_ids)}) & ::{tip} ~ ::(::{tip}- & bookmarks()) ~ empty())')
+            f'heads(({changes_revset(change_ids)}) & ::{tip} ~ ::({self._bookmarked_below()}) ~ empty())')
         # A divergent change's revisions can all be heads.
         return nearest[0] if len(set(nearest)) == 1 else None
 
@@ -435,8 +462,7 @@ class Workspace:
 
     def _on_sync_branch(self, commit: str) -> bool:
         """Whether commit is in the sync bookmark's history, which git made, not a jj snapshot."""
-        targets = self.bookmarks.get(get_sync_branch_setting(
-            self.directory) or DEFAULT_SYNC_BRANCH, [])
+        targets = self.bookmarks.get(sync_branch_name(self.directory), [])
         return len(targets) == 1 and targets[0] is not None and is_ancestor(commit, targets[0], self.directory)
 
     def check_clean(self) -> None:

@@ -227,6 +227,32 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         self.assertEqual(self.text(
         ), 'sync = { branch = "main", when = 2026-01-01, split-users = ["a"] }\n')
 
+    def test_names_written_with_escapes(self):
+        self.write_config(
+            '["review\\u002Dtool"]\ndefault = "a"\n\n[sync]\n"split\\u002Dusers" = ["a"]\n')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])
+        self.assertEqual(self.text(
+        ), '["review\\u002Dtool"]\ndefault = "b"\n\n[sync]\n"split\\u002Dusers" = ["b"]\n')
+
+    def test_a_dotted_key_written_with_escapes(self):
+        self.write_config("'sync' . \"split\\u002Dusers\" = [\"a\"]\n")
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])
+        self.assertEqual(
+            self.text(), "'sync' . \"split\\u002Dusers\" = [\"b\"]\n")
+
+    def test_refuses_an_array_of_tables(self):
+        self.write_config('[[sync]]\nbranch = "x"\n')
+        with self.assertRaisesRegex(ConfigError, 'by hand'):
+            set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(self.text(), '[[sync]]\nbranch = "x"\n')
+
+    def test_refuses_a_key_that_is_a_table(self):
+        self.write_config('[sync.split-users]\nx = 1\n')
+        with self.assertRaisesRegex(ConfigError, 'by hand'):
+            set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(self.text(), '[sync.split-users]\nx = 1\n')
+
     def test_a_quoted_header_and_key(self):
         self.write_config('["sync"]\n"split-users" = ["a"]\n')
         set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])

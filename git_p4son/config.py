@@ -1,7 +1,6 @@
 """Per-repo configuration stored in .git-p4son/config.toml."""
 
 import os
-import re
 import tomllib
 from typing import Any, TypeVar
 
@@ -102,11 +101,6 @@ def _load(text: str) -> dict[str, Any] | None:
         return None
 
 
-def _name(name: str) -> str:
-    """A pattern for a key or table name as TOML may write it: bare, or quoted."""
-    return rf'(?:{re.escape(name)}|"{re.escape(name)}"|\'{re.escape(name)}\')'
-
-
 def _newline(line: str) -> str:
     return '\r\n' if line.endswith('\r\n') else '\n'
 
@@ -127,45 +121,64 @@ def _statements(lines: list[str]) -> list[tuple[int, int]]:
     return statements
 
 
+def _path(data: object) -> tuple[tuple[str, ...], object]:
+    """The keys down through tables of one key each, and what they lead to."""
+    path: list[str] = []
+    while isinstance(data, dict) and len(data) == 1:
+        ((name, data),) = data.items()
+        path.append(name)
+    return tuple(path), data
+
+
+def _header(line: str) -> tuple[str, ...] | None:
+    """The table a [table] header line names, or None for an array of tables."""
+    path, rest = _path(_load(line))
+    return path if rest == {} else None
+
+
+def _key(line: str) -> tuple[tuple[str, ...], int] | None:
+    """The key a key/value line sets, as TOML reads it, and where its = is; None if there is none."""
+    # The key ends at the first = that leaves a key TOML reads, as a quoted key may hold an =.
+    for end in (i for i, char in enumerate(line) if char == '='):
+        if (data := _load(f'{line[:end]}= 0')) is not None:
+            return _path(data)[0], end
+    return None
+
+
 def _set_in_lines(lines: list[str], section: str, key: str, value: str | bool | list[str]) -> None:
     """Set section.key to value in lines, as a key of its table, a dotted key or an inline table, as it is written."""
-    sec, name = _name(section), _name(key)
-    header = re.compile(rf'^\s*\[\s*{sec}\s*\]\s*(#.*)?$')
-    dotted = re.compile(rf'^(\s*{sec}\s*\.\s*{name}\s*)=')
-    sibling = re.compile(rf'^\s*{sec}\s*\.')
-    inline = re.compile(rf'^(\s*{sec}\s*)=\s*\{{')
-    own = re.compile(rf'^(\s*{name}\s*)=')
     statements = _statements(lines)
-    first_header = next((n for n, (i, _) in enumerate(statements) if lines[i].lstrip().startswith('[')),
-                        len(statements))
-    top = statements[:first_header]
+    headers = [(first, _header(lines[first]))
+               for first, _ in statements if lines[first].lstrip().startswith('[')]
+    first_header = headers[0][0] if headers else len(lines)
+    keys = [(first, last, *found) for first, last in statements
+            if not lines[first].lstrip().startswith('[') and (found := _key(lines[first]))]
 
-    def replace(first: int, last: int, prefix: str, new_value: object) -> None:
-        lines[first:last +
-              1] = [f'{prefix.rstrip()} = {format_value(new_value)}{_newline(lines[first])}']
+    def replace(first: int, last: int, end: int, new_value: object) -> None:
+        lines[first:last + 1] = [f'{lines[first][:end].rstrip()} = {format_value(new_value)}'
+                                 f'{_newline(lines[first])}']
 
-    for first, last in top:
-        if match := dotted.match(lines[first]):
-            return replace(first, last, match.group(1), value)
-        if match := inline.match(lines[first]):
-            table = dict(
-                (_load(''.join(lines[first:last + 1])) or {}).get(section, {}))
-            return replace(first, last, match.group(1), table | {key: value})
-    start = next((n for n, (i, _) in enumerate(
-        statements) if header.match(lines[i])), None)
-    if start is not None:
-        header_line = statements[start][0]
+    top = [entry for entry in keys if entry[0] < first_header]
+    for first, last, path, end in top:
+        if path == (section, key):
+            return replace(first, last, end, value)
+        table = (_load(''.join(lines[first:last + 1])) or {}).get(section)
+        if path == (section,) and isinstance(table, dict):
+            return replace(first, last, end, table | {key: value})
+    header_line = next(
+        (first for first, path in headers if path == (section,)), None)
+    if header_line is not None:
         if not lines[header_line].endswith('\n'):
             lines[header_line] += '\n'
-        end = next((n for n in range(start + 1, len(statements))
-                    if lines[statements[n][0]].lstrip().startswith('[')), len(statements))
-        for first, last in statements[start + 1:end]:
-            if match := own.match(lines[first]):
-                return replace(first, last, match.group(1), value)
+        table_end = next(
+            (first for first, _ in headers if first > header_line), len(lines))
+        for first, last, path, end in keys:
+            if header_line < first < table_end and path == (key,):
+                return replace(first, last, end, value)
         lines.insert(
             header_line + 1, f'{format_key(key)} = {format_value(value)}{_newline(lines[header_line])}')
         return
-    siblings = [last for first, last in top if sibling.match(lines[first])]
+    siblings = [last for first, last, path, _ in top if path[:1] == (section,)]
     if siblings:
         lines.insert(siblings[-1] + 1, f'{format_key(section)}.{format_key(key)} = {format_value(value)}'
                      f'{_newline(lines[siblings[-1]])}')

@@ -28,11 +28,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   reverts the files no longer part of them through `edit_and_shelve`. `--review` (or `--review-tool`) resolves the
   review tool first (`resolve_review_tool`) and shelves, recording the tool in the alias, Swarm included; Swarm gets a
   `#review` keyword, and any other tool runs after the shelve (`push_review`), before the record counts the commits.
-  `--shelve` only shelves. Requires a clean git workspace unless `--no-edit` is given. `--per-commit` instead builds the
-  changelist commit by commit through `run_per_commit`, running `new <alias>` on the first commit and `update <alias>`
-  on the others, both shelving with `--shelve` or `--review`, with `shelf_delay` between them. Before shelving,
-  `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
-  `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps (`per_commit_step`) skip it.
+  `--shelve` only shelves. A failure once the CL exists names the `update` that finishes it. Requires a clean git
+  workspace unless `--no-edit` is given. `--per-commit` instead builds the changelist commit by commit through
+  `run_per_commit`, running `new <alias>` on the first commit and `update <alias>` on the others, both shelving with
+  `--shelve` or `--review`, with `shelf_delay` between them. Before shelving, `check_at_latest_revision` refuses files
+  of the change that aren't at the latest revision, unless `--ignore-out-of-date`; a per-commit run checks every commit
+  once, and its steps (`per_commit_step`) skip it.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias, once `check_own_pending` accepts it (once
   per `--per-commit` run, not in its steps). With a record (`find_record`), it folds in the commits after the included
@@ -188,11 +189,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `include_changes_in_changelist` (returns how many files it opened, moved or reopened; one
   `perforce.get_opened_files_and_moves` query gives what is opened and each move's other end, by depot path when git's
   change doesn't name it, `_plan_moves` sorts git's renames into one batched `p4 move` and leaves a move already open to
-  `_plan_opens`, and a reverted move end takes its other end along, as p4 won't revert a move/delete alone),
-  `revert_unchanged_files`, `edit_and_shelve`, which `new` and `update` share, and `check_at_latest_revision`, which
-  lists and refuses the files `perforce.get_out_of_date_files` finds behind the head revision before a shelve. They read
-  the change from the backend's `revision` and revert with `p4 revert -k`, so p4 never writes over a working file. On a
-  dry run of `new` the changelist is `DRY_RUN_CHANGELIST`.
+  `_plan_opens`, and a reverted move end takes its other end along, as p4 won't revert a move/delete alone; then
+  `_check_opened` asks p4 again and raises `CommandError` for any file it didn't open, as p4 exits 0 for most, so no
+  shelve goes out without it), `revert_unchanged_files`, `edit_and_shelve`, which `new` and `update` share, and
+  `check_at_latest_revision`, which lists and refuses the files `perforce.get_out_of_date_files` finds behind the head
+  revision before a shelve. They read the change from the backend's `revision` and revert with `p4 revert -k`, so p4
+  never writes over a working file. On a dry run of `new` the changelist is `DRY_RUN_CHANGELIST`.
 
 - **`description.py`** - Models a changelist description (`Description`): the message, the enumerated commit list
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`

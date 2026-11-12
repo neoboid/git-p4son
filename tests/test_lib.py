@@ -5,7 +5,7 @@ import stat
 import unittest
 from unittest import mock
 
-from git_p4son.common import RunError
+from git_p4son.common import CommandError, RunError
 from git_p4son.git import LocalChanges
 from git_p4son.lib import (
     create_changelist,
@@ -338,45 +338,41 @@ class TestUpdateChangelistReviewKeyword(unittest.TestCase):
         self.assertTrue(description.startswith('\tSee #review notes\n'))
 
 
-class TestOpenWarnings(unittest.TestCase):
-    """Files p4 did not open are found by asking again, since p4 exits 0 for most of them."""
+class TestOpenChecks(unittest.TestCase):
+    """Files p4 did not open are found by asking again, since p4 exits 0 for most of them, and fail the run."""
 
     def _run(self, adds, opened_after, output):
         changes = LocalChanges()
         changes.adds = adds
         with mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {})), \
                 mock.patch('git_p4son.lib.get_opened_files', return_value=opened_after) as mock_opened, \
-                mock.patch('git_p4son.perforce.run',
-                           return_value=make_run_result(
-                               returncode=1, stdout=output)), \
-                captured_output() as out:
+                mock.patch('git_p4son.perforce.run', return_value=make_run_result(returncode=1, stdout=output)):
             include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
-        return mock_opened, out.getvalue()
+        return mock_opened
 
-    def test_warns_about_files_left_unopened(self):
-        """A file matching .p4ignore is skipped with a warning and the rest still open."""
-        _, out = self._run(
-            ['generated.cs', 'real.txt'], {'real.txt': ('100', 'add')},
-            ['//depot/real.txt#1 - opened for add',
-             "generated.cs - ignored file can't be added."])
-        self.assertTrue(out.endswith(
-            '[warn] p4 did not open 1 of 2 files:\n'
+    def test_an_ignored_file_fails_with_how_to_leave_it_out(self):
+        with captured_output() as out, self.assertRaisesRegex(
+                CommandError, r'^p4 did not open 1 of 2 files in CL 100\. Leave the files p4 ignores out of the '
+                r'commits, or change \.p4ignore so p4 takes them\.$'):
+            self._run(['generated.cs', 'real.txt'], {'real.txt': ('100', 'add')},
+                      ['//depot/real.txt#1 - opened for add', "generated.cs - ignored file can't be added."])
+        self.assertTrue(out.getvalue().endswith(
+            'p4 did not open:\n'
             '  generated.cs (for add)\n'
             'p4 said:\n'
             "  generated.cs - ignored file can't be added.\n"))
 
-    def test_file_opened_in_another_changelist_warns(self):
-        _, out = self._run(['a.txt'], {'a.txt': ('200', 'add')}, [])
-        self.assertIn('[warn] p4 did not open 1 of 1 file:\n  a.txt (for add)\n',
-                      out)
+    def test_a_file_opened_in_another_changelist_fails(self):
+        with captured_output() as out, self.assertRaisesRegex(
+                CommandError, r'^p4 did not open 1 of 1 file in CL 100\. Fix what p4 said\.$'):
+            self._run(['a.txt'], {'a.txt': ('200', 'add')}, [])
+        self.assertIn('p4 did not open:\n  a.txt (for add)\n', out.getvalue())
 
-    def test_no_warning_when_all_opened(self):
-        mock_opened, out = self._run(
-            ['new.txt'], {'new.txt': ('100', 'add')},
-            ['//depot/new.txt#1 - opened for add'])
-        self.assertNotIn('[warn]', out)
-        self.assertEqual(mock_opened.call_args_list[0].args,
-                         (['new.txt'], '/ws'))
+    def test_all_opened_passes(self):
+        mock_opened = self._run(['new.txt'], {'new.txt': ('100', 'add')},
+                                ['//depot/new.txt#1 - opened for add'])
+        self.assertEqual(
+            mock_opened.call_args_list[0].args, (['new.txt'], '/ws'))
 
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {}))
@@ -392,7 +388,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
     def setUp(self):
         self.mocks = {}
         for target, value in (('get_opened_files_and_moves', ({}, {})),
-                              ('_warn_unopened', None)):
+                              ('_check_opened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
     # --- added files ---
@@ -548,9 +544,10 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
 
 
 class TestOneOpenedQuery(unittest.TestCase):
+    @mock.patch('git_p4son.lib._check_opened')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({}, {}))
-    def test_every_path_in_one_query(self, mock_opened, _run):
+    def test_every_path_in_one_query(self, mock_opened, _run, _check):
         changes = LocalChanges()
         changes.adds = ['new.txt']
         changes.mods = ['mod.txt']
@@ -567,7 +564,7 @@ class TestActionMismatch(unittest.TestCase):
     def setUp(self):
         self.mocks = {}
         for target, value in (('get_opened_files_and_moves', ({}, {})),
-                              ('_warn_unopened', None)):
+                              ('_check_opened', None)):
             self.mocks[target] = start_patch(self, f'git_p4son.lib.{target}',
                                              return_value=value)
 
@@ -657,7 +654,7 @@ class TestActionMismatch(unittest.TestCase):
 
 
 class TestBatchedActions(unittest.TestCase):
-    @mock.patch('git_p4son.lib._warn_unopened')
+    @mock.patch('git_p4son.lib._check_opened')
     @mock.patch('git_p4son.perforce.run', return_value=make_run_result())
     @mock.patch('git_p4son.lib.get_opened_files_and_moves', return_value=({
         'a.txt': ('100', 'delete'), 'b.txt': ('200', 'delete'),
@@ -693,7 +690,7 @@ class TestKeepWorkingFiles(WorkspaceTestCase):
     def setUp(self):
         super().setUp()
         self.write_file('a.txt', 'working')
-        start_patch(self, 'git_p4son.lib._warn_unopened')
+        start_patch(self, 'git_p4son.lib._check_opened')
         start_patch(self, 'git_p4son.lib.get_opened_files_and_moves',
                     return_value=({'a.txt': ('100', 'delete')}, {}))
         start_patch(self, 'git_p4son.perforce.run', side_effect=self._p4)

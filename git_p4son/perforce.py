@@ -289,6 +289,11 @@ def is_changelist_gone(changelist: str, workspace_dir: str) -> bool:
 
 # --- file operations ---
 
+def is_ignored_add(line: str) -> bool:
+    """Whether a line of p4 output refuses to add a file that .p4ignore matches."""
+    return "ignored file can't be added" in line
+
+
 def _unexpected_p4_errors(res: RunResult[list[str]], expected: tuple[str, ...]) -> list[str]:
     """The stderr lines of a failed p4 command that match none of the expected messages."""
     if res.returncode == 0:

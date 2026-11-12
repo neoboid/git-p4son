@@ -421,6 +421,8 @@ class FakeP4:
         self.pending: dict[str, list[str]] = {}
         self.owners: dict[str, str] = {}
         self.clients: dict[str, str] = {}
+        # Paths p4 refuses to add, as for a .p4ignore match.
+        self.ignored: set[str] = set()
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
         self.in_workspace = True
@@ -668,6 +670,12 @@ class FakeP4:
         stderr: list[str] = []
         in_depot = self.files_at(self.have)
         for path in paths:
+            if action == 'add' and path in self.ignored:
+                # p4 prints "opened for add" before refusing the file.
+                out.append(f'{self._depot(path)}#1 - opened for add')
+                stderr.append(
+                    f"{self._local(path)} - ignored file can't be added.")
+                continue
             if (action == 'add') == (path in in_depot):
                 stderr.append(f'{self._depot(path)} - can\'t {action} '
                               + ('existing file' if action == 'add' else '(not in depot)'))

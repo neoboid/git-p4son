@@ -217,6 +217,33 @@ class TestUpdateOwnPending(UpdateTestCase):
                          for call in self.p4.calls), 1)
 
 
+class TestUpdateUnopened(UpdateTestCase):
+    """update stops before shelving when p4 doesn't open a file of the change."""
+
+    def test_an_ignored_file_stops_the_shelve(self):
+        self.write_file('gen.txt', 'g\n')
+        self.commit('Add gen')
+        self.p4.ignored.add('gen.txt')
+        out = self.update_fails(
+            '--shelve', message='^p4 did not open 1 of 1 file in CL 101')
+        self.assertEqual(self.p4.shelved, {})
+        # p4 also prints "opened for add" for the file it then refuses, which p4 said leaves out.
+        said = out[out.index('p4 said:\n'):]
+        self.assertIn("gen.txt - ignored file can't be added.\n", said)
+        self.assertNotIn('opened for add', said)
+
+    def test_a_per_commit_step_points_at_resuming_the_run(self):
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+        self.write_file('gen.txt', 'g\n')
+        self.commit('Add gen')
+        self.commit_change_c()
+        self.p4.ignored.add('gen.txt')
+        self.update_fails('--per-commit', '--shelve',
+                          message=r'p4 did not open 1 of 1 file in CL 101\. Leave .*\.p4ignore so p4 takes them\.\n'
+                          r'After fixing the problem, resume with: git p4son update 101 --shelve --per-commit$')
+        self.assertEqual(self.p4.shelved, {})
+
+
 class TestSteps(unittest.TestCase):
     def commands(self, **overrides):
         return shlex.join(_step('100', _args(**overrides)))

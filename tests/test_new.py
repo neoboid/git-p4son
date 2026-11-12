@@ -91,6 +91,27 @@ class TestNew(NewTestCase):
         self.assertEqual(list_changelist_aliases(self.ws), [])
 
 
+class TestNewUnopened(NewTestCase):
+    """new stops before shelving when p4 doesn't open a file, and update finishes the changelist once p4 takes it."""
+
+    def test_update_finishes_after_the_cause_is_fixed(self):
+        self.p4.ignored.add('c.txt')
+        self.new_fails('--shelve', message=r'^p4 did not open 1 of 3 files in CL 101\. Leave the files p4 ignores '
+                       r'out of the commits, or change \.p4ignore so p4 takes them\.\nCL 101 is created\. Once fixed, '
+                       r'run: git p4son update feat --shelve$')
+        self.assertEqual(self.p4.shelved, {})
+        self.p4.ignored.clear()
+        self.run_command(update_command, ['update', 'feat', '--shelve'])
+        self.assertEqual(set(self.p4.shelved['101']), {
+                         'a.txt', 'b.txt', 'c.txt'})
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+
+    def test_without_an_alias_the_hint_names_the_changelist_and_base(self):
+        self.p4.ignored.add('c.txt')
+        self.p4son_fails('new', '--no-alias', '-m', 'Feature', '-b', 'main',
+                         message=r'\nCL 101 is created\. Once fixed, run: git p4son update 101 -b main$')
+
+
 class TestNewCleanWorkspace(NewTestCase):
     def test_the_base_s_name_is_resolved_under_creating_the_changelist(self):
         out = self.new('--no-edit')

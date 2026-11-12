@@ -303,6 +303,9 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   revision. ..."). Someone submitted the listed files since the last sync, so the review would show them against an
   older revision. Tell the user, and offer to sync (`git p4son sync`) and rebase the branch onto it, which they may
   want to drive themselves. Pass `--ignore-out-of-date` only when the user says to shelve anyway.
+- **p4 did not open files of the change** ("p4 did not open N of M files in CL ..."). Nothing was shelved. When p4
+  said a file is ignored, it matches `.p4ignore`: tell the user, who either leaves it out of the commits or changes
+  `.p4ignore` first. Otherwise report what p4 said, such as a file opened in another CL or locked by someone else.
 - **The alias already exists.** An earlier attempt saved it. `-f` overwrites it, or `git p4son alias delete` removes
   it; ask the user first if the old CL may still be in use.
 - **A tracked file turned read-only**, for example after a manual `p4 revert`. With writable mode on,

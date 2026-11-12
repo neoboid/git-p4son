@@ -61,9 +61,20 @@ def new_command(args: argparse.Namespace) -> int:
                                   review_tool=tool)
         log.success(f'Created CL {changelist}{alias_note}')
 
-    edit_and_shelve(changelist, args.base_branch, workspace_dir,
-                    edit=not args.no_edit, shelve=args.shelve or args.review,
-                    dry_run=args.dry_run, revision=revision)
+    try:
+        edit_and_shelve(changelist, args.base_branch, workspace_dir,
+                        edit=not args.no_edit, shelve=args.shelve or args.review,
+                        dry_run=args.dry_run, revision=revision)
+    except CommandError as error:
+        # A per-commit run gives its own resume hint, which shelves the commits one by one.
+        if args.per_commit_step or args.dry_run:
+            raise
+        target = [args.alias] if args.alias else [
+            changelist, '-b', args.base_given]
+        rerun = shlex.join(['git', 'p4son', 'update', *target, *(['--shelve'] if args.shelve or args.review else []),
+                            *_ignore_out_of_date(args)])
+        raise CommandError(f'{error}\nCL {changelist} is created. Once fixed, run: {rerun}',
+                           error.returncode) from error
     if runs_command(tool):
         try:
             push_review(args.alias, tool, changelist, first=True,

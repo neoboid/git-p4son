@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
-from git_p4son.config import ConfigError, config_path, load_config, save_config
+from git_p4son.config import ConfigError, config_path, load_config
 from git_p4son.sync_split_users import (
     get_split_users,
     is_self_split,
@@ -16,6 +16,7 @@ from git_p4son.sync_split_users import (
     USER_PLACEHOLDER,
 )
 from tests.helpers import (
+    save_config,
     captured_output,
     cli_args,
     start_patch,

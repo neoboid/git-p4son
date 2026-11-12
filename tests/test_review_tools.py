@@ -6,9 +6,9 @@ from unittest import mock
 
 from git_p4son.changelist_store import Record, alias_changes, find_record, find_review, Review, save_changelist_alias
 from git_p4son.common import CommandError, RunResult
-from git_p4son.config import load_config, save_config
+from git_p4son.config import load_config
 from git_p4son.review_tools import SWARM, resolve_review_tool, review_tool_names, run_review_tool
-from tests.helpers import FakeP4, P4RepoTestCase, WorkspaceTestCase, captured_output
+from tests.helpers import FakeP4, P4RepoTestCase, WorkspaceTestCase, captured_output, save_config
 
 
 class TestResolveReviewTool(WorkspaceTestCase):

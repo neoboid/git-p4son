@@ -4,14 +4,14 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.config import ConfigError, save_config
+from git_p4son.config import ConfigError
 from git_p4son.depot import (
     check_depot_root,
     expand_depot_root,
     get_depot_root,
     subdirectory_depot_root,
 )
-from tests.helpers import captured_output
+from tests.helpers import captured_output, save_config
 
 
 class TestGetDepotRoot(unittest.TestCase):

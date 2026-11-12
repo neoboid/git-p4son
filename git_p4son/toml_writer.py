@@ -11,7 +11,7 @@ _ESCAPES = {'\\': '\\\\', '"': '\\"', '\b': '\\b',
 def format_toml(data: dict[str, Any]) -> str:
     """Format data as TOML: top-level scalars first, then a [table] per dict."""
     return ''.join(_format_scalars(data)) + ''.join(
-        _format_table(_format_key(key), value)
+        _format_table(format_key(key), value)
         for key, value in data.items() if isinstance(value, dict))
 
 
@@ -23,7 +23,7 @@ def format_string(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _format_key(key: str) -> str:
+def format_key(key: str) -> str:
     """Format a TOML key, quoting it when it is not a bare key."""
     if _BARE_KEY_RE.match(key):
         return key
@@ -31,7 +31,7 @@ def _format_key(key: str) -> str:
 
 
 def format_value(value: object) -> str:
-    """Format a TOML value: strings, booleans, numbers, and lists."""
+    """Format a TOML value: strings, booleans, numbers, lists, and dicts as inline tables."""
     if isinstance(value, str):
         return format_string(value)
     if isinstance(value, bool):
@@ -40,12 +40,16 @@ def format_value(value: object) -> str:
         return str(value)
     if isinstance(value, list):
         return '[' + ', '.join(format_value(item) for item in value) + ']'
+    if isinstance(value, dict):
+        if not value:
+            return '{}'
+        return '{ ' + ', '.join(f'{format_key(key)} = {format_value(item)}' for key, item in value.items()) + ' }'
     raise ValueError(
         f'Unsupported TOML value type: {type(value).__name__}')
 
 
 def _format_scalars(table: dict[str, Any]) -> list[str]:
-    return [f'{_format_key(key)} = {format_value(value)}\n'
+    return [f'{format_key(key)} = {format_value(value)}\n'
             for key, value in table.items() if not isinstance(value, dict)]
 
 
@@ -54,5 +58,5 @@ def _format_table(name: str, table: dict[str, Any]) -> str:
     text = f'[{name}]\n' + ''.join(_format_scalars(table)) + '\n'
     for key, subtable in table.items():
         if isinstance(subtable, dict):
-            text += _format_table(f'{name}.{_format_key(key)}', subtable)
+            text += _format_table(f'{name}.{format_key(key)}', subtable)
     return text

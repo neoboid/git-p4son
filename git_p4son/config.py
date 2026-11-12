@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 
 from . import CONFIG_DIR
 from .common import CommandError
-from .toml_writer import format_toml, format_value
+from .toml_writer import format_key, format_toml, format_value
 
 
 def ensure_config_dir(workspace_dir: str) -> None:
@@ -102,6 +102,84 @@ def _load(text: str) -> dict[str, Any] | None:
         return None
 
 
+def _name(name: str) -> str:
+    """A pattern for a key or table name as TOML may write it: bare, or quoted."""
+    return rf'(?:{re.escape(name)}|"{re.escape(name)}"|\'{re.escape(name)}\')'
+
+
+def _newline(line: str) -> str:
+    return '\r\n' if line.endswith('\r\n') else '\n'
+
+
+def _statements(lines: list[str]) -> list[tuple[int, int]]:
+    """The (first, last) line of each table header and key/value in lines, blank and comment lines left out."""
+    statements = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped and not stripped.startswith('#'):
+            # A value runs to the first line that completes it as TOML, as it may span several.
+            last = i if stripped.startswith('[') else next(
+                (j for j in range(i, len(lines)) if _load(''.join(lines[i:j + 1])) is not None), i)
+            statements.append((i, last))
+            i = last
+        i += 1
+    return statements
+
+
+def _set_in_lines(lines: list[str], section: str, key: str, value: str | bool | list[str]) -> None:
+    """Set section.key to value in lines, as a key of its table, a dotted key or an inline table, as it is written."""
+    sec, name = _name(section), _name(key)
+    header = re.compile(rf'^\s*\[\s*{sec}\s*\]\s*(#.*)?$')
+    dotted = re.compile(rf'^(\s*{sec}\s*\.\s*{name}\s*)=')
+    sibling = re.compile(rf'^\s*{sec}\s*\.')
+    inline = re.compile(rf'^(\s*{sec}\s*)=\s*\{{')
+    own = re.compile(rf'^(\s*{name}\s*)=')
+    statements = _statements(lines)
+    first_header = next((n for n, (i, _) in enumerate(statements) if lines[i].lstrip().startswith('[')),
+                        len(statements))
+    top = statements[:first_header]
+
+    def replace(first: int, last: int, prefix: str, new_value: object) -> None:
+        lines[first:last +
+              1] = [f'{prefix.rstrip()} = {format_value(new_value)}{_newline(lines[first])}']
+
+    for first, last in top:
+        if match := dotted.match(lines[first]):
+            return replace(first, last, match.group(1), value)
+        if match := inline.match(lines[first]):
+            table = dict(
+                (_load(''.join(lines[first:last + 1])) or {}).get(section, {}))
+            return replace(first, last, match.group(1), table | {key: value})
+    start = next((n for n, (i, _) in enumerate(
+        statements) if header.match(lines[i])), None)
+    if start is not None:
+        header_line = statements[start][0]
+        if not lines[header_line].endswith('\n'):
+            lines[header_line] += '\n'
+        end = next((n for n in range(start + 1, len(statements))
+                    if lines[statements[n][0]].lstrip().startswith('[')), len(statements))
+        for first, last in statements[start + 1:end]:
+            if match := own.match(lines[first]):
+                return replace(first, last, match.group(1), value)
+        lines.insert(
+            header_line + 1, f'{format_key(key)} = {format_value(value)}{_newline(lines[header_line])}')
+        return
+    siblings = [last for first, last in top if sibling.match(lines[first])]
+    if siblings:
+        lines.insert(siblings[-1] + 1, f'{format_key(section)}.{format_key(key)} = {format_value(value)}'
+                     f'{_newline(lines[siblings[-1]])}')
+        return
+    # Ended as the file's last line is, so a CRLF file stays CRLF.
+    newline = _newline(lines[-1]) if lines else '\n'
+    if lines:
+        if not lines[-1].endswith('\n'):
+            lines[-1] += newline
+        lines.append(newline)
+    lines += [f'[{format_key(section)}]{newline}',
+              f'{format_key(key)} = {format_value(value)}{newline}']
+
+
 def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | bool | list[str]) -> None:
     """Set a setting in config.toml, replacing only its value and leaving the rest as written.
 
@@ -113,37 +191,13 @@ def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str 
     except FileNotFoundError:
         text = ''
     lines = text.splitlines(keepends=True)
-    header = re.compile(rf'^\s*\[\s*{re.escape(section)}\s*\]\s*(#.*)?$')
-    start = next((i for i, text_line in enumerate(
-        lines) if header.match(text_line)), None)
-    if start is None:
-        # Ended as the file's last line is, so a CRLF file stays CRLF.
-        newline = '\r\n' if lines and lines[-1].endswith('\r\n') else '\n'
-        if lines:
-            if not lines[-1].endswith('\n'):
-                lines[-1] += newline
-            lines.append(newline)
-        lines.append(f'[{section}]{newline}')
-        start = len(lines) - 1
-    elif not lines[start].endswith('\n'):
-        lines[start] += '\n'
-    # Ended as the header is, so a CRLF file stays CRLF.
-    line = f'{key} = {format_value(value)}' + \
-        ('\r\n' if lines[start].endswith('\r\n') else '\n')
-    end = next((i for i in range(start + 1, len(lines))
-               if lines[i].lstrip().startswith('[')), len(lines))
-    assignment = re.compile(rf'^\s*{re.escape(key)}\s*=')
-    found = next((i for i in range(start + 1, end)
-                 if assignment.match(lines[i])), None)
-    if found is None:
-        lines.insert(start + 1, line)
-    else:
-        # The value runs to the first line that completes it as TOML, as a value may span several.
-        last = next((i for i in range(found, end) if _load(
-            ''.join(lines[found:i + 1])) is not None), found)
-        lines[found:last + 1] = [line]
-    text = ''.join(lines)
-    written = (_load(text) or {}).get(section, {}).get(key)
+    try:
+        _set_in_lines(lines, section, key, value)
+        text = ''.join(lines)
+        written = (_load(text) or {}).get(section, {}).get(key)
+    except ValueError:
+        # An inline table holding a value the writer can't write, such as a date.
+        written = None
     if written != value:
         raise ConfigError(f'{path} holds {section}.{key} in a form git-p4son can\'t edit. '
                           f'Set {key} in [{section}] by hand.')

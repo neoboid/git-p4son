@@ -162,7 +162,7 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "a"  # old\nx = 2\n')
         set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
         self.assertEqual(self.text(
-        ), '[core]\ndefault = 1\n\n[review-tool]  # tools\ndefault = "b"\nx = 2\n')
+        ), '[core]\ndefault = 1\n\n[review-tool]  # tools\n  default = "b"\nx = 2\n')
 
     def test_a_crlf_file_stays_crlf(self):
         ensure_config_dir(self.ws)
@@ -215,11 +215,63 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         set_setting_in_place(self.ws, 'sync', 'split-users', [])
         self.assertEqual(self.text(), '[sync]\nsplit-users = []\n')
 
-    def test_refuses_a_file_it_cannot_edit_leaving_it_alone(self):
-        self.write_config('review-tool.default = "a"\n')
+    def test_refuses_a_file_that_cannot_hold_the_setting_leaving_it_alone(self):
+        self.write_config('review-tool = "a"\n')
         with self.assertRaisesRegex(ConfigError, 'Set default in \\[review-tool\\] by hand'):
             set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
-        self.assertEqual(self.text(), 'review-tool.default = "a"\n')
+        self.assertEqual(self.text(), 'review-tool = "a"\n')
+
+    def test_refuses_an_inline_table_holding_a_value_it_cannot_write(self):
+        self.write_config('sync = { branch = "main", when = 2026-01-01 }\n')
+        with self.assertRaisesRegex(ConfigError, 'Set split-users in \\[sync\\] by hand'):
+            set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(
+            self.text(), 'sync = { branch = "main", when = 2026-01-01 }\n')
+
+    def test_a_quoted_header_and_key(self):
+        self.write_config('["sync"]\n"split-users" = ["a"]\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['b'])
+        self.assertEqual(self.text(), '["sync"]\n"split-users" = ["b"]\n')
+
+    def test_a_dotted_key_at_the_top(self):
+        self.write_config(
+            '# Mine.\nreview-tool.default = "a"  # old\n\n[core]\nwritable = true\n')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
+        self.assertEqual(
+            self.text(), '# Mine.\nreview-tool.default = "b"\n\n[core]\nwritable = true\n')
+
+    def test_a_new_key_beside_dotted_keys_is_dotted(self):
+        self.write_config(
+            'sync.branch = [\n  "x",\n]\n\n[core]\nwritable = true\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(self.text(), 'sync.branch = [\n  "x",\n]\nsync.split-users = ["a"]\n\n'
+                         '[core]\nwritable = true\n')
+
+    def test_an_inline_table(self):
+        self.write_config(
+            'depot = { root = "//a", other = 1 }  # depot\n[core]\nwritable = true\n')
+        set_setting_in_place(self.ws, 'depot', 'root', '//b')
+        self.assertEqual(
+            self.text(), 'depot = { root = "//b", other = 1 }\n[core]\nwritable = true\n')
+
+    def test_a_new_key_in_an_inline_table(self):
+        self.write_config('sync = { branch = "main" }\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(
+            self.text(), 'sync = { branch = "main", split-users = ["a"] }\n')
+
+    def test_a_table_after_its_sub_tables(self):
+        self.write_config('[review-tool.t]\ncommand = ["t"]\n')
+        set_setting_in_place(self.ws, 'review-tool', 'default', 't')
+        self.assertEqual(
+            self.text(), '[review-tool.t]\ncommand = ["t"]\n\n[review-tool]\ndefault = "t"\n')
+
+    def test_a_nested_array_does_not_end_the_table(self):
+        self.write_config(
+            '[sync]\nother = [\n  ["a"]\n]\nsplit-users = ["x"]\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['y'])
+        self.assertEqual(
+            self.text(), '[sync]\nother = [\n  ["a"]\n]\nsplit-users = ["y"]\n')
 
 
 class TestLoadConfigInvalid(unittest.TestCase):

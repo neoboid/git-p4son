@@ -701,7 +701,8 @@ git p4son list-changes --base-branch main --porcelain
 Manage changelist aliases: names that stand for changelist numbers, so you can say `my-feature` instead of `12345`.
 `new` and `review` save one named after the branch, which also records what [`update`](#update-command) needs to go
 on from. Aliases are stored in `.git-p4son/aliases/`; ones saved by older versions in `.git-p4son/changelists/` keep
-working, and move when written, or all at once with `alias clean`.
+working, and move when written, or all at once with `alias clean`. Alias names ignore case: they're saved in lowercase,
+so `My-Feature` and `my-feature` are the same alias on every file system.
 
 #### alias list
 

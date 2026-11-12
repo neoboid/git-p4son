@@ -471,6 +471,13 @@ class TestJjNew(JjP4RepoTestCase):
         self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
 
+    def test_new_again_under_the_alias_in_another_case_is_the_same_alias(self):
+        self.p4son('new', 'Other', '--no-edit', '-b', 'main')
+        self.p4son_fails('new', 'OTHER', '--no-edit', '-b', 'main',
+                         message='Alias "other" already exists')
+        self.p4son('new', 'OTHER', '--no-edit', '--force', '-b', 'main')
+        self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
+
     def test_alias_new_records_no_change(self):
         self.p4son('alias', 'new', '555', 'named')
         self.assertEqual(alias_changes(self.ws), {})

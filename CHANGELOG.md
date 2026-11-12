@@ -4,7 +4,7 @@
 
 - Alias names ignore case on every file system, not only on Windows and macOS: aliases are saved in lowercase. `alias
   clean` renames aliases saved before in another case to lowercase, appending `-1`, `-2` and so on where the name is
-  taken or reserved, as for `HEAD`
+  taken or reserved, as for `HEAD`, and deletes an alias whose file holds no changelist
 - `update`, with or without `--per-commit`, opens every file of the change since the base its alias records, so a
   commit that renames, deletes or restores a file an earlier commit changed is opened as such, where p4 refused it
   and the change went missing from the shelf

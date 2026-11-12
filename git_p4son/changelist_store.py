@@ -365,6 +365,24 @@ def _free_name(name: str, taken: Callable[[str], bool]) -> str:
     return candidate
 
 
+def unreadable_aliases(workspace_dir: str) -> list[str]:
+    """The aliases in the store whose file holds no changelist, by name."""
+    directory = _aliases_dir(workspace_dir)
+    if not os.path.isdir(directory):
+        return []
+    unreadable = []
+    for entry in sorted(os.listdir(directory)):
+        name = entry.removesuffix('.toml')
+        path = os.path.join(directory, entry)
+        if not entry.endswith('.toml') or not os.path.isfile(path) or validate_alias_name(name) is not None:
+            continue
+        try:
+            _read_alias_file(path, name)
+        except CommandError:
+            unreadable.append(name)
+    return unreadable
+
+
 def lowercase_aliases(workspace_dir: str) -> list[tuple[str, str]]:
     """Rename each alias in the store whose name an older version allowed but isn't lowercase, or is reserved once
     lowercased, to a free lowercase name, and return (old, new) for each.

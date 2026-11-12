@@ -4,6 +4,8 @@ import re
 from typing import Any
 
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+_ESCAPES = {'\\': '\\\\', '"': '\\"', '\b': '\\b',
+            '\t': '\\t', '\n': '\\n', '\f': '\\f', '\r': '\\r'}
 
 
 def format_toml(data: dict[str, Any]) -> str:
@@ -15,7 +17,9 @@ def format_toml(data: dict[str, Any]) -> str:
 
 def format_string(value: str) -> str:
     """A TOML basic string holding value."""
-    escaped = value.replace('\\', '\\\\').replace('"', '\\"')
+    # A basic string may hold no control character but tab raw, so all of them are escaped.
+    escaped = ''.join(_ESCAPES.get(char) or (f'\\u{ord(char):04X}' if ord(char) < 0x20 or char == '\x7f' else char)
+                      for char in value)
     return f'"{escaped}"'
 
 

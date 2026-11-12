@@ -218,8 +218,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   depot root, `core.writable`, the split users, the blocking processes and the script runners. The review tools read
   their own `[review-tool]` section.
 
-- **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files; reading
-  uses `tomllib`.
+- **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files, escaping
+  control characters in strings; reading uses `tomllib`.
 
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
   deletes and moves since a base), commit subjects, staging and commits, the sync commit subject

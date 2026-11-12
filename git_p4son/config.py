@@ -223,8 +223,11 @@ def _set_in_lines(lines: list[str], section: str, key: str, value: str | bool | 
 def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str | bool | list[str]) -> None:
     """Set a setting in config.toml, replacing only its value and leaving the rest as written.
 
-    Raises ConfigError, leaving the file alone, when the edited file doesn't read back with the value."""
+    Raises ConfigError, leaving the file alone, when the file isn't valid TOML, or can't take the setting without
+    replacing what it holds there, such as a table at its key."""
     path = config_path(workspace_dir)
+    # A file that isn't valid TOML is the user's to fix, with what load_config says is wrong.
+    load_config(workspace_dir)
     try:
         with open(path, encoding='utf-8', newline='') as f:
             text = f.read()
@@ -235,7 +238,7 @@ def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str 
     text = ''.join(lines)
     written = (_load(text) or {}).get(section, {}).get(key)
     if written != value:
-        raise ConfigError(f'{path} holds {section}.{key} in a form git-p4son can\'t edit. '
+        raise ConfigError(f'{path} can\'t take {section}.{key} without replacing what it holds there. '
                           f'Set {key} in [{section}] by hand.')
     ensure_config_dir(workspace_dir)
     with open(path, 'w', encoding='utf-8', newline='') as f:

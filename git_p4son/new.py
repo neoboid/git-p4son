@@ -6,7 +6,7 @@ from dataclasses import replace
 from .changelist_store import (
     alias_for_change,
     check_alias_usable,
-    list_changelist_aliases,
+    changelist_alias_exists,
     load_changelist_alias,
     save_changelist_alias,
     update_record,
@@ -133,13 +133,17 @@ def _new_per_commit(args: argparse.Namespace, tool: str | None) -> None:
     base_name = args.backend.base_name(args.base_given)
     log.success(base_name)
 
-    aliases_before = dict(list_changelist_aliases(workspace_dir))
+    def saved() -> str | None:
+        if not changelist_alias_exists(args.alias, workspace_dir):
+            return None
+        return load_changelist_alias(args.alias, workspace_dir)
+
+    before = saved()
 
     def resumable() -> str | None:
         # Once the first step has saved the alias, its changelist exists.
-        changelist = dict(list_changelist_aliases(
-            workspace_dir)).get(args.alias)
-        if changelist is None or changelist == aliases_before.get(args.alias):
+        changelist = saved()
+        if changelist is None or changelist == before:
             return None
         return f'CL {changelist} exists.'
 

@@ -67,8 +67,8 @@ def alias_rename_command(args: argparse.Namespace) -> int:
     workspace_dir = args.workspace_dir
     backend: Backend = args.backend
     # Like git branch -m [old] new: a single name is the new one, for the current alias.
-    old, new = (args.old, args.new) if args.new is not None else (
-        'branch', args.old)
+    old, new = (args.old.lower(), args.new.lower()) if args.new is not None else (
+        'branch', args.old.lower())
     if new == 'branch':
         new = resolve_branch_keyword(backend, workspace_dir, new_alias=True)
     if old == 'branch':

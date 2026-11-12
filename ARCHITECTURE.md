@@ -189,16 +189,16 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   under `Changes included:`, trailing text, and Swarm `#review` keywords on lines of their own. `parse` and `format`
   own the layout; `new` and `update` build descriptions through it.
 
-- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`: save, load, list and
-  delete, rename (`rename_changelist_alias`, which moves everything an alias holds), name validation, the reserved
-  keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch keyword. An alias made by `new` holds a
-  `Record`: the base's name, its commit, and the identities of the commits since it the CL includes, and an inserted
-  catch-up commit until it is included (`find_record`, `update_record`). An alias may record a jj change (`change =
-  "..."`), at most one alias per change, as saving moves the record: `alias_for_change`, `aliases_by_change` and
-  `alias_changes`. An alias can record a review tool (`review_tool`) and, once the tool has run for the CL,
-  `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a whole `_Alias`, so every write keeps
-  them. The old `.git-p4son/changelists/<name>` store is still read; writes move an alias out of it, and
-  `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
+- **`changelist_store.py`** - Changelist aliases stored in `.git-p4son/aliases/<name>.toml`, names lowercased, as
+  aliases ignore case: save, load, list and delete, rename (`rename_changelist_alias`, which moves everything an alias
+  holds), name validation, the reserved keywords (`last-synced`, `head`, `branch`) and `branch_alias` for the branch
+  keyword. An alias made by `new` holds a `Record`: the base's name, its commit, and the identities of the commits since
+  it the CL includes, and an inserted catch-up commit until it is included (`find_record`, `update_record`). An alias
+  may record a jj change (`change = "..."`), at most one alias per change, as saving moves the record:
+  `alias_for_change`, `aliases_by_change` and `alias_changes`. An alias can record a review tool (`review_tool`) and,
+  once the tool has run for the CL, `review_started` (`find_review`, `mark_review_started`). `_write_alias` writes a
+  whole `_Alias`, so every write keeps them. The old `.git-p4son/changelists/<name>` store is still read; writes move an
+  alias out of it, and `migrate_changelist_aliases`, which `alias clean` runs first, moves the rest.
 
 - **`sync_branch.py`** - The sync branch: `[sync] branch` (`get_sync_branch_setting`), `DEFAULT_SYNC_BRANCH`, and
   `choose_sync_branch`, the `--branch`, setting, `main` order both backends and `init` share.

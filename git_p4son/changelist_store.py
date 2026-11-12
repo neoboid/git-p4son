@@ -59,8 +59,8 @@ _WINDOWS_RESERVED_NAMES = frozenset(
 
 
 def branch_to_alias(branch_name: str) -> str:
-    """Sanitize a branch name for use as an alias filename."""
-    return branch_name.replace('/', '-')
+    """Sanitize a branch name for use as an alias filename, in lowercase."""
+    return branch_name.replace('/', '-').lower()
 
 
 def branch_alias(branch_name: str) -> str | None:
@@ -108,7 +108,8 @@ def _old_aliases_dir(workspace_dir: str) -> str:
 
 
 def _alias_paths(name: str, workspace_dir: str) -> tuple[str, str]:
-    """Validate name and return its path in the store and in the old one; raise CommandError if invalid."""
+    """Validate name, lowercased, and return its path in the store and in the old one; raise CommandError if invalid."""
+    name = name.lower()
     error = validate_alias_name(name)
     if error:
         raise CommandError(error)
@@ -196,15 +197,18 @@ def _write_alias(name: str, alias: _Alias, workspace_dir: str) -> None:
 
 
 def _listed(directory: str, suffix: str, read: Callable[[str, str], _Read]) -> dict[str, _Read]:
-    """The readable aliases in a store directory, by name; files that hold none are left out."""
+    """The readable aliases in a store directory, by lowercased name; files that hold none, or that their lowercased
+    name doesn't reach, as an older version saved them, are left out."""
     if not os.path.isdir(directory):
         return {}
     aliases = {}
     for entry in os.listdir(directory):
         path = os.path.join(directory, entry)
-        name = entry.removesuffix(suffix)
-        if (not entry.endswith(suffix) or not os.path.isfile(path)
-                or validate_alias_name(name)):
+        name = entry.removesuffix(suffix).lower()
+        reached = os.path.join(directory, name + suffix)
+        # A case-insensitive file system reaches Feat.toml as feat.toml; HEAD.toml lowercases to a reserved name.
+        if (not entry.endswith(suffix) or not os.path.isfile(path) or validate_alias_name(name)
+                or not (os.path.exists(reached) and os.path.samefile(reached, path))):
             continue
         try:
             aliases[name] = read(path, name)
@@ -240,7 +244,7 @@ def save_changelist_alias(name: str, changelist: str, workspace_dir: str, force:
     check_alias_usable(name, workspace_dir, force)
     if change is not None:
         for other, alias in _records(workspace_dir).items():
-            if alias.change == change and other != name:
+            if alias.change == change and other != name.lower():
                 _write_alias(other, alias._replace(change=None), workspace_dir)
     _write_alias(name, _Alias(changelist, change,
                  record, review_tool), workspace_dir)
@@ -334,19 +338,12 @@ def rename_changelist_alias(old: str, new: str, workspace_dir: str, force: bool)
 
     Raises CommandError if old doesn't exist, new is old, or new is invalid or, without force, taken."""
     alias = _load_alias(old, workspace_dir)
-    if new == old:
-        raise CommandError(f'Alias "{old}" is already named {new}')
-    # A name differing only in case is the same file on a case-insensitive file system, in either store.
-    same_file = any(os.path.exists(old_path) and os.path.exists(new_path) and os.path.samefile(old_path, new_path)
-                    for old_path, new_path in zip(_alias_paths(old, workspace_dir), _alias_paths(new, workspace_dir)))
-    if same_file:
-        # Deleted before writing, as deleting after would delete what was written.
-        delete_changelist_alias(old, workspace_dir)
-        _write_alias(new, alias, workspace_dir)
-    else:
-        check_alias_usable(new, workspace_dir, force)
-        _write_alias(new, alias, workspace_dir)
-        delete_changelist_alias(old, workspace_dir)
+    if new.lower() == old.lower():
+        raise CommandError(
+            f'Alias "{old}" is already named {new.lower()}, as alias names ignore case')
+    check_alias_usable(new, workspace_dir, force)
+    _write_alias(new, alias, workspace_dir)
+    delete_changelist_alias(old, workspace_dir)
     return alias.changelist
 
 

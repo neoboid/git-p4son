@@ -15,6 +15,7 @@ from git_p4son.changelist_store import (
     Review,
     branch_alias,
     branch_to_alias,
+    changelist_alias_exists,
     check_alias_usable,
     delete_changelist_alias,
     list_changelist_aliases,
@@ -78,6 +79,9 @@ class AliasStoreTestCase(WorkspaceTestCase):
         with open(self.path('changelists', name), 'w') as f:
             f.write(content)
 
+    def files(self, store):
+        return sorted(os.listdir(self.path(store)))
+
     def write_new(self, name, content):
         os.makedirs(self.path('aliases'), exist_ok=True)
         with open(self.path('aliases', f'{name}.toml'), 'w') as f:
@@ -132,14 +136,14 @@ class TestAliasStoreLocations(AliasStoreTestCase):
         self.write_old('feature', '100\n')
         self.write_old('other', '300\n')
         save_changelist_alias('feature', '200', self.ws, force=True)
-        self.assertEqual(os.listdir(self.path('changelists')), ['other'])
+        self.assertEqual(self.files('changelists'), ['other'])
 
     def test_delete_removes_the_alias_from_both_stores(self):
         self.write_old('feature', '100\n')
         self.write_new('feature', 'changelist = 200\n')
         delete_changelist_alias('feature', self.ws)
         self.assertFalse(os.path.exists(self.path('changelists')))
-        self.assertEqual(os.listdir(self.path('aliases')), [])
+        self.assertEqual(self.files('aliases'), [])
 
     def test_delete_an_alias_only_in_the_old_store(self):
         self.write_old('feature', '100\n')
@@ -316,6 +320,57 @@ class TestReview(WorkspaceTestCase):
                          Review('b', 'my-tool', False))
 
 
+class TestAliasNamesIgnoreCase(AliasStoreTestCase):
+    """Aliases are written in lowercase and found whatever the case of the name, on every file system."""
+
+    def test_an_alias_is_written_in_lowercase_and_found_in_any_case(self):
+        save_changelist_alias('Feat', '101', self.ws, force=False)
+        self.assertEqual(self.files('aliases'), ['feat.toml'])
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
+        self.assertEqual(load_changelist_alias('FEAT', self.ws), '101')
+        self.assertTrue(changelist_alias_exists('fEaT', self.ws))
+        update_record('Feat', Record('main', 'abc', ['1']), self.ws)
+        self.assertEqual(find_record('101', self.ws),
+                         ('feat', Record('main', 'abc', ['1'])))
+        delete_changelist_alias('FEAT', self.ws)
+        self.assertEqual(list_changelist_aliases(self.ws), [])
+
+    def test_a_name_differing_only_in_case_is_taken(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        with self.assertRaisesRegex(CommandError, 'Alias "Feat" already exists'):
+            save_changelist_alias('Feat', '200', self.ws, force=False)
+        save_changelist_alias('Feat', '200', self.ws, force=True)
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '200')])
+
+    def test_a_rename_only_in_case_is_refused(self):
+        save_changelist_alias('feat', '101', self.ws, force=False)
+        with self.assertRaisesRegex(CommandError, 'already named feat, as alias names ignore case'):
+            rename_changelist_alias('feat', 'Feat', self.ws, force=False)
+        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
+
+    def test_a_name_lowercasing_makes_reserved_is_not_listed(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, record=Record('main', 'abc', ['1']))
+        os.rename(self.path('aliases', 'feat.toml'),
+                  self.path('aliases', 'HEAD.toml'))
+        self.assertEqual(list_changelist_aliases(self.ws), [])
+        self.assertIsNone(find_record('101', self.ws))
+
+    def test_a_name_in_another_case_is_listed_lowercased_where_lookups_find_it(self):
+        save_changelist_alias('feat', '101', self.ws,
+                              force=False, record=Record('main', 'abc', ['1']))
+        os.rename(self.path('aliases', 'feat.toml'),
+                  self.path('aliases', 'Feat.toml'))
+        if os.path.exists(self.path('aliases', 'feat.toml')):
+            self.assertEqual(find_record('101', self.ws),
+                             ('feat', Record('main', 'abc', ['1'])))
+            update_record('feat', Record('main', 'abc', ['1', '2']), self.ws)
+            self.assertEqual(load_changelist_alias('feat', self.ws), '101')
+        else:
+            # A case-sensitive file system: lookups miss it, so listing leaves it out.
+            self.assertEqual(list_changelist_aliases(self.ws), [])
+
+
 class TestRenameAlias(AliasStoreTestCase):
     """rename_changelist_alias, which moves everything an alias holds to a new name."""
 
@@ -358,18 +413,6 @@ class TestRenameAlias(AliasStoreTestCase):
             rename_changelist_alias('feat', 'feat', self.ws, force=True)
         self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
 
-    def test_a_new_name_differing_only_in_case_keeps_the_alias(self):
-        # On a case-insensitive file system both names are the same file.
-        save_changelist_alias('Feat', '101', self.ws, force=False)
-        rename_changelist_alias('Feat', 'feat', self.ws, force=False)
-        self.assertEqual(list_changelist_aliases(self.ws), [('feat', '101')])
-
-    def test_an_old_store_alias_renamed_only_in_case_moves_to_the_new_store(self):
-        self.write_old('feat', '100\n')
-        rename_changelist_alias('feat', 'Feat', self.ws, force=False)
-        self.assertEqual(list_changelist_aliases(self.ws), [('Feat', '100')])
-        self.assertFalse(os.path.exists(self.path('changelists')))
-
     def test_a_failed_write_keeps_the_old_alias(self):
         self.write_old('feat', '12a\n')
         with self.assertRaisesRegex(CommandError, 'Invalid changelist number: 12a'):
@@ -391,6 +434,9 @@ class TestBranchToAlias(unittest.TestCase):
 
     def test_multiple_slashes(self):
         self.assertEqual(branch_to_alias('a/b/c'), 'a-b-c')
+
+    def test_lowercase(self):
+        self.assertEqual(branch_to_alias('Feat/My-Feature'), 'feat-my-feature')
 
 
 class TestBranchAlias(unittest.TestCase):

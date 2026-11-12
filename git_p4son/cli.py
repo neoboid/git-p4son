@@ -668,6 +668,9 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         args.alias = None
 
     branch_attr = getattr(args, 'branch_keyword_arg', None)
+    if branch_attr and getattr(args, branch_attr) is not None:
+        # Alias names ignore case, and the store writes them in lowercase.
+        setattr(args, branch_attr, getattr(args, branch_attr).lower())
     if (branch_attr and getattr(args, branch_attr) == 'branch'
             and not getattr(args, 'all', False)):
         setattr(args, branch_attr, resolve_branch_keyword(

@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError
-from git_p4son.config import ConfigError, load_config, save_config
+from git_p4son.config import ConfigError, config_path, load_config, save_config
 from git_p4son.writable import (
     is_user_writable,
     is_writable_mode,
@@ -244,6 +244,14 @@ class TestWritableCommand(GitRepoTestCase):
         self.assertEqual(self._run('apply'), 0)
         self.assertTrue(self._writable(self.tracked))
         mock_opened.assert_not_called()
+
+    def test_setting_the_mode_keeps_the_rest_of_config_toml(self):
+        self.write_config(
+            '# Mine.\n[core]\nwritable = false  # off for now\n\n[sync]\nbranch = "main"\n')
+        set_writable_mode(self.ws, True)
+        with open(config_path(self.ws), encoding='utf-8') as f:
+            self.assertEqual(
+                f.read(), '# Mine.\n[core]\nwritable = true  # off for now\n\n[sync]\nbranch = "main"\n')
 
     def test_enable_turns_mode_on_and_applies(self):
         self._set_all(stat.S_IRUSR)

@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import Callable
 
 from .common import CommandError
-from .config import get_setting, save_config
+from .config import get_setting, set_setting_in_place
 from .git import list_tracked_files
 from .log import log, plural
 from .perforce import get_client_spec, opened_lookup, p4_get_opened_files
@@ -21,7 +21,7 @@ def is_writable_mode(workspace_dir: str) -> bool:
 
 def set_writable_mode(workspace_dir: str, enabled: bool) -> None:
     """Turn writable mode on or off in the config."""
-    save_config(workspace_dir, {'core': {'writable': enabled}})
+    set_setting_in_place(workspace_dir, 'core', 'writable', enabled)
 
 
 def _regular_file_mode(path: str) -> int | None:

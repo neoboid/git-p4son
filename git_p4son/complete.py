@@ -3,7 +3,7 @@
 import argparse
 from typing import TypeAlias
 
-from .backend import BACKENDS, Backend, alias_for_branch, completion_backend
+from .backend import BACKENDS, Backend, alias_for_branch_or_none, completion_backend
 from .changelist_store import list_changelist_aliases
 from .common import CommandError
 from .git import get_workspace_dir
@@ -115,13 +115,17 @@ def _complete_flag_value(flag: str, workspace_dir: str | None = None,
         backend = _backend(workspace_dir, backend_choice)
         return backend.base_candidates() if backend else []
     if flag == '--review-tool':
-        try:
-            tools = review_tool_names(
-                workspace_dir) if workspace_dir else [SWARM]
-        except CommandError:
-            tools = [SWARM]
-        return [(name, 'Built in' if name == SWARM else '') for name in tools]
+        return _get_review_tool_names(workspace_dir)
     return []
+
+
+def _get_review_tool_names(workspace_dir: str | None) -> Candidates:
+    """swarm and the configured review tools, or only swarm when the configuration can't be read."""
+    try:
+        tools = review_tool_names(workspace_dir) if workspace_dir else [SWARM]
+    except CommandError:
+        tools = [SWARM]
+    return [(name, 'Built in' if name == SWARM else '') for name in tools]
 
 
 def _get_branch_candidates(prefix: str, workspace_dir: str | None,
@@ -133,9 +137,8 @@ def _get_branch_candidates(prefix: str, workspace_dir: str | None,
     backend = _backend(workspace_dir, backend_choice)
     if backend is None:
         return []
-    try:
-        alias = alias_for_branch(backend, str(workspace_dir), new_alias)
-    except (CommandError, OSError):
+    alias = alias_for_branch_or_none(backend, str(workspace_dir), new_alias)
+    if alias is None:
         return []
     branch = backend.words.branch
     if prefix == keyword:
@@ -188,6 +191,9 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
         if positional_count == 0:
             return _branch_or_alias_candidates(prefix, workspace_dir, backend_choice, new_alias=False)
         return _get_branch_candidates(prefix, workspace_dir, backend_choice, new_alias=True)
+
+    if command == 'review-tool' and subcommand in ('set', 'default') and positional_count == 0:
+        return _filter(_get_review_tool_names(workspace_dir), prefix)
 
     if command == 'sync-split-users' and subcommand == 'delete':
         return _filter(_get_split_user_names(workspace_dir), prefix)

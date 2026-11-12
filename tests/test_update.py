@@ -4,11 +4,12 @@ import shlex
 import unittest
 from unittest import mock
 
-from git_p4son.changelist_store import find_record, Record, save_changelist_alias
+from git_p4son.changelist_store import find_record, Record, save_changelist_alias, set_review_tool
 from git_p4son.common import CommandError
 from git_p4son.git import author_dates
 from git_p4son.git_backend import GitBackend
 from git_p4son.new import new_command
+from git_p4son.review_tools import SWARM_SHELF_DELAY
 from git_p4son.update import _step, update_command
 from tests.helpers import (
     CHECK_REVISIONS,
@@ -254,6 +255,12 @@ class TestUpdatePerCommit(UpdateTestCase):
         self.update()
         self.assertEqual(self.shelves(), [])
         self.sleep.assert_not_called()
+
+    def test_a_swarm_review_sleeps_between_shelves_and_runs_no_tool(self):
+        set_review_tool('feat', 'swarm', self.ws)
+        self.update('--shelve')
+        self.assertEqual(len(self.shelves()), 2)
+        self.sleep.assert_called_once_with(SWARM_SHELF_DELAY)
 
     def test_message_goes_to_the_first_step_only(self):
         messages = []

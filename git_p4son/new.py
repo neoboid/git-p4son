@@ -17,7 +17,7 @@ from .included import new_record
 from .lib import check_at_latest_revision, create_changelist, edit_and_shelve
 from .log import log
 from .per_commit import run_per_commit
-from .review_tools import push_review, resolve_review_tool, shelf_delay
+from .review_tools import SWARM, push_review, resolve_review_tool, runs_command, shelf_delay
 
 
 def new_command(args: argparse.Namespace) -> int:
@@ -43,7 +43,7 @@ def new_command(args: argparse.Namespace) -> int:
     base = args.backend.base_name(args.base_given) if args.alias else None
     changelist = create_changelist(
         args.message, args.base_branch, workspace_dir, dry_run=args.dry_run,
-        commit_list=not args.no_commit_list, review=args.review and tool is None,
+        commit_list=not args.no_commit_list, review=tool == SWARM,
         revision=revision)
 
     alias_note = f' (alias={args.alias})' if args.alias else ''
@@ -56,13 +56,15 @@ def new_command(args: argparse.Namespace) -> int:
             record = new_record(base, resolve_commit(args.base_branch, workspace_dir), revision,
                                 args.shelve or args.review, args.backend, workspace_dir)
             save_changelist_alias(args.alias, changelist, workspace_dir, force=args.force, change=change,
-                                  record=replace(record, base_commit='', included=[]), review_tool=tool)
+                                  record=replace(
+                                      record, base_commit='', included=[]),
+                                  review_tool=tool)
         log.success(f'Created CL {changelist}{alias_note}')
 
     edit_and_shelve(changelist, args.base_branch, workspace_dir,
                     edit=not args.no_edit, shelve=args.shelve or args.review,
                     dry_run=args.dry_run, revision=revision)
-    if tool is not None:
+    if runs_command(tool):
         try:
             push_review(args.alias, tool, changelist, first=True,
                         workspace_dir=workspace_dir, dry_run=args.dry_run)
@@ -80,11 +82,11 @@ def new_command(args: argparse.Namespace) -> int:
 
 
 def _review_tool(args: argparse.Namespace) -> str | None:
-    """The tool new runs after each shelve, None for Swarm or without --review; raise CommandError if refused."""
+    """The review tool of the review new creates, None without --review; raise CommandError if refused."""
     if not args.review:
         return None
     tool = resolve_review_tool(args.review_tool, args.workspace_dir)
-    if tool is not None and args.no_alias:
+    if runs_command(tool) and args.no_alias:
         raise CommandError(f'Review tool {tool} needs the alias to record the tool for later updates. '
                            'Leave out --no-alias.')
     return tool

@@ -8,6 +8,7 @@ from typing import cast
 from . import __version__, jj
 from .backend import BACKENDS, open_backend, resolve_branch_keyword
 from .sync import sync_command
+from .review_tools import review_tool_command
 from .sync_split_users import sync_split_users_command
 from .new import new_command
 from .update import update_command
@@ -507,6 +508,51 @@ Examples:
     _add_new_args(review_parser)
     _add_dry_run(
         review_parser, 'Print the steps, one per commit, without running them')
+
+    review_tool_parser = subparsers.add_parser(
+        'review-tool',
+        help='Show or set the review tools: the default, and the one an alias records',
+        description='Review tools take a changelist\'s shelves for review: swarm, built in, and the tools '
+        'configured under [review-tool] in .git-p4son/config.toml. new --review records the tool in the alias, '
+        'and update runs the tool its alias records. Without an action, lists the tools and shows the current '
+        'alias\'s tool.'
+    )
+    review_tool_parser.set_defaults(func=review_tool_command, snapshot=False)
+    review_tool_subparsers = review_tool_parser.add_subparsers(
+        dest='review_tool_action',
+        help='Available review tool actions',
+        metavar='ACTION'
+    )
+    review_tool_subparsers.add_parser(
+        'list',
+        help='List the review tools, marking the default',
+        description='List swarm and the configured review tools, marking the default.'
+    )
+    review_tool_default_parser = review_tool_subparsers.add_parser(
+        'default',
+        help='Show or set the default review tool',
+        description='Show the review tool new --review uses, or set it as [review-tool] default in '
+        '.git-p4son/config.toml, swarm without a setting. A review keeps the tool it was created with.'
+    )
+    review_tool_default_parser.add_argument(
+        'tool', metavar='TOOL', nargs='?', help='The review tool to make the default')
+    review_tool_set_parser = review_tool_subparsers.add_parser(
+        'set',
+        help='Record the review tool of an alias\'s review',
+        description='Record the tool of the review of an alias\'s changelist, for update --shelve to run after '
+        'each shelve. The review is taken to exist, so update runs the tool\'s update arguments.'
+    )
+    review_tool_set_parser.add_argument(
+        'tool', metavar='TOOL', help='The review tool: swarm, or one configured under [review-tool]')
+    _add_branch_keyword_arg(review_tool_set_parser,
+                            'alias', 'Alias to record the tool in')
+    review_tool_show_parser = review_tool_subparsers.add_parser(
+        'show',
+        help='Show the review tool an alias records',
+        description='Show the review tool an alias records, and whether the tool has run for the review.'
+    )
+    _add_branch_keyword_arg(review_tool_show_parser,
+                            'alias', 'Alias to show the tool of')
 
     writable_parser = subparsers.add_parser(
         'writable',

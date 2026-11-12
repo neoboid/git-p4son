@@ -280,6 +280,18 @@ def find_review(changelist: str, workspace_dir: str) -> Review | None:
                  if alias.changelist == changelist and alias.review_tool is not None), None)
 
 
+def alias_review(name: str, workspace_dir: str) -> Review | None:
+    """The review alias name records, or None if it records no review tool; raise CommandError if there is no alias."""
+    alias = _load_alias(name, workspace_dir)
+    return None if alias.review_tool is None else Review(name, alias.review_tool, alias.review_started)
+
+
+def set_review_tool(name: str, tool: str, workspace_dir: str) -> None:
+    """Record tool in alias name as the tool of a review that exists; raise CommandError if there is no alias."""
+    _write_alias(name, _load_alias(name, workspace_dir)._replace(
+        review_tool=tool, review_started=True), workspace_dir)
+
+
 def mark_review_started(name: str, workspace_dir: str) -> None:
     """Record that the review tool has run for the CL of alias name."""
     path, _ = _alias_paths(name, workspace_dir)

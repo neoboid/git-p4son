@@ -2,34 +2,21 @@
 
 ## Unreleased
 
-- `sync-split-users add` and `delete`, `writable enable` and `disable`, and `init` edit only the settings they change
-  in `config.toml`, however they're written, keeping the comments and layout of the rest of the file and the comments
-  on the setting's own lines, where they rewrote the whole file
-- `new` and `update` fail before shelving when p4 doesn't open a file of the change, listing the files and what p4
-  said, where they warned, reported every file as opened and shelved without it. A file `.p4ignore` matches fails the
-  same way: leave it out of the commits, or change `.p4ignore` first
-- New `review-tool` command: list the review tools, show or set the default, and show or set the tool an alias
-  records, such as for an alias recreated with `alias new`, whose review `update --shelve` otherwise left alone
-- An alias records Swarm as its review tool too, so a review's tool shows and stays put when the default changes.
-  An older git-p4son's `update --shelve` refuses such an alias
-- Strings with control characters, such as a newline in a review tool's argument, are escaped in the files git-p4son
-  writes, where they made `config.toml` invalid
-- `alias new` and `update` refuse a changelist that isn't pending, is owned by another user, such as Swarm's copy of
-  a review, or belongs to another client. `update` used to fail on it with p4's own error, after rewriting the
-  description of the user's CL from another client
-- Alias names ignore case on every file system, not only on Windows and macOS: aliases are saved in lowercase. `alias
-  clean` renames aliases saved before in another case to lowercase, appending `-1`, `-2` and so on where the name is
-  taken or reserved, as for `HEAD`, and deletes an alias whose file holds no changelist
-- `update`, with or without `--per-commit`, opens every file of the change since the base its alias records, so a
-  commit that renames, deletes or restores a file an earlier commit changed is opened as such, where p4 refused it
-  and the change went missing from the shelf
-- With a record, `update -b` is refused unless it replaces a recorded base that no longer resolves, and
-  `--per-commit`'s resume hint no longer passes `-b`
-- With git, a base given as a revision relative to a branch, such as `-b main~1`, is no longer recorded as if it were
-  a branch's name, which pointed elsewhere after the next sync. It's named by the one branch at its commit, or refused,
-  and `sync main~1` is refused as a sync branch that doesn't exist
-- On Windows and macOS, a branch name in the wrong case, such as `-b MAIN`, is named as git spells it, `main`, where
-  it was recorded as given and stopped resolving once git packed its refs
+- New `review-tool` command: list the review tools, and show or set the default and the tool an alias records, such
+  as after recreating an alias with `alias new`
+- An alias records its review tool even when it's Swarm, so a review stays on its tool when the default changes.
+  Older versions refuse to `update --shelve` such an alias
+- `alias new` and `update` refuse a changelist that isn't your own pending one on this workspace, such as Swarm's
+  copy of a review
+- `new` and `update` stop before shelving when p4 doesn't open a file, and say why, where they shelved without it. A
+  file `.p4ignore` matches stops them too: leave it out of the commits, or change `.p4ignore`
+- `update` and `review` keep every file in the shelf when a later commit renames, moves, deletes or restores a file
+  an earlier one changed
+- git-p4son now edits `config.toml` in place, leaving your hand edits and comments alone
+- Alias names ignore case everywhere. `alias clean` renames aliases saved in another case, and deletes empty ones
+- `update -b` is refused when the alias already records a base, unless that base no longer exists
+- A base or sync branch written unusually, such as `main~1` or `MAIN`, is no longer recorded in a form that breaks
+  later
 
 ## 0.9.3
 

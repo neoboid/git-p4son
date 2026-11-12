@@ -221,12 +221,11 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             set_setting_in_place(self.ws, 'review-tool', 'default', 'b')
         self.assertEqual(self.text(), 'review-tool = "a"\n')
 
-    def test_refuses_an_inline_table_holding_a_value_it_cannot_write(self):
+    def test_keeps_a_date_in_an_inline_table(self):
         self.write_config('sync = { branch = "main", when = 2026-01-01 }\n')
-        with self.assertRaisesRegex(ConfigError, 'Set split-users in \\[sync\\] by hand'):
-            set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
-        self.assertEqual(
-            self.text(), 'sync = { branch = "main", when = 2026-01-01 }\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        self.assertEqual(self.text(
+        ), 'sync = { branch = "main", when = 2026-01-01, split-users = ["a"] }\n')
 
     def test_a_quoted_header_and_key(self):
         self.write_config('["sync"]\n"split-users" = ["a"]\n')

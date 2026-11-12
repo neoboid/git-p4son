@@ -1,5 +1,6 @@
 """Tests for git_p4son.toml_writer module."""
 
+import datetime
 import tomllib
 import unittest
 
@@ -29,6 +30,13 @@ class TestFormatToml(unittest.TestCase):
     def test_control_characters_round_trip(self):
         data = {'s': 'a\nb\rc\td\be\ff\x00g\x1fh\x7fi'}
         self.assertEqual(tomllib.loads(format_toml(data)), data)
+
+    def test_dates_and_times_round_trip(self):
+        offset = datetime.timezone(datetime.timedelta(hours=2))
+        data = {'date': datetime.date(2026, 1, 1), 'time': datetime.time(7, 32, 0, 500),
+                'local': datetime.datetime(2026, 1, 1, 7, 32), 'offset': datetime.datetime(2026, 1, 1, 7, 32, tzinfo=offset),
+                'inline': {'when': datetime.date(2026, 1, 1)}}
+        self.assertEqual(tomllib.loads(format_toml({'t': data})), {'t': data})
 
     def test_unsupported_value_raises(self):
         with self.assertRaises(ValueError):

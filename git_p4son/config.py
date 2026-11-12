@@ -191,13 +191,9 @@ def set_setting_in_place(workspace_dir: str, section: str, key: str, value: str 
     except FileNotFoundError:
         text = ''
     lines = text.splitlines(keepends=True)
-    try:
-        _set_in_lines(lines, section, key, value)
-        text = ''.join(lines)
-        written = (_load(text) or {}).get(section, {}).get(key)
-    except ValueError:
-        # An inline table holding a value the writer can't write, such as a date.
-        written = None
+    _set_in_lines(lines, section, key, value)
+    text = ''.join(lines)
+    written = (_load(text) or {}).get(section, {}).get(key)
     if written != value:
         raise ConfigError(f'{path} holds {section}.{key} in a form git-p4son can\'t edit. '
                           f'Set {key} in [{section}] by hand.')

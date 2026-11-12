@@ -1,5 +1,6 @@
 """A minimal TOML writer for git-p4son's own files; reading uses tomllib."""
 
+import datetime
 import re
 from typing import Any
 
@@ -31,13 +32,15 @@ def format_key(key: str) -> str:
 
 
 def format_value(value: object) -> str:
-    """Format a TOML value: strings, booleans, numbers, lists, and dicts as inline tables."""
+    """Format a TOML value: strings, booleans, numbers, dates and times, lists, and dicts as inline tables."""
     if isinstance(value, str):
         return format_string(value)
     if isinstance(value, bool):
         return 'true' if value else 'false'
     if isinstance(value, (int, float)):
         return str(value)
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
     if isinstance(value, list):
         return '[' + ', '.join(format_value(item) for item in value) + ']'
     if isinstance(value, dict):

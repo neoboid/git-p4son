@@ -488,7 +488,8 @@ Add the commits a changelist doesn't include yet: `update` opens their files for
 the commit list in the description, keeping the message above it unless `-m` or `-F` replaces it. It also reverts
 files that are no longer part of the change (see
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files needs a clean git
-workspace, untracked files included, unless `--no-edit` skips it.
+workspace, untracked files included, unless `--no-edit` skips it. Before changing anything, `update` refuses a
+changelist that isn't pending, yours and on this workspace's client, as `alias new` does.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]

@@ -15,12 +15,14 @@ from .git import (
 )
 from .log import log, plural
 from .perforce import (
+    describe_changelist,
     extract_description_lines,
     get_changelist_spec,
     get_opened_files,
     get_opened_files_and_moves,
     get_opened_files_in_changelist,
     get_out_of_date_files,
+    get_p4_user_and_client,
     OutOfDate,
     p4_create_changelist,
     p4_revert_unchanged,
@@ -47,6 +49,29 @@ def check_git_workspace_clean(workspace_dir: str) -> None:
         raise CommandError('Workspace is not clean. '
                            'Commit or stash the changes above first.')
     log.success('Clean')
+
+
+def check_own_pending(changelist: str, workspace_dir: str) -> None:
+    """Raise CommandError unless update can edit the changelist: pending, and the current user's and client's."""
+    record, _ = describe_changelist(changelist, workspace_dir)
+    if record is None:
+        raise CommandError(f'CL {changelist} does not exist.')
+    status = record.get('status')
+    if status != 'pending':
+        raise CommandError(
+            f'CL {changelist} is {status or "of unknown status"}, not pending.')
+    user, client = get_p4_user_and_client(workspace_dir)
+    if user is None:
+        raise CommandError(
+            f"Perforce doesn't know the current user, so CL {changelist} can't be checked as yours.")
+    # Servers that ignore case may spell a name differently in the CL and in p4 info.
+    owner, owner_client = record.get('user', ''), record.get('client', '')
+    if owner.lower() != user.lower():
+        raise CommandError(f"CL {changelist} belongs to {owner}, not {user}. If it is a Swarm review's copy, use "
+                           'your own CL instead, often the number just before it.')
+    if client is None or owner_client.lower() != client.lower():
+        raise CommandError(f'CL {changelist} belongs to client {owner_client}, not {client or "the current client"}, '
+                           "so update can't open files in it.")
 
 
 def create_changelist(message: str, base_branch: str, workspace_dir: str, dry_run: bool,

@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- `alias new` refuses a changelist that isn't pending, is owned by another user, such as Swarm's copy of a review,
-  or belongs to another client, which `update` couldn't edit
+- `alias new` and `update` refuse a changelist that isn't pending, is owned by another user, such as Swarm's copy of
+  a review, or belongs to another client. `update` used to fail on it with p4's own error, after rewriting the
+  description of the user's CL from another client
 - Alias names ignore case on every file system, not only on Windows and macOS: aliases are saved in lowercase. `alias
   clean` renames aliases saved before in another case to lowercase, appending `-1`, `-2` and so on where the name is
   taken or reserved, as for `HEAD`, and deletes an alias whose file holds no changelist

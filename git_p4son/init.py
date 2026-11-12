@@ -7,7 +7,7 @@ import shutil
 from . import jj
 from .backend import workspace_lock
 from .common import CommandError, prompt_choice, prompt_menu, prompt_numbered
-from .config import save_config
+from .config import set_setting_in_place
 from .depot import (
     WORKSPACE_DEPOT_ROOT,
     check_depot_root,
@@ -74,7 +74,7 @@ def _configure_depot_root(client_name: str, cwd: str,
         raise CommandError('No depot root selected, aborting')
 
     log.success(f'{expand_depot_root(depot_root, client_name)}/...')
-    save_config(cwd, {'depot': {'root': depot_root}})
+    set_setting_in_place(cwd, 'depot', 'root', depot_root)
 
 
 def _ask_yes_no(question: str, current: bool) -> bool | None:
@@ -145,7 +145,7 @@ def _configure_sync_branch(cwd: str, new_repo: bool) -> None:
         log.warning(
             'No sync branch chosen. Set [sync] branch in .git-p4son/config.toml before syncing.')
         return
-    save_config(cwd, {'sync': {'branch': branch}})
+    set_setting_in_place(cwd, 'sync', 'branch', branch)
     log.success(
         f'{branch}, saved as [sync] branch in .git-p4son/config.toml, where you can change it')
 

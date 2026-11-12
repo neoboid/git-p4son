@@ -88,7 +88,7 @@ class TestSelectDepotRoot(unittest.TestCase):
 class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot')
-    @mock.patch('git_p4son.init.save_config')
+    @mock.patch('git_p4son.init.set_setting_in_place')
     def test_existing_valid_root_skips_save(self, mock_save, mock_get, mock_validate):
         _configure_depot_root('client', '/ws', '/ws')
         mock_save.assert_not_called()
@@ -96,24 +96,23 @@ class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.init._select_depot_root', return_value='//depot/new')
     @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=False)
     @mock.patch('git_p4son.init.get_depot_root', return_value='//depot/old')
-    @mock.patch('git_p4son.init.save_config')
+    @mock.patch('git_p4son.init.set_setting_in_place')
     def test_existing_invalid_root_prompts_and_saves(self, mock_save, mock_get,
                                                      mock_validate, mock_select):
         _configure_depot_root('client', '/ws', '/ws')
         mock_save.assert_called_once_with(
-            '/ws', {'depot': {'root': '//depot/new'}})
+            '/ws', 'depot', 'root', '//depot/new')
 
     @mock.patch('git_p4son.init._select_depot_root', return_value='//depot')
     @mock.patch('git_p4son.init.get_depot_root', return_value=None)
-    @mock.patch('git_p4son.init.save_config')
+    @mock.patch('git_p4son.init.set_setting_in_place')
     def test_no_existing_root_prompts_and_saves(self, mock_save, mock_get, mock_select):
         _configure_depot_root('client', '/ws', '/ws')
-        mock_save.assert_called_once_with(
-            '/ws', {'depot': {'root': '//depot'}})
+        mock_save.assert_called_once_with('/ws', 'depot', 'root', '//depot')
 
     @mock.patch('git_p4son.init._select_depot_root', return_value=None)
     @mock.patch('git_p4son.init.get_depot_root', return_value=None)
-    @mock.patch('git_p4son.init.save_config')
+    @mock.patch('git_p4son.init.set_setting_in_place')
     def test_no_existing_root_user_aborts(self, mock_save, mock_get, mock_select):
         with self.assertRaisesRegex(CommandError, 'No depot root selected'):
             _configure_depot_root('client', '/ws', '/ws')
@@ -122,7 +121,7 @@ class TestConfigureDepotRoot(unittest.TestCase):
     @mock.patch('git_p4son.depot.p4_depot_root_exists', return_value=True)
     @mock.patch('git_p4son.init.get_depot_root',
                 return_value='//$(workspace)/Engine')
-    @mock.patch('git_p4son.init.save_config')
+    @mock.patch('git_p4son.init.set_setting_in_place')
     def test_existing_template_root_validated_resolved(self, mock_save,
                                                        mock_get, mock_validate):
         """An existing $(workspace) root is validated against the resolved path."""
@@ -258,6 +257,14 @@ class TestConfigureSyncBranch(GitRepoTestCase):
         out = self.configure(new_repo=True)
         self.assertEqual(get_sync_branch_setting(self.ws), 'trunk')
         self.assertIn('[sync] branch in .git-p4son/config.toml', out)
+
+    def test_keeps_the_rest_of_config_toml(self):
+        self.write_config(
+            '# Mine.\n[depot]\nroot = "//depot"  # the team root\n')
+        self.configure(new_repo=True)
+        with open(os.path.join(self.ws, '.git-p4son', 'config.toml'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), '# Mine.\n[depot]\nroot = "//depot"  # the team root\n\n'
+                             '[sync]\nbranch = "main"\n')
 
     def test_an_existing_repo_prefers_main_to_head_s_branch(self):
         self.git('switch', '-q', '-c', 'feature')

@@ -13,6 +13,11 @@ def get_sync_branch_setting(workspace_dir: str) -> str | None:
     return get_setting(workspace_dir, 'sync', 'branch', str, None)
 
 
+def sync_branch_name(workspace_dir: str) -> str:
+    """The [sync] branch setting, else main, whether or not it exists; raise ConfigError if malformed."""
+    return get_sync_branch_setting(workspace_dir) or DEFAULT_SYNC_BRANCH
+
+
 def choose_sync_branch(workspace_dir: str, branch: str | None, exists: Callable[[str], bool], kind: str) -> str:
     """branch, else [sync] branch, else main if it exists; raise CommandError if none exists.
 

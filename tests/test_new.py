@@ -657,6 +657,37 @@ class TestNewPerCommitRelativeBase(P4RepoTestCase):
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
 
+class TestNewBaseFromUpstream(NewTestCase):
+    """new and review without -b, on branch feature."""
+
+    def test_new_takes_the_base_from_the_branch_s_local_upstream(self):
+        self.git('branch', '-q', '-u', 'main')
+        out = self.p4son('new', 'feat', '-m', 'Feature')
+        self.assertRegex(
+            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(upstream of feature\)\n')
+        self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+
+    def test_review_takes_it_too(self):
+        self.git('branch', '-q', '-u', 'main')
+        out = self.p4son('review', 'feat', '-m', 'Feature', '--dry-run')
+        self.assertRegex(
+            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(upstream of feature\)\n')
+        self.assertIn('Would run 2 steps', out)
+
+    def test_b_wins_over_the_upstream(self):
+        self.git('branch', '-q', '-u', 'main')
+        self.git('branch', 'mid', 'HEAD~1')
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'mid')
+        self.assertEqual(self.p4.pending['101'], [
+                         'Feature', '', 'Changes included:', '1. Replace b with c'])
+
+    def test_without_an_upstream_b_is_required(self):
+        self.p4son_fails('new', 'feat', '-m', 'Feature',
+                         message='-b is required')
+        self.assertEqual(self.p4.pending, {})
+
+
 _STRAY_FILE = 'jj makes a stray file part of the working change, which the loop then takes as a commit'
 TestNewPerCommitOnJj = on_jj(TestNewPerCommit, skip={
                              'test_dirty_workspace': _STRAY_FILE})

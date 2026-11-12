@@ -8,7 +8,7 @@ from git_p4son.backend import completion_backend, open_backend, selected_backend
 from git_p4son.common import CommandError, RunError
 from git_p4son.config import ConfigError
 from git_p4son.git_backend import GitBackend
-from tests.helpers import captured_output, GitRepoTestCase
+from tests.helpers import captured_output, GitRepoTestCase, save_config
 
 
 class TestGitBackend(GitRepoTestCase):
@@ -129,6 +129,137 @@ class TestGitBackendBase(GitRepoTestCase):
                           '--date=raw', commit) for commit in commits]
         self.assertEqual(self.backend.commit_identities(commits), dates)
         self.assertEqual(self.backend.commit_identities([]), [])
+
+
+class TestGitBackendUpstream(GitRepoTestCase):
+    """GitBackend with main at "Base" and branch feat one commit on, tracking main."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('Base')
+        self.git('switch', '-q', '-c', 'feat', '--track', 'main')
+        self.commit_file('feat.txt')
+
+    def setUp(self):
+        super().setUp()
+        self.backend = GitBackend(self.ws)
+
+    def commit_file(self, name):
+        self.write_file(name, name)
+        self.commit(name)
+
+    def stack(self, sync_branch='main'):
+        """Branch low off sync_branch and high off low, one commit each, and leave HEAD on high."""
+        self.git('switch', '-q', '-c', 'low', '--track', sync_branch)
+        self.commit_file('low.txt')
+        self.git('switch', '-q', '-c', 'high', '--track', 'low')
+        self.commit_file('high.txt')
+
+    def test_the_local_upstream_is_the_base(self):
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'upstream of feat'))
+
+    def test_a_branch_without_an_upstream_needs_b(self):
+        self.git('branch', '--unset-upstream')
+        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream.*git branch -u'):
+            self.backend.implicit_base()
+
+    def test_a_remote_upstream_needs_b(self):
+        self.git('remote', 'add', 'origin', self.ws)
+        self.git('fetch', '-q', 'origin')
+        self.git('branch', '-q', '-u', 'origin/main')
+        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream'):
+            self.backend.implicit_base()
+
+    def test_a_deleted_upstream_needs_b(self):
+        self.stack()
+        self.git('branch', '-q', '-D', 'low')
+        with self.assertRaisesRegex(CommandError, '-b is required, as high has no local upstream'):
+            self.backend.implicit_base()
+
+    def test_a_detached_head_needs_b(self):
+        self.git('switch', '-q', '--detach')
+        with self.assertRaisesRegex(CommandError, '-b is required on a detached HEAD'):
+            self.backend.implicit_base()
+
+    def test_the_sync_branch_moving_on_keeps_it_the_base(self):
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', 'feat')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'upstream of feat'))
+
+    def assert_not_below_is_refused(self):
+        with self.assertRaisesRegex(CommandError, '-b is required, as low, the upstream of high, is not below it'):
+            self.backend.implicit_base()
+
+    def test_a_parent_branch_below_is_the_base(self):
+        self.stack()
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'upstream of high'))
+
+    def test_an_amended_parent_branch_is_refused(self):
+        """low..HEAD would take in the old copy of low's commit."""
+        self.stack()
+        self.git('switch', '-q', 'low')
+        self.git('commit', '-q', '--amend', '-m', 'low.txt v2')
+        self.git('switch', '-q', 'high')
+        self.assert_not_below_is_refused()
+
+    def test_a_parent_branch_rebased_onto_the_sync_branch_is_refused(self):
+        self.stack()
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('rebase', '-q', 'main', 'low')
+        self.git('switch', '-q', 'high')
+        self.assert_not_below_is_refused()
+
+    def test_a_parent_branch_that_gained_commits_is_refused(self):
+        """Not below HEAD, which is all a default can check; -b low takes it."""
+        self.stack()
+        self.git('switch', '-q', 'low')
+        self.commit_file('low2.txt')
+        self.git('switch', '-q', 'high')
+        self.assert_not_below_is_refused()
+
+    def test_an_upstream_the_branch_was_rebased_past_is_refused(self):
+        """After low is submitted and high rebased onto main, low..HEAD would take in low's old commit."""
+        self.stack()
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('rebase', '-q', '--onto', 'main', 'low', 'high')
+        self.assert_not_below_is_refused()
+
+    def assert_left_on_an_old_sync_commit_is_refused(self, sync_branch):
+        """old is below high, but in the sync branch's history, so old..HEAD would take in the sync commits."""
+        self.git('branch', 'old', sync_branch)
+        self.git('switch', '-q', sync_branch)
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', '-c', 'high')
+        self.git('branch', '-q', '-u', 'old')
+        self.commit_file('high.txt')
+        with self.assertRaisesRegex(
+                CommandError, f'old, the upstream of high, is in the history of {sync_branch}.*'
+                f'git branch -u {sync_branch}'):
+            self.backend.implicit_base()
+
+    def test_an_upstream_below_a_merge_of_the_sync_branch_is_refused(self):
+        """low..HEAD would take in the sync commit the merge brought in."""
+        self.stack()
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', 'high')
+        self.git('merge', '-q', '--no-edit', 'main')
+        with self.assertRaisesRegex(CommandError, 'low, the upstream of high, would take in commits of main'):
+            self.backend.implicit_base()
+
+    def test_an_upstream_left_on_an_old_sync_commit_is_refused(self):
+        self.assert_left_on_an_old_sync_commit_is_refused('main')
+
+    def test_the_sync_branch_setting_names_the_branch_the_upstream_is_checked_against(self):
+        self.git('branch', 'trunk', 'main')
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        self.assert_left_on_an_old_sync_commit_is_refused('trunk')
 
 
 class TestGitBackendWithoutCommits(GitRepoTestCase):

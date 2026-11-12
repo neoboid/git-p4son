@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `-b` is optional on `new` and `review`: it defaults to the git branch's local upstream, or with jj the
+  nearest bookmark below the change
+
 ## 0.10.0
 
 - New `review-tool` command: list the review tools, and show or set the default and the tool an alias records, such

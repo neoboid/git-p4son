@@ -126,12 +126,15 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.shelve)
         self.assertFalse(args.review)
 
-    def test_new_and_review_need_a_base(self):
+    def test_new_and_review_need_a_base_where_update_has_a_default(self):
+        """Left out, run_command takes new's and review's from the upstream, else refuses."""
         for command in ('new', 'review'):
-            with self.subTest(command=command), contextlib.redirect_stderr(io.StringIO()), \
-                    self.assertRaises(SystemExit):
-                self.parser.parse_args([command, '-m', 'Fix bug'])
-        self.assertIsNone(self.parser.parse_args(['update']).base_branch)
+            args = self.parser.parse_args([command, '-m', 'Fix bug'])
+            self.assertEqual(
+                (args.base_branch, args.implicit_base), (None, True))
+        args = self.parser.parse_args(['update'])
+        self.assertEqual((args.base_branch, getattr(
+            args, 'implicit_base', False)), (None, False))
 
     def test_message_file(self):
         for command in ('new', 'update', 'review'):

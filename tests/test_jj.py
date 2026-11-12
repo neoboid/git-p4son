@@ -18,7 +18,7 @@ from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
-    recorded, requires_jj, run_jj, start_patch, WorkspaceTestCase,
+    recorded, requires_jj, run_jj, save_config, start_patch, WorkspaceTestCase,
 )
 
 
@@ -737,6 +737,95 @@ class TestJjChangeBase(JjP4RepoTestCase):
     def test_a_revision_with_a_bookmark_still_records_the_bookmark(self):
         self.p4son('new', '-b', 'main')
         self.assertEqual(self.base(), 'main')
+
+
+class TestJjBaseFromBookmarkBelow(JjP4RepoTestCase):
+    """new and review without -b take the nearest bookmark below the change."""
+
+    def stack(self):
+        """Stack high on low on main, with a bookmark each, and an empty working change on top."""
+        self.change('Change a', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('low')
+        self.change('Change b', 'b.txt', 'b2\n')
+        self.bookmark('high')
+        self.jj('new')
+
+    def test_a_change_on_the_sync_bookmark_takes_it(self):
+        self.change('Change a', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('feat')
+        self.jj('new')
+        out = self.p4son('new', '-m', 'Feature')
+        self.assertIn(
+            f'[ok] main -> {self.describe("main", "commit_id")} (nearest bookmark below)\n', out)
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+
+    def test_a_stacked_change_takes_the_bookmark_below(self):
+        self.stack()
+        self.p4son('new', '-m', 'Feature')
+        self.assertEqual(recorded('101', self.ws).base, 'low')
+        self.assertEqual(self.p4.pending['101'], [
+                         'Feature', '', 'Changes included:', '1. Change b'])
+        self.assertEqual(self.p4.opened, {'b.txt': ('101', 'edit')})
+
+    def test_review_takes_it_too(self):
+        self.stack()
+        out = self.p4son('review', '-m', 'Feature', '--dry-run')
+        self.assertIn('(nearest bookmark below)', out)
+        self.assertIn('Would run 1 step', out)
+
+    def test_b_wins_over_the_bookmark_below(self):
+        self.stack()
+        self.p4son('new', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+
+    def assert_in_sync_history_is_refused(self, sync):
+        """old..feat would take in the sync commit between them, as the sync bookmark has moved on past it."""
+        self.jj('bookmark', 'create', 'old', '-r', sync)
+        self.change('Sync', 's.txt', 's1\n', parent=sync)
+        self.jj('bookmark', 'set', sync, '-r', '@')
+        self.change('Change a', 'a.txt', 'a2\n')
+        self.bookmark('feat')
+        self.change('Sync 2', 't.txt', 't1\n', parent=sync)
+        self.jj('bookmark', 'set', sync, '-r', '@')
+        self.jj('new', 'feat')
+        self.p4son_fails('new', '-m', 'Feature',
+                         message=f'-b is required, as old, the nearest bookmark below the change, is in the history '
+                         f'of {sync}, .* such as {sync}\\.')
+        self.assertEqual(self.p4.pending, {})
+
+    def test_a_bookmark_in_the_sync_bookmark_s_history_is_refused(self):
+        self.assert_in_sync_history_is_refused('main')
+
+    def test_the_sync_branch_setting_names_the_sync_bookmark(self):
+        self.jj('bookmark', 'rename', 'main', 'trunk')
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        self.assert_in_sync_history_is_refused('trunk')
+
+    def test_no_bookmark_below_needs_b_and_suggests_the_sync_bookmark(self):
+        """A change left on an older sync commit, which main has moved on from."""
+        self.change('Change a', 'a.txt', 'a2\n', parent='main')
+        self.bookmark('feat')
+        self.change('Sync', 's.txt', 's1\n', parent='main')
+        self.jj('bookmark', 'set', 'main', '-r', '@')
+        self.jj('new', 'feat')
+        self.p4son_fails('new', '-m', 'Feature',
+                         message=r'no bookmark is below the change. Name the base it starts from, such as main\.')
+
+    def test_a_bookmark_on_an_emptied_change_stays_the_base(self):
+        """After low is submitted and synced, its emptied change stays out of high's CL."""
+        self.stack()
+        self.jj('restore', '--changes-in', 'low')
+        self.p4son('new', '-m', 'Feature')
+        self.assertEqual(recorded('101', self.ws).base, 'low')
+        self.assertEqual(self.p4.pending['101'], [
+                         'Feature', '', 'Changes included:', '1. Change b'])
+
+    def test_two_bookmarks_on_the_nearest_commit_need_b(self):
+        self.stack()
+        self.jj('bookmark', 'create', 'also-low', '-r', 'low')
+        self.p4son_fails('new', '-m', 'Feature',
+                         message='-b is required, as also-low, low are the nearest bookmarks')
+        self.assertEqual(self.p4.pending, {})
 
 
 class TestJjPerCommit(JjP4RepoTestCase):

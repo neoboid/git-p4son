@@ -62,9 +62,10 @@ with these translations:
   stacked on top of it, up to the first bookmark below them. jj doesn't move bookmarks on `jj new`: after adding
   changes above a bookmarked change with a CL, suggest moving the bookmark to the tip (`jj bookmark move <name>
   --to @-`) so `update` finds the alias.
-- **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent. A change without a
-  bookmark, such as a local-only change kept under the stack, is recorded by its change ID. If `update` says the
-  recorded base no longer resolves, `update -b <base>` records a new one.
+- **`-b` takes a jj revision**, such as `main` or a change ID, and defaults to the change's parent, or for `new` and
+  `review` to the nearest bookmark below the change. A change without a bookmark, such as a local-only change kept under
+  the stack, is recorded by its change ID. If `update` says the recorded base no longer resolves, `update -b <base>`
+  records a new one.
 - **Branching off `main`** is `jj new main -m "..."` and `jj bookmark create <name>`. **Switching to a change**, as
   `git checkout feature-a` does in the stacks walkthrough, is `jj edit <bookmark>` to amend that change, or
   `jj new <bookmark>` to add a change on top.
@@ -199,8 +200,9 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 Notes:
 
-- `-b` is required: pass `main`, or the branch you started from. The alias records it, with the commits the CL
-  includes, so later updates know which commits are new.
+- Pass `-b`: `main`, or the branch you started from. Left out, it defaults to the git branch's local upstream, or with
+  jj the nearest bookmark below the change, and is refused without one; the `Resolving base` step names the base it
+  took. The alias records it, with the commits the CL includes, so later updates know which commits are new.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
   for a single-commit change, where a one-entry list would just repeat the title.

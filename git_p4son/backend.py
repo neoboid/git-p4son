@@ -28,6 +28,11 @@ class Backend(Protocol):
     def resolve_base(self, base: str | None) -> str:
         """The base to find the change's commits since, None for the backend's default."""
 
+    def implicit_base(self) -> tuple[str, str]:
+        """The base new and review take without -b, and where it comes from.
+
+        Raises CommandError, saying -b is required, where there is none."""
+
     def suggested_alias(self) -> str:
         """The alias the current branch or bookmark suggests; raise CommandError if there is none."""
 

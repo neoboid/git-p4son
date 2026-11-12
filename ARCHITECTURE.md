@@ -220,10 +220,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `subdirectory_depot_root` back `init`'s choice.
 
 - **`config.py`** - Per-repo configuration in `.git-p4son/config.toml`. `get_setting` reads a typed value with a default
-  and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file, rewriting it, and
-  `set_setting_in_place` replaces one string, bool or list setting's value, over every line it spans, leaving the rest
-  as written, for `review-tool default`. Holds the depot root, `core.writable`, the split users, the blocking processes
-  and the script runners. The review tools read their own `[review-tool]` section.
+  and raises `ConfigError` for a wrong type or invalid TOML; `save_config` merges into the file, rewriting it.
+  `set_setting_in_place` writes `review-tool default`'s setting: it finds the setting's table and key as TOML reads
+  them, in whichever form they're written (a table, a dotted key, an inline table, which is rewritten from its parsed
+  entries), replaces its value over every line it spans, keeping the comments on those lines (the ones inside a value
+  move above its key), and leaves the rest of the file as written. Holds the depot root, `core.writable`, the split
+  users, the blocking processes and the script runners. The review tools read their own `[review-tool]` section.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind `config.toml` and the alias files, escaping
   control characters in strings; reading uses `tomllib`.

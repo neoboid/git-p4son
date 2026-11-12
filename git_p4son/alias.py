@@ -17,7 +17,8 @@ from .changelist_store import (
 )
 from .common import CommandError
 from .log import log, plural
-from .perforce import describe_changelist, get_p4_user_and_client, is_changelist_gone
+from .lib import check_own_pending
+from .perforce import is_changelist_gone
 
 
 def _print_aliases(aliases: list[tuple[str, str]], workspace_dir: str, backend: Backend) -> None:
@@ -60,34 +61,11 @@ def alias_new_command(args: argparse.Namespace) -> int:
 
     log.heading(f'Saving alias {args.alias}')
     check_alias_usable(args.alias, workspace_dir, args.force)
-    _check_own_pending(args.changelist, workspace_dir)
+    check_own_pending(args.changelist, workspace_dir)
     save_changelist_alias(args.alias, args.changelist, workspace_dir,
                           force=args.force)
     log.success(f'{args.alias} -> CL {args.changelist}')
     return 0
-
-
-def _check_own_pending(changelist: str, workspace_dir: str) -> None:
-    """Raise CommandError unless update can edit the changelist: pending, and the current user's and client's."""
-    record, _ = describe_changelist(changelist, workspace_dir)
-    if record is None:
-        raise CommandError(f'CL {changelist} does not exist.')
-    status = record.get('status')
-    if status != 'pending':
-        raise CommandError(
-            f'CL {changelist} is {status or "of unknown status"}, not pending.')
-    user, client = get_p4_user_and_client(workspace_dir)
-    if user is None:
-        raise CommandError(
-            f"Perforce doesn't know the current user, so CL {changelist} can't be checked as yours.")
-    # Servers that ignore case may spell a name differently in the CL and in p4 info.
-    owner, owner_client = record.get('user', ''), record.get('client', '')
-    if owner.lower() != user.lower():
-        raise CommandError(f"CL {changelist} belongs to {owner}, not {user}. If it is a Swarm review's copy, alias "
-                           'your own CL instead, often the number just before it.')
-    if client is None or owner_client.lower() != client.lower():
-        raise CommandError(f'CL {changelist} belongs to client {owner_client}, not {client or "the current client"}, '
-                           "so update can't open files in it.")
 
 
 def alias_rename_command(args: argparse.Namespace) -> int:

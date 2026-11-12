@@ -180,6 +180,42 @@ class TestUpdateChecksOnce(UpdateTestCase):
         self.assertEqual(self.per_commit_checks(), 1)
 
 
+class TestUpdateOwnPending(UpdateTestCase):
+    """update refuses a CL it can't edit before touching it, as alias new does."""
+
+    def setUp(self):
+        super().setUp()
+        self.commit_change_c()
+
+    def test_refuses_another_users_changelist_before_changing_it(self):
+        self.p4.owners['101'] = 'bob'
+        self.update_fails('--shelve', message="^CL 101 belongs to bob, not me. If it is a Swarm review's copy, use "
+                          'your own CL instead, often the number just before it.$')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertNotIn(['change', '-i'], self.p4.calls)
+
+    def test_reports_the_check_under_a_heading_of_its_own(self):
+        self.assertIn('# Checking CL 101\n', self.update())
+
+    def test_refuses_another_clients_changelist(self):
+        self.p4.clients['101'] = 'otherws'
+        self.update_fails(message="^CL 101 belongs to client otherws, not myclient, so update can't open files in "
+                          'it.$')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+
+    def test_refuses_a_changelist_that_does_not_exist(self):
+        self.command_fails(
+            update_command, ['update', '999'], message='^CL 999 does not exist.$')
+
+    def test_a_per_commit_update_checks_once_not_in_its_steps(self):
+        start_patch(self, 'git_p4son.per_commit.time.sleep')
+        self.edit('d.txt', 'd1\n')
+        self.commit('Add d')
+        self.run_command(update_command, ['update', '101', '--per-commit'])
+        self.assertEqual(sum(call[:2] == ['-ztag', 'describe']
+                         for call in self.p4.calls), 1)
+
+
 class TestSteps(unittest.TestCase):
     def commands(self, **overrides):
         return shlex.join(_step('100', _args(**overrides)))
@@ -286,7 +322,9 @@ class TestUpdatePerCommit(UpdateTestCase):
         out = self.update('--dry-run')
         self.assertRegex(out, r'Step 1 of 2: \w+ Change a\nStep 2 of 2: \w+ Replace b with c\n'
                          r'\[ok\] Would run 2 steps, git p4son update 101\n')
-        self.assertEqual(self.p4.calls, [])
+        # Only the reads that check the CL is the user's.
+        self.assertEqual(
+            self.p4.calls, [['-ztag', 'describe', '-s', '-m1', '101'], ['-ztag', 'info']])
 
 
 class TestUpdatePerCommitRelativeBase(P4RepoTestCase):

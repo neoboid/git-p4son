@@ -7,7 +7,7 @@ from .changelist_store import Record, Review, find_record, find_review, load_cha
 from .common import CommandError
 from .git import get_head_subject, resolve_commit
 from .included import Plan, catch_up_subject, included_count, plan_update
-from .lib import check_at_latest_revision, edit_and_shelve, update_changelist
+from .lib import check_at_latest_revision, check_own_pending, edit_and_shelve, update_changelist
 from .log import log, plural
 from .per_commit import message_args, run_per_commit
 from .review_tools import push_review, review_tool_config, shelf_delay
@@ -135,6 +135,11 @@ def update_command(args: argparse.Namespace) -> int:
         log.heading('Resolving alias')
         changelist = load_changelist_alias(args.changelist, workspace_dir)
         log.success(f'{args.changelist} -> CL {changelist}')
+    # A per-commit run checks once, before its steps.
+    if not args.per_commit_step:
+        log.heading(f'Checking CL {changelist}')
+        check_own_pending(changelist, workspace_dir)
+        log.success('Pending, yours and on this client')
 
     revision = args.backend.revision
     review = find_review(changelist, workspace_dir)

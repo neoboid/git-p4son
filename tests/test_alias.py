@@ -140,7 +140,7 @@ class TestAliasNewAndList(WorkspaceTestCase):
         self.p4.pending['201'] = ['Swarm\'s copy of 200']
         self.p4.owners['201'] = 'swarm'
         with self.assertRaisesRegex(CommandError, "^CL 201 belongs to swarm, not me. If it is a Swarm review's copy, "
-                                    'alias your own CL instead, often the number just before it.$'):
+                                    'use your own CL instead, often the number just before it.$'):
             self._new('201', 'feature-a', force=True)
         self.assertEqual(
             self._list(), ['Found 1 alias', 'feature-a -> CL 100'])

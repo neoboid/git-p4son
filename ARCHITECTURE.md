@@ -34,17 +34,18 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   Before shelving, `check_at_latest_revision` refuses files of the change that aren't at the latest revision, unless
   `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps (`per_commit_step`) skip it.
 
-- **`update.py`** - Updates an existing changelist, named by number or alias. With a record (`find_record`), it folds in
-  the commits after the included ones, through `included.plan_update`, appending their subjects; without one, it merges
-  the commits since `-b` into its description by subject (`update_changelist`). Then `edit_and_shelve`, after a shelve
-  the review tool an alias records for the CL (`find_review`, looked up once and checked before shelving), through
-  `push_review`, and the record's new count. It opens files from the record's base commit, where the branch leaves the
-  depot: a diff from the last included commit would replay earlier updates' renames and deletes against what p4 has
-  opened. `plan_update` refuses `-b` unless it replaces a base that no longer resolves. A shelving update first runs
-  `check_at_latest_revision` over the files since there and the files opened in the CL, unless `--ignore-out-of-date` or
-  a step. `--per-commit` instead updates once per commit after the included ones through `run_per_commit`, with
-  `shelf_delay` between shelving steps, each step without `-b`, so it opens files from the record's base commit too.
-  Requires a clean git workspace unless `--no-edit` is given.
+- **`update.py`** - Updates an existing changelist, named by number or alias, once `check_own_pending` accepts it (once
+  per `--per-commit` run, not in its steps). With a record (`find_record`), it folds in the commits after the included
+  ones, through `included.plan_update`, appending their subjects; without one, it merges the commits since `-b` into its
+  description by subject (`update_changelist`). Then `edit_and_shelve`, after a shelve the review tool an alias records
+  for the CL (`find_review`, looked up once and checked before shelving), through `push_review`, and the record's new
+  count. It opens files from the record's base commit, where the branch leaves the depot: a diff from the last included
+  commit would replay earlier updates' renames and deletes against what p4 has opened. `plan_update` refuses `-b` unless
+  it replaces a base that no longer resolves. A shelving update first runs `check_at_latest_revision` over the files
+  since there and the files opened in the CL, unless `--ignore-out-of-date` or a step. `--per-commit` instead updates
+  once per commit after the included ones through `run_per_commit`, with `shelf_delay` between shelving steps, each step
+  without `-b`, so it opens files from the record's base commit too. Requires a clean git workspace unless `--no-edit`
+  is given.
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
@@ -59,14 +60,14 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   the list, printed directly, reaches stdout.
 
 - **`alias.py`** - The `alias` actions (`list`, `show`, `new`, `rename`, `delete`, `clean`), each an `alias_*_command`
-  built on `changelist_store.py`. `new` refuses a CL that `describe_changelist` doesn't find pending and owned by the
-  current user and client (`get_p4_user_and_client`, ignoring case), as `update` can't edit it. `rename` takes one or
-  two names, as `git branch -m` does, and resolves the `branch` keyword for each itself: the current alias as the old
-  name, the suggested one as the new. `clean` deletes the aliases whose changelist `is_changelist_gone` finds submitted
-  or missing, or whose file holds no changelist (`unreadable_aliases`), after giving the aliases an older version saved
-  in another case or under a now reserved name a free lowercase one (`lowercase_aliases`, `migrate_changelist_aliases`);
-  it and `delete --all` go on past an alias that fails to delete, then raise `CommandError` with the count.
-  `clean --porcelain` sets `quiet`, as `list-changes --porcelain` does, and prints one line per alias directly.
+  built on `changelist_store.py`. `new` refuses a CL `update` can't edit through `lib.check_own_pending`. `rename` takes
+  one or two names, as `git branch -m` does, and resolves the `branch` keyword for each itself: the current alias as the
+  old name, the suggested one as the new. `clean` deletes the aliases whose changelist `is_changelist_gone` finds
+  submitted or missing, or whose file holds no changelist (`unreadable_aliases`), after giving the aliases an older
+  version saved in another case or under a now reserved name a free lowercase one (`lowercase_aliases`,
+  `migrate_changelist_aliases`); it and `delete --all` go on past an alias that fails to delete, then raise
+  `CommandError` with the count. `clean --porcelain` sets `quiet`, as `list-changes --porcelain` does, and prints one
+  line per alias directly.
 
 - **`init.py`** - The `init` command: checks it runs in a Perforce workspace, then asks for the depot root, writable
   mode, split users, the Claude Code skill and, with jj 0.41 or newer, colocating jj and the `jj p4son` alias. It sets
@@ -178,8 +179,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and clean check a
   step reads, and the working change's files back at the end, so jj sees no change.
 
-- **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `create_changelist`,
-  `update_changelist`, `include_changes_in_changelist` (returns how many files it opened, moved or reopened; one
+- **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `check_own_pending` (refuses a CL
+  `describe_changelist` doesn't find pending and owned by the current user and client, `get_p4_user_and_client`,
+  ignoring case, which `alias new` and `update` run), `create_changelist`, `update_changelist`,
+  `include_changes_in_changelist` (returns how many files it opened, moved or reopened; one
   `perforce.get_opened_files_and_moves` query gives what is opened and each move's other end, by depot path when git's
   change doesn't name it, `_plan_moves` sorts git's renames into one batched `p4 move` and leaves a move already open to
   `_plan_opens`, and a reverted move end takes its other end along, as p4 won't revert a move/delete alone),

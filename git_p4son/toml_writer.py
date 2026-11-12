@@ -30,7 +30,7 @@ def _format_key(key: str) -> str:
     return format_string(key)
 
 
-def _format_value(value: object) -> str:
+def format_value(value: object) -> str:
     """Format a TOML value: strings, booleans, numbers, and lists."""
     if isinstance(value, str):
         return format_string(value)
@@ -39,13 +39,13 @@ def _format_value(value: object) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, list):
-        return '[' + ', '.join(_format_value(item) for item in value) + ']'
+        return '[' + ', '.join(format_value(item) for item in value) + ']'
     raise ValueError(
         f'Unsupported TOML value type: {type(value).__name__}')
 
 
 def _format_scalars(table: dict[str, Any]) -> list[str]:
-    return [f'{_format_key(key)} = {_format_value(value)}\n'
+    return [f'{_format_key(key)} = {format_value(value)}\n'
             for key, value in table.items() if not isinstance(value, dict)]
 
 

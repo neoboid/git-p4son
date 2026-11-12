@@ -173,6 +173,15 @@ class TestSetSettingInPlace(WorkspaceTestCase):
             self.assertEqual(
                 f.read(), '[review-tool]\r\ndefault = "a"\r\n# c\r\n')
 
+    def test_a_table_appended_to_a_crlf_file_is_crlf(self):
+        ensure_config_dir(self.ws)
+        with open(config_path(self.ws), 'w', encoding='utf-8', newline='') as f:
+            f.write('[core]\r\nwritable = true\r\n')
+        set_setting_in_place(self.ws, 'sync', 'split-users', ['a'])
+        with open(config_path(self.ws), encoding='utf-8', newline='') as f:
+            self.assertEqual(
+                f.read(), '[core]\r\nwritable = true\r\n\r\n[sync]\r\nsplit-users = ["a"]\r\n')
+
     def test_appends_the_table_when_there_is_none(self):
         self.write_config('[core]\nwritable = true')
         set_setting_in_place(self.ws, 'review-tool', 'default', 'a')
@@ -183,6 +192,10 @@ class TestSetSettingInPlace(WorkspaceTestCase):
         set_setting_in_place(self.ws, 'review-tool', 'default', 'a')
         self.assertEqual(self.text(), '[review-tool]\ndefault = "a"\n')
         self.assertEqual(_read_config_gitignore(self.ws), '*\n')
+
+    def test_an_empty_list(self):
+        set_setting_in_place(self.ws, 'sync', 'split-users', [])
+        self.assertEqual(self.text(), '[sync]\nsplit-users = []\n')
 
     def test_refuses_a_file_it_cannot_edit_leaving_it_alone(self):
         self.write_config('review-tool.default = "a"\n')

@@ -3,7 +3,7 @@
 import argparse
 
 from .common import CommandError
-from .config import get_setting, save_config
+from .config import get_setting, set_setting_in_place
 from .log import log
 from .perforce import get_existing_p4_users, get_p4_user
 
@@ -18,7 +18,7 @@ def get_split_users(workspace_dir: str) -> list[str]:
 
 def set_split_users(workspace_dir: str, users: list[str]) -> None:
     """Replace the configured split users."""
-    save_config(workspace_dir, {'sync': {'split-users': users}})
+    set_setting_in_place(workspace_dir, 'sync', 'split-users', users)
 
 
 def is_self_split(workspace_dir: str) -> bool:

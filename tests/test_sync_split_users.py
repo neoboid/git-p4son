@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.common import CommandError, RunError
-from git_p4son.config import ConfigError, load_config, save_config
+from git_p4son.config import ConfigError, config_path, load_config, save_config
 from git_p4son.sync_split_users import (
     get_split_users,
     is_self_split,
@@ -172,6 +172,13 @@ class TestSyncSplitUsersAdd(WorkspaceTestCase):
         args = cli_args(['sync-split-users', 'add', *names]
                         + (['--me'] if me else []), workspace_dir=self.ws)
         return sync_split_users_command(args)
+
+    def test_keeps_the_comments_in_config_toml(self):
+        self.write_config('# Team settings.\n[sync]\nsplit-users = []\n')
+        self._run('bob')
+        with open(config_path(self.ws), encoding='utf-8') as f:
+            self.assertEqual(
+                f.read(), '# Team settings.\n[sync]\nsplit-users = ["bob"]\n')
 
     def test_adds_users_in_order(self):
         self.assertEqual(self._run('bob', 'Alice'), 0)

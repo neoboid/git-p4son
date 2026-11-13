@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New `cherry-pick` command: sync only a submitted changelist's files onto the sync branch, as
+  `p4 sync @=CL` does, with a commit of its own
 - `-b` is optional on `new` and `review`: it defaults to the git branch's local upstream, or with jj the
   nearest bookmark below the change
 

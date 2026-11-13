@@ -647,9 +647,21 @@ class TestP4SyncOutputProcessor(unittest.TestCase):
         self.assertEqual(processor.stats['del'], 1)
 
     def test_up_to_date_message(self):
+        for line in ('//...@12345 - file(s) up-to-date.', '//...@=12345 - file(s) up-to-date.'):
+            with self.subTest(line=line):
+                processor = P4SyncOutputProcessor()
+                with captured_output() as out:
+                    processor(line, sys.stdout)
+                self.assertEqual(sum(processor.stats.values()), 0)
+                self.assertIn('All files up to date', out.getvalue())
+
+    def test_no_files_message(self):
+        """p4 prints it, with exit code 0, for a changelist with no files in the client view."""
         processor = P4SyncOutputProcessor()
-        processor('//...@12345 - file(s) up-to-date.', sys.stdout)
+        with captured_output() as out:
+            processor('//myclient/...@=12345 - no such file(s).', sys.stdout)
         self.assertEqual(sum(processor.stats.values()), 0)
+        self.assertNotIn('Unparsable', out.getvalue())
 
     def test_failed_rename_aborts(self):
         processor = P4SyncOutputProcessor()

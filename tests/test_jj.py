@@ -1140,6 +1140,23 @@ class TestJjSync(JjP4RepoTestCase):
             (self.read('b.txt'), self.read('c.txt')), ('b2\n', 'c1\n'))
 
 
+class TestJjCherryPick(JjP4RepoTestCase):
+    def test_from_a_change_it_moves_the_sync_bookmark_and_rebases_the_change(self):
+        self.change('Change c', 'c.txt', 'c1\n', parent='main')
+        self.bookmark('feat')
+        self.jj('new')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'b.txt': 'b2\n'})
+        out = self.p4son('cherry-pick', '102')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@=102')
+        self.assertEqual(self.describe('feat-', 'commit_id'),
+                         self.describe('main', 'commit_id'))
+        self.assertEqual((self.read('a.txt'), self.read(
+            'b.txt'), self.read('c.txt')), ('a1\n', 'b2\n', 'c1\n'))
+        self.assertIn('main is now at CL 100 with cherry-picks 102', out)
+
+
 class TestJjSyncFromAnywhere(JjP4RepoTestCase):
     """sync from a stack: Change a with bookmark feat on main, and an empty working change above it."""
 

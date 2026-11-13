@@ -347,7 +347,7 @@ class TestSyncLocalChanges(SyncTestCase):
     def test_last_synced_resyncs_without_committing(self):
         self.p4.have = 0
         self.sync('last-synced')
-        self.assertEqual(self.p4.synced(), [100])
+        self.assertEqual(self.p4.synced(), ['@100'])
         self.assertEqual(self.read('a.txt'), 'a1\n')
         self.assertEqual(self.synced_commits(), [])
 
@@ -626,7 +626,7 @@ class TestSyncSplitting(SyncTestCase):
         self.git('commit', '--amend', '-q', '-m', 'Initial')
         out = self.sync()
         self.assertIn('no previous sync to start from', out)
-        self.assertEqual(self.p4.synced(), [106])
+        self.assertEqual(self.p4.synced(), ['@106'])
 
     def test_changelists_outside_the_view_are_not_split(self):
         self.p4.submit(107, {}, user='me')

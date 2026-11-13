@@ -608,13 +608,37 @@ def list_branches(workspace_dir: str) -> list[str]:
 # --- sync commits ---
 
 _SYNC_SUBJECT_PREFIX = 'git-p4son: p4 sync '
-_SYNC_SUBJECT_RE = re.compile(
-    '^' + re.escape(_SYNC_SUBJECT_PREFIX) + r'//.+@(\d+)$')
+# A sync takes the depot root to a changelist, @N; a cherry-pick only the changelist's files, @=N.
+_SYNC_AT, _CHERRY_PICK_AT = '@', '@='
+
+
+def _subject_re(at: str) -> re.Pattern[str]:
+    return re.compile('^' + re.escape(_SYNC_SUBJECT_PREFIX) + '//.+' + re.escape(at) + r'(\d+)$')
+
+
+def _subject_grep(at: str) -> str:
+    """The subjects as a git log --grep extended regular expression."""
+    return '^' + _SYNC_SUBJECT_PREFIX + '//.*' + at + '[0-9]+$'
+
+
+_SYNC_SUBJECT_RE = _subject_re(_SYNC_AT)
+_CHERRY_PICK_SUBJECT_RE = _subject_re(_CHERRY_PICK_AT)
 
 
 def format_sync_subject(depot_root: str, changelist: int) -> str:
     """Subject of the commit sync makes for a changelist."""
-    return f'{_SYNC_SUBJECT_PREFIX}{depot_root}/...@{changelist}'
+    return f'{_SYNC_SUBJECT_PREFIX}{depot_root}/...{_SYNC_AT}{changelist}'
+
+
+def format_cherry_pick_subject(depot_root: str, changelist: int) -> str:
+    """Subject of the commit cherry-pick makes for a changelist, the p4 sync of its files alone."""
+    return f'{_SYNC_SUBJECT_PREFIX}{depot_root}/...{_CHERRY_PICK_AT}{changelist}'
+
+
+def parse_cherry_pick_subject(subject: str) -> int | None:
+    """Return the changelist of a cherry-pick commit subject, or None for any other subject."""
+    match = _CHERRY_PICK_SUBJECT_RE.match(subject)
+    return int(match.group(1)) if match else None
 
 
 def parse_sync_subject(subject: str) -> int | None:
@@ -623,15 +647,45 @@ def parse_sync_subject(subject: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def git_last_synced_changelist(workspace_dir: str, revision: str = 'HEAD') -> int | None:
-    """Get the changelist number of the most recent sync commit in revision's history."""
-    res = run(
-        ['git', 'log', '-1', '--pretty=%s',
-         f'--grep=^{_SYNC_SUBJECT_PREFIX}', revision, '--'],
-        cwd=workspace_dir)
+def _last_sync_commit(workspace_dir: str, revision: str) -> tuple[str, int] | None:
+    """The most recent sync commit in revision's history and its changelist, cherry-picks left out."""
+    res = run(['git', 'log', '-1', '--format=%H %s', '-E', f'--grep={_subject_grep(_SYNC_AT)}', revision, '--'],
+              cwd=workspace_dir)
     if not res.stdout:
         return None
-    return parse_sync_subject(res.stdout[0])
+    commit, _, subject = res.stdout[0].partition(' ')
+    changelist = parse_sync_subject(subject)
+    return None if changelist is None else (commit, changelist)
+
+
+def git_last_synced_changelist(workspace_dir: str, revision: str = 'HEAD') -> int | None:
+    """Get the changelist number of the most recent sync commit in revision's history."""
+    last = _last_sync_commit(workspace_dir, revision)
+    return None if last is None else last[1]
+
+
+@dataclass(frozen=True)
+class SyncState:
+    """Where a sync branch is: its most recent sync's changelist, and the changelists cherry-picked since."""
+    last_synced: int | None
+    cherry_picks: tuple[int, ...] = ()
+
+    def __str__(self) -> str:
+        at = 'the synced changelist' if self.last_synced is None else f'CL {self.last_synced}'
+        if not self.cherry_picks:
+            return at
+        return f'{at} with cherry-picks {", ".join(map(str, self.cherry_picks))}'
+
+
+def sync_state(workspace_dir: str, revision: str = 'HEAD') -> SyncState:
+    """Where revision's history is synced to, cherry-picks oldest first."""
+    last = _last_sync_commit(workspace_dir, revision)
+    since = revision if last is None else f'{last[0]}..{revision}'
+    res = run(['git', 'log', '--reverse', '--format=%s', '-E', f'--grep={_subject_grep(_CHERRY_PICK_AT)}', since,
+               '--'], cwd=workspace_dir)
+    picks = tuple(changelist for changelist in map(
+        parse_cherry_pick_subject, res.stdout) if changelist is not None)
+    return SyncState(None if last is None else last[1], picks)
 
 
 def find_base_commits(filepaths: list[str], before_commit: str,

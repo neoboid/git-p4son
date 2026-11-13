@@ -7,7 +7,7 @@ from .backend import Backend
 from .changelist_store import Record
 from .common import CommandError, RevisionNotFoundError
 from .git import (
-    changed_paths, commit_subject, get_commits_since, git_last_synced_changelist, merge_base, resolve_commit,
+    changed_paths, commit_subject, get_commits_since, merge_base, resolve_commit, sync_state,
 )
 from .log import plural
 
@@ -65,8 +65,8 @@ def catch_up_subject(plan: Plan, workspace_dir: str, revision: str) -> str | Non
         return None
     if not changed_paths(shelved, base, workspace_dir) & changed_paths(base, revision, workspace_dir):
         return None
-    changelist = git_last_synced_changelist(workspace_dir, base)
-    return 'Rebase' if changelist is None else f'Rebase onto CL {changelist}'
+    state = sync_state(workspace_dir, base)
+    return 'Rebase' if state.last_synced is None and not state.cherry_picks else f'Rebase onto {state}'
 
 
 def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, str] | None, backend: Backend,

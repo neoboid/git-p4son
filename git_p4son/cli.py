@@ -7,6 +7,7 @@ from importlib.resources import files
 from typing import cast
 from . import __version__, jj
 from .backend import BACKENDS, open_backend, resolve_branch_keyword
+from .cherry_pick import cherry_pick_command
 from .sync import sync_command
 from .review_tools import review_tool_command
 from .sync_split_users import sync_split_users_command
@@ -60,7 +61,7 @@ def _add_dry_run(parser: argparse.ArgumentParser, help: str) -> None:
 
 
 def _add_sync_branch_args(parser: argparse.ArgumentParser, verb: str) -> None:
-    """Add --no-rebase and --ignore-blocking-processes, which sync reads through OnSyncBranch."""
+    """Add --no-rebase and --ignore-blocking-processes, which sync and cherry-pick read through OnSyncBranch."""
     parser.add_argument(
         '--no-rebase', action='store_true',
         help='With the jj backend, leave the changes you started from where they are, instead of rebasing them '
@@ -243,6 +244,26 @@ Examples:
         help='Ignore the configured split users for this sync. Users given '
              'with --split-user are still split out'
     )
+
+    cherry_pick_parser = subparsers.add_parser(
+        'cherry-pick',
+        help='Sync the files of submitted changelists alone onto the sync branch',
+        description='Sync only the files of one or more submitted changelists, at the revisions they submitted, as '
+        'p4 sync //...@=CHANGELIST does, with a git commit for each on the sync branch, [sync] branch in '
+        '.git-p4son/config.toml or main. From another branch, it checks the sync branch out and returns afterwards, '
+        'as sync does. The next sync takes the files to the revisions it syncs to.'
+    )
+    cherry_pick_parser.set_defaults(func=cherry_pick_command)
+    cherry_pick_parser.add_argument(
+        'changelist',
+        nargs='+',
+        metavar='CHANGELIST',
+        help='Submitted changelist number(s), cherry-picked in the order given, each after the last synced '
+             'changelist'
+    )
+    _add_sync_branch_args(cherry_pick_parser, 'Cherry-pick')
+    _add_dry_run(
+        cherry_pick_parser, 'Print the changelists to cherry-pick without syncing')
 
     split_users_parser = subparsers.add_parser(
         'sync-split-users',

@@ -15,11 +15,11 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   a sync touches those files, it merges the local changes on top of the new Perforce content and leaves the result
   as unstaged changes, with conflict markers if they clash. Leave reviewing, resolving and re-committing them to the
   user.
-- **Only touch Perforce when asked.** Run `sync`, `new`, `update` and `review` only when the user asks for exactly
-  that. Otherwise draft the commits and the CL description, and let the user drive Perforce. Reviews and shelves
-  (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm, or the workspace's review tool. Read-only
-  commands are always fine: `alias list`, `alias show`, `list-changes`, `review-tool list` and `review-tool show`,
-  `review-tool`, `writable` and `sync-split-users` without an action, and any command with `--dry-run`.
+- **Only touch Perforce when asked.** Run `sync`, `cherry-pick`, `new`, `update` and `review` only when the user asks
+  for exactly that. Otherwise draft the commits and the CL description, and let the user drive Perforce. Reviews and
+  shelves (`review`, `new --review`, `--shelve`) are seen by reviewers in Swarm, or the workspace's review tool.
+  Read-only commands are always fine: `alias list`, `alias show`, `list-changes`, `review-tool list` and `review-tool
+  show`, `review-tool`, `writable` and `sync-split-users` without an action, and any command with `--dry-run`.
 - **Let git-p4son talk to Perforce.** Don't run `p4 sync`, `p4 edit`, `p4 add`, `p4 delete`, `p4 revert`, `p4 shelve`
   or `p4 change` on files git-p4son manages, except to recover as described under "When something refuses".
   Read-only commands such as `p4 describe`, `p4 opened` and `p4 changes` are fine.
@@ -29,12 +29,12 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   by git-p4son. The user checks them out, locks and submits them in P4V as usual, and opens them in a review CL by
   hand when needed (see "Binary assets in a review").
 - **Never submit.** git-p4son has no submit command on purpose: submitting is left to the user, usually in P4V.
-- **Keep the workspace clean.** `sync`, `new`, `update` and `review` refuse to run with uncommitted changes,
-  untracked files included (`new` and `update` don't check with `--no-edit`). `review` and the other `--per-commit`
-  runs check even on a dry run; `sync --dry-run` does not, so a clean dry run doesn't mean the sync will start.
-  Commit or stash first, and keep scratch files, like a description file, outside the workspace.
-- **Preview first.** `sync`, `new`, `update`, `review` and `alias clean` take `-n/--dry-run`, which prints what
-  would happen without touching Perforce or git.
+- **Keep the workspace clean.** `sync`, `cherry-pick`, `new`, `update` and `review` refuse to run with uncommitted
+  changes, untracked files included (`new` and `update` don't check with `--no-edit`). `review` and the other
+  `--per-commit` runs check even on a dry run; `sync --dry-run` does not, so a clean dry run doesn't mean the sync will
+  start. Commit or stash first, and keep scratch files, like a description file, outside the workspace.
+- **Preview first.** `sync`, `cherry-pick`, `new`, `update`, `review` and `alias clean` take `-n/--dry-run`, which
+  prints what would happen without touching Perforce or git.
 - **Avoid `init`.** It prompts for answers, and setup is the user's job. Never use `alias delete --all`, which
   deletes every alias without asking, unless the user asks for it.
 
@@ -86,7 +86,8 @@ with these translations:
 ## Where things stand
 
 - `git log --oneline main` shows the sync history. A sync commit has a subject like
-  `git-p4son: p4 sync //workspace/...@12345`, where 12345 is the synced CL.
+  `git-p4son: p4 sync //workspace/...@12345`, where 12345 is the synced CL. A cherry-pick commit,
+  `git-p4son: p4 sync //workspace/...@=12346`, holds only CL 12346's files, from `git p4son cherry-pick 12346`.
 - `git p4son alias list` lists the aliases: names for the CLs that `new` and `review` created.
 - `git p4son alias show [alias]` prints only the CL number of an alias. It defaults to the current branch.
 - `p4 describe -s <CL>` and `p4 opened -c <CL>` show a CL's description and files.

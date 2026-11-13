@@ -426,6 +426,8 @@ class FakeP4:
         self.port = 'ssl:perforce.example.com:1666'
         self.changes: dict[int, tuple[str, dict[str, str | None]]] = {}
         self.have = 0
+        # Files synced to a change on their own, as by p4 sync @=change, ahead of have.
+        self.picked: dict[str, int] = {}
         self.opened: dict[str, tuple[str, str]] = {}
         self.moved: dict[str, str] = {}
         self.moves_made: list[tuple[str, str]] = []
@@ -459,13 +461,24 @@ class FakeP4:
                     files[path] = content
         return files
 
+    def had(self) -> dict[str, str]:
+        """The workspace's {path: content} as the have-list holds it."""
+        files = self.files_at(self.have)
+        for path, change in self.picked.items():
+            content = self.changes[change][1][path]
+            if content is None:
+                files.pop(path, None)
+            else:
+                files[path] = content
+        return files
+
     def sync_to(self, change: int) -> None:
         """Sync the workspace to change outside git-p4son, as the setup of a test."""
         self._apply(change, preview=False)
 
-    def synced(self) -> list[int]:
-        """The changelists synced for real, in order."""
-        return [int(args[-1].rsplit('@', 1)[1]) for args in self.calls
+    def synced(self) -> list[str]:
+        """The revisions synced for real, in order, such as @100 or @=101."""
+        return ['@' + args[-1].rsplit('@', 1)[1] for args in self.calls
                 if args[0] == 'sync' and '-n' not in args]
 
     def _local(self, path: str) -> str:
@@ -596,7 +609,7 @@ class FakeP4:
         state = self.opened.get(old)
         if state is None or state[1] not in ('edit', 'add', 'move/add'):
             return [], [f'{self._depot(old)} - not opened for edit']
-        if new in self.opened or new in self.files_at(self.have):
+        if new in self.opened or new in self.had():
             return [], [f'{self._depot(new)} - can\'t move to an existing file']
         del self.opened[old]
         if state[1] == 'add':
@@ -619,7 +632,7 @@ class FakeP4:
         """The have and head revisions of paths, as fstat -T haveRev,headRev,headAction prints them."""
         out: list[str] = []
         stderr: list[str] = []
-        in_depot = self.files_at(self.have)
+        in_depot = self.had()
         for path in paths:
             head = self._revisions(path)
             if not head:
@@ -633,7 +646,7 @@ class FakeP4:
                     f'... headAction {"delete" if deleted else "edit"}']
             if path in in_depot:
                 out.append(
-                    f'... haveRev {len(self._revisions(path, self.have))}')
+                    f'... haveRev {len(self._revisions(path, self.picked.get(path, self.have)))}')
             out.append('')
         return out, stderr
 
@@ -679,7 +692,7 @@ class FakeP4:
         """Open paths for action in change; returns (stdout, stderr) as p4 prints them."""
         out: list[str] = []
         stderr: list[str] = []
-        in_depot = self.files_at(self.have)
+        in_depot = self.had()
         for path in paths:
             if action == 'add' and path in self.ignored:
                 # p4 prints "opened for add" before refusing the file.
@@ -708,7 +721,7 @@ class FakeP4:
         it was. The source of a move is refused unless its target is reverted with it."""
         out: list[str] = []
         stderr: list[str] = []
-        in_depot = self.files_at(self.have)
+        in_depot = self.had()
         refused = [p for p in paths if self.opened.get(p, ('', ''))[1] == 'move/delete'
                    and self.moved[p] not in paths]
         stderr += [f'{self._depot(p)}#1 - has been moved, not reverted' for p in refused]
@@ -733,7 +746,7 @@ class FakeP4:
 
     def _revert_unchanged(self, paths: list[str], change: str, preview: bool) -> list[str]:
         """Revert the edits matching the depot and the adds missing on disk, as revert -a does."""
-        in_depot = self.files_at(self.have)
+        in_depot = self.had()
         unchanged = []
         for path in paths:
             opened_change, action = self.opened.get(path, (None, None))
@@ -753,8 +766,9 @@ class FakeP4:
         self.calls.append(args)
         if args[0] != 'sync':
             raise AssertionError(f'unscripted streamed p4 command: {args}')
-        change = int(args[-1].rsplit('@', 1)[1])
-        lines, refused = self._apply(change, preview='-n' in args)
+        revision = args[-1].rsplit('@', 1)[1]
+        lines, refused = self._apply(int(revision.lstrip('=')), preview='-n' in args,
+                                     exact=revision.startswith('='))
         # As p4 prints them: progress on stdout, clobber refusals on stderr.
         for line in lines:
             on_output(line, sys.stdout)
@@ -764,9 +778,19 @@ class FakeP4:
             raise RunError(' '.join(command), returncode=1, stderr=refused)
         return RunResult(0, lines if keep_stdout else [], [])
 
-    def _apply(self, change: int, preview: bool) -> tuple[list[str], list[str]]:
-        """Sync the workspace from the have-list to change; returns (output lines, clobber refusals)."""
-        before, after = self.files_at(self.have), self.files_at(change)
+    def _apply(self, change: int, preview: bool, exact: bool = False) -> tuple[list[str], list[str]]:
+        """Sync the workspace from the have-list to change, or with exact only change's own files to it; returns
+        (output lines, clobber refusals)."""
+        before = self.had()
+        if exact:
+            after = dict(before)
+            for path, content in self.changes[change][1].items():
+                if content is None:
+                    after.pop(path, None)
+                else:
+                    after[path] = content
+        else:
+            after = self.files_at(change)
         lines: list[str] = []
         refused: list[str] = []
         for path in sorted(set(before) | set(after)):
@@ -800,10 +824,18 @@ class FakeP4:
                 f.write(after[path])
             if 'allwrite' not in self.options.replace('noallwrite', ''):
                 os.chmod(local, stat.S_IRUSR)
-        if not preview:
+        if not preview and exact:
+            self.picked.update(dict.fromkeys(self.changes[change][1], change))
+        elif not preview:
             self.have = change
-        if not lines and not refused:
-            lines.append(f'//{self.client}/...@{change} - file(s) up-to-date.')
+            self.picked.clear()
+        if exact and not self.changes[change][1]:
+            # p4 says so, with exit code 0, for a changelist with no files in the client view.
+            lines.append(f'//{self.client}/...@={change} - no such file(s).')
+        elif not lines and not refused:
+            at = '@=' if exact else '@'
+            lines.append(
+                f'//{self.client}/...{at}{change} - file(s) up-to-date.')
         return lines, refused
 
 

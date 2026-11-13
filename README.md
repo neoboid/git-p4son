@@ -97,10 +97,11 @@ jj new main -m "Next fancy feature"
 
 - [Installation](#installation)
 - [Setup](#setup)
-- [Commands](#commands): [init](#init-command), [sync](#sync-command), [sync-split-users](#sync-split-users-command),
-  [new](#new-command), [update](#update-command), [review](#review-command), [list-changes](#list-changes-command),
-  [alias](#alias-command), [review-tool](#review-tool-command), [writable](#writable-command),
-  [completion](#completion-command), [skill](#skill-command)
+- [Commands](#commands): [init](#init-command), [sync](#sync-command), [cherry-pick](#cherry-pick-command),
+  [sync-split-users](#sync-split-users-command), [new](#new-command), [update](#update-command),
+  [review](#review-command), [list-changes](#list-changes-command), [alias](#alias-command),
+  [review-tool](#review-tool-command), [writable](#writable-command), [completion](#completion-command),
+  [skill](#skill-command)
 - [Configuration](#configuration)
 - [Review Tools](#review-tools)
 - [Hooks](#hooks)
@@ -166,12 +167,13 @@ workflow.
 
 ## Commands
 
-git-p4son provides twelve commands:
+git-p4son provides thirteen commands:
 
 | Command | What it does |
 | --- | --- |
 | [`init`](#init-command) | Set up a git repository in a Perforce workspace |
 | [`sync`](#sync-command) | Sync the workspace from Perforce and commit the changes to `main` |
+| [`cherry-pick`](#cherry-pick-command) | Sync only a submitted changelist's files and commit them to `main` |
 | [`sync-split-users`](#sync-split-users-command) | Show or edit the users whose changelists `sync` commits one by one |
 | [`new`](#new-command) | Create a changelist from the commits on your branch, optionally with a review |
 | [`update`](#update-command) | Add the newer commits to an existing changelist |
@@ -402,6 +404,51 @@ sync git-p4son lists the ones Perforce skipped because they were modified locall
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
 
+### Cherry-Pick Command
+
+Sync only the files of one or more submitted changelists, at the revisions they submitted, and commit them onto the
+sync branch, one commit per changelist. It is `p4 sync //workspace/...@=CHANGELIST`, for when you need a fix that
+was just submitted without syncing everything else:
+
+```sh
+git p4son cherry-pick changelist [changelist ...] [--no-rebase] [--dry-run] [--ignore-blocking-processes]
+```
+
+**Arguments:**
+- `changelist`: Submitted changelist numbers, cherry-picked in the order given, each once. Each must come after the
+  last synced changelist.
+
+**Options:**
+- `--no-rebase`, `-n, --dry-run` and `--ignore-blocking-processes`: as for [`sync`](#sync-command). A dry run checks
+  the changelists and prints them.
+
+**Examples:**
+```sh
+git p4son cherry-pick 12345
+git p4son cherry-pick 12345 12352   # one commit each
+```
+
+Like `sync`, it runs from any branch, onto the sync branch only, with the same clean-workspace checks, hooks,
+handling of [writable files](#how-sync-handles-writable-files), and return to where you started, or with jj the
+rebase of your changes onto the [sync bookmark](#syncing-a-bookmark). Perforce's have list is one for the whole
+workspace, so the sync branch is the one branch it matches; rebase your branches onto it as after a sync.
+
+- **The commit is the p4 command:** `git-p4son: p4 sync //workspace/...@=12345`, next to a sync's `...@12345`.
+  Sync's "last synced" changelist stays the one before the cherry-pick.
+- **Whole files:** each file comes at its revision from that changelist, with any earlier changelists' edits to the
+  same file, but not those changelists' other files, as `p4 sync @=` does.
+- **Not before the last sync:** a changelist at or before the last synced one is refused, as it would take files
+  back to older revisions. There is no `--allow-backwards`.
+- **In any order after it:** a changelist found to be needed after a newer one was cherry-picked can still be
+  picked. A file both changed goes to the revision of the one picked last, with a warning that names them.
+- **Submitted only:** a pending or shelved changelist is refused; unshelve one with p4 instead.
+- **The next sync** takes the files to the revisions it syncs to: past the cherry-picked changelist they stay, and
+  before it they go back, which it warns about. With [split users](#split-users), a split commit below a
+  cherry-picked changelist shows its files go back, and the next commit brings them forward again.
+  `sync last-synced` re-syncs the cherry-picks too.
+- **`update --shelve`'s catch-up commit** names the cherry-picks too, such as "Rebase onto CL 12340 with
+  cherry-picks 12345, 12352".
+
 ### Sync-Split-Users Command
 
 Show or edit the [split users](#split-users), the Perforce users whose changelists `sync` gives a commit each:
@@ -573,10 +620,10 @@ stays as you wrote it.
 #### After a sync
 
 A shelf holds whole files, so after a sync that changed files the changelist touches, the next shelf would mix the
-sync's changes into your next patch. So when `update --shelve` finds you synced and rebased, it first inserts an
-empty commit, `Rebase onto CL <N>`, after the last included commit, and shelves it on its own: its patch holds what
-the sync changed. An update without `--shelve` leaves this to the next one that shelves, and a dry run says what it
-would insert.
+sync's changes into your next patch. So when `update --shelve` finds you synced and rebased, it first inserts an empty
+commit, `Rebase onto CL <N>`, after the last included commit, and shelves it on its own: its patch holds what the sync
+changed. After a [cherry-pick](#cherry-pick-command) it names those too: `Rebase onto CL <N> with cherry-picks <X>,
+<Y>`. An update without `--shelve` leaves this to the next one that shelves, and a dry run says what it would insert.
 
 #### Changelists without a record
 

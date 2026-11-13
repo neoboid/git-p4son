@@ -19,11 +19,19 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
   on the sync branch.
 
-  Its parts are public for another command to share: `sync_settings` (depot root, line endings, clobber),
-  `find_last_synced`, `parse_changelist` and `check_increasing`, `run_sync_passes`, which syncs a list of catch-up
-  `SyncPass`es folded into the first target's commit, then commits each target, and `sync_on_branch`, the
-  preflight, checkout, hooks and return around them, given an `OnSyncBranch` (the parser adds its options with
-  `_add_sync_branch_args`), passing where the sync branch is now to `finish_sync` as text.
+  The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
+  `parse_changelist` and `check_increasing`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded
+  into the first target's commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which
+  also picks the cherry-pick subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them,
+  given an `OnSyncBranch` (the parsers add its options with `_add_sync_branch_args`), passing the sync branch's
+  `SyncState` to `finish_sync` as text.
+
+- **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
+  onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or
+  before the last synced one (`find_sync_state`), with no override, and one that isn't submitted
+  (`describe_changelist`), and warns about one older than an earlier cherry-pick. Its catch-up passes
+  (`catch_up_passes`, which `sync last-synced` uses too) sync to the last synced changelist, then each cherry-pick
+  since it in order, so the workspace matches the sync branch before the new ones.
 
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, written in place
   (`set_setting_in_place`) so the rest of `config.toml` keeps its comments and layout, resolving the `$(user)`
@@ -59,7 +67,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
   and what it appends. A recorded base that no longer resolves (`RevisionNotFoundError`) is an error, unless `-b` is
   given, which then becomes the recorded base. `catch_up_subject` says whether a base moved since the last shelve needs
-  an empty catch-up commit, which `update` inserts through `Backend.insert_empty_after` before planning again.
+  an empty catch-up commit, named after the base's last sync and the cherry-picks since it (`sync_state`), which
+  `update` inserts through `Backend.insert_empty_after` before planning again.
 
 - **`review`** - Has no module: its parser runs `new_command` as `new --review --per-commit`.
 
@@ -245,11 +254,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `set_setting_in_place` formats a `config.toml` value with, escaping control characters in strings; reading uses
   `tomllib`.
 
-- **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits,
-  deletes and moves since a base), commit subjects, staging and commits, the sync commit subject
-  (`format_sync_subject`, `git_last_synced_changelist`), blob reads and `merge_file` for `sync_merge`, and
-  `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files` walks, for
-  jj's ignore check. git's `-z` output is read as bytes.
+- **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits, deletes
+  and moves since a base), commit subjects, staging and commits, the sync and cherry-pick commit subjects
+  (`format_sync_subject`, `format_cherry_pick_subject`; `git_last_synced_changelist` skips cherry-picks, and
+  `sync_state` gives the last sync and the cherry-picks since it as a `SyncState`), blob reads and `merge_file` for
+  `sync_merge`, and `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files`
+  walks, for jj's ignore check. git's `-z` output is read as bytes.
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),

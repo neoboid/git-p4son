@@ -607,11 +607,9 @@ def _run_p4_sync(args: list[str], workspace_dir: str,
     return result
 
 
-def p4_sync_preview(changelist: int, depot_root: str,
-                    workspace_dir: str) -> list[P4SyncPreviewFile]:
-    """Preview which files would be synced without actually syncing."""
-    log.heading(f'Previewing sync to CL {changelist}')
-    result = _run_p4_sync(['-n', f'{depot_root}/...@{changelist}'],
+def p4_sync_preview(revision: str, depot_root: str, workspace_dir: str) -> list[P4SyncPreviewFile]:
+    """Preview which files a sync of the depot root to revision, such as @123, would sync."""
+    result = _run_p4_sync(['-n', f'{depot_root}/...{revision}'],
                           workspace_dir, P4SyncOutputProcessor())
 
     files = []
@@ -631,15 +629,15 @@ class P4SyncClobberError(RunError):
         self.refused = refused
 
 
-def p4_sync(changelist: int, depot_root: str, workspace_dir: str) -> None:
-    """Sync the depot root to changelist.
+def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> None:
+    """Sync the depot root to revision, such as @123.
 
     Raises P4SyncClobberError when p4 refused to overwrite writable files.
     """
     output_processor = P4SyncOutputProcessor()
     try:
         # The processor reads every line as it arrives; holding a large sync's output would only cost memory.
-        _run_p4_sync([f'{depot_root}/...@{changelist}'], workspace_dir,
+        _run_p4_sync([f'{depot_root}/...{revision}'], workspace_dir,
                      output_processor, keep_stdout=False)
     except RunError as e:
         refused = get_writable_files(e.stderr)

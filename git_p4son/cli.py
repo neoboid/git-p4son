@@ -59,6 +59,20 @@ def _add_dry_run(parser: argparse.ArgumentParser, help: str) -> None:
     parser.add_argument('-n', '--dry-run', action='store_true', help=help)
 
 
+def _add_sync_branch_args(parser: argparse.ArgumentParser, verb: str) -> None:
+    """Add --no-rebase and --ignore-blocking-processes, which sync reads through OnSyncBranch."""
+    parser.add_argument(
+        '--no-rebase', action='store_true',
+        help='With the jj backend, leave the changes you started from where they are, instead of rebasing them '
+        'onto the sync bookmark'
+    )
+    parser.add_argument(
+        '--ignore-blocking-processes',
+        action='store_true',
+        help=f'{verb} even while a configured blocking process is running'
+    )
+
+
 def _add_no_edit(parser: argparse.ArgumentParser) -> None:
     """Add --no-edit, which skips opening files for edit."""
     parser.add_argument('--no-edit', action='store_true',
@@ -191,11 +205,7 @@ Examples:
         help='The sync branch to commit onto, overriding [sync] branch, which defaults to main. With the jj '
         'backend, the bookmark to move to each sync commit'
     )
-    sync_parser.add_argument(
-        '--no-rebase', action='store_true',
-        help='With the jj backend, leave the changes you started from where they are, instead of rebasing them '
-        'onto the sync bookmark'
-    )
+    _add_sync_branch_args(sync_parser, 'Sync')
     sync_parser.add_argument(
         'changelist',
         nargs='*',
@@ -219,11 +229,6 @@ Examples:
     )
     _add_dry_run(
         sync_parser, 'Print the resolved sync sequence without syncing')
-    sync_parser.add_argument(
-        '--ignore-blocking-processes',
-        action='store_true',
-        help='Sync even while a configured blocking process is running'
-    )
     sync_parser.add_argument(
         '-u', '--split-user',
         action='append',

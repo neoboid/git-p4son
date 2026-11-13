@@ -212,7 +212,7 @@ class TestP4SyncPreview(unittest.TestCase):
             '//depot/bar.txt#3 - updating /ws/bar.txt',
             '//depot/old.txt#2 - deleted as /ws/old.txt',
         ])
-        result = p4_sync_preview(100, '//depot', '/ws')
+        result = p4_sync_preview('@100', '//depot', '/ws')
         self.assertEqual(result, [
             P4SyncPreviewFile(mode='add', filepath='/ws/foo.txt'),
             P4SyncPreviewFile(mode='upd', filepath='/ws/bar.txt'),
@@ -224,13 +224,13 @@ class TestP4SyncPreview(unittest.TestCase):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/...@100 - file(s) up-to-date.',
         ])
-        result = p4_sync_preview(100, '//depot', '/ws')
+        result = p4_sync_preview('@100', '//depot', '/ws')
         self.assertEqual(result, [])
 
     @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_passes_sync_n_flag(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[])
-        p4_sync_preview(100, '//depot', '/ws')
+        p4_sync_preview('@100', '//depot', '/ws')
         cmd = mock_rwo.call_args[0][0]
         self.assertEqual(
             cmd, ['p4', '-L', 'en', 'sync', '-n', '//depot/...@100'])
@@ -241,7 +241,7 @@ class TestP4SyncPreview(unittest.TestCase):
             '//depot/foo.txt#1 - added as /ws/foo.txt',
             'some random output',
         ])
-        result = p4_sync_preview(100, '//depot', '/ws')
+        result = p4_sync_preview('@100', '//depot', '/ws')
         self.assertEqual(result, [
             P4SyncPreviewFile(mode='add', filepath='/ws/foo.txt'),
         ])
@@ -463,7 +463,7 @@ class TestP4Sync(unittest.TestCase):
     @mock.patch('git_p4son.perforce.run_with_stream_output',
                 return_value=mock.Mock(elapsed=None))
     def test_success(self, mock_rwo):
-        p4_sync(12345, '//myclient', '/ws')
+        p4_sync('@12345', '//myclient', '/ws')
         self.assertEqual(mock_rwo.call_args.args[0],
                          ['p4', '-L', 'en', 'sync', '//myclient/...@12345'])
         self.assertFalse(mock_rwo.call_args.kwargs['keep_stdout'])
@@ -475,7 +475,7 @@ class TestP4Sync(unittest.TestCase):
             stderr=["Can't clobber writable file /ws/a.txt",
                     "Can't clobber writable file /ws/b.txt"])
         with self.assertRaises(P4SyncClobberError) as ctx:
-            p4_sync(12345, '//myclient', '/ws')
+            p4_sync('@12345', '//myclient', '/ws')
         self.assertEqual(ctx.exception.refused, ['/ws/a.txt', '/ws/b.txt'])
         self.assertEqual(ctx.exception.returncode, 1)
 
@@ -484,7 +484,7 @@ class TestP4Sync(unittest.TestCase):
         mock_rwo.side_effect = RunError(
             'p4 sync failed', returncode=1, stderr=['some other error'])
         with self.assertRaises(RunError) as ctx:
-            p4_sync(12345, '//myclient', '/ws')
+            p4_sync('@12345', '//myclient', '/ws')
         self.assertNotIsInstance(ctx.exception, P4SyncClobberError)
 
 

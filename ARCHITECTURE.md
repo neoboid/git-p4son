@@ -19,6 +19,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
   on the sync branch.
 
+  Its parts are public for another command to share: `sync_settings` (depot root, line endings, clobber),
+  `find_last_synced`, `parse_changelist` and `check_increasing`, `run_sync_passes`, which syncs a list of catch-up
+  `SyncPass`es folded into the first target's commit, then commits each target, and `sync_on_branch`, the
+  preflight, checkout, hooks and return around them, given an `OnSyncBranch` (the parser adds its options with
+  `_add_sync_branch_args`), passing where the sync branch is now to `finish_sync` as text.
+
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, written in place
   (`set_setting_in_place`) so the rest of `config.toml` keeps its comments and layout, resolving the `$(user)`
   placeholder to the current Perforce user (`resolve_split_users`), and the `sync-split-users` command (`list`, `add`,

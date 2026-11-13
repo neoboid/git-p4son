@@ -84,8 +84,8 @@ class Backend(Protocol):
     def fail_sync(self) -> None:
         """Say where a sync that failed partway leaves the work tree: on the sync branch, as Perforce left it."""
 
-    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
-        """Return to where start_sync started, now at changelist, unless changes are left; rebase applies to jj."""
+    def finish_sync(self, state: str, rebase: bool) -> None:
+        """Return to where start_sync started, the sync branch now at state, unless changes are left; rebase is jj's."""
 
     def after_lock(self) -> None:
         """Finish what the command left for after jj's working-copy lock is released, as jj's rebase."""

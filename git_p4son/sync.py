@@ -2,12 +2,13 @@
 
 import argparse
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .backend import Backend
 from .common import CommandError
 from .git import (
-    get_head_commit, get_tracked_files, format_sync_subject, git_last_synced_changelist,
+    format_sync_subject, get_head_commit, get_tracked_files, git_last_synced_changelist,
 )
 from .hooks import run_hooks
 from .depot import resolve_depot_root
@@ -40,16 +41,31 @@ LAST_SYNCED_LABEL = 'last synced'
 _SPLIT_LABEL = 'split'
 
 
-def _sync_changelist(changelist: int, label: str, depot_root: str,
-                     workspace_dir: str,
+@dataclass(frozen=True)
+class SyncPass:
+    """A changelist to sync to; label names it."""
+    changelist: int
+    label: str
+
+    @property
+    def revision(self) -> str:
+        return f'@{self.changelist}'
+
+    def subject(self, depot_root: str) -> str:
+        """The subject of the commit for this pass."""
+        return format_sync_subject(depot_root, self.changelist)
+
+
+def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
                      expected_clobber: set[str]) -> list[str]:
-    """Sync to changelist, returning the expected_clobber files p4 refused.
+    """Run sync_pass's p4 sync, returning the expected_clobber files p4 refused.
 
     Any other refused file raises.
     """
+    changelist, label = sync_pass.changelist, sync_pass.label
     log.heading(f'Syncing to {label} CL ({changelist})')
     try:
-        p4_sync(changelist, depot_root, workspace_dir)
+        p4_sync(sync_pass.revision, depot_root, workspace_dir)
         return []
     except P4SyncClobberError as e:
         unexpected = [f for f in e.refused if f not in expected_clobber]
@@ -112,27 +128,69 @@ def sync_preflight(depot_root: str, workspace_dir: str, ignore_blocking_processe
 
 
 @dataclass(frozen=True)
-class _SyncContext:
-    """What every pass of one sync shares."""
-    workspace_dir: str
+class SyncSettings:
+    """What every sync of a workspace reads from its depot root and client spec."""
     depot_root: str
-    pre_sync_head_commit: str
-    temp_root: str
     uses_crlf: bool
     clobber_mode: ClobberMode
 
 
-def _sync_pass(changelist: int, label: str,
-               ctx: _SyncContext) -> WritableSyncFileSet:
+def sync_settings(workspace_dir: str) -> SyncSettings:
+    """The workspace's depot root and the client spec's line endings and clobber option."""
+    resolved = resolve_depot_root(workspace_dir)
+    client_spec = resolved.client_spec
+    return SyncSettings(resolved.depot_root, bool(client_spec and client_spec.uses_crlf),
+                        client_spec.clobber_mode if client_spec else ClobberMode.NOCLOBBER)
+
+
+@dataclass(frozen=True)
+class _SyncContext:
+    """What every pass of one sync shares."""
+    workspace_dir: str
+    settings: SyncSettings
+    pre_sync_head_commit: str
+    temp_root: str
+
+
+def find_last_synced(workspace_dir: str, sync_revision: str) -> int | None:
+    """The changelist of the newest sync commit at sync_revision, under a heading."""
+    log.heading(f'Finding {LAST_SYNCED_LABEL} changelist')
+    last_synced = git_last_synced_changelist(workspace_dir, sync_revision)
+    if last_synced:
+        log.success(f'CL {last_synced}')
+    else:
+        log.warning('No previous sync found')
+    return last_synced
+
+
+def parse_changelist(raw: str) -> int:
+    """The changelist number raw gives; raise CommandError if it isn't one."""
+    try:
+        return int(raw)
+    except ValueError:
+        raise CommandError(f'Invalid changelist number: {raw}') from None
+
+
+def check_increasing(changelists: list[int]) -> None:
+    """Raise CommandError unless changelists are strictly increasing."""
+    for prev, curr in zip(changelists, changelists[1:]):
+        if curr <= prev:
+            raise CommandError('Changelists must be strictly increasing, '
+                               f'got {prev} then {curr}')
+
+
+def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
     """Run one sync pass: preview, prepare writable files, and p4 sync."""
-    preview = p4_sync_preview(changelist, ctx.depot_root, ctx.workspace_dir)
+    settings = ctx.settings
+    log.heading(f'Previewing sync to CL {sync_pass.changelist}')
+    preview = p4_sync_preview(
+        sync_pass.revision, settings.depot_root, ctx.workspace_dir)
     prep = prepare_writable_files(preview, ctx.workspace_dir,
                                   ctx.pre_sync_head_commit, ctx.temp_root,
-                                  uses_crlf=ctx.uses_crlf,
-                                  clobber_mode=ctx.clobber_mode)
+                                  uses_crlf=settings.uses_crlf,
+                                  clobber_mode=settings.clobber_mode)
     if preview:
-        prep.not_synced = _sync_changelist(changelist, label, ctx.depot_root,
-                                           ctx.workspace_dir,
+        prep.not_synced = _sync_changelist(sync_pass, settings.depot_root, ctx.workspace_dir,
                                            expected_clobber=set(prep.ignored))
         prep.synced = [entry.filepath for entry in preview]
     return prep
@@ -249,16 +307,10 @@ def _resolve_sync_targets(
         if c.lower() == 'head':
             targets.append(_latest_target(depot_root, workspace_dir))
         else:
-            try:
-                targets.append((int(c), 'specified'))
-            except ValueError:
-                raise CommandError(f'Invalid changelist number: {c}') from None
+            targets.append((parse_changelist(c), 'specified'))
 
     numbers = [cl for cl, _ in targets]
-    for prev, curr in zip(numbers, numbers[1:]):
-        if curr <= prev:
-            raise CommandError('Changelists must be strictly increasing, '
-                               f'got {prev} then {curr}')
+    check_increasing(numbers)
 
     if last_synced and numbers[0] < last_synced:
         if not allow_backwards:
@@ -280,15 +332,13 @@ def _resolve_sync_targets(
 @dataclass
 class _SyncPlan:
     """A resolved sync: the targets to visit after the catch-up pass to last_synced."""
-    depot_root: str
+    settings: SyncSettings
     last_synced: int | None
     targets: list[tuple[int, str]]
     # Re-sync only last_synced; targets is empty.
     resync_last_synced: bool
     split_users: list[str]
     split: bool
-    uses_crlf: bool
-    clobber_mode: ClobberMode
 
 
 def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None:
@@ -298,16 +348,9 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
     """
     workspace_dir = args.workspace_dir
 
-    resolved = resolve_depot_root(workspace_dir)
-    depot_root = resolved.depot_root
-    client_spec = resolved.client_spec
-
-    log.heading(f'Finding {LAST_SYNCED_LABEL} changelist')
-    last_synced = git_last_synced_changelist(workspace_dir, sync_revision)
-    if last_synced:
-        log.success(f'CL {last_synced}')
-    else:
-        log.warning('No previous sync found')
+    settings = sync_settings(workspace_dir)
+    depot_root = settings.depot_root
+    last_synced = find_last_synced(workspace_dir, sync_revision)
 
     split_users = _collect_split_users(args, workspace_dir)
 
@@ -332,36 +375,30 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
             return None
 
     return _SyncPlan(
-        depot_root=depot_root, last_synced=last_synced, targets=targets,
+        settings=settings, last_synced=last_synced, targets=targets,
         resync_last_synced=resync_last_synced, split_users=split_users,
-        split=_should_split(split_users, last_synced, targets),
-        uses_crlf=bool(client_spec and client_spec.uses_crlf),
-        clobber_mode=(client_spec.clobber_mode if client_spec
-                      else ClobberMode.NOCLOBBER))
+        split=_should_split(split_users, last_synced, targets))
 
 
-def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend: Backend) -> None:
-    """Sync and commit each target, then merge local changes back and run the post-sync hooks."""
+def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings,
+                    workspace_dir: str, invocation_dir: str, backend: Backend) -> None:
+    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes, run hooks."""
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
 
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
-        ctx = _SyncContext(workspace_dir, plan.depot_root, pre_sync_head_commit,
-                           temp_root, plan.uses_crlf, plan.clobber_mode)
+        ctx = _SyncContext(workspace_dir, settings,
+                           pre_sync_head_commit, temp_root)
 
-        preps: list[WritableSyncFileSet] = []
-        # Catch-up pass to the last synced changelist, folded into the first commit.
-        if plan.last_synced:
-            preps.append(_sync_pass(plan.last_synced, LAST_SYNCED_LABEL, ctx))
+        preps = [_sync_pass(sync_pass, ctx) for sync_pass in catch_up]
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
-        for changelist, changelist_label in plan.targets:
-            preps.append(_sync_pass(changelist, changelist_label, ctx))
+        for target in targets:
+            preps.append(_sync_pass(target, ctx))
 
-            log.heading(f'Committing git changes for CL {changelist}')
-            staged = backend.commit_sync(
-                format_sync_subject(plan.depot_root, changelist))
+            log.heading(f'Committing git changes for CL {target.changelist}')
+            staged = backend.commit_sync(target.subject(settings.depot_root))
             log.success(f'Committed {plural(staged, "file")}')
 
         # Dedup files that showed up in several sync passes.
@@ -369,13 +406,55 @@ def _run_sync(plan: _SyncPlan, workspace_dir: str, invocation_dir: str, backend:
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
         merge_changed_files(changed_files, workspace_dir, temp_root)
 
-        report_not_synced(preps, plan.clobber_mode, workspace_dir)
+        report_not_synced(preps, settings.clobber_mode, workspace_dir)
 
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
 
         run_hooks('post-sync', workspace_dir,
                   invocation_dir, backend.words.tool)
+
+
+@dataclass(frozen=True)
+class OnSyncBranch:
+    """Where and how a command runs on the sync branch, as sync does."""
+    workspace_dir: str
+    invocation_dir: str
+    backend: Backend
+    sync_revision: str
+    ignore_blocking_processes: bool
+    rebase: bool
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace, sync_revision: str) -> 'OnSyncBranch':
+        return cls(args.workspace_dir, args.invocation_dir, args.backend, sync_revision,
+                   args.ignore_blocking_processes, not args.no_rebase)
+
+
+def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], str],
+                   before_run: Callable[[], None] | None = None) -> None:
+    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return.
+
+    run returns where the sync branch is now, such as "CL 123", for finish_sync."""
+    backend = on.backend
+    sync_preflight(depot_root, on.workspace_dir,
+                   on.ignore_blocking_processes, backend, on.sync_revision)
+    backend.start_sync()
+    try:
+        _run_pre_sync_hooks(
+            on.workspace_dir, on.invocation_dir, backend.words.tool)
+        if before_run is not None:
+            # Before the costly split queries, the checks and hooks have run.
+            before_run()
+    except BaseException:
+        backend.abandon_sync()
+        raise
+    try:
+        state = run()
+    except BaseException:
+        backend.fail_sync()
+        raise
+    backend.finish_sync(state, on.rebase)
 
 
 def sync_command(args: argparse.Namespace) -> int:
@@ -395,27 +474,21 @@ def sync_command(args: argparse.Namespace) -> int:
         _log_sequence(plan)
         return 0
 
-    # The checks and hooks run before the costly split queries.
-    sync_preflight(plan.depot_root, workspace_dir,
-                   args.ignore_blocking_processes, backend, sync_revision)
-    backend.start_sync()
-    try:
-        _run_pre_sync_hooks(
-            workspace_dir, args.invocation_dir, backend.words.tool)
+    def split() -> None:
         _add_split_targets(plan, workspace_dir)
-    except BaseException:
-        backend.abandon_sync()
-        raise
-    if plan.split:
-        _log_sequence(plan)
+        if plan.split:
+            _log_sequence(plan)
 
-    try:
-        _run_sync(plan, workspace_dir, args.invocation_dir, backend)
-    except BaseException:
-        backend.fail_sync()
-        raise
-    synced_to = plan.targets[-1][0] if plan.targets else plan.last_synced
-    backend.finish_sync(synced_to, not args.no_rebase)
+    def run() -> str:
+        catch_up = [] if plan.last_synced is None else [
+            SyncPass(plan.last_synced, LAST_SYNCED_LABEL)]
+        run_sync_passes(catch_up, [SyncPass(cl, label) for cl, label in plan.targets], plan.settings,
+                        workspace_dir, args.invocation_dir, backend)
+        synced_to = plan.targets[-1][0] if plan.targets else plan.last_synced
+        return 'the synced changelist' if synced_to is None else f'CL {synced_to}'
+
+    sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
+                   plan.settings.depot_root, run, split)
     return 0
 
 
@@ -427,7 +500,7 @@ def _add_split_targets(plan: _SyncPlan, workspace_dir: str) -> None:
         users = resolve_split_users(plan.split_users, workspace_dir)
         log.success(', '.join(users))
         plan.targets = _split_targets(plan.targets, users, plan.last_synced,
-                                      plan.depot_root, workspace_dir)
+                                      plan.settings.depot_root, workspace_dir)
 
 
 def _log_sequence(plan: _SyncPlan) -> None:

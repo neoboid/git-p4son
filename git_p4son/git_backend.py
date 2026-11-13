@@ -203,7 +203,7 @@ class GitBackend:
             log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. '
                         f'Return to {sync.start.name} once it is sorted out.')
 
-    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
+    def finish_sync(self, state: str, rebase: bool) -> None:
         """Return with the git rebase to run, as sync does not rebase; stay while merged local changes are left."""
         sync = self._prepared()
         if sync.on_sync_branch:
@@ -213,9 +213,8 @@ class GitBackend:
                         f'Then return to {sync.start.name}.')
             return
         self._return(sync)
-        at = f' is now at CL {changelist}' if changelist else ' is synced'
         log.info(
-            f'{sync.branch}{at}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
+            f'{sync.branch} is now at {state}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
 
     def after_lock(self) -> None:
         """Nothing to do: git's sync returns under the lock."""

@@ -25,8 +25,8 @@ class _Sync:
     # git's HEAD before the checkout, which jj keeps at the working change's parent.
     head: str
     on_sync_branch: bool
-    # Set by finish_sync, for after_lock: the changelist synced to, and whether to rebase.
-    finished: tuple[int | None, bool] | None = None
+    # Set by finish_sync, for after_lock: where the sync bookmark is now, and whether to rebase.
+    finished: tuple[str, bool] | None = None
 
     @property
     def return_command(self) -> str:
@@ -238,9 +238,9 @@ class JjBackend:
                         f'Perforce left them, and nothing is rebased. Your changes are as they were; return with '
                         f'"{sync.return_command}" once it is sorted out.')
 
-    def finish_sync(self, changelist: int | None, rebase: bool) -> None:
+    def finish_sync(self, state: str, rebase: bool) -> None:
         """Exclude what jj would wrongly track; the rebase and the return wait for after_lock, outside jj's lock."""
-        self._prepared().finished = (changelist, rebase)
+        self._prepared().finished = (state, rebase)
         leave_out_case_only_ignored(self.workspace.directory)
 
     def after_lock(self) -> None:
@@ -250,7 +250,7 @@ class JjBackend:
         sync = self._sync
         if sync is None or sync.finished is None or sync.on_sync_branch:
             return
-        changelist, rebase = sync.finished
+        at, rebase = sync.finished
         workspace = self.workspace
         rebase_command = f'jj rebase -b {sync.start} -d {sync.bookmark}'
         failure = None
@@ -262,7 +262,6 @@ class JjBackend:
                 failure = error
             else:
                 self._report_conflicts(sync)
-        at = f'CL {changelist}' if changelist else 'the synced changelist'
         if not workspace.working_is_empty():
             log.warning(f'Staying on {sync.bookmark}, with the merged local changes in the working change. Review '
                         f'them, then return with "{sync.return_command}".')

@@ -16,6 +16,7 @@ from git_p4son.sync import (
     _collect_split_users,
     _make_synced_files_writable,
     _should_split,
+    SyncPass,
     _sync_changelist,
     sync_command,
     sync_preflight,
@@ -76,12 +77,12 @@ class TestSyncChangelist(unittest.TestCase):
 
     def test_clean_sync_refuses_nothing(self, mock_p4_sync):
         self.assertEqual(
-            _sync_changelist(12345, 'test', '//myclient', '/ws', expected_clobber=set()), [])
-        mock_p4_sync.assert_called_once_with(12345, '//myclient', '/ws')
+            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws', expected_clobber=set()), [])
+        mock_p4_sync.assert_called_once_with('@12345', '//myclient', '/ws')
 
     def test_expected_clobber_tolerated(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt', '/ws/b.txt')
-        refused = _sync_changelist(12345, 'test', '//myclient', '/ws',
+        refused = _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
                                    expected_clobber={'/ws/a.txt', '/ws/b.txt'})
         self.assertEqual(refused, ['/ws/a.txt', '/ws/b.txt'])
 
@@ -90,7 +91,7 @@ class TestSyncChangelist(unittest.TestCase):
             'rename: failed to rename D:\\ws\\a.uasset')
         with captured_output() as out, \
                 self.assertRaises(CommandError) as ctx:
-            _sync_changelist(12345, 'test', '//myclient',
+            _sync_changelist(SyncPass(12345, 'test'), '//myclient',
                              '/ws', expected_clobber=set())
         self.assertIn('\nrename: failed to rename D:\\ws\\a.uasset\n',
                       out.getvalue())
@@ -100,7 +101,7 @@ class TestSyncChangelist(unittest.TestCase):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
         with captured_output() as out, \
                 self.assertRaisesRegex(CommandError, 'Unexpected clobber'):
-            _sync_changelist(12345, 'test', '//myclient', '/ws',
+            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
                              expected_clobber=set())
         self.assertIn('\n/ws/a.txt\n', out.getvalue())
 

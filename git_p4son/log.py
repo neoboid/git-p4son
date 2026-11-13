@@ -107,6 +107,7 @@ class Log:
         """Print a section heading."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         if self._heading_count > 0:
             print()
         self._heading_count += 1
@@ -117,6 +118,7 @@ class Log:
         """Print a success message to stdout."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         ok = _color_status('ok', Color.SUCCESS, sys.stdout)
         print(f'{ok} {text}', file=sys.stdout)
 
@@ -124,11 +126,14 @@ class Log:
         """Print a warning message to stdout."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         warn = _color_status('warn', Color.WARNING, sys.stdout)
         print(f'{warn} {text}', file=sys.stdout)
 
     def error(self, text: str) -> None:
         """Print an error message to stderr."""
+        if not self.quiet_mode:
+            self.stop_spinner()
         error = _color_status('err', Color.ERROR, sys.stderr)
         # A piped stdout is block-buffered; flush it so merged output keeps its order.
         sys.stdout.flush()
@@ -166,12 +171,14 @@ class Log:
         """Print an informational status line."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         print(text)
 
     def output(self, line: str, stderr: bool = False) -> None:
         """Print a line of a child process's output as is."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         if stderr:
             sys.stdout.flush()
         print(line, file=sys.stderr if stderr else sys.stdout)
@@ -188,12 +195,14 @@ class Log:
         """Print elapsed time."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         print(f'elapsed: {duration}')
 
     def file_change(self, filename: str, change: str) -> None:
         """Print a file change line ('add', 'delete', 'modify', 'move', 'untracked') with colored prefix."""
         if self.quiet_mode:
             return
+        self.stop_spinner()
         prefixes = {
             'add': ('+', Color.ADD),
             'delete': ('-', Color.DELETE),
@@ -215,7 +224,9 @@ class Log:
         self._spinner_thread.start()
 
     def stop_spinner(self) -> None:
-        """Stop the spinner and reprint the clean command line."""
+        """Stop the spinner and reprint the clean command line, or end a command line left open without one.
+
+        Every message calls it first, so one logged mid-command goes below its command line."""
         if self._spinner_thread is None:
             # No spinner ran, but the command line may still need its newline.
             self.end_command()

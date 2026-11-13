@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A message printed while a command runs, such as "All files up to date" during a sync, goes below its command
+  line instead of onto it
+
 ## 0.11.0
 
 - New `cherry-pick` command: sync only a submitted changelist's files onto the sync branch, as

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .backend import Backend
 from .common import CommandError
 from .git import (
-    format_sync_subject, get_head_commit, get_tracked_files, git_last_synced_changelist,
+    SyncState, format_cherry_pick_subject, format_sync_subject, get_head_commit, get_tracked_files, sync_state,
 )
 from .hooks import run_hooks
 from .depot import resolve_depot_root
@@ -43,17 +43,18 @@ _SPLIT_LABEL = 'split'
 
 @dataclass(frozen=True)
 class SyncPass:
-    """A changelist to sync to; label names it."""
+    """A changelist to sync to, or with exact only the files it submitted (p4 sync @=N); label names it."""
     changelist: int
     label: str
+    exact: bool = False
 
     @property
     def revision(self) -> str:
-        return f'@{self.changelist}'
+        return f'@={self.changelist}' if self.exact else f'@{self.changelist}'
 
     def subject(self, depot_root: str) -> str:
         """The subject of the commit for this pass."""
-        return format_sync_subject(depot_root, self.changelist)
+        return (format_cherry_pick_subject if self.exact else format_sync_subject)(depot_root, self.changelist)
 
 
 def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
@@ -63,7 +64,8 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
     Any other refused file raises.
     """
     changelist, label = sync_pass.changelist, sync_pass.label
-    log.heading(f'Syncing to {label} CL ({changelist})')
+    log.heading(f'Syncing the files of {label} CL {changelist}' if sync_pass.exact
+                else f'Syncing to {label} CL ({changelist})')
     try:
         p4_sync(sync_pass.revision, depot_root, workspace_dir)
         return []
@@ -152,15 +154,23 @@ class _SyncContext:
     temp_root: str
 
 
-def find_last_synced(workspace_dir: str, sync_revision: str) -> int | None:
-    """The changelist of the newest sync commit at sync_revision, under a heading."""
+def find_sync_state(workspace_dir: str, sync_revision: str) -> SyncState:
+    """Where the sync branch at sync_revision is synced to, under a heading."""
     log.heading(f'Finding {LAST_SYNCED_LABEL} changelist')
-    last_synced = git_last_synced_changelist(workspace_dir, sync_revision)
-    if last_synced:
-        log.success(f'CL {last_synced}')
+    state = sync_state(workspace_dir, sync_revision)
+    if state.last_synced:
+        log.success(str(state))
     else:
         log.warning('No previous sync found')
-    return last_synced
+    return state
+
+
+def catch_up_passes(state: SyncState) -> list[SyncPass]:
+    """The passes that bring the workspace back to state: its last sync, then each cherry-pick since, in order."""
+    if state.last_synced is None:
+        return []
+    return [SyncPass(state.last_synced, LAST_SYNCED_LABEL),
+            *(SyncPass(changelist, 'cherry-picked', exact=True) for changelist in state.cherry_picks)]
 
 
 def parse_changelist(raw: str) -> int:
@@ -182,7 +192,8 @@ def check_increasing(changelists: list[int]) -> None:
 def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
     """Run one sync pass: preview, prepare writable files, and p4 sync."""
     settings = ctx.settings
-    log.heading(f'Previewing sync to CL {sync_pass.changelist}')
+    log.heading(f'Previewing sync of CL {sync_pass.changelist}\'s files' if sync_pass.exact
+                else f'Previewing sync to CL {sync_pass.changelist}')
     preview = p4_sync_preview(
         sync_pass.revision, settings.depot_root, ctx.workspace_dir)
     prep = prepare_writable_files(preview, ctx.workspace_dir,
@@ -333,12 +344,16 @@ def _resolve_sync_targets(
 class _SyncPlan:
     """A resolved sync: the targets to visit after the catch-up pass to last_synced."""
     settings: SyncSettings
-    last_synced: int | None
+    state: SyncState
     targets: list[tuple[int, str]]
-    # Re-sync only last_synced; targets is empty.
+    # Re-sync only the state, the cherry-picks included; targets is empty.
     resync_last_synced: bool
     split_users: list[str]
     split: bool
+
+    @property
+    def last_synced(self) -> int | None:
+        return self.state.last_synced
 
 
 def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None:
@@ -350,7 +365,8 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
 
     settings = sync_settings(workspace_dir)
     depot_root = settings.depot_root
-    last_synced = find_last_synced(workspace_dir, sync_revision)
+    state = find_sync_state(workspace_dir, sync_revision)
+    last_synced = state.last_synced
 
     split_users = _collect_split_users(args, workspace_dir)
 
@@ -371,11 +387,17 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
             args.changelist, last_synced, depot_root, workspace_dir, args.allow_backwards)
         if not targets:
             log.heading('Checking sync targets')
-            log.success(f'Already at CL {last_synced}, nothing to sync')
+            log.success(f'Already at {state}, nothing to sync')
             return None
+        final = targets[-1][0]
+        taken_back = [
+            changelist for changelist in state.cherry_picks if changelist > final]
+        if taken_back:
+            log.warning(f'Syncing to CL {final} takes back the cherry-picks of CL '
+                        f'{", ".join(map(str, taken_back))}')
 
     return _SyncPlan(
-        settings=settings, last_synced=last_synced, targets=targets,
+        settings=settings, state=state, targets=targets,
         resync_last_synced=resync_last_synced, split_users=split_users,
         split=_should_split(split_users, last_synced, targets))
 
@@ -396,6 +418,9 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for target in targets:
             preps.append(_sync_pass(target, ctx))
+            if target.exact and not preps[-1].synced:
+                log.warning(
+                    f'CL {target.changelist} changes no files in the workspace')
 
             log.heading(f'Committing git changes for CL {target.changelist}')
             staged = backend.commit_sync(target.subject(settings.depot_root))
@@ -417,7 +442,7 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
 
 @dataclass(frozen=True)
 class OnSyncBranch:
-    """Where and how a command runs on the sync branch, as sync does."""
+    """Where and how sync and cherry-pick run on the sync branch."""
     workspace_dir: str
     invocation_dir: str
     backend: Backend
@@ -431,11 +456,9 @@ class OnSyncBranch:
                    args.ignore_blocking_processes, not args.no_rebase)
 
 
-def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], str],
+def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], SyncState],
                    before_run: Callable[[], None] | None = None) -> None:
-    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return.
-
-    run returns where the sync branch is now, such as "CL 123", for finish_sync."""
+    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return."""
     backend = on.backend
     sync_preflight(depot_root, on.workspace_dir,
                    on.ignore_blocking_processes, backend, on.sync_revision)
@@ -454,7 +477,7 @@ def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], str],
     except BaseException:
         backend.fail_sync()
         raise
-    backend.finish_sync(state, on.rebase)
+    backend.finish_sync(str(state), on.rebase)
 
 
 def sync_command(args: argparse.Namespace) -> int:
@@ -479,13 +502,13 @@ def sync_command(args: argparse.Namespace) -> int:
         if plan.split:
             _log_sequence(plan)
 
-    def run() -> str:
-        catch_up = [] if plan.last_synced is None else [
-            SyncPass(plan.last_synced, LAST_SYNCED_LABEL)]
+    def run() -> SyncState:
+        # A sync forward catches up to the last sync alone: its targets decide the cherry-picked files' revisions.
+        catch_up = catch_up_passes(
+            plan.state if plan.resync_last_synced else SyncState(plan.last_synced))
         run_sync_passes(catch_up, [SyncPass(cl, label) for cl, label in plan.targets], plan.settings,
                         workspace_dir, args.invocation_dir, backend)
-        synced_to = plan.targets[-1][0] if plan.targets else plan.last_synced
-        return 'the synced changelist' if synced_to is None else f'CL {synced_to}'
+        return SyncState(plan.targets[-1][0]) if plan.targets else plan.state
 
     sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
                    plan.settings.depot_root, run, split)

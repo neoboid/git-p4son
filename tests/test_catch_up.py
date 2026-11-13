@@ -9,7 +9,7 @@ from git_p4son.common import CommandError
 from git_p4son.lib import edit_and_shelve
 from git_p4son.new import new_command
 from git_p4son.update import update_command
-from git_p4son.git import insert_empty_commit
+from git_p4son.git import format_cherry_pick_subject, insert_empty_commit
 from tests.helpers import captured_output, GitRepoTestCase, P4RepoTestCase, recorded, start_patch
 
 M = ''.join(f'{line}\n' for line in range(1, 9))
@@ -66,6 +66,21 @@ class CatchUpTestCase(P4RepoTestCase):
 
 class TestCatchUp(CatchUpTestCase):
     """main syncs CL 103, changing m.txt's last line, which Edit m top's file holds."""
+
+    def test_the_catch_up_names_the_cherry_picks_since_the_sync(self):
+        self.sync_main({'m.txt': M.replace('8\n', 'eight\n')}, rebase=False)
+        self.git('switch', '-q', 'main')
+        for change, line in ((104, '7\n'), (106, '6\n')):
+            os.chmod(os.path.join(self.ws, 'm.txt'),
+                     stat.S_IRUSR | stat.S_IWUSR)
+            self.edit('m.txt', self.read('m.txt').replace(line, 'x' + line))
+            self.commit(format_cherry_pick_subject('//myclient', change))
+        self.git('switch', '-q', 'feature')
+        self.git('rebase', '-q', 'main')
+        self.add_o()
+        self.update('--per-commit', '--shelve')
+        self.assertEqual(self.subjects(), [
+                         'Edit m top', 'Add n', 'Rebase onto CL 103 with cherry-picks 104, 106', 'Add o'])
 
     def test_per_commit_shelves_the_catch_up_before_the_new_commits(self):
         self.sync_main({'m.txt': M.replace('8\n', 'eight\n')})

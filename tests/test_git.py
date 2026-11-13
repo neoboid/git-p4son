@@ -17,7 +17,9 @@ from git_p4son.git import (
     branch_exists,
     commit,
     find_base_commits,
+    format_cherry_pick_subject,
     format_sync_subject,
+    parse_cherry_pick_subject,
     get_autocrlf,
     get_blob_oids,
     get_commits_since,
@@ -40,6 +42,8 @@ from git_p4son.git import (
     list_tracked_files,
     merge_file,
     parse_sync_subject,
+    sync_state,
+    SyncState,
 )
 from tests.helpers import CRLF_WHITELIST_GITIGNORE, GitRepoTestCase, make_run_result
 
@@ -467,14 +471,14 @@ class TestGitLastSyncedChangelist(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_extracts_changelist(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            'git-p4son: p4 sync //...@12345'
+            'abc123 git-p4son: p4 sync //...@12345'
         ])
         self.assertEqual(git_last_synced_changelist('/ws'), 12345)
 
     @mock.patch('git_p4son.git.run')
     def test_extracts_changelist_fail(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            'other: p4 sync //...@12345'
+            'abc123 other: p4 sync //...@12345'
         ])
         self.assertIsNone(git_last_synced_changelist('/ws'))
 
@@ -499,7 +503,7 @@ class TestGitLastSyncedChangelist(unittest.TestCase):
     @mock.patch('git_p4son.git.run')
     def test_new_format_with_depot_root(self, mock_run):
         mock_run.return_value = make_run_result(stdout=[
-            'git-p4son: p4 sync //my-client/Engine/Source/...@12345'
+            'abc123 git-p4son: p4 sync //my-client/Engine/Source/...@12345'
         ])
         self.assertEqual(git_last_synced_changelist('/ws'), 12345)
 
@@ -507,11 +511,11 @@ class TestGitLastSyncedChangelist(unittest.TestCase):
     def test_uses_git_grep_to_search_history(self, mock_run):
         """git log --grep finds sync commits even when HEAD is not one."""
         mock_run.return_value = make_run_result(stdout=[
-            'git-p4son: p4 sync //...@99999'
+            'abc123 git-p4son: p4 sync //...@99999'
         ])
         self.assertEqual(git_last_synced_changelist('/ws'), 99999)
         cmd = mock_run.call_args[0][0]
-        self.assertIn('--grep=^git-p4son: p4 sync ', cmd)
+        self.assertIn('--grep=^git-p4son: p4 sync //.*@[0-9]+$', cmd)
 
 
 class TestGitLastSyncedChangelistInRepo(GitRepoTestCase):
@@ -523,12 +527,49 @@ class TestGitLastSyncedChangelistInRepo(GitRepoTestCase):
 
         self.assertEqual(git_last_synced_changelist(self.ws), 100)
 
+    def test_skips_cherry_picks(self):
+        for subject in ('git-p4son: p4 sync //ws/...@100', 'git-p4son: p4 sync //ws/...@=105'):
+            self.write_file('a.cpp', subject)
+            self.commit(subject)
+        self.assertEqual(git_last_synced_changelist(self.ws), 100)
+
+
+class TestSyncState(GitRepoTestCase):
+    def commit_subjects(self, *subjects):
+        for subject in subjects:
+            self.write_file('a.cpp', subject)
+            self.commit(subject)
+
+    def test_the_cherry_picks_above_the_last_sync_oldest_first(self):
+        self.commit_subjects('git-p4son: p4 sync //ws/...@=90', 'git-p4son: p4 sync //ws/...@100',
+                             'git-p4son: p4 sync //ws/...@=105', 'Unrelated', 'git-p4son: p4 sync //ws/...@=107')
+        self.assertEqual(sync_state(self.ws).cherry_picks, (105, 107))
+        self.assertEqual(sync_state(self.ws, 'HEAD~2').cherry_picks, (105,))
+
+    def test_reads_as_the_changelist_and_the_cherry_picks(self):
+        self.assertEqual(str(SyncState(100)), 'CL 100')
+        self.assertEqual(str(SyncState(100, (105, 107))),
+                         'CL 100 with cherry-picks 105, 107')
+
+    def test_none_right_after_a_sync(self):
+        self.commit_subjects('git-p4son: p4 sync //ws/...@=105',
+                             'git-p4son: p4 sync //ws/...@110')
+        self.assertEqual(sync_state(self.ws).cherry_picks, ())
+
 
 class TestSyncSubject(unittest.TestCase):
     def test_round_trip(self):
         subject = format_sync_subject('//ws/Engine', 12345)
         self.assertEqual(subject, 'git-p4son: p4 sync //ws/Engine/...@12345')
         self.assertEqual(parse_sync_subject(subject), 12345)
+
+    def test_a_cherry_pick_is_not_a_sync(self):
+        subject = format_cherry_pick_subject('//ws/Engine', 12345)
+        self.assertEqual(subject, 'git-p4son: p4 sync //ws/Engine/...@=12345')
+        self.assertIsNone(parse_sync_subject(subject))
+        self.assertEqual(parse_cherry_pick_subject(subject), 12345)
+        self.assertIsNone(parse_cherry_pick_subject(
+            format_sync_subject('//ws/Engine', 12345)))
 
     def test_other_subjects_are_not_sync_subjects(self):
         for subject in ['other: p4 sync //ws/...@1', 'Fix p4 sync //ws/...@1',

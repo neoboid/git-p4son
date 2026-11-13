@@ -128,7 +128,8 @@ class TestComplete(unittest.TestCase):
         self.assertIn('writable', names)
         self.assertIn('skill', names)
         self.assertIn('review-tool', names)
-        self.assertEqual(len(names), 11)
+        self.assertIn('cherry-pick', names)
+        self.assertEqual(len(names), 12)
 
     def test_empty_excludes_complete(self, _ws, _aliases):
         result = _complete(self.parser, [''], workspace_dir='/ws')
@@ -141,7 +142,7 @@ class TestComplete(unittest.TestCase):
         self.assertEqual(names, ['sync', 'sync-split-users'])
 
     def test_hidden_command_not_completed(self, _ws, _aliases):
-        result = _complete(self.parser, ['c'], workspace_dir='/ws')
+        result = _complete(self.parser, ['co'], workspace_dir='/ws')
         names = self._names(result)
         self.assertEqual(names, [])
 

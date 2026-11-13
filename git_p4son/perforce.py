@@ -505,7 +505,9 @@ _SYNC_LINE_PATTERNS = (
     ('upd', ' - updating '),
     ('clb', _CLOBBER_PREFIX),
 )
-_UP_TO_DATE_RE = re.compile(r"@\d+ - file\(s\) up-to-date\.")
+_UP_TO_DATE_RE = re.compile(r"@=?\d+ - file\(s\) up-to-date\.")
+# p4 says so, with exit code 0, for a changelist with no files in the client view, as an @= sync can be.
+_NO_FILES_RE = re.compile(r"@=?\d+ - no such file\(s\)\.")
 
 
 def get_writable_files(stderr_lines: list[str]) -> list[str]:
@@ -542,6 +544,9 @@ class P4SyncOutputProcessor:
     def __call__(self, line: str, stream: IO[str]) -> None:
         if _UP_TO_DATE_RE.search(line):
             log.info('All files up to date')
+            return
+        if _NO_FILES_RE.search(line):
+            log.info('No files in the client view')
             return
 
         if line.startswith(_RENAME_FAILED_PREFIX):
@@ -608,7 +613,7 @@ def _run_p4_sync(args: list[str], workspace_dir: str,
 
 
 def p4_sync_preview(revision: str, depot_root: str, workspace_dir: str) -> list[P4SyncPreviewFile]:
-    """Preview which files a sync of the depot root to revision, such as @123, would sync."""
+    """Preview which files a sync of the depot root to revision, such as @123 or @=123, would sync."""
     result = _run_p4_sync(['-n', f'{depot_root}/...{revision}'],
                           workspace_dir, P4SyncOutputProcessor())
 
@@ -630,7 +635,7 @@ class P4SyncClobberError(RunError):
 
 
 def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> None:
-    """Sync the depot root to revision, such as @123.
+    """Sync the depot root to revision, such as @123, or @=123 for only the files changelist 123 submitted.
 
     Raises P4SyncClobberError when p4 refused to overwrite writable files.
     """

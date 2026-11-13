@@ -365,7 +365,8 @@ writable. git-p4son handles these automatically by classifying each writable fil
 
 **writable-unchanged** - The file on disk is identical to the last sync (only the read-only flag was removed
 by git). This is the common case after switching branches. git-p4son detects this by comparing git blob IDs against
-the last sync commit that touched the file, restores the read-only flag, and lets the sync overwrite the file.
+the last sync or [cherry-pick](#cherry-pick-command) commit that touched the file, restores the read-only flag, and
+lets the sync overwrite the file.
 
 **writable-changed** - The file on disk differs from the last sync. This happens when you manually edit a file
 on `main` and commit it to git without submitting to Perforce. git-p4son lets the sync overwrite the file and

@@ -358,6 +358,12 @@ class TestFindBaseCommits(GitRepoTestCase):
         self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
                          {'a.cpp': s0})
 
+    def test_a_cherry_pick_commit_is_perforce_content_too(self):
+        _, picked = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
+                                        ('git-p4son: p4 sync //ws/...@=150', {'a.cpp': 'X2'}))
+        self.assertEqual(find_base_commits(['a.cpp'], 'HEAD', self.ws),
+                         {'a.cpp': picked})
+
     def test_skips_user_commits_that_touched_file(self):
         s0, _ = self.commit_history((SYNC_100, {'a.cpp': 'X'}),
                                     ('user: my local edit', {'a.cpp': 'Y'}))

@@ -3,8 +3,10 @@
 import contextlib
 import io
 import os
+import re
 import subprocess
 import sys
+import time
 import unittest
 from unittest import mock
 
@@ -37,6 +39,56 @@ class TestNonTtyOutput(unittest.TestCase):
             log.command('p4 change -i')
             log.end_command()
         self.assertEqual(buffer.getvalue(), '> p4 change -i\n')
+
+
+class _Terminal(io.StringIO):
+    """A stdout that reports itself as a terminal."""
+
+    def isatty(self):
+        return True
+
+
+def _rendered(text):
+    """The lines a terminal shows for text: carriage returns rewrite the line, colors and clear-to-end vanish."""
+    lines = ['']
+    for part in re.split(r'(\r|\n|\x1b\[K)', re.sub(r'\x1b\[[0-9;]*m', '', text)):
+        if part == '\n':
+            lines.append('')
+        elif part == '\r':
+            lines[-1] = ''
+        elif part and part != '\x1b[K':
+            lines[-1] += part
+    return [line for line in lines if line]
+
+
+class TestMessageDuringCommand(unittest.TestCase):
+    """A message logged while a command line is open ends the line first, so it doesn't land on it."""
+
+    def run_command(self, log_message, spin=True):
+        log = Log()
+        terminal = _Terminal()
+        with contextlib.redirect_stdout(terminal):
+            log.command('p4 sync -n //ws/...@100', truncate_for_spinner=spin)
+            if spin:
+                log.start_spinner()
+                # Long enough for the spinner to draw a frame.
+                time.sleep(0.25)
+            log_message(log)
+            log.stop_spinner()
+            log.info('after')
+        return _rendered(terminal.getvalue())
+
+    def test_info_goes_below_the_spinner_s_command_line(self):
+        self.assertEqual(self.run_command(lambda log: log.info('All files up to date')),
+                         ['> p4 sync -n //ws/...@100', 'All files up to date', 'after'])
+
+    def test_a_warning_and_a_success_too(self):
+        self.assertEqual(self.run_command(lambda log: (log.warning('Unparsable line: x'), log.success('done'))),
+                         ['> p4 sync -n //ws/...@100', '[warn] Unparsable line: x', '[ok] done', 'after'])
+
+    def test_a_command_line_left_open_without_a_spinner(self):
+        self.assertEqual(self.run_command(lambda log: log.info('message'), spin=False),
+                         ['> p4 sync -n //ws/...@100', 'message', 'after'])
 
 
 class TestPlural(unittest.TestCase):

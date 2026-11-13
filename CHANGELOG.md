@@ -4,8 +4,8 @@
 
 - New `cherry-pick` command: sync only a submitted changelist's files onto the sync branch, as
   `p4 sync @=CL` does, with a commit of its own
-- `-b` is optional on `new` and `review`: it defaults to the git branch's local upstream, or with jj the
-  nearest bookmark below the change
+- You no longer type a base at all: `new` and `review` take it from the branch's upstream (git) or the bookmark
+  below (jj), and `update` already used the one the alias records
 
 ## 0.10.0
 

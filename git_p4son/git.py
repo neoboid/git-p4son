@@ -690,7 +690,7 @@ def sync_state(workspace_dir: str, revision: str = 'HEAD') -> SyncState:
 
 def find_base_commits(filepaths: list[str], before_commit: str,
                       workspace_dir: str) -> dict[str, str | None]:
-    """Map each path to its most recent sync commit before before_commit, else its latest add, else None."""
+    """Map each path to its newest sync or cherry-pick commit before before_commit, else its latest add, else None."""
     result: dict[str, str | None] = dict.fromkeys(filepaths)
     if not filepaths:
         return result
@@ -714,7 +714,9 @@ def find_base_commits(filepaths: list[str], before_commit: str,
         if token.startswith('\x01'):
             header, _, status = token.partition('\n')
             _, current_sha, subject = header.split('\x01', 2)
-            current_is_sync = parse_sync_subject(subject) is not None
+            # A cherry-pick commit holds Perforce's content for the files it touched, as a sync commit does.
+            current_is_sync = parse_sync_subject(
+                subject) is not None or parse_cherry_pick_subject(subject) is not None
             if not status:
                 continue
         path = next(tokens, '')

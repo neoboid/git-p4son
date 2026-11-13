@@ -68,6 +68,17 @@ class TestCherryPick(CherryPickTestCase):
             self.files(), {'a.txt': 'a3\n', 'b.txt': 'b2\n', 'c.txt': 'c1\n'})
         self.assertEqual(sync_state(self.ws), SyncState(100, (102, 103)))
 
+    def test_in_writable_mode_a_second_cherry_pick_finds_no_local_changes(self):
+        """The catch-up to the last sync takes the first cherry-pick's file back, which is no local edit."""
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n\n[core]\nwritable = true\n')
+        self.cherry_pick('102')
+        out = self.cherry_pick('103')
+        self.assertNotIn('local changes', out)
+        self.assertEqual(
+            self.files(), {'a.txt': 'a3\n', 'b.txt': 'b2\n', 'c.txt': 'c1\n'})
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
     def test_a_deleted_file_is_deleted(self):
         self.p4.submit(104, {'b.txt': None})
         self.cherry_pick('104')
@@ -203,6 +214,27 @@ class TestSyncAfterCherryPick(CherryPickTestCase):
         out = self.sync('100')
         self.assertIn(
             'Already at CL 100 with cherry-picks 102, nothing to sync', out)
+
+    def writable_mode(self):
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n\n[core]\nwritable = true\n')
+
+    def test_in_writable_mode_a_sync_past_the_cherry_pick_finds_no_local_changes(self):
+        self.writable_mode()
+        self.cherry_pick('102')
+        out = self.sync('103')
+        self.assertNotIn('local changes', out)
+        self.assertEqual(
+            self.files(), {'a.txt': 'a3\n', 'b.txt': 'b2\n', 'c.txt': 'c1\n'})
+        self.assertEqual(self.git('status', '--porcelain'), '')
+
+    def test_in_writable_mode_a_sync_before_the_cherry_pick_takes_its_files_back(self):
+        self.writable_mode()
+        self.cherry_pick('102')
+        out = self.sync('101')
+        self.assertNotIn('local changes', out)
+        self.assertEqual(self.files(), {'a.txt': 'a2\n', 'b.txt': 'b1\n'})
+        self.assertEqual(self.git('status', '--porcelain'), '')
 
     def test_last_synced_resyncs_the_cherry_picks_too(self):
         self.cherry_pick('102')

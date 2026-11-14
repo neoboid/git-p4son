@@ -639,6 +639,79 @@ class TestUpdateOutOfDateWithoutRecord(UpdateTestCase):
         self.assertEqual(self.p4.shelved, {})
 
 
+class TestUpdateBaseBelowTheSyncTip(P4RepoTestCase):
+    """update of CL 101 on branch feature, rebased onto a main that synced since new."""
+
+    BELOW = 'The base base-b does not contain the latest main, .* Name a base on main or above it'
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('branch', 'base-b', 'main')
+        self.commit_feature()
+        self.run_command(
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'base-b'])
+        self.commit_sync_on_main(102, {'d.txt': 'd1\n'})
+        self.git('rebase', '-q', 'main', 'feature')
+        self.edit('c.txt', 'c2\n')
+        self.commit('Change c')
+
+    def test_a_recorded_base_left_below_the_sync_tip_is_refused(self):
+        head = self.git('rev-parse', 'HEAD')
+        for argv in ([], ['--dry-run'], ['--shelve'], ['--per-commit', '--shelve']):
+            with self.subTest(argv=argv):
+                self.p4son_fails('update', 'feat', *argv, message=self.BELOW)
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.opened, FEATURE_OPENED)
+        self.assertEqual(self.shelves(), [])
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def test_the_recorded_base_moved_up_to_the_sync_tip_runs(self):
+        self.git('branch', '-f', 'base-b', 'main')
+        self.p4son('update', 'feat')
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+
+    def test_without_a_record_a_base_below_the_sync_tip_is_refused(self):
+        save_changelist_alias('feat', '101', self.ws, force=True)
+        self.p4son_fails('update', 'feat', '-b', 'base-b', message=self.BELOW)
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+
+    def test_without_a_record_no_edit_checks_no_base_and_says_so(self):
+        save_changelist_alias('feat', '101', self.ws, force=True)
+        out = self.p4son('update', 'feat', '-b', 'base-b',
+                         '--no-edit', '-m', 'Reworded')
+        self.assertNotIn('# Checking the base', out)
+        self.assertEqual(self.p4.pending['101'][0], 'Reworded')
+
+
+class TestUpdateStackRebasedFromItsTop(P4RepoTestCase):
+    """update of CL 101 on branch high, stacked on low, after a sync and a rebase of high that left low behind."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('switch', '-q', '-c', 'low')
+        self.edit('a.txt', 'a2\n')
+        self.commit('Low')
+        self.git('switch', '-q', '-c', 'high')
+        self.edit('b.txt', 'b2\n')
+        self.commit('High')
+        self.run_command(new_command, ['new', 'hi', '-m', 'High', '-b', 'low'])
+        self.commit_sync_on_main(102, {'d.txt': 'd1\n'})
+        self.git('rebase', '-q', 'main', 'high')
+        self.edit('b.txt', 'b3\n')
+        self.commit('High 2')
+
+    def test_the_branch_below_is_to_be_pointed_at_its_rebased_commit(self):
+        self.p4son_fails('update', 'hi', message='The base low does not contain the latest main, .* or if low is the '
+                         'branch below in a stack, point it at its rebased commit, such as with "git branch -f low '
+                         '<commit>"\\. Rebasing a stack from its top with --update-refs keeps the branches below '
+                         'with it\\.$')
+        self.git('branch', '-f', 'low', 'high~2')
+        self.p4son('update', 'hi')
+        self.assertEqual(self.p4.pending['101'], [
+                         'High', '', 'Changes included:', '1. High', '2. High 2'])
+        self.assertEqual(self.p4.opened, {'b.txt': ('101', 'edit')})
+
+
 class TestUpdateLostBase(P4RepoTestCase):
     """update of CL 101, whose alias records a base branch that was deleted after new."""
 
@@ -768,6 +841,7 @@ class TestUpdateIncludedGitRewrites(IncludedTestCase):
 
 
 TestUpdateIncludedOnJj = on_jj(TestUpdateIncluded)
+TestUpdateBaseBelowTheSyncTipOnJj = on_jj(TestUpdateBaseBelowTheSyncTip)
 TestUpdatePerCommitOnJj = on_jj(TestUpdatePerCommit)
 TestUpdateOutOfDateOnJj = on_jj(TestUpdateOutOfDate)
 

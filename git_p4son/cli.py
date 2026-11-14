@@ -743,6 +743,9 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         # As given, as the jj backend resolves a bookmark to a commit: new records the name, update checks for one.
         args.base_given = args.base_branch
         args.base_branch = backend.resolve_base(args.base_branch)
+        # update checks the base it takes from the alias's record, once it has read it.
+        if getattr(args, 'implicit_base', False) and _needs_clean(args):
+            backend.check_base_on_sync_tip(args.base_branch, args.base_given)
         shown = (args.base_branch if args.base_given in (None, args.base_branch)
                  else f'{args.base_given} -> {args.base_branch}')
         log.success(f'{shown}{note}')

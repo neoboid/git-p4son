@@ -287,6 +287,8 @@ class TestRunCommand(unittest.TestCase):
             self, 'git_p4son.git_backend.check_git_workspace_clean')
         self.check_on_sync_tip = start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
+        start_patch(
+            self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
@@ -473,6 +475,8 @@ class TestBranchKeyword(unittest.TestCase):
         start_patch(self, 'git_p4son.git_backend.check_git_workspace_clean')
         start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
+        start_patch(
+            self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')

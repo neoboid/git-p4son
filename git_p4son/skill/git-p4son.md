@@ -305,6 +305,11 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   command again. With jj a rebase keeps the merge: move the side that isn't in `main`'s history onto the other
   parent (`jj rebase -s <the change's side> -d <other parent>`), never `main`'s own side, then
   `jj simplify-parents -r <merge>`. Never merge `main` into a feature branch here; rebase after every sync.
+- **The base is below the latest sync** ("The base ... does not contain the latest main, ..."). The commits since
+  it would take in sync commits. Pass `-b main`, or the branch below in a stack. When the name is the branch below
+  that the alias records, the stack was rebased from its top without `--update-refs`, so that branch stayed behind:
+  point it at its rebased commit in the stack (`git branch -f <branch> <commit>`). A plain `git rebase main <branch>`
+  makes a second copy of its commits, which `update` then refuses.
 - **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them
   first: ..."). Files that git
   tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for

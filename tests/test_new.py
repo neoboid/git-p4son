@@ -778,14 +778,30 @@ class TestNewOnAnOldSync(NewTestCase):
                          'feature', message=self.MERGED)
         self.assertEqual(self.p4.pending, {})
 
-    def test_per_commit_from_a_base_below_the_sync_tip_is_refused(self):
-        """The first step's commit is a sync commit below the tip, whose files are older than Perforce has them."""
+    def test_a_base_below_the_sync_tip_is_refused(self):
+        """The commits since it start with sync commits, which are Perforce's content."""
         self.commit_sync_on_main(102, {'e.txt': 'e1\n'})
         self.git('rebase', '-q', 'main', 'feature')
-        self.git('branch', 'old', 'main~2')
-        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'old', '--per-commit', '--shelve',
-                         message='Commit [0-9a-f]{7} is not based on the latest main')
+        self.git('branch', 'one-below', 'main~1')
+        self.git('branch', 'two-below', 'main~2')
+        for base in ('one-below', 'two-below'):
+            for argv in ([], ['--dry-run'], ['--per-commit', '--shelve']):
+                with self.subTest(base=base, argv=argv):
+                    out = self.p4son_fails(
+                        'new', 'feat', '-m', 'Feature', '-b', base, *argv,
+                        message=f'The base {base} does not contain the latest main, .* Name a base on main or above it')
+                    self.assertNotIn('# Creating changelist', out)
+            self.p4son_fails('review', 'feat', '-m', 'Feature',
+                             '-b', base, message=f'The base {base} does not')
         self.assertEqual(self.p4.pending, {})
+        self.assertEqual(self.p4.opened, {})
+
+    def test_no_edit_takes_a_base_below_the_sync_tip(self):
+        self.git('rebase', '-q', 'main', 'feature')
+        self.git('branch', 'one-below', 'main~1')
+        self.p4son('new', 'feat', '-m', 'Feature',
+                   '-b', 'one-below', '--no-edit')
+        self.assertEqual(self.p4.opened, {})
 
     def test_no_edit_opens_nothing_so_a_merge_runs(self):
         self.merge_side()

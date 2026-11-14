@@ -55,6 +55,14 @@ def _refuse_bookmark_at_working(workspace: Workspace, bookmark: str) -> NoReturn
                        'Or keep them as a change: jj describe, then jj new.')
 
 
+def _unconflicted(name: str, targets: list[str | None]) -> str:
+    """The one commit bookmark name points at; raise CommandError for a conflicted one."""
+    if len(targets) != 1 or targets[0] is None:
+        raise CommandError(
+            f'jj bookmark "{name}" is conflicted. Resolve it first.')
+    return targets[0]
+
+
 class JjBackend:
     """The jj backend, over a workspace loaded at one jj operation."""
 
@@ -189,11 +197,7 @@ class JjBackend:
         workspace = self.workspace
         name = choose_sync_branch(
             workspace.directory, branch, lambda name: name in workspace.bookmarks, 'bookmark')
-        targets = workspace.bookmarks[name]
-        if len(targets) != 1 or targets[0] is None:
-            raise CommandError(
-                f'jj bookmark "{name}" is conflicted. Resolve it first.')
-        commit = targets[0]
+        commit = _unconflicted(name, workspace.bookmarks[name])
         if commit == workspace.working.commit:
             _refuse_bookmark_at_working(workspace, name)
         self._sync = _Sync(name, commit, workspace.tip.change_id[:12], workspace.working is workspace.tip,

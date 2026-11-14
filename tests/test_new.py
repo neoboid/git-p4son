@@ -674,6 +674,24 @@ class TestNewImplicitBase(NewTestCase):
         self.assertEqual(self.p4.pending['101'], [
                          'Feature', '', 'Changes included:', '1. Replace b with c'])
 
+    def test_a_per_commit_run_names_the_base_as_given(self):
+        out = self.p4son('review', 'feat', '-m', 'Feature',
+                         '-b', 'main', '--dry-run')
+        self.assertIn('[ok] main\n', out)
+        self.assertIn('[ok] 2 commits since main\n', out)
+        self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'feature', '--dry-run',
+                         message='No commits found since feature$')
+
+    def test_a_tag_named_like_the_base_branch_does_not_become_the_base(self):
+        self.git('branch', 'mid', 'HEAD~1')
+        self.git('tag', 'mid', 'main')
+        for argv in (['-b', 'mid'], []):
+            with self.subTest(argv=argv):
+                out = self.p4son('new', 'feat', '-m',
+                                 'Feature', '--dry-run', *argv)
+                self.assertIn('1. Replace b with c', out)
+                self.assertNotIn('Change a', out)
+
     def test_without_an_upstream_new_takes_the_nearest_branch_below(self):
         out = self.p4son('new', 'feat', '-m', 'Feature')
         self.assertRegex(

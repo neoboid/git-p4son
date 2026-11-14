@@ -639,6 +639,17 @@ class TestUpdateOutOfDateWithoutRecord(UpdateTestCase):
         self.assertEqual(self.p4.shelved, {})
 
 
+class TestUpdateTagNamedLikeTheBase(UpdateTestCase):
+    def test_the_recorded_base_resolves_as_the_branch(self):
+        """A tag called main, further up, would leave the first commit out of the plan."""
+        self.git('tag', 'main', 'HEAD~1')
+        self.commit_change_c()
+        out = self.p4son('update', 'feat')
+        self.assertIn('[ok] 2 commits included, 1 new\n', out)
+        self.assertEqual(self.p4.pending['101'], [
+                         *FEATURE_DESCRIPTION, '3. Change c'])
+
+
 class TestUpdateBaseBelowTheSyncTip(P4RepoTestCase):
     """update of CL 101 on branch feature, rebased onto a main that synced since new."""
 

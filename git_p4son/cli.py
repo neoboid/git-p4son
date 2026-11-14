@@ -24,7 +24,7 @@ from .alias import (
 )
 from .init import init_command
 from .common import CommandError, RunError
-from .git import get_workspace_dir
+from .git import branch_name, get_workspace_dir
 from .log import log
 from .complete import run_complete
 from .skill import skill_install_command, skill_show_command
@@ -740,14 +740,16 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         if args.base_branch is None and getattr(args, 'implicit_base', False):
             args.base_branch, source = backend.implicit_base()
             note = f' ({source})'
-        # As given, as the jj backend resolves a bookmark to a commit: new records the name, update checks for one.
+        # As given, as the backends resolve it, jj to a commit and git a branch to its full ref: new records the name,
+        # update checks for one.
         args.base_given = args.base_branch
         args.base_branch = backend.resolve_base(args.base_branch)
         # update checks the base it takes from the alias's record, once it has read it.
         if getattr(args, 'implicit_base', False) and _needs_clean(args):
             backend.check_base_on_sync_tip(args.base_branch, args.base_given)
-        shown = (args.base_branch if args.base_given in (None, args.base_branch)
-                 else f'{args.base_given} -> {args.base_branch}')
+        resolved = branch_name(args.base_branch)
+        shown = resolved if args.base_given in (
+            None, resolved) else f'{args.base_given} -> {resolved}'
         log.success(f'{shown}{note}')
 
     if getattr(args, 'no_alias', False):

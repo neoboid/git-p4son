@@ -64,8 +64,11 @@ class GitBackend:
         self._sync: _Sync | None = None
 
     def resolve_base(self, base: str | None) -> str:
-        """The base as given, or HEAD~1; raise CommandError if it names no commit."""
+        """The base as given, a branch by its full ref, or HEAD~1; raise CommandError if it names no commit."""
         base = DEFAULT_BASE if base is None else base
+        # git resolves a bare name to a tag before a branch.
+        if branch_exists(base, self.workspace_dir):
+            return f'refs/heads/{base}'
         resolve_commit(base, self.workspace_dir)
         return base
 

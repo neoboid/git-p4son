@@ -189,7 +189,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command branches
   on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
-- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the branch's local
+- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base
+  by its full ref, so that a tag of its name isn't taken for it, the branch's local
   upstream as `new`'s and `review`'s, if it is the sync branch, or below HEAD, not in the sync branch's
   history and without its commits since, as after a merge of it that `--no-edit` let through, else the nearest
   branch below HEAD down to the sync branch (`git.nearest_branches_below`), the current branch,

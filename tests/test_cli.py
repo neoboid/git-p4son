@@ -126,8 +126,8 @@ class TestCreateParser(unittest.TestCase):
         self.assertFalse(args.shelve)
         self.assertFalse(args.review)
 
-    def test_new_and_review_need_a_base_where_update_has_a_default(self):
-        """Left out, run_command takes new's and review's from the upstream, else refuses."""
+    def test_new_and_review_leave_the_base_to_the_backend_where_update_has_a_default(self):
+        """Left out, run_command takes new's and review's from the backend's implicit base."""
         for command in ('new', 'review'):
             args = self.parser.parse_args([command, '-m', 'Fix bug'])
             self.assertEqual(

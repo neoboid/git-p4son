@@ -113,7 +113,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
   `run_command`, so its clean check runs once, before them, and `run_per_commit` itself checks that every step's
-  commit contains the sync branch's tip, as one below a merge of it doesn't. A step's arguments are parsed with the
+  commit contains the sync branch's tip, as one from a base below it doesn't. A step's arguments are parsed with the
   real parser just before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to`
   names. It returns to where it started, also when a step fails, ends the error with the command that resumes after
   the last commit that worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name,
@@ -177,7 +177,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   commit to read the change from (`revision`), the base (`resolve_base`, None for the default, and `implicit_base`, the
   one `new` and `review` take without `-b`), the alias the branch or bookmark suggests, the jj change aliases record
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
-  that the change, or each commit of a per-commit run, contains the sync branch's tip (`check_on_sync_tip`), `-b`
+  that the change contains the sync branch's tip, with no merge above it, or that each commit of a per-commit run
+  contains it (`check_on_sync_tip`), `-b`
   completions, `checkouts` for the per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and
   the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from
   `--backend`, then `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds jj's lock and
@@ -191,8 +192,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the branch's local
   upstream as `new`'s and `review`'s, if it is the sync branch, or below HEAD, not in the sync branch's
-  history and without its commits since, as after a merge of it, else the nearest branch below HEAD down to the sync
-  branch (`git.nearest_branches_below`), the current branch,
+  history and without its commits since, as after a merge of it that `--no-edit` let through, else the nearest
+  branch below HEAD down to the sync branch (`git.nearest_branches_below`), the current branch,
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
   `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
 

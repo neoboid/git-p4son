@@ -528,17 +528,15 @@ Without `-b`, `new` and `review` take the base from where the change sits, and t
 With git, the history can't show that the branch below was amended or rebased: no branch is then left between
 yours and the sync branch, so the sync branch becomes the base, and the branch below's old commits come along. Rebase
 your branch onto the one below first, or record it as the upstream, which refuses that case. A branch left further
-down the same line, such as a backup, is taken as the base too; pass `-b` then. So is a branch you merged into
-yours, when it is the only one below: its commits are then left out of the changelist.
+down the same line, such as a backup, is taken as the base too; pass `-b` then.
 
 Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused, as it
-would take in the sync commits since it. So is a git base below a merge of the sync branch. Rebase onto the base, or
-with git move the upstream with `git branch -u main`.
+would take in the sync commits since it. Rebase onto the base, or with git move the upstream with
+`git branch -u main`.
 
-With two branches or bookmarks on the nearest commit below, or one on each side of a merge, `-b` is required, as it
-is before the first sync, when git has no sync branch to look down to. `branch.autoSetupMerge = always` sets the
-upstream on every new branch, but with `push.default = upstream` a bare `git push` then pushes the branch into its
-local upstream, such as `main`.
+With two branches or bookmarks on the nearest commit below, `-b` is required, as it is before the first sync, when
+git has no sync branch to look down to. `branch.autoSetupMerge = always` sets the upstream on every new branch, but
+with `push.default = upstream` a bare `git push` then pushes the branch into its local upstream, such as `main`.
 
 **Examples:**
 ```sh
@@ -695,9 +693,12 @@ sync branch's latest commit, whatever `-b` says, and refuse otherwise. Rebase th
 a branch that is rebased on it, and run the command again. `--no-edit` opens nothing and skips the check, except
 with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
 
-A branch that merged the sync branch contains its latest commit, and its files hold what the sync brought in, so it
-passes. `--per-commit` and `review` open the files of each commit in turn, though, and the commits below the merge
-still hold the older contents, so they check every commit and refuse such a branch: rebase it instead of merging.
+The same check refuses a merge commit anywhere above the sync branch, whether it merged the sync branch or another
+branch, and wherever `-b` points. A changelist is made from a straight line of commits: below a merge of the sync
+branch, the commits still hold the older contents, and a merged branch leaves it open which commits are the
+change's. Rebase the branch instead of merging. With jj, a rebase keeps a merge: move the side that isn't in the
+sync bookmark's history onto the other parent with `jj rebase -s`, then drop the parent left over with
+`jj simplify-parents`.
 
 #### Shelving only files at the latest revision
 

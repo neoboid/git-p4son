@@ -6,6 +6,7 @@
   branch. A local upstream still wins
 - `new`, `update` and `review` refuse a branch that isn't rebased onto the latest sync, where its files would
   undo what the sync brought in
+- `new`, `update` and `review` refuse a branch with a merge commit above the sync branch: rebase instead of merging
 - A message printed while a command runs, such as "All files up to date" during a sync, goes below its command
   line instead of onto it
 

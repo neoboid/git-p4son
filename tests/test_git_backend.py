@@ -104,10 +104,14 @@ class TestGitBackend(GitRepoTestCase):
         with captured_output(), self.assertRaisesRegex(CommandError, 'HEAD is not based on the latest main'):
             self.backend.check_on_sync_tip()
 
-    def test_a_merge_of_the_sync_branch_s_tip_passes_the_check(self):
+    def test_a_merge_above_the_sync_branch_is_refused(self):
         self.sync_main()
         self.git('merge', '-q', '--no-edit', 'main')
-        with captured_output():
+        merge = self.git('rev-parse', 'HEAD')
+        self.commit('After the merge')
+        with captured_output(), self.assertRaisesRegex(
+                CommandError, f'feat/x has a merge commit, {merge[:7]}, above main. A changelist is made from a '
+                'straight line of commits. Rebase it onto main instead of merging.'):
             self.backend.check_on_sync_tip()
 
     def test_the_sync_branch_itself_passes_the_check(self):

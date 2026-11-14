@@ -8,14 +8,13 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, nearest_branches_below,
-    resolve_commit, switch_branch,
-    switch_detached,
+    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, merges_above,
+    nearest_branches_below, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -174,20 +173,29 @@ class GitBackend:
         check_git_workspace_clean(self.workspace_dir)
 
     def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
-        """Raise CommandError unless HEAD, or each of commits, contains the sync branch's tip; nothing to check
-        without the branch."""
+        """Raise CommandError unless HEAD contains the sync branch's tip, with no merge above it, or unless each of
+        commits contains it; nothing to check without the branch."""
         workspace_dir = self.workspace_dir
         sync_branch = sync_branch_name(workspace_dir)
         log.heading(sync_tip_heading(sync_branch, commits))
         if not branch_exists(sync_branch, workspace_dir):
             log.success(f'No {self.words.branch} {sync_branch} yet')
             return
+        sync_ref = f'refs/heads/{sync_branch}'
         for commit in commits or ['HEAD']:
-            if not is_ancestor(f'refs/heads/{sync_branch}', commit, workspace_dir):
-                change = f'Commit {commit[:7]}' if commits else get_current_branch(
-                    workspace_dir) or 'HEAD'
+            if not is_ancestor(sync_ref, commit, workspace_dir):
+                change = f'Commit {commit[:7]}' if commits else self._change()
                 raise not_on_sync_tip(change, sync_branch, self.words)
+        # A per-commit run comes here a second time, with its commits, after the merges were looked for.
+        merges = [] if commits else merges_above(
+            sync_ref, 'HEAD', workspace_dir)
+        if merges:
+            raise has_merge(self._change(), merges[0], sync_branch, self.words)
         log.success('Based on it')
+
+    def _change(self) -> str:
+        """The name of the change in a refusal: the current branch, or HEAD when detached."""
+        return get_current_branch(self.workspace_dir) or 'HEAD'
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The __branch__ marker, which the completion scripts expand to git's branches."""

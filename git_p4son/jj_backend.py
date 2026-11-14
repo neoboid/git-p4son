@@ -178,8 +178,10 @@ class JjBackend:
         one."""
         workspace = self.workspace
         sync = workspace.sync_bookmark()
-        if sync is not None and not is_ancestor(_unconflicted(sync, workspace.bookmarks[sync]), base,
-                                                workspace.directory):
+        if sync is None:
+            return
+        tip = _unconflicted(sync, workspace.bookmarks[sync])
+        if tip != base and not is_ancestor(tip, base, workspace.directory):
             raise base_below_sync_tip(
                 name, sync, self.words, name in workspace.bookmarks)
 

@@ -100,7 +100,7 @@ def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
         args.base_given = args.base_branch
         # The workspace may be fake, so git doesn't look the base up, as a commit or as a branch.
         with mock.patch('git_p4son.git_backend.resolve_commit'), \
-                mock.patch('git_p4son.git_backend.branch_exists', return_value=False):
+                mock.patch.object(GitBackend, '_is_branch', return_value=False):
             args.base_branch = args.backend.resolve_base(args.base_branch)
     return args
 

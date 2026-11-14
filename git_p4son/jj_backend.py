@@ -11,7 +11,7 @@ from .git import commit_all, get_head_commit, get_local_changes, is_ancestor
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, named_base, not_on_sync_tip, sync_tip_heading
+from .words import Words, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 
 @dataclass
@@ -97,8 +97,7 @@ class JjBackend:
             raise CommandError(
                 f'-b is required, as no bookmark is below the change. Name the base it starts from{such_as}.')
         if len(names) > 1:
-            raise CommandError(f'-b is required, as {", ".join(names)} are the nearest bookmarks below the change. '
-                               'Name the one it starts from.')
+            raise several_nearest(names, 'the change', self.words)
         name = names[0]
         if name != sync and workspace.in_sync_history(name):
             raise CommandError(f'-b is required, as {name}, the nearest bookmark below the change, is in the history '

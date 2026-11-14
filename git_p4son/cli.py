@@ -783,12 +783,17 @@ def _needs_clean_to_edit(args: argparse.Namespace) -> bool:
     return not args.no_edit or args.per_commit
 
 
+def _needs_clean(args: argparse.Namespace) -> bool:
+    """Whether the command's parser has a needs_clean, which says so for args."""
+    needs_clean = getattr(args, 'needs_clean', None)
+    return needs_clean is not None and needs_clean(args)
+
+
 def check_clean_workspace(args: argparse.Namespace) -> None:
     """Check the workspace once, before the command runs, when its parser's needs_clean says so for args.
 
     Raises CommandError if it isn't clean. The steps of a per-commit run don't come through here."""
-    needs_clean = getattr(args, 'needs_clean', None)
-    if needs_clean is not None and needs_clean(args):
+    if _needs_clean(args):
         args.backend.check_clean()
 
 

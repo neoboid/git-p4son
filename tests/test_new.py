@@ -671,6 +671,31 @@ class TestNewImplicitBase(NewTestCase):
         self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'feature', '--dry-run',
                          message='No commits found since feature$')
 
+    def test_a_base_beside_the_change_is_refused(self):
+        self.git('switch', '-q', '-c', 'beside', 'main')
+        self.edit('s.txt', 's1\n')
+        self.commit('Beside')
+        self.git('switch', '-q', 'feature')
+        for command in ('new', 'review'):
+            with self.subTest(command=command):
+                self.p4son_fails(command, 'feat', '-m', 'Feature', '-b', 'beside',
+                                 message='The base beside is not below feature')
+        self.assertEqual(self.p4.pending, {})
+
+    def test_an_upstream_amended_after_the_branch_is_refused(self):
+        """The branch still has the upstream's old commit, which the commits since the new one would take in."""
+        self.git('branch', '-q', '-u', 'main')
+        self.git('switch', '-q', '-c', 'top')
+        self.git('branch', '-q', '-u', 'feature')
+        self.edit('e.txt', 'e1\n')
+        self.commit('Add e')
+        self.git('switch', '-q', 'feature')
+        self.git('commit', '-q', '--amend', '-m', 'Replace b with c, amended')
+        self.git('switch', '-q', 'top')
+        self.p4son_fails('new', 'top', '-m', 'Top', message='The base feature is not below top, such as after '
+                         'feature was amended or rebased')
+        self.assertEqual(self.p4.pending, {})
+
     def test_a_tag_named_like_the_base_branch_does_not_become_the_base(self):
         self.git('branch', 'mid', 'HEAD~1')
         self.git('tag', 'mid', 'main')
@@ -791,11 +816,15 @@ class TestNewOnAnOldSync(NewTestCase):
         self.p4son('new', 'top', '-m', 'Top', '-b', 'feature')
         self.assertEqual(set(self.p4.opened), {'e.txt'})
 
-    def test_without_the_sync_branch_there_is_nothing_to_check(self):
+    def test_without_the_sync_branch_only_the_base_below_the_change_is_checked(self):
+        """main moved on past the change, which nothing compares with a sync branch; the branch it left is below."""
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.git('branch', 'old', 'feature~2')
+        out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'old')
         self.assertRegex(out, r'\[ok\] No (branch|bookmark) trunk yet\n')
         self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
+        self.p4son_fails('new', 'other', '-m', 'Feature', '-b',
+                         'main', message='The base main is not below')
 
     def test_the_sync_branch_setting_names_the_branch_to_be_based_on(self):
         self.git('branch', 'trunk', 'main')

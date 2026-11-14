@@ -120,7 +120,8 @@ def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | 
     base = resolve_recorded_base(
         record, alias, changelist, given, args.backend, args.workspace_dir)
     if _checks_base(args):
-        args.backend.check_base(base.commit, base.record.base)
+        args.backend.check_base(
+            base.commit, base.record.base, recorded=base.replaced_by is None)
     plan = plan_update(base, alias, changelist,
                        args.backend, args.workspace_dir, revision)
     included = plural(included_count(plan.kept), 'commit') + \
@@ -131,7 +132,7 @@ def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | 
 
 
 def _checks_base(args: argparse.Namespace) -> bool:
-    """Whether update checks that its base contains the sync tip, as cli does for new: once, where files are opened."""
+    """Whether update checks its base, as cli does for new's: once, where files are opened."""
     return not args.per_commit_step and args.needs_clean(args)
 
 
@@ -165,7 +166,7 @@ def update_command(args: argparse.Namespace) -> int:
             name = args.base_given or args.base_branch
             log.heading(f'Checking the base {name}')
             args.backend.check_base(args.base_branch, name)
-            log.success('On the sync branch or above it')
+            log.success('Below the change, and on the sync branch or above it')
         if args.shelve:
             check_at_latest_revision(
                 args, None if args.no_edit else args.base_branch, changelist, revision)

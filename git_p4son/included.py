@@ -52,7 +52,8 @@ def new_record(base: str, base_commit: str, revision: str, shelved: bool, backen
                workspace_dir: str) -> Record:
     """The record of a CL that includes every commit from base_commit to revision, its shelf on it if shelved."""
     commits = get_commits_since(base_commit, workspace_dir, revision)
-    on = merge_base(base_commit, revision, workspace_dir) if shelved else ''
+    # check_base made the base an ancestor of the change, where the commits since it start.
+    on = base_commit if shelved else ''
     return Record(base, on, backend.commit_identities([sha for sha, _ in commits]))
 
 

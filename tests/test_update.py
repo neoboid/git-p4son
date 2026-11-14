@@ -719,6 +719,38 @@ class TestUpdateStackRebasedFromItsTop(P4RepoTestCase):
         self.assertEqual(self.p4.opened, {'b.txt': ('101', 'edit')})
 
 
+class TestUpdateAmendedBranchBelow(P4RepoTestCase):
+    """update of CL 101 on branch high, stacked on low, after low was amended and high wasn't rebased."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.git('switch', '-q', '-c', 'low')
+        self.edit('a.txt', 'a2\n')
+        self.commit('Low')
+        self.git('switch', '-q', '-c', 'high')
+        self.edit('b.txt', 'b2\n')
+        self.commit('High')
+        self.run_command(new_command, ['new', 'hi', '-m', 'High', '-b', 'low'])
+        self.old_low = self.git('rev-parse', 'low')
+        self.git('switch', '-q', 'low')
+        self.edit('a.txt', 'a3\n')
+        self.git('commit', '-q', '-a', '--amend', '--no-edit')
+        self.git('switch', '-q', 'high')
+        self.edit('b.txt', 'b3\n')
+        self.commit('High 2')
+
+    def test_the_change_s_own_commits_are_to_be_rebased_onto_it(self):
+        """update takes no -b for a recorded base, and a plain rebase would replay low's old commit too."""
+        self.p4son_fails('update', 'hi', message='The base low is not below high, .* made from elsewhere\\. Rebase '
+                         'high\'s own commits onto low, such as with "git rebase --onto low <old base> high", '
+                         '<old base> being the commit high was built on\\.$')
+        self.git('rebase', '-q', '--onto', 'low', self.old_low, 'high')
+        self.p4son('update', 'hi')
+        self.assertEqual(self.p4.pending['101'], [
+                         'High', '', 'Changes included:', '1. High', '2. High 2'])
+        self.assertEqual(self.p4.opened, {'b.txt': ('101', 'edit')})
+
+
 class TestUpdateLostBase(P4RepoTestCase):
     """update of CL 101, whose alias records a base branch that was deleted after new."""
 

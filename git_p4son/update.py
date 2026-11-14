@@ -6,7 +6,7 @@ from dataclasses import replace
 from .changelist_store import Record, Review, find_record, find_review, load_changelist_alias, update_record
 from .common import CommandError
 from .git import get_head_subject, resolve_commit
-from .included import Plan, catch_up_subject, included_count, plan_update
+from .included import Plan, catch_up_subject, included_count, plan_update, resolve_recorded_base
 from .lib import check_at_latest_revision, check_own_pending, edit_and_shelve, update_changelist
 from .log import log, plural
 from .per_commit import message_args, run_per_commit
@@ -116,7 +116,9 @@ def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | 
           revision: str) -> Plan:
     """plan_update under a heading of its own, closed by how many commits the CL still includes and how many are new."""
     log.heading(f'Planning the update of CL {changelist}')
-    plan = plan_update(record, alias, changelist, given,
+    base = resolve_recorded_base(
+        record, alias, changelist, given, args.backend, args.workspace_dir)
+    plan = plan_update(base, alias, changelist,
                        args.backend, args.workspace_dir, revision)
     included = plural(included_count(plan.kept), 'commit') + \
         (' still' if plan.dropped else '')

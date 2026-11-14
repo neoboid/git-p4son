@@ -69,31 +69,49 @@ def catch_up_subject(plan: Plan, workspace_dir: str, revision: str) -> str | Non
     return 'Rebase' if state.last_synced is None and not state.cherry_picks else f'Rebase onto {state}'
 
 
-def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, str] | None, backend: Backend,
-                workspace_dir: str, revision: str) -> Plan:
-    """Plan an update of changelist through revision, given the -b as typed and resolved, if not None.
+@dataclass(frozen=True)
+class RecordedBase:
+    """A record with its base resolved to a commit."""
+    record: Record
+    commit: str
+    # The -b that replaced a base that no longer resolves, which the record then names.
+    replaced_by: str | None = None
 
-    Raises CommandError if a commit the CL doesn't include sits below ones it does, given is passed while the recorded
-    base resolves, or the recorded base no longer resolves and given isn't below every commit the CL includes."""
-    fix = f'Pass the base the CL started from, below its first commit: git p4son update {alias} -b <base>'
-    # The -b that replaced a base that no longer resolves.
-    new_base: str | None = None
+
+def _base_fix(alias: str) -> str:
+    return f'Pass the base the CL started from, below its first commit: git p4son update {alias} -b <base>'
+
+
+def resolve_recorded_base(record: Record, alias: str, changelist: str, given: tuple[str, str] | None,
+                          backend: Backend, workspace_dir: str) -> RecordedBase:
+    """Resolve the record's base, or the -b as typed and resolved, given, where the recorded one no longer resolves.
+
+    Raises CommandError if given is passed while the recorded base resolves, or is missing while it doesn't."""
     try:
-        base_commit = resolve_commit(
+        commit = resolve_commit(
             backend.resolve_base(record.base), workspace_dir)
     except RevisionNotFoundError as error:
         if given is None:
-            raise CommandError(
-                f'CL {changelist} records the base {record.base}, which no longer resolves. {fix}') from error
+            raise CommandError(f'CL {changelist} records the base {record.base}, which no longer resolves. '
+                               f'{_base_fix(alias)}') from error
         # Only a base that no longer resolves is replaced, so -b keeps meaning where the new commits start. The plan's
         # kept record carries the new base, so update saves it.
-        record = replace(record, base=backend.base_name(given[0]))
-        base_commit = resolve_commit(given[1], workspace_dir)
-        new_base = given[0]
-    if given is not None and new_base is None:
+        return RecordedBase(replace(record, base=backend.base_name(given[0])),
+                            resolve_commit(given[1], workspace_dir), given[0])
+    if given is not None:
         # A -b would diff from a commit p4 has files opened from, take in the base's own changes, or do nothing.
         raise CommandError(
             f'CL {changelist} already records its base, {record.base}. Leave out -b {given[0]}.')
+    return RecordedBase(record, commit)
+
+
+def plan_update(base: RecordedBase, alias: str, changelist: str, backend: Backend, workspace_dir: str,
+                revision: str) -> Plan:
+    """Plan an update of changelist through revision, from its record's resolved base.
+
+    Raises CommandError if a commit the CL doesn't include sits below ones it does, or a -b that replaced the recorded
+    base isn't below every commit the CL includes."""
+    record, base_commit, new_base = base.record, base.commit, base.replaced_by
     commits = get_commits_since(base_commit, workspace_dir, revision)
     shas = [sha for sha, _ in commits]
     identities = backend.commit_identities(shas)
@@ -120,7 +138,7 @@ def plan_update(record: Record, alias: str, changelist: str, given: tuple[str, s
         # Commits at or below a new base aren't gone from the branch, so they mustn't be recorded as dropped.
         positions = ', '.join(str(position) for position in dropped)
         raise CommandError(f'-b {new_base} is at or above commits CL {changelist} includes (number {positions}), so '
-                           f'it can\'t be its base. {fix}')
+                           f'it can\'t be its base. {_base_fix(alias)}')
     slots = [DROPPED if position in dropped else identity for position,
              identity in enumerate(record.included, 1)]
     catch_up = shas[included] if included < len(

@@ -67,7 +67,7 @@ class Backend(Protocol):
         """Raise CommandError unless the change contains the sync branch's tip, with no merge above it; nothing to
         check without the branch."""
 
-    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+    def check_base(self, base: str, name: str) -> None:
         """Raise CommandError, calling it name, unless the resolved base contains the sync branch's tip; nothing to
         check without the branch."""
 

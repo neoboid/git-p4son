@@ -746,7 +746,7 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         args.base_branch = backend.resolve_base(args.base_branch)
         # update checks the base it takes from the alias's record, once it has read it.
         if getattr(args, 'implicit_base', False) and _needs_clean(args):
-            backend.check_base_on_sync_tip(args.base_branch, args.base_given)
+            backend.check_base(args.base_branch, args.base_given)
         resolved = branch_name(args.base_branch)
         shown = resolved if args.base_given in (
             None, resolved) else f'{args.base_given} -> {resolved}'

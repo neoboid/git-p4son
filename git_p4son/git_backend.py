@@ -208,7 +208,7 @@ class GitBackend:
             raise has_merge(self._change(), merges[0], sync_branch, self.words)
         log.success('Based on it')
 
-    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+    def check_base(self, base: str, name: str) -> None:
         """Raise CommandError, calling it name, unless base contains the sync branch's tip; nothing to check without
         the branch."""
         sync_ref = self._sync_ref

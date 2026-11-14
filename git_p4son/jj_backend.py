@@ -173,7 +173,7 @@ class JjBackend:
             raise has_merge('The change', merges[0], sync, self.words)
         log.success('Based on it')
 
-    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+    def check_base(self, base: str, name: str) -> None:
         """Raise CommandError, calling it name, unless base contains the sync bookmark's tip; nothing to check without
         one."""
         workspace = self.workspace

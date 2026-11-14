@@ -120,7 +120,7 @@ def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | 
     base = resolve_recorded_base(
         record, alias, changelist, given, args.backend, args.workspace_dir)
     if _checks_base(args):
-        args.backend.check_base_on_sync_tip(base.commit, base.record.base)
+        args.backend.check_base(base.commit, base.record.base)
     plan = plan_update(base, alias, changelist,
                        args.backend, args.workspace_dir, revision)
     included = plural(included_count(plan.kept), 'commit') + \
@@ -164,7 +164,7 @@ def update_command(args: argparse.Namespace) -> int:
         if _checks_base(args):
             name = args.base_given or args.base_branch
             log.heading(f'Checking the base {name}')
-            args.backend.check_base_on_sync_tip(args.base_branch, name)
+            args.backend.check_base(args.base_branch, name)
             log.success('On the sync branch or above it')
         if args.shelve:
             check_at_latest_revision(

@@ -288,7 +288,7 @@ class TestRunCommand(unittest.TestCase):
         self.check_on_sync_tip = start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
         start_patch(
-            self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
+            self, 'git_p4son.git_backend.GitBackend.check_base')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
         start_patch(self, 'git_p4son.git_backend.branch_exists',
                     return_value=False)
@@ -478,7 +478,7 @@ class TestBranchKeyword(unittest.TestCase):
         start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
         start_patch(
-            self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
+            self, 'git_p4son.git_backend.GitBackend.check_base')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
         start_patch(self, 'git_p4son.git_backend.branch_exists',
                     return_value=False)

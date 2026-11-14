@@ -63,7 +63,7 @@ shared setup before calling `args.func`: finding the workspace, checking the cha
 when the parser's `needs_clean` says so (the backend's `check_on_sync_tip`), resolving the `branch` keyword to an
 alias, reading `-F` message files, taking `new`'s and `review`'s base from the backend's `implicit_base` when `-b`
 is left out (their parsers set `implicit_base`) and checking it contains the sync branch's tip too
-(`check_base_on_sync_tip`, which `update` calls itself for the base its alias records), deriving a message from HEAD,
+(`check_base`, which `update` calls itself for the base its alias records), deriving a message from HEAD,
 checking the workspace is clean once when the parser's `needs_clean` says so (`check_clean_workspace`), and ending a dry
 run with "Dry run, nothing changed".
 `main` is the only place that prints a `CommandError`/`RunError` and turns it into an exit code. `cli.py` also holds

@@ -137,10 +137,28 @@ class TestGitBackend(GitRepoTestCase):
                 '--update-refs keeps the branches below with it\\.$'):
             self.backend.check_base('low', 'low')
 
-    def test_without_the_sync_branch_any_base_passes(self):
+    def test_a_base_beside_the_change_is_refused(self):
+        """A branch on the sync tip that the change isn't built on: the commits since it aren't the change's."""
+        self.sync_main()
+        self.git('rebase', '-q', 'main')
+        self.git('branch', 'beside', 'main')
+        self.git('switch', '-q', 'beside')
+        self.commit('Beside')
+        self.git('switch', '-q', 'feat/x')
+        with self.assertRaisesRegex(
+                CommandError, 'The base beside is not below feat/x, such as after beside was amended or rebased, or '
+                'feat/x was made from elsewhere\\. Name the base feat/x starts from, or rebase feat/x\'s own commits '
+                'onto beside, such as with "git rebase --onto beside <old base> feat/x", <old base> being the commit '
+                'feat/x was built on\\.$'):
+            self.backend.check_base(
+                self.backend.resolve_base('beside'), 'beside')
+
+    def test_without_the_sync_branch_only_the_base_below_the_change_is_checked(self):
         self.sync_main()
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
         self.backend.check_base('main~1', 'main~1')
+        with self.assertRaisesRegex(CommandError, 'The base main is not below feat/x'):
+            self.backend.check_base(self.backend.resolve_base('main'), 'main')
 
     def test_the_sync_branch_itself_passes_the_check(self):
         self.git('switch', '-q', 'main')
@@ -324,8 +342,11 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
                          ('main', 'upstream of feat'))
 
     def assert_not_below_is_refused(self):
-        with self.assertRaisesRegex(CommandError, '-b is required, as low, the upstream of high, is not below it'):
-            self.backend.implicit_base()
+        """The upstream is the base, and the check of the base refuses it."""
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'upstream of high'))
+        with self.assertRaisesRegex(CommandError, 'The base low (is not below high|does not contain the latest main)'):
+            self.backend.check_base(self.backend.resolve_base('low'), 'low')
 
     def test_a_parent_branch_below_is_the_base(self):
         self.stack()

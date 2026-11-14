@@ -67,9 +67,9 @@ class Backend(Protocol):
         """Raise CommandError unless the change contains the sync branch's tip, with no merge above it; nothing to
         check without the branch."""
 
-    def check_base(self, base: str, name: str) -> None:
-        """Raise CommandError, calling it name, unless the resolved base contains the sync branch's tip; nothing to
-        check without the branch."""
+    def check_base(self, base: str, name: str, recorded: bool = False) -> None:
+        """Raise CommandError, calling it name, unless the resolved base is below the change and contains the sync
+        branch's tip, if there is one; recorded if the alias records the base."""
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """Completion candidates for -b, as (name, description)."""

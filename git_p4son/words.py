@@ -50,6 +50,23 @@ def base_below_sync_tip(base: str, sync_branch: str, words: Words, named: bool) 
         f'change. Name a base on {sync_branch} or above it{fix}.')
 
 
+def base_not_below(base: str, change: str, words: Words, recorded: bool) -> CommandError:
+    """The error for a base that is not an ancestor of change; recorded if the alias records it, so -b can't name
+    another."""
+    if words.tool == 'git':
+        # A plain rebase onto an amended base replays the base's old commits too.
+        rebase = (f'rebase {change}\'s own commits onto {base}, such as with "git rebase --onto {base} <old base> '
+                  f'{change}", <old base> being the commit {change} was built on')
+    else:
+        rebase = f'rebase {change} onto {base}'
+    fix = rebase[:1].upper() + rebase[1:]
+    if not recorded:
+        fix = f'Name the base {change} starts from, or {rebase}'
+    return CommandError(
+        f'The base {base} is not below {change}, such as after {base} was amended or rebased, or {change} was made '
+        f'from elsewhere. {fix}.')
+
+
 def has_merge(change: str, merge: str, sync_branch: str, words: Words) -> CommandError:
     """The error for a change with a merge commit, merge, above sync_branch."""
     # git's rebase replays a merge's commits in a line; jj's keeps the merge.

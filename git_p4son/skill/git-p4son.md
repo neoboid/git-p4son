@@ -313,6 +313,12 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   below that the alias records, and the stack was rebased from its top without `--update-refs`, so that branch
   stayed behind. Point it at its rebased commit in the stack (`git branch -f <branch> <commit>`). A plain
   `git rebase main <branch>` makes a second copy of its commits, which `update` then refuses.
+- **The base is not below the change** ("The base ... is not below ..."). The change isn't built on that base: it
+  is a branch beside the change, or the branch below was amended or rebased and the change wasn't. For a branch
+  beside, pass the base the change starts from. For an amended branch below, which `update` meets as the alias
+  records it, rebase only the change's own commits onto it: `git rebase --onto <below> <old base> <change>`, with
+  `<old base>` the commit the change was built on. A plain `git rebase <below>` replays the old commits too, and
+  stops on conflicts with their amended copies.
 - **`-b` is required** ("-b is required, as ..."). The history gave no one base, for the reason the message names.
   Pass `-b` with the branch the change starts from.
 - **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them

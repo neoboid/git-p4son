@@ -11,7 +11,7 @@ from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, me
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest
+from .words import Words, base_below_sync_tip, base_not_below, has_merge, named_base, not_on_sync_tip, several_nearest
 
 
 @dataclass
@@ -168,17 +168,21 @@ class JjBackend:
             raise has_merge('The change', merges[0], sync, self.words)
         log.success('Based on it')
 
-    def check_base(self, base: str, name: str) -> None:
-        """Raise CommandError, calling it name, unless base contains the sync bookmark's tip; nothing to check without
-        one."""
+    def check_base(self, base: str, name: str, recorded: bool = False) -> None:
+        """Raise CommandError, calling it name, unless base is below the change and contains the sync bookmark's tip,
+        if there is one."""
         workspace = self.workspace
         sync = workspace.sync_bookmark()
-        if sync is None:
-            return
-        tip = _unconflicted(sync, workspace.bookmarks[sync])
-        if tip != base and not is_ancestor(tip, base, workspace.directory):
-            raise base_below_sync_tip(
-                name, sync, self.words, name in workspace.bookmarks)
+        if sync is not None:
+            tip = _unconflicted(sync, workspace.bookmarks[sync])
+            # The sync bookmark's commit is below the change once check_on_sync_tip passed, and contains itself.
+            if tip == base:
+                return
+            if not is_ancestor(tip, base, workspace.directory):
+                raise base_below_sync_tip(
+                    name, sync, self.words, name in workspace.bookmarks)
+        if not is_ancestor(base, workspace.tip.commit, workspace.directory):
+            raise base_not_below(name, 'the change', self.words, recorded)
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""

@@ -15,7 +15,7 @@ from .git import (
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest
+from .words import Words, base_below_sync_tip, base_not_below, has_merge, named_base, not_on_sync_tip, several_nearest
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -100,12 +100,6 @@ class GitBackend:
             branch, workspace_dir)
         if base is None:
             return self._nearest_branch_below(branch or 'HEAD'), 'nearest branch below'
-        if base == self._sync_branch:
-            return base, f'upstream of {branch}'
-        # Rewritten or moved on, the commits since it would take in its old ones.
-        if not is_ancestor(f'refs/heads/{base}', self.revision, workspace_dir):
-            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is not below it, such as after '
-                               f'{base} was amended or rebased. Name the base, or rebase {branch} onto {base}.')
         return base, f'upstream of {branch}'
 
     def _nearest_branch_below(self, change: str) -> str:
@@ -187,16 +181,19 @@ class GitBackend:
             raise has_merge(self._change(), merges[0], sync_branch, self.words)
         log.success('Based on it')
 
-    def check_base(self, base: str, name: str) -> None:
-        """Raise CommandError, calling it name, unless base contains the sync branch's tip; nothing to check without
-        the branch."""
+    def check_base(self, base: str, name: str, recorded: bool = False) -> None:
+        """Raise CommandError, calling it name, unless base is below HEAD and contains the sync branch's tip, if
+        there is one."""
         sync_ref = self._sync_ref
-        # The sync branch as the base needs no git call to say it contains its own tip.
-        if sync_ref is None or name == self._sync_branch:
-            return
-        if not is_ancestor(sync_ref, base, self.workspace_dir):
-            raise base_below_sync_tip(
-                name, self._sync_branch, self.words, self._is_branch(name))
+        if sync_ref is not None:
+            # The sync branch is below HEAD once check_on_sync_tip passed, and contains its own tip.
+            if name == self._sync_branch:
+                return
+            if not is_ancestor(sync_ref, base, self.workspace_dir):
+                raise base_below_sync_tip(
+                    name, self._sync_branch, self.words, self._is_branch(name))
+        if not is_ancestor(base, self.revision, self.workspace_dir):
+            raise base_not_below(name, self._change(), self.words, recorded)
 
     def _change(self) -> str:
         """The name of the change in a refusal: the current branch, or HEAD when detached."""

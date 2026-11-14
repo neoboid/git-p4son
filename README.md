@@ -519,9 +519,9 @@ Without `-b`, `new` and `review` take the base from where the change sits, and t
   made from it, or the branch below in a stack. A branch on the same commit as the current one doesn't count.
 - **git, with an upstream:** when the current branch's upstream is a local branch, it is the base instead:
   `git switch -c my-fix --track main`, or `git branch -u main` on an existing branch. An upstream on a remote, such
-  as `origin/main`, doesn't count. Other than the sync branch, the upstream must be below the branch: once it was
-  amended or rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it
-  is refused, as the commits since it would include others.
+  as `origin/main`, doesn't count. Like any base, the upstream must be below the branch: once it was amended or
+  rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it is refused,
+  as the commits since it would include others.
 - **jj:** the nearest bookmark below the change, such as `main`, or the bookmark below in a stack.
 
 With git, the history can't show that the branch below was amended or rebased: no branch is then left between
@@ -702,6 +702,10 @@ after a miscounted `-b HEAD~3`. For `update`, that is the base the alias records
 below, which stays behind when only the top branch is rebased after a sync: point it at its rebased commit with
 `git branch -f`, and next time rebase the stack from its top with `git rebase --update-refs`, which moves the
 branches below along.
+
+And the base has to be below the change, also before the first sync: a branch beside it, made from the same sync,
+is refused, as the change isn't built on it. So is a branch below that was amended or rebased while the change
+wasn't: rebase the change's own commits onto it with `git rebase --onto <below> <old base> <change>`.
 
 #### Shelving only files at the latest revision
 

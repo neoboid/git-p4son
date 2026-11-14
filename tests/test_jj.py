@@ -197,6 +197,21 @@ class TestJjBackend(JjRepoTestCase):
             with self.assertRaisesRegex(CommandError, 'Name a base on main or above it\\.$'):
                 backend.check_base(below, below)
 
+    def test_a_base_beside_the_change_is_refused(self):
+        self.jj('new', 'main', '-m', 'beside')
+        self.write_file('s.txt', 's\n')
+        self.jj('bookmark', 'create', 'beside', '-r', '@')
+        self.jj('new', 'feat')
+        with self.operation() as workspace, self.assertRaisesRegex(
+                CommandError, 'The base beside is not below the change, .* Name the base the change starts from, or '
+                'rebase the change onto beside\\.$'):
+            JjBackend(workspace).check_base(self.commit_of('beside'), 'beside')
+        with self.operation() as workspace, self.assertRaisesRegex(
+                CommandError, 'The base beside is not below the change, .* made from elsewhere\\. Rebase the change '
+                'onto beside\\.$'):
+            JjBackend(workspace).check_base(
+                self.commit_of('beside'), 'beside', recorded=True)
+
     def test_without_the_sync_bookmark_there_is_nothing_to_check(self):
         self.jj('bookmark', 'delete', 'main')
         with self.operation() as workspace:

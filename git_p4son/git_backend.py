@@ -8,13 +8,14 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, resolve_commit, switch_branch,
+    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, nearest_branches_below,
+    resolve_commit, switch_branch,
     switch_detached,
 )
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, named_base, not_on_sync_tip, sync_tip_heading
+from .words import Words, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -70,19 +71,15 @@ class GitBackend:
         return base
 
     def implicit_base(self) -> tuple[str, str]:
-        """The local branch the current branch tracks, and "upstream of <branch>".
+        """The current branch's local upstream, else the nearest branch below HEAD, and which of the two it is.
 
-        Raises CommandError, saying -b is required, without one, or when it is not below HEAD or the commits since it
-        take in the sync branch's."""
+        Raises CommandError, saying -b is required, where neither gives a base whose commits since are the change's."""
         workspace_dir = self.workspace_dir
         branch = get_current_branch(workspace_dir)
-        if branch is None:
-            raise CommandError(
-                '-b is required on a detached HEAD. Name the base the change starts from.')
-        base = local_upstream(branch, workspace_dir)
+        base = None if branch is None else local_upstream(
+            branch, workspace_dir)
         if base is None:
-            raise CommandError(f'-b is required, as {branch} has no local upstream. Name the base the change starts '
-                               'from, or make it the default with "git branch -u <base>".')
+            return self._nearest_branch_below(branch or 'HEAD'), 'nearest branch below'
         sync_branch = sync_branch_name(workspace_dir)
         if base == sync_branch:
             # The commits since it leave out what HEAD can't reach; check_on_sync_tip refuses opening files from
@@ -104,6 +101,30 @@ class GitBackend:
             raise CommandError(f'-b is required, as {base}, the upstream of {branch}, would take in commits of '
                                f'{sync_branch}, such as after a merge of it. {fix}')
         return base, f'upstream of {branch}'
+
+    def _nearest_branch_below(self, change: str) -> str:
+        """The one branch on the nearest commit below HEAD that has any, above the sync branch, else the sync branch.
+
+        Raises CommandError, saying -b is required, for several, one below a merge of the sync branch, or no sync
+        branch."""
+        workspace_dir = self.workspace_dir
+        sync_branch = sync_branch_name(workspace_dir)
+        if not branch_exists(sync_branch, workspace_dir):
+            raise CommandError(f'-b is required, as {change} has no local upstream and there is no branch '
+                               f'{sync_branch} to find the base above. Name the base the change starts from.')
+        sync_ref = f'refs/heads/{sync_branch}'
+        names = nearest_branches_below(self.revision, sync_ref, workspace_dir)
+        if not names:
+            return sync_branch
+        if len(names) > 1:
+            raise several_nearest(names, change, self.words)
+        # As for an upstream: a merge of the sync branch above the base brings sync commits into the commits since it.
+        fork = merge_base(self.revision, sync_ref, workspace_dir)
+        if not is_ancestor(fork, f'refs/heads/{names[0]}', workspace_dir):
+            raise CommandError(f'-b is required, as {names[0]}, the nearest branch below {change}, would take in '
+                               f'commits of {sync_branch}, such as after a merge of it. Name the base, or rebase '
+                               f'{change} onto {sync_branch}.')
+        return names[0]
 
     def suggested_alias(self) -> str:
         """The alias the current branch suggests; raise CommandError on a detached HEAD."""

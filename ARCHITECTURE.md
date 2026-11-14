@@ -191,7 +191,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, the branch's local
   upstream as `new`'s and `review`'s, if it is the sync branch, or below HEAD, not in the sync branch's
-  history and without its commits since, as after a merge of it, the current branch,
+  history and without its commits since, as after a merge of it, else the nearest branch below HEAD down to the sync
+  branch (`git.nearest_branches_below`), the current branch,
   `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
   `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
 

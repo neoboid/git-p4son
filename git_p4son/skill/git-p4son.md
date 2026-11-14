@@ -201,9 +201,10 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 Notes:
 
-- Pass `-b`: `main`, or the branch you started from. Left out, it defaults to the git branch's local upstream, or with
-  jj the nearest bookmark below the change, and is refused without one; the `Resolving base` step names the base it
-  took. The alias records it, with the commits the CL includes, so later updates know which commits are new.
+- Pass `-b`: `main`, or the branch you started from. Left out, it defaults to the nearest branch below the git
+  branch (its local upstream, if it has one), or with jj the nearest bookmark below the change; the `Resolving base`
+  step names the base it took, so check it in a stack. The alias records it, with the commits the CL includes, so
+  later updates know which commits are new.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
   for a single-commit change, where a one-entry list would just repeat the title.

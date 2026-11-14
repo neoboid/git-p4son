@@ -76,9 +76,7 @@ class TestRunPerCommit(GitRepoTestCase):
             '[ok] Ran 2 steps, git p4son update first, then git p4son update rest\n'), out)
 
     def test_where_to_return_is_found_under_the_first_step(self):
-        self.assertRegex(self.run_steps(), r'\[ok\] 2 commits since main\n\n'
-                         r'# Checking each commit for the latest main\n(>  .*\n)*\[ok\] Based on it\n\n'
-                         r'# Step 1 of 2: .*\n'
+        self.assertRegex(self.run_steps(), r'\[ok\] 2 commits since main\n\n# Step 1 of 2: .*\n'
                          r'>  git symbolic-ref -q HEAD\n')
 
     def test_a_failing_step_is_not_closed(self):

@@ -11,7 +11,7 @@ from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, me
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest
 
 
 @dataclass
@@ -156,22 +156,19 @@ class JjBackend:
         """Raise CommandError, listing them, if files changed since jj's snapshot, or jj left any out of it."""
         self.workspace.check_clean()
 
-    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
-        """Raise CommandError unless the change contains the sync bookmark's tip, with no merge above it, or unless
-        each of commits contains it, or if the bookmark is conflicted; nothing to check without one."""
+    def check_on_sync_tip(self) -> None:
+        """Raise CommandError unless the change contains the sync bookmark's tip, with no merge above it, or if the
+        bookmark is conflicted; nothing to check without one."""
         workspace = self.workspace
         sync = sync_branch_name(workspace.directory)
-        log.heading(sync_tip_heading(sync, commits))
+        log.heading(f'Checking for the latest {sync}')
         if workspace.sync_bookmark() is None:
             log.success(f'No {self.words.branch} {sync} yet')
             return
         tip = _unconflicted(sync, workspace.bookmarks[sync])
-        for commit in commits or [workspace.tip.commit]:
-            if not is_ancestor(tip, commit, workspace.directory):
-                raise not_on_sync_tip(
-                    f'Commit {commit[:7]}' if commits else 'The change', sync, self.words)
-        merges = [] if commits else merges_above(
-            tip, workspace.tip.commit, workspace.directory)
+        if not is_ancestor(tip, workspace.tip.commit, workspace.directory):
+            raise not_on_sync_tip('The change', sync, self.words)
+        merges = merges_above(tip, workspace.tip.commit, workspace.directory)
         if merges:
             raise has_merge('The change', merges[0], sync, self.words)
         log.success('Based on it')

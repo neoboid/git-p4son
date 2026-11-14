@@ -14,7 +14,7 @@ from .git import (
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -172,23 +172,19 @@ class GitBackend:
         """Raise CommandError, after listing them, if the workspace has uncommitted changes."""
         check_git_workspace_clean(self.workspace_dir)
 
-    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
-        """Raise CommandError unless HEAD contains the sync branch's tip, with no merge above it, or unless each of
-        commits contains it; nothing to check without the branch."""
+    def check_on_sync_tip(self) -> None:
+        """Raise CommandError unless HEAD contains the sync branch's tip, with no merge above it; nothing to check
+        without the branch."""
         workspace_dir = self.workspace_dir
         sync_branch = sync_branch_name(workspace_dir)
-        log.heading(sync_tip_heading(sync_branch, commits))
+        log.heading(f'Checking for the latest {sync_branch}')
         if not branch_exists(sync_branch, workspace_dir):
             log.success(f'No {self.words.branch} {sync_branch} yet')
             return
         sync_ref = f'refs/heads/{sync_branch}'
-        for commit in commits or ['HEAD']:
-            if not is_ancestor(sync_ref, commit, workspace_dir):
-                change = f'Commit {commit[:7]}' if commits else self._change()
-                raise not_on_sync_tip(change, sync_branch, self.words)
-        # A per-commit run comes here a second time, with its commits, after the merges were looked for.
-        merges = [] if commits else merges_above(
-            sync_ref, 'HEAD', workspace_dir)
+        if not is_ancestor(sync_ref, 'HEAD', workspace_dir):
+            raise not_on_sync_tip(self._change(), sync_branch, self.words)
+        merges = merges_above(sync_ref, 'HEAD', workspace_dir)
         if merges:
             raise has_merge(self._change(), merges[0], sync_branch, self.words)
         log.success('Based on it')

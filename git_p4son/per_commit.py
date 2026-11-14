@@ -80,7 +80,6 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
     if not commits:
         raise CommandError(f'No commits found since {base_branch}')
     log.success(f'{plural(len(commits), "commit")} since {base_branch}')
-    backend.check_on_sync_tip([commit for commit, _ in commits])
 
     total = plural(len(commits), 'step')
     steps = [first] + [rest] * (len(commits) - 1)

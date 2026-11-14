@@ -160,19 +160,15 @@ class TestJjBackend(JjRepoTestCase):
     def test_a_change_on_the_sync_bookmark_passes_the_sync_tip_check(self):
         with self.operation() as workspace:
             JjBackend(workspace).check_on_sync_tip()
-            JjBackend(workspace).check_on_sync_tip([self.commit_of('feat')])
 
     def test_a_change_the_sync_bookmark_moved_on_from_is_refused(self):
         self.jj('new', 'main', '-m', 'sync')
         self.jj('bookmark', 'set', 'main', '-r', '@')
         self.jj('new', 'feat')
-        commit = self.commit_of('feat')
-        with self.operation() as workspace:
-            with self.assertRaisesRegex(CommandError, 'The change is not based on the latest main, .* Rebase it onto '
-                                        'main, or onto a bookmark that is rebased on it.'):
-                JjBackend(workspace).check_on_sync_tip()
-            with self.assertRaisesRegex(CommandError, f'Commit {commit[:7]} is not based on the latest main'):
-                JjBackend(workspace).check_on_sync_tip([commit])
+        with self.operation() as workspace, self.assertRaisesRegex(
+                CommandError, 'The change is not based on the latest main, .* Rebase it onto main, or onto a bookmark '
+                'that is rebased on it.'):
+            JjBackend(workspace).check_on_sync_tip()
 
     def test_a_merge_change_above_the_sync_bookmark_is_refused(self):
         self.jj('new', 'main', '-m', 'side')
@@ -967,8 +963,7 @@ class TestJjPerCommit(JjP4RepoTestCase):
     def test_the_run_ends_returning_to_the_working_change(self):
         change = self.describe('@', 'change_id')[:8]
         out = self.p4son('review', 'feat', '-m', 'Feature', '-b', 'main')
-        self.assertRegex(out, r'\[ok\] 2 commits since \w+\n\n# Checking each commit for the latest main\n'
-                         r'(>  .*\n)*\[ok\] Based on it\n\n# Step 1 of 2: ')
+        self.assertRegex(out, r'\[ok\] 2 commits since \w+\n\n# Step 1 of 2: ')
         self.assertRegex(out, rf'\n# Returning to jj change {change}\n(>  .*\n)*'
                          r'\[ok\] Ran 2 steps, git p4son new feat --review, then git p4son update feat --shelve\n'
                          r'\n# Reconciling jj workspace\n')

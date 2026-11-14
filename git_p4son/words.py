@@ -61,13 +61,8 @@ def has_merge(change: str, merge: str, sync_branch: str, words: Words) -> Comman
                         f'a straight line of commits. {fix}')
 
 
-def sync_tip_heading(sync_branch: str, commits: list[str] | None) -> str:
-    """The heading of the check that the change, or each of commits, contains the tip of sync_branch."""
-    return f'Checking {"each commit " if commits else ""}for the latest {sync_branch}'
-
-
 def not_on_sync_tip(change: str, sync_branch: str, words: Words) -> CommandError:
-    """The error for a change, or a commit of it, that does not contain the tip of sync_branch."""
+    """The error for a change that does not contain the tip of sync_branch."""
     return CommandError(
         f'{change} is not based on the latest {sync_branch}, which is what Perforce last synced the workspace to. '
         f'Rebase it onto {sync_branch}, or onto a {words.branch} that is rebased on it.')

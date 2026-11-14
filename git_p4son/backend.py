@@ -63,9 +63,9 @@ class Backend(Protocol):
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if the change has uncommitted work."""
 
-    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
-        """Raise CommandError unless the change contains the sync branch's tip, with no merge above it, or unless each
-        of commits contains it; nothing to check without the branch."""
+    def check_on_sync_tip(self) -> None:
+        """Raise CommandError unless the change contains the sync branch's tip, with no merge above it; nothing to
+        check without the branch."""
 
     def check_base_on_sync_tip(self, base: str, name: str) -> None:
         """Raise CommandError, calling it name, unless the resolved base contains the sync branch's tip; nothing to

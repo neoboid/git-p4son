@@ -178,7 +178,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   one `new` and `review` take without `-b`), the alias the branch or bookmark suggests, the jj change aliases record
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
   that the change contains the sync branch's tip, with no merge above it, or that each commit of a per-commit run
-  contains it (`check_on_sync_tip`), `-b`
+  contains it (`check_on_sync_tip`), the check that a base contains it too (`check_base_on_sync_tip`), `-b`
   completions, `checkouts` for the per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and
   the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from
   `--backend`, then `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds jj's lock and

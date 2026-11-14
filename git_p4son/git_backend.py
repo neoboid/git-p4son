@@ -14,7 +14,7 @@ from .git import (
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -192,6 +192,16 @@ class GitBackend:
         if merges:
             raise has_merge(self._change(), merges[0], sync_branch, self.words)
         log.success('Based on it')
+
+    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+        """Raise CommandError, calling it name, unless base contains the sync branch's tip; nothing to check without
+        the branch."""
+        workspace_dir = self.workspace_dir
+        sync_branch = sync_branch_name(workspace_dir)
+        if (branch_exists(sync_branch, workspace_dir)
+                and not is_ancestor(f'refs/heads/{sync_branch}', base, workspace_dir)):
+            raise base_below_sync_tip(
+                name, sync_branch, self.words, branch_exists(name, workspace_dir))
 
     def _change(self) -> str:
         """The name of the change in a refusal: the current branch, or HEAD when detached."""

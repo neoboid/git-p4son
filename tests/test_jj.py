@@ -186,6 +186,21 @@ class TestJjBackend(JjRepoTestCase):
                 '"jj simplify-parents".'):
             JjBackend(workspace).check_on_sync_tip()
 
+    def test_a_base_below_the_sync_bookmark_is_refused_and_one_on_it_passes(self):
+        self.jj('new', 'main', '-m', 'sync')
+        self.jj('bookmark', 'set', 'main', '-r', '@')
+        self.jj('bookmark', 'create', 'old', '-r', 'main-')
+        with self.operation() as workspace:
+            backend = JjBackend(workspace)
+            backend.check_base_on_sync_tip(self.commit_of('main'), 'main')
+            below = self.commit_of('main-')
+            with self.assertRaisesRegex(CommandError, 'The base old does not contain the latest main, .* Name a '
+                                        'base on main or above it, or if old is a bookmark left behind, rebase it '
+                                        'onto main\\.$'):
+                backend.check_base_on_sync_tip(below, 'old')
+            with self.assertRaisesRegex(CommandError, 'Name a base on main or above it\\.$'):
+                backend.check_base_on_sync_tip(below, below)
+
     def test_without_the_sync_bookmark_there_is_nothing_to_check(self):
         self.jj('bookmark', 'delete', 'main')
         with self.operation() as workspace:

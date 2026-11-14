@@ -114,6 +114,36 @@ class TestGitBackend(GitRepoTestCase):
                 'straight line of commits. Rebase it onto main instead of merging.'):
             self.backend.check_on_sync_tip()
 
+    def test_a_base_on_the_sync_branch_s_tip_or_above_it_passes(self):
+        self.sync_main()
+        self.git('rebase', '-q', 'main')
+        for base in ('main', 'feat/x', 'HEAD~1'):
+            with self.subTest(base=base):
+                self.backend.check_base_on_sync_tip(base, base)
+
+    def test_a_base_below_the_sync_branch_s_tip_is_refused(self):
+        self.sync_main()
+        self.git('rebase', '-q', 'main')
+        with self.assertRaisesRegex(
+                CommandError, 'The base HEAD~2 does not contain the latest main, so the commits since it take in '
+                'more than the change. Name a base on main or above it\\.$'):
+            self.backend.check_base_on_sync_tip('main~1', 'HEAD~2')
+
+    def test_a_branch_as_the_base_below_the_tip_gets_the_advice_for_a_stack(self):
+        self.sync_main()
+        self.git('branch', 'low', 'main~1')
+        self.git('rebase', '-q', 'main')
+        with self.assertRaisesRegex(
+                CommandError, 'Name a base on main or above it, or if low is the branch below in a stack, point it at '
+                'its rebased commit, such as with "git branch -f low <commit>"\\. Rebasing a stack from its top with '
+                '--update-refs keeps the branches below with it\\.$'):
+            self.backend.check_base_on_sync_tip('low', 'low')
+
+    def test_without_the_sync_branch_any_base_passes(self):
+        self.sync_main()
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        self.backend.check_base_on_sync_tip('main~1', 'main~1')
+
     def test_the_sync_branch_itself_passes_the_check(self):
         self.git('switch', '-q', 'main')
         with captured_output():

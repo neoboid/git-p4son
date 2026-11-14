@@ -11,7 +11,7 @@ from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, me
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, base_below_sync_tip, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 
 @dataclass
@@ -175,6 +175,16 @@ class JjBackend:
         if merges:
             raise has_merge('The change', merges[0], sync, self.words)
         log.success('Based on it')
+
+    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+        """Raise CommandError, calling it name, unless base contains the sync bookmark's tip; nothing to check without
+        one."""
+        workspace = self.workspace
+        sync = workspace.sync_bookmark()
+        if sync is not None and not is_ancestor(_unconflicted(sync, workspace.bookmarks[sync]), base,
+                                                workspace.directory):
+            raise base_below_sync_tip(
+                name, sync, self.words, name in workspace.bookmarks)
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""

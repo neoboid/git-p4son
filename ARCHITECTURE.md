@@ -65,7 +65,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`included.py`** - The commits a changelist includes: `new_record` for `new`, and `plan_update`, which checks the
   included commits' identities (`Backend.commit_identities`), finds dropped ones, and works out where `update` starts
-  and what it appends. A recorded base that no longer resolves (`RevisionNotFoundError`) is an error, unless `-b` is
+  and what it appends. A recorded base that no longer resolves (`resolve_recorded_base`) is an error, unless `-b` is
   given, which then becomes the recorded base. `catch_up_subject` says whether a base moved since the last shelve needs
   an empty catch-up commit, named after the base's last sync and the cherry-picks since it (`sync_state`), which
   `update` inserts through `Backend.insert_empty_after` before planning again.

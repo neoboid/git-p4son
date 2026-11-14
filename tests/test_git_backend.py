@@ -86,18 +86,6 @@ class TestGitBackend(GitRepoTestCase):
                 'workspace to. Rebase it onto main, or onto a branch that is rebased on it.'):
             self.backend.check_on_sync_tip()
 
-    def test_given_commits_each_is_checked_and_the_first_stale_one_named(self):
-        self.sync_main()
-        stale = self.git('rev-parse', 'HEAD')
-        with captured_output() as out:
-            self.backend.check_on_sync_tip([self.git('rev-parse', 'main')])
-        self.assertIn(
-            '# Checking each commit for the latest main\n', out.getvalue())
-        with captured_output(), self.assertRaisesRegex(
-                CommandError, f'Commit {stale[:7]} is not based on the latest main'):
-            self.backend.check_on_sync_tip(
-                [self.git('rev-parse', 'main'), stale])
-
     def test_a_detached_head_is_checked_too(self):
         self.sync_main()
         self.git('switch', '-q', '--detach')

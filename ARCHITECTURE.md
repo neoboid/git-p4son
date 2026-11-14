@@ -112,12 +112,11 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
-  `run_command`, so its clean check runs once, before them, and `run_per_commit` itself checks that every step's
-  commit contains the sync branch's tip, as one from a base below it doesn't. A step's arguments are parsed with the
-  real parser just before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to`
-  names. It returns to where it started, also when a step fails, ends the error with the command that resumes after
-  the last commit that worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name,
-  goes to every step, as the steps get the base as a commit.
+  `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
+  before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to` names. It returns to
+  where it started, also when a step fails, ends the error with the command that resumes after the last commit that
+  worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name, goes to every step, as
+  the steps get the base as a commit.
 
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
@@ -177,8 +176,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   commit to read the change from (`revision`), the base (`resolve_base`, None for the default, and `implicit_base`, the
   one `new` and `review` take without `-b`), the alias the branch or bookmark suggests, the jj change aliases record
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
-  that the change contains the sync branch's tip, with no merge above it, or that each commit of a per-commit run
-  contains it (`check_on_sync_tip`), the check that a base contains it too (`check_base_on_sync_tip`), `-b`
+  that the change contains the sync branch's tip, with no merge above it (`check_on_sync_tip`), the check that a
+  base contains it too (`check_base_on_sync_tip`), `-b`
   completions, `checkouts` for the per-commit loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and
   the `Words` its messages use, whose `tool` hooks get as `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from
   `--backend`, then `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds jj's lock and

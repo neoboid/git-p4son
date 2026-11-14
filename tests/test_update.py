@@ -13,6 +13,8 @@ from git_p4son.review_tools import SWARM_SHELF_DELAY
 from git_p4son.update import _step, update_command
 from tests.helpers import (
     CHECK_REVISIONS,
+    FEATURE_DESCRIPTION,
+    FEATURE_OPENED,
     OUT_OF_DATE,
     on_jj,
     captured_output,
@@ -32,12 +34,6 @@ def _args(**overrides):
                     file=None, per_commit=False)
     defaults.update(overrides)
     return cli_args(['update'], **defaults)
-
-
-FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
-                       '1. Change a', '2. Replace b with c']
-FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': ('101', 'delete'),
-                  'c.txt': ('101', 'add')}
 
 
 class UpdateTestCase(P4RepoTestCase):

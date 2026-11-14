@@ -788,7 +788,7 @@ class TestJjBaseFromBookmarkBelow(JjP4RepoTestCase):
         self.change('Sync 2', 't.txt', 't1\n', parent=sync)
         self.jj('bookmark', 'set', sync, '-r', '@')
         self.jj('new', 'feat')
-        self.p4son_fails('new', '-m', 'Feature',
+        self.p4son_fails('new', '-m', 'Feature', '--no-edit',
                          message=f'-b is required, as old, the nearest bookmark below the change, is in the history '
                          f'of {sync}, .* such as {sync}\\.')
         self.assertEqual(self.p4.pending, {})
@@ -808,7 +808,7 @@ class TestJjBaseFromBookmarkBelow(JjP4RepoTestCase):
         self.change('Sync', 's.txt', 's1\n', parent='main')
         self.jj('bookmark', 'set', 'main', '-r', '@')
         self.jj('new', 'feat')
-        self.p4son_fails('new', '-m', 'Feature',
+        self.p4son_fails('new', '-m', 'Feature', '--no-edit',
                          message=r'no bookmark is below the change. Name the base it starts from, such as main\.')
 
     def test_a_bookmark_on_an_emptied_change_stays_the_base(self):

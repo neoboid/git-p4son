@@ -446,6 +446,11 @@ def branch_exists(branch: str, workspace_dir: str) -> bool:
                       fail_on_returncode=False).stdout
 
 
+def branch_name(revision: str) -> str:
+    """revision as it is shown: a branch's full ref by the branch's name, anything else as it is."""
+    return revision.removeprefix('refs/heads/')
+
+
 def local_upstream(branch: str, workspace_dir: str) -> str | None:
     """The local branch that branch tracks; None for none, one on a remote, or one that no longer exists."""
     # A remote's branch is under refs/remotes/; git marks a deleted one [gone].

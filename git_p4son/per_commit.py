@@ -9,7 +9,7 @@ from typing import Literal
 
 from .backend import Backend
 from .common import CommandError
-from .git import get_commits_since, resolve_commit
+from .git import branch_name, get_commits_since, resolve_commit
 from .log import log, plural
 
 
@@ -78,8 +78,10 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
         commits = [(commit, subject)
                    for commit, subject in commits if commit in only]
     if not commits:
-        raise CommandError(f'No commits found since {base_branch}')
-    log.success(f'{plural(len(commits), "commit")} since {base_branch}')
+        raise CommandError(
+            f'No commits found since {branch_name(base_branch)}')
+    log.success(
+        f'{plural(len(commits), "commit")} since {branch_name(base_branch)}')
 
     total = plural(len(commits), 'step')
     steps = [first] + [rest] * (len(commits) - 1)

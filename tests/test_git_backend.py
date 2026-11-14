@@ -30,8 +30,18 @@ class TestGitBackend(GitRepoTestCase):
     def test_default_base_is_the_parent_commit(self):
         self.assertEqual(self.backend.resolve_base(None), 'HEAD~1')
 
-    def test_named_base_is_kept_as_given(self):
-        self.assertEqual(self.backend.resolve_base('main'), 'main')
+    def test_a_branch_as_the_base_is_named_in_full(self):
+        """So that a tag of its name, which git would resolve the bare name to, doesn't become the base."""
+        self.git('tag', 'main', 'HEAD')
+        self.assertEqual(self.backend.resolve_base('main'), 'refs/heads/main')
+        self.assertEqual(self.backend.resolve_base(
+            'feat/x'), 'refs/heads/feat/x')
+
+    def test_a_base_that_is_no_branch_is_kept_as_given(self):
+        self.git('tag', 'v1', 'main')
+        for base in ('HEAD~1', 'v1', self.git('rev-parse', 'main')):
+            with self.subTest(base=base):
+                self.assertEqual(self.backend.resolve_base(base), base)
 
     def test_unknown_base_is_refused(self):
         with self.assertRaisesRegex(CommandError, '"nope" is not a commit'):

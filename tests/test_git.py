@@ -41,6 +41,7 @@ from git_p4son.git import (
     is_workspace_dir,
     list_tracked_files,
     merge_file,
+    merges_above,
     nearest_branches_below,
     parse_sync_subject,
     sync_state,
@@ -687,6 +688,42 @@ class TestNearestBranchesBelow(GitRepoTestCase):
         self.git('branch', 'low', 'HEAD~2')
         self.git('tag', 'low', 'HEAD')
         self.assertEqual(self.nearest(), ['low'])
+
+
+class TestMergesAbove(GitRepoTestCase):
+    """main at "Base", and HEAD on branch top, one commit on."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('Base')
+        self.git('switch', '-q', '-c', 'top')
+        self.commit('One')
+
+    def merge(self, branch):
+        """Merge a new commit on branch, made from main, into top; returns the merge commit."""
+        self.git('switch', '-q', '-C', branch, 'main')
+        self.write_file(f'{branch}.txt')
+        self.commit(branch)
+        self.git('switch', '-q', 'top')
+        self.git('merge', '-q', '--no-edit', '--no-ff', branch)
+        return self.git('rev-parse', 'HEAD')
+
+    def test_none_in_a_line_of_commits(self):
+        self.commit('Two')
+        self.assertEqual(merges_above('refs/heads/main', 'HEAD', self.ws), [])
+
+    def test_a_merge_of_the_bottom_and_one_of_another_branch_newest_first(self):
+        side = self.merge('side')
+        self.commit('Two')
+        synced = self.merge('main')
+        self.assertEqual(merges_above('refs/heads/main',
+                         'HEAD', self.ws), [synced, side])
+
+    def test_a_merge_in_the_bottom_s_history_does_not_count(self):
+        self.merge('side')
+        self.git('branch', '-f', 'main', 'top')
+        self.commit('Two')
+        self.assertEqual(merges_above('refs/heads/main', 'HEAD', self.ws), [])
 
 
 class TestGetCurrentBranch(GitRepoTestCase):

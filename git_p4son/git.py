@@ -465,6 +465,11 @@ def branches_at(commit: str, workspace_dir: str) -> list[str]:
     return [ref.removeprefix('refs/heads/') for ref in result.stdout]
 
 
+def merges_above(bottom: str, revision: str, workspace_dir: str) -> list[str]:
+    """The merge commits in revision's history outside bottom's, newest first."""
+    return run(['git', 'rev-list', '--merges', f'{bottom}..{revision}'], cwd=workspace_dir).stdout
+
+
 def nearest_branches_below(revision: str, bottom: str, workspace_dir: str) -> list[str]:
     """The local branches on the nearest commits below revision that have any, outside bottom's history, by name.
 
@@ -584,7 +589,7 @@ def insert_empty_commit(after: str, message: str, workspace_dir: str) -> tuple[s
     head = get_head_commit(workspace_dir)
     commits = run(['git', 'rev-list', '--reverse',
                   f'{after}..{head}'], cwd=workspace_dir).stdout
-    if run(['git', 'rev-list', '--merges', f'{after}..{head}'], cwd=workspace_dir).stdout:
+    if merges_above(after, head, workspace_dir):
         raise CommandError(
             f'A merge commit follows {after[:7]}, so no commit can be inserted after it.')
     inserted = run(['git', 'commit-tree', f'{after}^{{tree}}', '-p', after, '-m', message],

@@ -63,6 +63,10 @@ class Backend(Protocol):
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if the change has uncommitted work."""
 
+    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
+        """Raise CommandError unless the change, or each of commits, contains the sync branch's tip; nothing to check
+        without the branch."""
+
     def base_candidates(self) -> list[tuple[str, str]]:
         """Completion candidates for -b, as (name, description)."""
 

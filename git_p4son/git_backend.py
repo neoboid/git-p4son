@@ -14,7 +14,7 @@ from .git import (
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, named_base
+from .words import Words, named_base, not_on_sync_tip, sync_tip_heading
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -150,6 +150,22 @@ class GitBackend:
     def check_clean(self) -> None:
         """Raise CommandError, after listing them, if the workspace has uncommitted changes."""
         check_git_workspace_clean(self.workspace_dir)
+
+    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
+        """Raise CommandError unless HEAD, or each of commits, contains the sync branch's tip; nothing to check
+        without the branch."""
+        workspace_dir = self.workspace_dir
+        sync_branch = sync_branch_name(workspace_dir)
+        log.heading(sync_tip_heading(sync_branch, commits))
+        if not branch_exists(sync_branch, workspace_dir):
+            log.success(f'No {self.words.branch} {sync_branch} yet')
+            return
+        for commit in commits or ['HEAD']:
+            if not is_ancestor(f'refs/heads/{sync_branch}', commit, workspace_dir):
+                change = f'Commit {commit[:7]}' if commits else get_current_branch(
+                    workspace_dir) or 'HEAD'
+                raise not_on_sync_tip(change, sync_branch, self.words)
+        log.success('Based on it')
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The __branch__ marker, which the completion scripts expand to git's branches."""

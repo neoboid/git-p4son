@@ -68,6 +68,60 @@ class TestGitBackend(GitRepoTestCase):
             self.backend.check_clean()
         self.assertIn('stray.txt', out.getvalue())
 
+    def test_a_change_on_the_sync_branch_s_tip_passes_the_check(self):
+        with captured_output() as out:
+            self.backend.check_on_sync_tip()
+        self.assertRegex(out.getvalue(
+        ), r'# Checking for the latest main\n(>  .*\n)+\[ok\] Based on it\n$')
+
+    def sync_main(self):
+        self.git('switch', '-q', 'main')
+        self.commit('Sync')
+        self.git('switch', '-q', 'feat/x')
+
+    def test_a_change_forked_before_the_sync_branch_s_tip_is_refused(self):
+        self.sync_main()
+        with captured_output(), self.assertRaisesRegex(
+                CommandError, 'feat/x is not based on the latest main, which is what Perforce last synced the '
+                'workspace to. Rebase it onto main, or onto a branch that is rebased on it.'):
+            self.backend.check_on_sync_tip()
+
+    def test_given_commits_each_is_checked_and_the_first_stale_one_named(self):
+        self.sync_main()
+        stale = self.git('rev-parse', 'HEAD')
+        with captured_output() as out:
+            self.backend.check_on_sync_tip([self.git('rev-parse', 'main')])
+        self.assertIn(
+            '# Checking each commit for the latest main\n', out.getvalue())
+        with captured_output(), self.assertRaisesRegex(
+                CommandError, f'Commit {stale[:7]} is not based on the latest main'):
+            self.backend.check_on_sync_tip(
+                [self.git('rev-parse', 'main'), stale])
+
+    def test_a_detached_head_is_checked_too(self):
+        self.sync_main()
+        self.git('switch', '-q', '--detach')
+        with captured_output(), self.assertRaisesRegex(CommandError, 'HEAD is not based on the latest main'):
+            self.backend.check_on_sync_tip()
+
+    def test_a_merge_of_the_sync_branch_s_tip_passes_the_check(self):
+        self.sync_main()
+        self.git('merge', '-q', '--no-edit', 'main')
+        with captured_output():
+            self.backend.check_on_sync_tip()
+
+    def test_the_sync_branch_itself_passes_the_check(self):
+        self.git('switch', '-q', 'main')
+        with captured_output():
+            self.backend.check_on_sync_tip()
+
+    def test_without_the_sync_branch_there_is_nothing_to_check(self):
+        self.sync_main()
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        with captured_output() as out:
+            self.backend.check_on_sync_tip()
+        self.assertIn('[ok] No branch trunk yet\n', out.getvalue())
+
     def test_base_candidates_ask_the_shell_for_branches(self):
         self.assertEqual(self.backend.base_candidates(), [('__branch__', '')])
 

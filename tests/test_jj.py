@@ -174,6 +174,18 @@ class TestJjBackend(JjRepoTestCase):
             with self.assertRaisesRegex(CommandError, f'Commit {commit[:7]} is not based on the latest main'):
                 JjBackend(workspace).check_on_sync_tip([commit])
 
+    def test_a_merge_change_above_the_sync_bookmark_is_refused(self):
+        self.jj('new', 'main', '-m', 'side')
+        self.write_file('s.txt', 's\n')
+        self.jj('new', 'feat', '@', '-m', 'merged')
+        merge = self.commit_of('@')
+        with self.operation() as workspace, self.assertRaisesRegex(
+                CommandError, f'The change has a merge commit, {merge[:7]}, above main. A changelist is made from a '
+                'straight line of commits. Put its changes in a line on main instead: move the side that isn\'t in '
+                'main\'s history onto the other parent with "jj rebase -s", then drop the parent left over with '
+                '"jj simplify-parents".'):
+            JjBackend(workspace).check_on_sync_tip()
+
     def test_without_the_sync_bookmark_there_is_nothing_to_check(self):
         self.jj('bookmark', 'delete', 'main')
         with self.operation() as workspace:

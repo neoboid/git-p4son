@@ -739,23 +739,57 @@ class TestNewOnAnOldSync(NewTestCase):
             out, r'# Checking for the latest main\n(>  .*\n)*\[ok\] .*\n\n# Resolving base\n')
         self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
 
-    def test_a_merge_of_the_sync_branch_runs(self):
-        """The merged files hold what the sync brought in."""
-        self.git('merge', '-q', '--no-edit', 'main')
-        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
-        self.assertEqual(self.p4.opened, {path: (
-            '102', action) for path, (_, action) in FEATURE_OPENED.items()})
+    MERGED = 'has a merge commit, [0-9a-f]{7}, above main. A changelist is made from a straight line of commits.'
 
-    def test_per_commit_below_a_merge_of_the_sync_branch_is_refused(self):
-        """Each step opens the files of a commit below the merge, which don't hold what the sync brought in."""
-        self.git('merge', '-q', '--no-edit', 'main')
-        for argv in (['--shelve'], ['--review'], ['--shelve', '--dry-run']):
+    def merge_side(self):
+        """Rebase feature onto main, then merge a branch with one commit on main into it."""
+        self.git('rebase', '-q', 'main', 'feature')
+        self.git('switch', '-q', '-c', 'side', 'main')
+        self.edit('s.txt', 's1\n')
+        self.commit('Add s')
+        self.git('switch', '-q', 'feature')
+        self.git('merge', '-q', '--no-edit', 'side')
+
+    def assert_refused_for_a_merge(self):
+        for argv in (['-b', 'main'], [], ['-b', 'main', '--dry-run'], ['-b', 'main', '--per-commit', '--shelve']):
             with self.subTest(argv=argv):
-                self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main', '--per-commit', *argv,
-                                 message='Commit [0-9a-f]{7} is not based on the latest main')
-        self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                self.p4son_fails('new', 'feat', '-m', 'Feature',
+                                 *argv, message=self.MERGED)
+        self.p4son_fails('review', 'feat', '-m', 'Feature',
+                         '-b', 'main', message=self.MERGED)
+        self.assertEqual(self.p4.pending, {})
+        self.assertEqual(self.p4.opened, {})
+
+    def test_a_merge_of_the_sync_branch_is_refused(self):
+        """The commits below the merge hold the files as they were before the sync."""
+        self.git('merge', '-q', '--no-edit', 'main')
+        self.assert_refused_for_a_merge()
+
+    def test_a_merge_of_another_branch_is_refused(self):
+        self.merge_side()
+        self.assert_refused_for_a_merge()
+
+    def test_a_merge_below_the_base_is_refused(self):
+        self.merge_side()
+        self.git('switch', '-q', '-c', 'top')
+        self.edit('e.txt', 'e1\n')
+        self.commit('Add e')
+        self.p4son_fails('new', 'top', '-m', 'Top', '-b',
+                         'feature', message=self.MERGED)
+        self.assertEqual(self.p4.pending, {})
+
+    def test_per_commit_from_a_base_below_the_sync_tip_is_refused(self):
+        """The first step's commit is a sync commit below the tip, whose files are older than Perforce has them."""
+        self.commit_sync_on_main(102, {'e.txt': 'e1\n'})
+        self.git('rebase', '-q', 'main', 'feature')
+        self.git('branch', 'old', 'main~2')
+        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'old', '--per-commit', '--shelve',
                          message='Commit [0-9a-f]{7} is not based on the latest main')
         self.assertEqual(self.p4.pending, {})
+
+    def test_no_edit_opens_nothing_so_a_merge_runs(self):
+        self.merge_side()
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit')
         self.assertEqual(self.p4.opened, {})
 
     def test_a_branch_stacked_on_a_rebased_one_runs(self):

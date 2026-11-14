@@ -34,6 +34,17 @@ def several_nearest(names: list[str], change: str, words: Words) -> CommandError
                         'Name the one it starts from.')
 
 
+def has_merge(change: str, merge: str, sync_branch: str, words: Words) -> CommandError:
+    """The error for a change with a merge commit, merge, above sync_branch."""
+    # git's rebase replays a merge's commits in a line; jj's keeps the merge.
+    fix = (f'Rebase it onto {sync_branch} instead of merging.' if words.tool == 'git' else
+           f'Put its changes in a line on {sync_branch} instead: move the side that isn\'t in {sync_branch}\'s '
+           'history onto the other parent with "jj rebase -s", then drop the parent left over with '
+           '"jj simplify-parents".')
+    return CommandError(f'{change} has a merge commit, {merge[:7]}, above {sync_branch}. A changelist is made from '
+                        f'a straight line of commits. {fix}')
+
+
 def sync_tip_heading(sync_branch: str, commits: list[str] | None) -> str:
     """The heading of the check that the change, or each of commits, contains the tip of sync_branch."""
     return f'Checking {"each commit " if commits else ""}for the latest {sync_branch}'

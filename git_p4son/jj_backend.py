@@ -7,11 +7,11 @@ from typing import NoReturn
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
-from .git import commit_all, get_head_commit, get_local_changes, is_ancestor
+from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, merges_above
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
+from .words import Words, has_merge, named_base, not_on_sync_tip, several_nearest, sync_tip_heading
 
 
 @dataclass
@@ -157,8 +157,8 @@ class JjBackend:
         self.workspace.check_clean()
 
     def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
-        """Raise CommandError unless the change, or each of commits, contains the sync bookmark's tip, or if the
-        bookmark is conflicted; nothing to check without one."""
+        """Raise CommandError unless the change contains the sync bookmark's tip, with no merge above it, or unless
+        each of commits contains it, or if the bookmark is conflicted; nothing to check without one."""
         workspace = self.workspace
         sync = sync_branch_name(workspace.directory)
         log.heading(sync_tip_heading(sync, commits))
@@ -170,6 +170,10 @@ class JjBackend:
             if not is_ancestor(tip, commit, workspace.directory):
                 raise not_on_sync_tip(
                     f'Commit {commit[:7]}' if commits else 'The change', sync, self.words)
+        merges = [] if commits else merges_above(
+            tip, workspace.tip.commit, workspace.directory)
+        if merges:
+            raise has_merge('The change', merges[0], sync, self.words)
         log.success('Based on it')
 
     def base_candidates(self) -> list[tuple[str, str]]:

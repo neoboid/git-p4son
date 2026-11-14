@@ -85,7 +85,8 @@ class GitBackend:
                                'from, or make it the default with "git branch -u <base>".')
         sync_branch = sync_branch_name(workspace_dir)
         if base == sync_branch:
-            # Moving on after the fork is harmless, as the commits since it leave out what HEAD can't reach.
+            # The commits since it leave out what HEAD can't reach; check_on_sync_tip refuses opening files from
+            # behind it.
             return base, f'upstream of {branch}'
         # Rewritten or moved on, the commits since it would take in its old ones.
         if not is_ancestor(f'refs/heads/{base}', self.revision, workspace_dir):

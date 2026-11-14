@@ -540,8 +540,9 @@ git p4son new -m "New feature" --review -b main
 git p4son new -m "New feature" --shelve --per-commit -b main   # a shelf per commit, without a Swarm review
 ```
 
-Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. The check
-is skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
+Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. It also
+requires the change to be [based on the latest sync](#opening-only-changes-based-on-the-latest-sync). Both checks
+are skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
 
 With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
@@ -557,8 +558,10 @@ Add the commits a changelist doesn't include yet: `update` opens their files for
 the commit list in the description, keeping the message above it unless `-m` or `-F` replaces it. It also reverts
 files that are no longer part of the change (see
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)). Opening files needs a clean git
-workspace, untracked files included, unless `--no-edit` skips it. Before changing anything, `update` refuses a
-changelist that isn't pending, yours and on this workspace's client, as `alias new` does.
+workspace, untracked files included, and a change
+[based on the latest sync](#opening-only-changes-based-on-the-latest-sync), unless `--no-edit` skips it. Before
+changing anything, `update` refuses a changelist that isn't pending, yours and on this workspace's client, as
+`alias new` does.
 
 ```sh
 git p4son update [changelist] [-m <message> | -F <file>] [--base-branch BASE_BRANCH] [--dry-run]
@@ -673,6 +676,16 @@ Shelving (`--shelve`, `--review`) replaces the whole shelf with the changelist's
 `p4 shelve -r -a leaveunchanged`, so the shelf never holds stale files, and unchanged files that are still opened
 are left out of it.
 
+#### Opening only changes based on the latest sync
+
+The sync branch's latest commit is what Perforce last gave the workspace, and Perforce takes every file you open to
+be an edit of that revision. A branch forked before the latest sync still holds the older contents: opened from
+there, a file the sync changed would show in the review as undoing what others submitted, and would be submitted
+that way without a resolve. So before opening files, `new`, `update` and `review` check that the change contains the
+sync branch's latest commit, whatever `-b` says, and refuse otherwise. Rebase the branch onto the sync branch, or onto
+a branch that is rebased on it, and run the command again. `--no-edit` opens nothing and skips the check, except
+with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
+
 #### Shelving only files at the latest revision
 
 Before shelving, `new`, `update` and `review` check that the files are synced to the latest revision in the depot:
@@ -729,9 +742,9 @@ git p4son review -F description.txt -b main
 `review` checks out the first commit since the base branch and runs `git p4son new --review` on it, then checks out
 each later commit and runs `git p4son update --shelve`, and finally returns to where you started. With Swarm, every
 step but the last sleeps 5 seconds to give Perforce/Swarm time to process the shelf; another
-[review tool](#review-tools) runs once per step instead. The commits are reviewed where they are: to review them on top
-of the latest `main`, rebase first. Like `new`, it needs a clean git workspace, untracked files included, and checks
-it even with `--dry-run`.
+[review tool](#review-tools) runs once per step instead. Like `new`, it needs a clean git workspace, untracked files
+included, and commits [based on the latest sync](#opening-only-changes-based-on-the-latest-sync), and checks both even
+with `--dry-run`.
 
 A dry run prints the plan like this, with the base resolved to the commit the first step uses; the later steps find
 it in the changelist's record. The message, which only the first step gets, is printed below it:

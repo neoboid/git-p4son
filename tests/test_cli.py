@@ -285,6 +285,8 @@ class TestRunCommand(unittest.TestCase):
         # The workspace is fake, so git's clean check and base lookup are too.
         self.check_clean = start_patch(
             self, 'git_p4son.git_backend.check_git_workspace_clean')
+        self.check_on_sync_tip = start_patch(
+            self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
@@ -293,9 +295,12 @@ class TestRunCommand(unittest.TestCase):
                              (['update', '100', '--no-edit', '--per-commit'], 1), (['list-changes'], 0)):
             with self.subTest(argv=argv), mock.patch('git_p4son.cli.list_changes_command', return_value=0):
                 self.check_clean.reset_mock()
+                self.check_on_sync_tip.reset_mock()
                 with captured_output():
                     run_command(create_parser().parse_args(argv))
                 self.assertEqual(self.check_clean.call_count, checks)
+                self.assertEqual(
+                    self.check_on_sync_tip.call_count, checks)
 
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_dispatches_sync(self, mock_sync, _ws):
@@ -466,6 +471,8 @@ class TestRunCommand(unittest.TestCase):
 class TestBranchKeyword(unittest.TestCase):
     def setUp(self):
         start_patch(self, 'git_p4son.git_backend.check_git_workspace_clean')
+        start_patch(
+            self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')

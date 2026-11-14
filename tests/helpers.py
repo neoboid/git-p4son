@@ -856,6 +856,13 @@ class P4RepoTestCase(GitRepoTestCase):
         self.p4.sync_to(change)
         self.commit(format_sync_subject('//myclient', change))
 
+    def commit_sync_on_main(self, change: int, files: dict[str, str | None]) -> None:
+        """commit_sync on main, then return to the branch it was run from."""
+        branch = self.git('branch', '--show-current')
+        self.git('switch', '-q', 'main')
+        self.commit_sync(change, files)
+        self.git('switch', '-q', branch)
+
     def shelves(self) -> list[list[str]]:
         """The p4 shelve calls made so far."""
         return [call for call in self.p4.calls if call[0] == 'shelve']

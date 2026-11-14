@@ -59,10 +59,12 @@ checks, which mypy narrows on; it does not narrow on `os.name`.
 
 **`cli.py`** builds the argparse parser (`create_parser`), where each command registers its handler with
 `set_defaults(func=...)` (and `needs_workspace=False` for commands that run outside a repo). `run_command` does the
-shared setup before calling `args.func`: finding the workspace, resolving the `branch` keyword to an alias, reading
-`-F` message files, taking `new`'s and `review`'s base from the backend's `implicit_base` when `-b` is left out
-(their parsers set `implicit_base`), deriving a message from HEAD, checking the workspace is clean once when the
-parser's `needs_clean` says so (`check_clean_workspace`), and ending a dry run with "Dry run, nothing changed".
+shared setup before calling `args.func`: finding the workspace, checking the change contains the sync branch's tip
+when the parser's `needs_clean` says so (the backend's `check_on_sync_tip`), resolving the `branch` keyword to an
+alias, reading `-F` message files, taking `new`'s and `review`'s base from the backend's `implicit_base` when `-b`
+is left out (their parsers set `implicit_base`), deriving a message from HEAD, checking the workspace is clean once
+when the parser's `needs_clean` says so (`check_clean_workspace`), and ending a dry run with "Dry run, nothing
+changed".
 `main` is the only place that prints a `CommandError`/`RunError` and turns it into an exit code. `cli.py` also holds
 `completion_command` and sends `complete` to `complete.py` before argparse runs.
 

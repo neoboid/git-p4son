@@ -731,6 +731,8 @@ def _run_command(args: argparse.Namespace) -> int:
 def _run_in_workspace(args: argparse.Namespace) -> int:
     """Resolve the arguments that depend on the workspace, then run the command."""
     backend = args.backend
+    if _needs_clean(args):
+        backend.check_on_sync_tip()
     if hasattr(args, 'base_branch'):
         log.heading('Resolving base')
         note = ''

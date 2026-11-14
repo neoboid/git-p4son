@@ -16,13 +16,18 @@ from git_p4son.changelist_store import (
 from git_p4son.common import CommandError
 from git_p4son.new import new_command, _steps
 from git_p4son.update import update_command
-from tests.helpers import CHECK_REVISIONS, cli_args, on_jj, OUT_OF_DATE, P4RepoTestCase, recorded, start_patch, save_config
-
-
-FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
-                       '1. Change a', '2. Replace b with c']
-FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': ('101', 'delete'),
-                  'c.txt': ('101', 'add')}
+from tests.helpers import (
+    CHECK_REVISIONS,
+    FEATURE_DESCRIPTION,
+    FEATURE_OPENED,
+    OUT_OF_DATE,
+    P4RepoTestCase,
+    cli_args,
+    on_jj,
+    recorded,
+    save_config,
+    start_patch,
+)
 
 
 class NewTestCase(P4RepoTestCase):
@@ -382,9 +387,8 @@ class TestNewPerCommit(PerCommitTestCase):
 
     def test_new_on_the_first_commit_then_update_on_the_second(self):
         self.new()
-        self.assertEqual(self.p4.pending['101'],
-                         ['Feature', '', 'Changes included:', '1. Change a', '2. Replace b with c',
-                          '', '#review'])
+        self.assertEqual(self.p4.pending['101'], [
+                         *FEATURE_DESCRIPTION, '', '#review'])
         self.assertEqual(self.p4.shelved,
                          {'101': {'a.txt': 'a2\n', 'b.txt': None, 'c.txt': 'c1\n'}})
         self.assertEqual(len(self.shelves()), 2)

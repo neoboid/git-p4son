@@ -406,6 +406,12 @@ class GitRepoTestCase(WorkspaceTestCase):
 OUT_OF_DATE = 'not at the latest revision'
 CHECK_REVISIONS = '# Checking files are at the latest revision'
 
+# What new makes of P4RepoTestCase.commit_feature: the description of its changelist 101 and the files it opens.
+FEATURE_DESCRIPTION = ['Feature', '', 'Changes included:',
+                       '1. Change a', '2. Replace b with c']
+FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': (
+    '101', 'delete'), 'c.txt': ('101', 'add')}
+
 
 class FakeP4:
     """A scripted Perforce server for the p4 commands git-p4son runs.

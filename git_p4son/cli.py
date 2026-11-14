@@ -38,9 +38,9 @@ def _add_base_branch(parser: argparse.ArgumentParser, help: str, default_help: s
     if default_help is None:
         parser.add_argument('-b', '--base-branch',
                             help=f'{help}: a branch or bookmark, or a commit one points at, which the alias records. '
-                            'Defaults to the current branch\'s local upstream, else the nearest branch below it, '
-                            'or with the jj backend the nearest bookmark below the change; required when several '
-                            'are nearest')
+                            'Defaults to the nearest branch below the current one, or its local upstream if it has '
+                            'one, or with the jj backend the nearest bookmark below the change. Where that gives no '
+                            'one base, the command says so and asks for -b')
         parser.set_defaults(implicit_base=True)
         return
     parser.add_argument('-b', '--base-branch', help=f'{help}. {default_help}')

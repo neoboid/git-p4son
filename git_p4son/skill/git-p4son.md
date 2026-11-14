@@ -201,10 +201,11 @@ the Swarm review, so every git commit shows up as its own patch and reviewers ca
 
 Notes:
 
-- Pass `-b`: `main`, or the branch you started from. Left out, it defaults to the nearest branch below the git
-  branch (its local upstream, if it has one), or with jj the nearest bookmark below the change; the `Resolving base`
-  step names the base it took, so check it in a stack. The alias records it, with the commits the CL includes, so
-  later updates know which commits are new.
+- `-b` is the base the change starts from: `main`, or the branch below in a stack. It can be left out: it then
+  defaults to the nearest branch below the git branch (its local upstream, if it has one), or with jj the nearest
+  bookmark below the change. The `Resolving base` step names the base it took, so check that line, and pass `-b`
+  when it is not the one you mean. The alias records it, with the commits the CL includes, so later updates know
+  which commits are new.
 - By default the description ends with a numbered list of the commit subjects under `Changes included:`.
   `--no-commit-list` leaves it out, so the description holds exactly the text from the file, plus `#review`. Use it
   for a single-commit change, where a one-entry list would just repeat the title.
@@ -298,7 +299,8 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
 - **The branch is not based on the latest sync** ("... is not based on the latest main, which is what Perforce
   last synced the workspace to."). `new`, `update` and `review` open files only from a change that contains the
   sync branch's latest commit, as the files of an older fork would undo what the sync brought in. Rebase the branch
-  onto `main`, or the whole stack from the top, and run the command again. There is no option to skip it.
+  onto `main`, or the whole stack from the top, and run the command again. No option skips it; `--no-edit` without
+  `--per-commit`, which opens no files, runs without it.
 - **The branch has a merge commit** ("... has a merge commit, abc1234, above main."). The same commands refuse a
   merge anywhere above the sync branch, of `main` or of another branch, as a changelist is made from a straight line
   of commits. Rebase the branch onto `main` instead of merging, which replays its commits in a line, and run the
@@ -306,10 +308,13 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   parent (`jj rebase -s <the change's side> -d <other parent>`), never `main`'s own side, then
   `jj simplify-parents -r <merge>`. Never merge `main` into a feature branch here; rebase after every sync.
 - **The base is below the latest sync** ("The base ... does not contain the latest main, ..."). The commits since
-  it would take in sync commits. Pass `-b main`, or the branch below in a stack. When the name is the branch below
-  that the alias records, the stack was rebased from its top without `--update-refs`, so that branch stayed behind:
-  point it at its rebased commit in the stack (`git branch -f <branch> <commit>`). A plain `git rebase main <branch>`
-  makes a second copy of its commits, which `update` then refuses.
+  it would take in sync commits. For `new` and `review`, pass `-b main`, or the branch below in a stack. `update`
+  takes the base from the alias and refuses a `-b` while the recorded base exists: there the name is the branch
+  below that the alias records, and the stack was rebased from its top without `--update-refs`, so that branch
+  stayed behind. Point it at its rebased commit in the stack (`git branch -f <branch> <commit>`). A plain
+  `git rebase main <branch>` makes a second copy of its commits, which `update` then refuses.
+- **`-b` is required** ("-b is required, as ..."). The history gave no one base, for the reason the message names.
+  Pass `-b` with the branch the change starts from.
 - **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them
   first: ..."). Files that git
   tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for

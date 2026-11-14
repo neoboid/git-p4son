@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- With git, `new` and `review` find the base without an upstream: the nearest branch below yours, down to the sync
+  branch. A local upstream still wins
 - `new`, `update` and `review` refuse a branch that isn't rebased onto the latest sync, where its files would
   undo what the sync brought in
 - A message printed while a command runs, such as "All files up to date" during a sync, goes below its command

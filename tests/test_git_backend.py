@@ -202,39 +202,107 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.write_file(name, name)
         self.commit(name)
 
-    def stack(self, sync_branch='main'):
-        """Branch low off sync_branch and high off low, one commit each, and leave HEAD on high."""
-        self.git('switch', '-q', '-c', 'low', '--track', sync_branch)
+    def stack(self, sync_branch='main', track=True):
+        """Branch low off sync_branch and high off low, one commit each, as upstreams if track; HEAD ends on high."""
+        tracking = '--track' if track else '--no-track'
+        self.git('switch', '-q', '-c', 'low', tracking, sync_branch)
         self.commit_file('low.txt')
-        self.git('switch', '-q', '-c', 'high', '--track', 'low')
+        self.git('switch', '-q', '-c', 'high', tracking, 'low')
         self.commit_file('high.txt')
 
     def test_the_local_upstream_is_the_base(self):
         self.assertEqual(self.backend.implicit_base(),
                          ('main', 'upstream of feat'))
 
-    def test_a_branch_without_an_upstream_needs_b(self):
+    def test_a_branch_on_the_sync_branch_without_an_upstream_takes_it(self):
         self.git('branch', '--unset-upstream')
-        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream.*git branch -u'):
-            self.backend.implicit_base()
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'nearest branch below'))
 
-    def test_a_remote_upstream_needs_b(self):
+    def test_a_remote_upstream_does_not_count(self):
         self.git('remote', 'add', 'origin', self.ws)
         self.git('fetch', '-q', 'origin')
         self.git('branch', '-q', '-u', 'origin/main')
-        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream'):
-            self.backend.implicit_base()
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'nearest branch below'))
 
-    def test_a_deleted_upstream_needs_b(self):
+    def test_a_deleted_upstream_does_not_count(self):
+        """The commits of low come along, as no branch marks where they end."""
         self.stack()
         self.git('branch', '-q', '-D', 'low')
-        with self.assertRaisesRegex(CommandError, '-b is required, as high has no local upstream'):
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'nearest branch below'))
+
+    def test_a_detached_head_takes_the_nearest_branch_below(self):
+        self.stack(track=False)
+        self.git('switch', '-q', '--detach')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'nearest branch below'))
+
+    def test_a_stacked_branch_without_an_upstream_takes_the_branch_below(self):
+        self.stack(track=False)
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'nearest branch below'))
+        self.git('switch', '-q', '-c', 'top')
+        self.commit_file('top.txt')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('high', 'nearest branch below'))
+
+    def test_the_upstream_wins_over_a_nearer_branch(self):
+        self.stack()
+        self.commit_file('high2.txt')
+        self.git('branch', 'nearer', 'HEAD~1')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'upstream of high'))
+
+    def test_two_branches_on_the_nearest_commit_need_b(self):
+        self.stack(track=False)
+        self.git('branch', 'also', 'low')
+        with self.assertRaisesRegex(CommandError, '-b is required, as also, low are the nearest branches below high. '
+                                    'Name the one it starts from.'):
             self.backend.implicit_base()
 
-    def test_a_detached_head_needs_b(self):
-        self.git('switch', '-q', '--detach')
-        with self.assertRaisesRegex(CommandError, '-b is required on a detached HEAD'):
+    def test_a_nearest_branch_below_a_merge_of_the_sync_branch_needs_b(self):
+        """low..HEAD would take in the sync commit the merge brought in."""
+        self.stack(track=False)
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', 'high')
+        self.git('merge', '-q', '--no-edit', 'main')
+        with self.assertRaisesRegex(CommandError, '-b is required, as low, the nearest branch below high, would take '
+                                    'in commits of main, such as after a merge of it. Name the base'):
             self.backend.implicit_base()
+
+    def test_a_stack_the_sync_branch_moved_on_from_keeps_the_branch_below(self):
+        """As with --no-edit before a rebase: low..HEAD is still only high's commit."""
+        self.stack(track=False)
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', 'high')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('low', 'nearest branch below'))
+
+    def test_the_sync_branch_moving_on_keeps_it_the_nearest(self):
+        self.git('branch', '--unset-upstream')
+        self.git('switch', '-q', 'main')
+        self.commit_file('synced.txt')
+        self.git('switch', '-q', 'feat')
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'nearest branch below'))
+
+    def test_without_an_upstream_and_the_sync_branch_b_is_required(self):
+        self.git('branch', '--unset-upstream')
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream and there is no '
+                                    'branch trunk to find the base above. Name the base the change starts from'):
+            self.backend.implicit_base()
+
+    def test_the_sync_branch_setting_names_the_branch_the_search_stops_at(self):
+        self.git('branch', '--unset-upstream')
+        self.git('branch', 'trunk', 'main')
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        self.assertEqual(self.backend.implicit_base(),
+                         ('trunk', 'nearest branch below'))
 
     def test_the_sync_branch_moving_on_keeps_it_the_base(self):
         self.git('switch', '-q', 'main')

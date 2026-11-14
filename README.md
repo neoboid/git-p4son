@@ -496,7 +496,7 @@ git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--d
   files: a branch or bookmark, or a commit exactly one points at, or with jj a change without a bookmark. The alias
   records it by name, or a jj change by its change ID, as a commit would go stale after a sync and rebase, along with
   the commits since it the changelist includes, so `update` knows where the next ones start. With `--no-alias` any
-  commit will do. Left out, it defaults to the [branch's local upstream or the bookmark below](#the-default-base)
+  commit will do. Left out, it defaults to the [branch or bookmark below](#the-default-base)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
 - `--no-edit`: Skip opening changed files for edit in Perforce
@@ -516,20 +516,29 @@ git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--d
 
 Without `-b`, `new` and `review` take the base from where the change sits, and the `Resolving base` step says which:
 
-- **git:** the current branch's upstream, when that is a local branch: `git switch -c my-fix --track main`, or
-  `git branch -u main` on an existing branch. In a stack, track the branch below. An upstream on a remote, such as
-  `origin/main`, doesn't count. Other than the sync branch, the upstream must be below the branch: once it was amended
-  or rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it is
-  refused, as the commits since it would include others.
+- **git:** the nearest branch below the current one in its history, down to the sync branch: `main` for a branch
+  made from it, or the branch below in a stack. A branch on the same commit as the current one doesn't count.
+- **git, with an upstream:** when the current branch's upstream is a local branch, it is the base instead:
+  `git switch -c my-fix --track main`, or `git branch -u main` on an existing branch. An upstream on a remote, such
+  as `origin/main`, doesn't count. Other than the sync branch, the upstream must be below the branch: once it was
+  amended or rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it
+  is refused, as the commits since it would include others.
 - **jj:** the nearest bookmark below the change, such as `main`, or the bookmark below in a stack.
 
-Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused too, as
-it would take in the sync commits since it. So is a git upstream below a merge of the sync branch. Rebase onto the
-base, or with git move the upstream with `git branch -u main`.
+With git, the history can't show that the branch below was amended or rebased: no branch is then left between
+yours and the sync branch, so the sync branch becomes the base, and the branch below's old commits come along. Rebase
+your branch onto the one below first, or record it as the upstream, which refuses that case. A branch left further
+down the same line, such as a backup, is taken as the base too; pass `-b` then. So is a branch you merged into
+yours, when it is the only one below: its commits are then left out of the changelist.
 
-Without one, or with two bookmarks on the nearest commit below, `-b` is required. `branch.autoSetupMerge = always`
-sets the upstream on every new branch, but with `push.default = upstream` a bare `git push` then pushes the branch
-into its local upstream, such as `main`.
+Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused, as it
+would take in the sync commits since it. So is a git base below a merge of the sync branch. Rebase onto the base, or
+with git move the upstream with `git branch -u main`.
+
+With two branches or bookmarks on the nearest commit below, or one on each side of a merge, `-b` is required, as it
+is before the first sync, when git has no sync branch to look down to. `branch.autoSetupMerge = always` sets the
+upstream on every new branch, but with `push.default = upstream` a bare `git push` then pushes the branch into its
+local upstream, such as `main`.
 
 **Examples:**
 ```sh
@@ -720,7 +729,7 @@ git p4son review [-b BASE_BRANCH] [alias] [-m <message> | -F <file>] [--force] [
   multiple lines
 - `-b, --base-branch BASE_BRANCH`: The base the change starts from, to find commits since: a branch or bookmark, or
   a commit exactly one points at, which the alias records as for [`new`](#new-command). Left out, it defaults to the
-  [branch's local upstream or the bookmark below](#the-default-base)
+  [branch or bookmark below](#the-default-base)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Print the steps, one per commit, without running them. Ends with `Dry run, nothing changed`
 - `--no-commit-list`: Leave the enumerated commit list out of the changelist description. Passed on to `new` and

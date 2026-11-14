@@ -674,10 +674,19 @@ class TestNewImplicitBase(NewTestCase):
         self.assertEqual(self.p4.pending['101'], [
                          'Feature', '', 'Changes included:', '1. Replace b with c'])
 
-    def test_without_an_upstream_b_is_required(self):
-        self.p4son_fails('new', 'feat', '-m', 'Feature',
-                         message='-b is required')
-        self.assertEqual(self.p4.pending, {})
+    def test_without_an_upstream_new_takes_the_nearest_branch_below(self):
+        out = self.p4son('new', 'feat', '-m', 'Feature')
+        self.assertRegex(
+            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(nearest branch below\)\n')
+        self.assertEqual(recorded('101', self.ws).base, 'main')
+
+    def test_a_stacked_branch_takes_the_branch_below(self):
+        self.git('switch', '-q', '-c', 'top')
+        self.edit('e.txt', 'e1\n')
+        self.commit('Add e')
+        self.p4son('new', 'top', '-m', 'Top')
+        self.assertEqual(recorded('101', self.ws).base, 'feature')
+        self.assertEqual(self.p4.opened, {'e.txt': ('101', 'add')})
 
 
 class TestNewOnAnOldSync(NewTestCase):
@@ -707,6 +716,17 @@ class TestNewOnAnOldSync(NewTestCase):
         self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit')
         self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
         self.assertEqual(self.p4.opened, {})
+
+    def test_no_edit_on_a_stack_takes_the_branch_below(self):
+        """Not rebased yet, feature..top is still only top's commit."""
+        self.git('switch', '-q', '-c', 'top')
+        self.edit('e.txt', 'e1\n')
+        self.commit('Add e')
+        out = self.p4son('new', 'top', '-m', 'Top', '--no-edit')
+        self.assertRegex(
+            out, r'\[ok\] feature( -> \w+)? \(nearest (branch|bookmark) below\)\n')
+        self.assertEqual(self.p4.pending, {
+                         '102': ['Top', '', 'Changes included:', '1. Add e']})
 
     def test_no_edit_per_commit_is_refused(self):
         self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit', '--per-commit', '--review',

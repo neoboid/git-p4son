@@ -67,6 +67,10 @@ class Backend(Protocol):
         """Raise CommandError unless the change contains the sync branch's tip, with no merge above it, or unless each
         of commits contains it; nothing to check without the branch."""
 
+    def check_base_on_sync_tip(self, base: str, name: str) -> None:
+        """Raise CommandError, calling it name, unless the resolved base contains the sync branch's tip; nothing to
+        check without the branch."""
+
     def base_candidates(self) -> list[tuple[str, str]]:
         """Completion candidates for -b, as (name, description)."""
 

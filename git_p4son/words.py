@@ -34,6 +34,22 @@ def several_nearest(names: list[str], change: str, words: Words) -> CommandError
                         'Name the one it starts from.')
 
 
+def base_below_sync_tip(base: str, sync_branch: str, words: Words, named: bool) -> CommandError:
+    """The error for a base that does not contain the tip of sync_branch; named if it is a branch or bookmark."""
+    fix = ''
+    if named and words.tool == 'git':
+        # Rebasing a stack from its top leaves the branches below where they were, unless --update-refs moves them,
+        # which it no longer can once the top is rebased.
+        fix = (f', or if {base} is the branch below in a stack, point it at its rebased commit, such as with '
+               f'"git branch -f {base} <commit>". Rebasing a stack from its top with --update-refs keeps the '
+               'branches below with it')
+    elif named:
+        fix = f', or if {base} is a {words.branch} left behind, rebase it onto {sync_branch}'
+    return CommandError(
+        f'The base {base} does not contain the latest {sync_branch}, so the commits since it take in more than the '
+        f'change. Name a base on {sync_branch} or above it{fix}.')
+
+
 def has_merge(change: str, merge: str, sync_branch: str, words: Words) -> CommandError:
     """The error for a change with a merge commit, merge, above sync_branch."""
     # git's rebase replays a merge's commits in a line; jj's keeps the merge.

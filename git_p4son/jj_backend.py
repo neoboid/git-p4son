@@ -7,11 +7,11 @@ from typing import NoReturn
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
-from .git import commit_all, get_head_commit, get_local_changes
+from .git import commit_all, get_head_commit, get_local_changes, is_ancestor
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
-from .sync_branch import choose_sync_branch
-from .words import Words, named_base
+from .sync_branch import choose_sync_branch, sync_branch_name
+from .words import Words, named_base, not_on_sync_tip, sync_tip_heading
 
 
 @dataclass
@@ -156,6 +156,22 @@ class JjBackend:
     def check_clean(self) -> None:
         """Raise CommandError, listing them, if files changed since jj's snapshot, or jj left any out of it."""
         self.workspace.check_clean()
+
+    def check_on_sync_tip(self, commits: list[str] | None = None) -> None:
+        """Raise CommandError unless the change, or each of commits, contains the sync bookmark's tip, or if the
+        bookmark is conflicted; nothing to check without one."""
+        workspace = self.workspace
+        sync = sync_branch_name(workspace.directory)
+        log.heading(sync_tip_heading(sync, commits))
+        if workspace.sync_bookmark() is None:
+            log.success(f'No {self.words.branch} {sync} yet')
+            return
+        tip = _unconflicted(sync, workspace.bookmarks[sync])
+        for commit in commits or [workspace.tip.commit]:
+            if not is_ancestor(tip, commit, workspace.directory):
+                raise not_on_sync_tip(
+                    f'Commit {commit[:7]}' if commits else 'The change', sync, self.words)
+        log.success('Based on it')
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """The local bookmarks."""

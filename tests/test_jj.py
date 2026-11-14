@@ -157,6 +157,28 @@ class TestJjBackend(JjRepoTestCase):
             self.assertEqual(JjBackend(workspace).resolve_base(
                 'HEAD~1'), self.commit_of('main'))
 
+    def test_a_change_on_the_sync_bookmark_passes_the_sync_tip_check(self):
+        with self.operation() as workspace:
+            JjBackend(workspace).check_on_sync_tip()
+            JjBackend(workspace).check_on_sync_tip([self.commit_of('feat')])
+
+    def test_a_change_the_sync_bookmark_moved_on_from_is_refused(self):
+        self.jj('new', 'main', '-m', 'sync')
+        self.jj('bookmark', 'set', 'main', '-r', '@')
+        self.jj('new', 'feat')
+        commit = self.commit_of('feat')
+        with self.operation() as workspace:
+            with self.assertRaisesRegex(CommandError, 'The change is not based on the latest main, .* Rebase it onto '
+                                        'main, or onto a bookmark that is rebased on it.'):
+                JjBackend(workspace).check_on_sync_tip()
+            with self.assertRaisesRegex(CommandError, f'Commit {commit[:7]} is not based on the latest main'):
+                JjBackend(workspace).check_on_sync_tip([commit])
+
+    def test_without_the_sync_bookmark_there_is_nothing_to_check(self):
+        self.jj('bookmark', 'delete', 'main')
+        with self.operation() as workspace:
+            JjBackend(workspace).check_on_sync_tip()
+
     def test_no_subject_without_a_description(self):
         self.jj('describe', '-m', '', '-r', 'feat')
         with self.operation() as workspace, self.assertRaisesRegex(CommandError, 'no description'):

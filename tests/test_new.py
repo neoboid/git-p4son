@@ -649,7 +649,7 @@ class TestNewPerCommitRelativeBase(P4RepoTestCase):
         self.assertEqual(set(self.p4.opened), {'a.txt', 'b.txt', 'c.txt'})
 
 
-class TestNewBaseFromUpstream(NewTestCase):
+class TestNewImplicitBase(NewTestCase):
     """new and review without -b, on branch feature."""
 
     def test_new_takes_the_base_from_the_branch_s_local_upstream(self):

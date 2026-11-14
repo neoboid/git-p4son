@@ -185,7 +185,7 @@ class TestGitBackendBase(GitRepoTestCase):
         self.assertEqual(self.backend.commit_identities([]), [])
 
 
-class TestGitBackendUpstream(GitRepoTestCase):
+class TestGitBackendImplicitBase(GitRepoTestCase):
     """GitBackend with main at "Base" and branch feat one commit on, tracking main."""
 
     def build_workspace(self):

@@ -39,7 +39,7 @@ git add .
 git commit -m "Feature part2"
 
 # Create a review with a patch per commit, under an alias named after the branch
-git p4son review -m "My fancy feature" -b main
+git p4son review -m "My fancy feature"
 
 # Address review feedback, then add the new commit to the changelist and the review
 git add .
@@ -73,7 +73,7 @@ jj new -m "Feature part2"
 jj bookmark create my-fancy-feature
 
 # Create a review with a patch per change, under an alias named after the bookmark
-jj p4son review -m "My fancy feature" -b main
+jj p4son review -m "My fancy feature"
 
 # After review feedback, add a change and move the bookmark to it
 jj new -m "Address review feedback"
@@ -531,12 +531,13 @@ your branch onto the one below first, or record it as the upstream, which refuse
 down the same line, such as a backup, is taken as the base too; pass `-b` then.
 
 Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused, as it
-would take in the sync commits since it. Rebase onto the base, or with git move the upstream with
+would take in the sync commits since it. Name the base with `-b`, or with git move the upstream with
 `git branch -u main`.
 
-With two branches or bookmarks on the nearest commit below, `-b` is required, as it is before the first sync, when
-git has no sync branch to look down to. `branch.autoSetupMerge = always` sets the upstream on every new branch, but
-with `push.default = upstream` a bare `git push` then pushes the branch into its local upstream, such as `main`.
+With two branches or bookmarks on the nearest commit below, `-b` is required, as it is with jj when no bookmark is
+below the change, and with git before the first sync, when there is no sync branch to look down to.
+`branch.autoSetupMerge = always` sets the upstream on every new branch, but with `push.default = upstream` a bare
+`git push` then pushes the branch into its local upstream, such as `main`.
 
 **Examples:**
 ```sh

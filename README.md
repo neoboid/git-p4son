@@ -686,6 +686,10 @@ sync branch's latest commit, whatever `-b` says, and refuse otherwise. Rebase th
 a branch that is rebased on it, and run the command again. `--no-edit` opens nothing and skips the check, except
 with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
 
+A branch that merged the sync branch contains its latest commit, and its files hold what the sync brought in, so it
+passes. `--per-commit` and `review` open the files of each commit in turn, though, and the commits below the merge
+still hold the older contents, so they check every commit and refuse such a branch: rebase it instead of merging.
+
 #### Shelving only files at the latest revision
 
 Before shelving, `new`, `update` and `review` check that the files are synced to the latest revision in the depot:

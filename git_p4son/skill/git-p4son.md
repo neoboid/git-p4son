@@ -297,7 +297,9 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
 - **The branch is not based on the latest sync** ("... is not based on the latest main, which is what Perforce
   last synced the workspace to."). `new`, `update` and `review` open files only from a change that contains the
   sync branch's latest commit, as the files of an older fork would undo what the sync brought in. Rebase the branch
-  onto `main`, or the whole stack from the top, and run the command again. There is no option to skip it.
+  onto `main`, or the whole stack from the top, and run the command again. There is no option to skip it. When it
+  names a commit ("Commit abc1234 is not based on ..."), the branch merged `main`, and a per-commit run opens the
+  commits below the merge: rebase onto `main` instead of merging.
 - **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them
   first: ..."). Files that git
   tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for

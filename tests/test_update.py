@@ -549,9 +549,19 @@ class TestUpdateOnAnOldSync(UpdateTestCase):
         self.p4son('update', '101')
         self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
 
+    def test_per_commit_below_a_merge_of_the_sync_branch_is_refused(self):
+        self.git('merge', '-q', '--no-edit', 'main')
+        self.p4.calls.clear()
+        self.p4son_fails('update', '101', '--per-commit', '--shelve',
+                         message='Commit [0-9a-f]{7} is not based on the latest main')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.shelves(), [])
+
 
 TestUpdateOnJj = on_jj(TestUpdate)
-TestUpdateOnAnOldSyncOnJj = on_jj(TestUpdateOnAnOldSync)
+TestUpdateOnAnOldSyncOnJj = on_jj(TestUpdateOnAnOldSync, skip={
+    'test_per_commit_below_a_merge_of_the_sync_branch_is_refused':
+    'update takes -b for a jj change with several parents, and refuses it for a changelist with a record'})
 TestUpdateChecksOnceOnJj = on_jj(TestUpdateChecksOnce)
 
 

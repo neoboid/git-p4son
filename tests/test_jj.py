@@ -940,7 +940,8 @@ class TestJjPerCommit(JjP4RepoTestCase):
     def test_the_run_ends_returning_to_the_working_change(self):
         change = self.describe('@', 'change_id')[:8]
         out = self.p4son('review', 'feat', '-m', 'Feature', '-b', 'main')
-        self.assertRegex(out, r'\[ok\] 2 commits since \w+\n\n# Step 1 of 2: ')
+        self.assertRegex(out, r'\[ok\] 2 commits since \w+\n\n# Checking each commit for the latest main\n'
+                         r'(>  .*\n)*\[ok\] Based on it\n\n# Step 1 of 2: ')
         self.assertRegex(out, rf'\n# Returning to jj change {change}\n(>  .*\n)*'
                          r'\[ok\] Ran 2 steps, git p4son new feat --review, then git p4son update feat --shelve\n'
                          r'\n# Reconciling jj workspace\n')

@@ -112,11 +112,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
-  `run_command`, so its clean check runs once, before them. A step's arguments are parsed with the real parser just
-  before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to` names. It returns to
-  where it started, also when a step fails, ends the error with the command that resumes after the last commit that
-  worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name, goes to every step, as
-  the steps get the base as a commit.
+  `run_command`, so its clean check runs once, before them, and `run_per_commit` itself checks that every step's
+  commit contains the sync branch's tip, as one below a merge of it doesn't. A step's arguments are parsed with the
+  real parser just before it runs, with the base resolved once to a SHA and given as `-b` to the steps `base_to`
+  names. It returns to where it started, also when a step fails, ends the error with the command that resumes after
+  the last commit that worked, and sleeps the delay its caller gives between steps. `base_name`, the base's name,
+  goes to every step, as the steps get the base as a commit.
 
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.

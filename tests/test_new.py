@@ -406,14 +406,6 @@ class TestNewPerCommit(PerCommitTestCase):
                       out)
         self.assertEqual(len(self.shelves()), 2)
 
-    def test_reviews_commits_where_they_are(self):
-        """main moving on does not replay the commits onto it."""
-        self.git('switch', '-q', 'main')
-        self.commit('Unrelated')
-        self.git('switch', '-q', 'feature')
-        self.new()
-        self.assert_at('feature', self.feature_head)
-
     def test_dry_run_prints_the_steps(self):
         out = self.new('--dry-run', '-m', 'Line one\nLine two')
         self.assertRegex(
@@ -726,6 +718,25 @@ class TestNewOnAnOldSync(NewTestCase):
         self.assertRegex(
             out, r'# Checking for the latest main\n(>  .*\n)*\[ok\] .*\n\n# Resolving base\n')
         self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
+
+    def test_a_merge_of_the_sync_branch_runs(self):
+        """The merged files hold what the sync brought in."""
+        self.git('merge', '-q', '--no-edit', 'main')
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(self.p4.opened, {path: (
+            '102', action) for path, (_, action) in FEATURE_OPENED.items()})
+
+    def test_per_commit_below_a_merge_of_the_sync_branch_is_refused(self):
+        """Each step opens the files of a commit below the merge, which don't hold what the sync brought in."""
+        self.git('merge', '-q', '--no-edit', 'main')
+        for argv in (['--shelve'], ['--review'], ['--shelve', '--dry-run']):
+            with self.subTest(argv=argv):
+                self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main', '--per-commit', *argv,
+                                 message='Commit [0-9a-f]{7} is not based on the latest main')
+        self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                         message='Commit [0-9a-f]{7} is not based on the latest main')
+        self.assertEqual(self.p4.pending, {})
+        self.assertEqual(self.p4.opened, {})
 
     def test_a_branch_stacked_on_a_rebased_one_runs(self):
         self.git('rebase', '-q', 'main', 'feature')

@@ -9,6 +9,7 @@
 - `new`, `update` and `review` refuse a branch with a merge commit above the sync branch: rebase instead of merging
 - `new`, `update` and `review` refuse a base below the latest sync, such as a miscounted `-b HEAD~3`
 - With git, a base that names a branch is that branch, also when a tag has the same name
+- `new` no longer takes `--no-edit`, which created a changelist without opening its files. `update --no-edit` stays
 - A message printed while a command runs, such as "All files up to date" during a sync, goes below its command
   line instead of onto it
 

@@ -365,7 +365,7 @@ class TestUpdatePerCommitRelativeBase(P4RepoTestCase):
         self.commit_sync(110, {'d.txt': 'd1\n'})
         self.commit_feature()
         self.run_command(
-            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit'])
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main'])
 
     def setUp(self):
         super().setUp()

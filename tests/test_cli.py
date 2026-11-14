@@ -122,7 +122,6 @@ class TestCreateParser(unittest.TestCase):
         self.assertEqual(args.message, 'Fix bug')
         self.assertEqual(args.base_branch, 'main')
         self.assertFalse(args.dry_run)
-        self.assertFalse(args.no_edit)
         self.assertFalse(args.shelve)
         self.assertFalse(args.review)
 
@@ -168,8 +167,8 @@ class TestCreateParser(unittest.TestCase):
 
     def test_review_is_new_review_per_commit(self):
         args = self.parser.parse_args(['review', '-b', 'main'])
-        self.assertEqual((args.review, args.per_commit, args.shelve, args.no_alias, args.no_edit),
-                         (True, True, False, False, False))
+        self.assertEqual((args.review, args.per_commit, args.shelve, args.no_alias),
+                         (True, True, False, False))
 
     def test_review_sets_every_argument_new_has(self):
         """new_command reads them all, so one review left out would fail at runtime."""
@@ -186,12 +185,10 @@ class TestCreateParser(unittest.TestCase):
 
     def test_new_command_with_options(self):
         args = self.parser.parse_args(
-            ['new', '-m', 'Fix bug', '-b', 'main', '-n', '--no-edit',
-             '--shelve', '--review'])
+            ['new', '-m', 'Fix bug', '-b', 'main', '-n', '--shelve', '--review'])
         self.assertEqual(args.message, 'Fix bug')
         self.assertEqual(args.base_branch, 'main')
         self.assertTrue(args.dry_run)
-        self.assertTrue(args.no_edit)
         self.assertTrue(args.shelve)
         self.assertTrue(args.review)
 
@@ -269,12 +266,12 @@ class TestCleanCheckDefault(unittest.TestCase):
 
     def test_commands_that_open_files_need_a_clean_workspace(self):
         for argv in (['new', '-b', 'main'], ['update'], ['update', '--no-edit', '--per-commit'],
-                     ['new', '-b', 'main', '--no-edit', '--per-commit'], ['review', '-b', 'main']):
+                     ['new', '-b', 'main', '--per-commit'], ['review', '-b', 'main']):
             with self.subTest(argv=argv):
                 self.assertTrue(self.needs_clean(argv))
 
     def test_no_edit_and_other_commands_do_not(self):
-        for argv in (['new', '-b', 'main', '--no-edit'], ['update', '--no-edit'], ['list-changes'], ['sync']):
+        for argv in (['update', '--no-edit'], ['list-changes'], ['sync']):
             with self.subTest(argv=argv):
                 self.assertFalse(self.needs_clean(argv))
 

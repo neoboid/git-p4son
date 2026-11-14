@@ -9,7 +9,7 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merge_base, merges_above,
+    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merges_above,
     nearest_branches_below, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
@@ -100,33 +100,18 @@ class GitBackend:
             branch, workspace_dir)
         if base is None:
             return self._nearest_branch_below(branch or 'HEAD'), 'nearest branch below'
-        sync_branch = self._sync_branch
-        if base == sync_branch:
-            # The commits since it leave out what HEAD can't reach; check_on_sync_tip refuses opening files from
-            # behind it.
+        if base == self._sync_branch:
             return base, f'upstream of {branch}'
         # Rewritten or moved on, the commits since it would take in its old ones.
         if not is_ancestor(f'refs/heads/{base}', self.revision, workspace_dir):
             raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is not below it, such as after '
                                f'{base} was amended or rebased. Name the base, or rebase {branch} onto {base}.')
-        sync_ref = self._sync_ref
-        if sync_ref is None:
-            return base, f'upstream of {branch}'
-        fix = f'Name the base, or move the upstream, such as with "git branch -u {sync_branch}".'
-        if is_ancestor(f'refs/heads/{base}', sync_ref, workspace_dir):
-            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is in the history of '
-                               f'{sync_branch}, such as when left on an old sync commit. {fix}')
-        # A merge of the sync branch above the upstream brings sync commits into the commits since it.
-        if not is_ancestor(merge_base(self.revision, sync_ref, workspace_dir), f'refs/heads/{base}', workspace_dir):
-            raise CommandError(f'-b is required, as {base}, the upstream of {branch}, would take in commits of '
-                               f'{sync_branch}, such as after a merge of it. {fix}')
         return base, f'upstream of {branch}'
 
     def _nearest_branch_below(self, change: str) -> str:
         """The one branch on the nearest commit below HEAD that has any, above the sync branch, else the sync branch.
 
-        Raises CommandError, saying -b is required, for several, one below a merge of the sync branch, or no sync
-        branch."""
+        Raises CommandError, saying -b is required, for several, or no sync branch."""
         workspace_dir = self.workspace_dir
         sync_branch, sync_ref = self._sync_branch, self._sync_ref
         if sync_ref is None:
@@ -137,12 +122,6 @@ class GitBackend:
             return sync_branch
         if len(names) > 1:
             raise several_nearest(names, change, self.words)
-        # As for an upstream: a merge of the sync branch above the base brings sync commits into the commits since it.
-        fork = merge_base(self.revision, sync_ref, workspace_dir)
-        if not is_ancestor(fork, f'refs/heads/{names[0]}', workspace_dir):
-            raise CommandError(f'-b is required, as {names[0]}, the nearest branch below {change}, would take in '
-                               f'commits of {sync_branch}, such as after a merge of it. Name the base, or rebase '
-                               f'{change} onto {sync_branch}.')
         return names[0]
 
     def suggested_alias(self) -> str:

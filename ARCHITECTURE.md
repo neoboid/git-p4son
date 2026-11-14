@@ -44,11 +44,11 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   review tool first (`resolve_review_tool`) and shelves, recording the tool in the alias, Swarm included; Swarm gets a
   `#review` keyword, and any other tool runs after the shelve (`push_review`), before the record counts the commits.
   `--shelve` only shelves. A failure once the CL exists names the `update` that finishes it. Requires a clean git
-  workspace unless `--no-edit` is given. `--per-commit` instead builds the changelist commit by commit through
-  `run_per_commit`, running `new <alias>` on the first commit and `update <alias>` on the others, both shelving with
-  `--shelve` or `--review`, with `shelf_delay` between them. Before shelving, `check_at_latest_revision` refuses files
-  of the change that aren't at the latest revision, unless `--ignore-out-of-date`; a per-commit run checks every commit
-  once, and its steps (`per_commit_step`) skip it.
+  workspace. `--per-commit` instead builds the changelist commit by commit through `run_per_commit`, running `new
+  <alias>` on the first commit and `update <alias>` on the others, both shelving with `--shelve` or `--review`, with
+  `shelf_delay` between them. Before shelving, `check_at_latest_revision` refuses files of the change that aren't at the
+  latest revision, unless `--ignore-out-of-date`; a per-commit run checks every commit once, and its steps
+  (`per_commit_step`) skip it.
 
 - **`update.py`** - Updates an existing changelist, named by number or alias, once `check_own_pending` accepts it (once
   per `--per-commit` run, not in its steps). With a record (`find_record`), it folds in the commits after the included
@@ -189,20 +189,18 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command branches
   on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
-- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base
-  by its full ref, so that a tag of its name isn't taken for it, the branch's local
-  upstream as `new`'s and `review`'s, if it is the sync branch, or below HEAD, not in the sync branch's
-  history and without its commits since, as after a merge of it that `--no-edit` let through, else the nearest
-  branch below HEAD down to the sync branch (`git.nearest_branches_below`), the current branch,
-  `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
-  `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
+- **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
+  its full ref, so that a tag of its name isn't taken for it, the branch's local upstream as `new`'s and `review`'s, if
+  it is the sync branch or below HEAD, else the nearest branch below HEAD down to the sync branch
+  (`git.nearest_branches_below`), the current branch, `checkouts` detaching at each commit and returning to the starting
+  branch, and the sync branch: `--branch`, else `[sync] branch`, else `main`, checked out for the sync and returned from
+  with a `git rebase` hint.
 
-- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. `new`'s and `review`'s base
-  without `-b` is the one nearest bookmark below the change (`nearest_bookmarks`), unless it is in the sync
-  bookmark's history (`in_sync_history`). `base_name` records a base without
-  a bookmark as `change_id(<ID>)` (`jj.changes_revset`), which resolves the change's current commit. Its sync refuses a
-  sync bookmark at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and
-  moves the bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
+- **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. `new`'s and `review`'s base without
+  `-b` is the one nearest bookmark below the change (`nearest_bookmarks`). `base_name` records a base without a bookmark
+  as `change_id(<ID>)` (`jj.changes_revset`), which resolves the change's current commit. Its sync refuses a sync
+  bookmark at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and moves the
+  bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
   <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back changes
   are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and clean check a
   step reads, and the working change's files back at the end, so jj sees no change.

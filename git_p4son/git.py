@@ -589,8 +589,7 @@ def insert_empty_commit(after: str, message: str, workspace_dir: str) -> tuple[s
 
     The recreated commits are copies with their parent swapped, so the working files and the index stay as they are.
     Returns the new commit, HEAD's old commit, and the other local branches still built on the commits it recreated.
-    Raises
-    CommandError if a merge commit is among them."""
+    Raises CommandError if a merge commit is among them."""
     head = get_head_commit(workspace_dir)
     commits = run(['git', 'rev-list', '--reverse',
                   f'{after}..{head}'], cwd=workspace_dir).stdout

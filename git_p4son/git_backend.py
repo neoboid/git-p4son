@@ -1,6 +1,7 @@
 """The git adapter for the backend interface."""
 
 import contextlib
+import functools
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
@@ -62,12 +63,29 @@ class GitBackend:
     def __init__(self, workspace_dir: str) -> None:
         self.workspace_dir = workspace_dir
         self._sync: _Sync | None = None
+        self._branches: dict[str, bool] = {}
+
+    def _is_branch(self, name: str) -> bool:
+        """Whether name is a local branch, asked of git once per name."""
+        if name not in self._branches:
+            self._branches[name] = branch_exists(name, self.workspace_dir)
+        return self._branches[name]
+
+    @functools.cached_property
+    def _sync_branch(self) -> str:
+        """The sync branch's name, read from the config once."""
+        return sync_branch_name(self.workspace_dir)
+
+    @property
+    def _sync_ref(self) -> str | None:
+        """The sync branch's full ref, or None if it doesn't exist."""
+        return f'refs/heads/{self._sync_branch}' if self._is_branch(self._sync_branch) else None
 
     def resolve_base(self, base: str | None) -> str:
         """The base as given, a branch by its full ref, or HEAD~1; raise CommandError if it names no commit."""
         base = DEFAULT_BASE if base is None else base
-        # git resolves a bare name to a tag before a branch.
-        if branch_exists(base, self.workspace_dir):
+        # git resolves a bare name to a tag before a branch. No branch is called HEAD~1.
+        if base != DEFAULT_BASE and self._is_branch(base):
             return f'refs/heads/{base}'
         resolve_commit(base, self.workspace_dir)
         return base
@@ -82,7 +100,7 @@ class GitBackend:
             branch, workspace_dir)
         if base is None:
             return self._nearest_branch_below(branch or 'HEAD'), 'nearest branch below'
-        sync_branch = sync_branch_name(workspace_dir)
+        sync_branch = self._sync_branch
         if base == sync_branch:
             # The commits since it leave out what HEAD can't reach; check_on_sync_tip refuses opening files from
             # behind it.
@@ -91,9 +109,9 @@ class GitBackend:
         if not is_ancestor(f'refs/heads/{base}', self.revision, workspace_dir):
             raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is not below it, such as after '
                                f'{base} was amended or rebased. Name the base, or rebase {branch} onto {base}.')
-        if not branch_exists(sync_branch, workspace_dir):
+        sync_ref = self._sync_ref
+        if sync_ref is None:
             return base, f'upstream of {branch}'
-        sync_ref = f'refs/heads/{sync_branch}'
         fix = f'Name the base, or move the upstream, such as with "git branch -u {sync_branch}".'
         if is_ancestor(f'refs/heads/{base}', sync_ref, workspace_dir):
             raise CommandError(f'-b is required, as {base}, the upstream of {branch}, is in the history of '
@@ -110,11 +128,10 @@ class GitBackend:
         Raises CommandError, saying -b is required, for several, one below a merge of the sync branch, or no sync
         branch."""
         workspace_dir = self.workspace_dir
-        sync_branch = sync_branch_name(workspace_dir)
-        if not branch_exists(sync_branch, workspace_dir):
+        sync_branch, sync_ref = self._sync_branch, self._sync_ref
+        if sync_ref is None:
             raise CommandError(f'-b is required, as {change} has no local upstream and there is no branch '
                                f'{sync_branch} to find the base above. Name the base the change starts from.')
-        sync_ref = f'refs/heads/{sync_branch}'
         names = nearest_branches_below(self.revision, sync_ref, workspace_dir)
         if not names:
             return sync_branch
@@ -142,7 +159,7 @@ class GitBackend:
     def base_name(self, base: str) -> str:
         """The branch base names, or the one branch at the commit it names; raise CommandError otherwise."""
         workspace_dir = self.workspace_dir
-        return named_base(base, self.words, lambda name: branch_exists(name, workspace_dir),
+        return named_base(base, self.words, self._is_branch,
                           lambda base: branches_at(resolve_commit(base, workspace_dir), workspace_dir))
 
     def commit_identities(self, commits: list[str]) -> list[str]:
@@ -179,12 +196,11 @@ class GitBackend:
         """Raise CommandError unless HEAD contains the sync branch's tip, with no merge above it; nothing to check
         without the branch."""
         workspace_dir = self.workspace_dir
-        sync_branch = sync_branch_name(workspace_dir)
+        sync_branch, sync_ref = self._sync_branch, self._sync_ref
         log.heading(f'Checking for the latest {sync_branch}')
-        if not branch_exists(sync_branch, workspace_dir):
+        if sync_ref is None:
             log.success(f'No {self.words.branch} {sync_branch} yet')
             return
-        sync_ref = f'refs/heads/{sync_branch}'
         if not is_ancestor(sync_ref, 'HEAD', workspace_dir):
             raise not_on_sync_tip(self._change(), sync_branch, self.words)
         merges = merges_above(sync_ref, 'HEAD', workspace_dir)
@@ -195,12 +211,13 @@ class GitBackend:
     def check_base_on_sync_tip(self, base: str, name: str) -> None:
         """Raise CommandError, calling it name, unless base contains the sync branch's tip; nothing to check without
         the branch."""
-        workspace_dir = self.workspace_dir
-        sync_branch = sync_branch_name(workspace_dir)
-        if (branch_exists(sync_branch, workspace_dir)
-                and not is_ancestor(f'refs/heads/{sync_branch}', base, workspace_dir)):
+        sync_ref = self._sync_ref
+        # The sync branch as the base needs no git call to say it contains its own tip.
+        if sync_ref is None or name == self._sync_branch:
+            return
+        if not is_ancestor(sync_ref, base, self.workspace_dir):
             raise base_below_sync_tip(
-                name, sync_branch, self.words, branch_exists(name, workspace_dir))
+                name, self._sync_branch, self.words, self._is_branch(name))
 
     def _change(self) -> str:
         """The name of the change in a refusal: the current branch, or HEAD when detached."""

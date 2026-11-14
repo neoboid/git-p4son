@@ -290,6 +290,8 @@ class TestRunCommand(unittest.TestCase):
         start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
+        start_patch(self, 'git_p4son.git_backend.branch_exists',
+                    return_value=False)
 
     @mock.patch('git_p4son.cli.update_command', return_value=0)
     def test_checks_the_workspace_once_before_a_command_that_edits(self, _update, _ws):
@@ -478,6 +480,8 @@ class TestBranchKeyword(unittest.TestCase):
         start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_base_on_sync_tip')
         start_patch(self, 'git_p4son.git_backend.resolve_commit')
+        start_patch(self, 'git_p4son.git_backend.branch_exists',
+                    return_value=False)
 
     @mock.patch('git_p4son.git_backend.get_current_branch', return_value='feat/foo')
     def test_resolves_branch_to_alias(self, _branch):

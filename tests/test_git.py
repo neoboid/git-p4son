@@ -41,6 +41,7 @@ from git_p4son.git import (
     is_workspace_dir,
     list_tracked_files,
     merge_file,
+    nearest_branches_below,
     parse_sync_subject,
     sync_state,
     SyncState,
@@ -632,6 +633,60 @@ class TestBranchExists(GitRepoTestCase):
         for name in ('main~1', 'main^', 'main@{0}', 'nope', 'dir', 'MAIN'):
             with self.subTest(name=name):
                 self.assertFalse(branch_exists(name, self.ws))
+
+
+class TestNearestBranchesBelow(GitRepoTestCase):
+    """main at "Base", and HEAD on branch top, three commits on."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit('Base')
+        self.git('switch', '-q', '-c', 'top')
+        for subject in ('One', 'Two', 'Three'):
+            self.commit(subject)
+
+    def nearest(self):
+        return nearest_branches_below('HEAD', 'refs/heads/main', self.ws)
+
+    def test_none_between_the_bottom_and_the_revision(self):
+        self.assertEqual(self.nearest(), [])
+
+    def test_the_nearest_of_the_branches_below(self):
+        self.git('branch', 'low', 'HEAD~2')
+        self.assertEqual(self.nearest(), ['low'])
+        self.git('branch', 'mid', 'HEAD~1')
+        self.assertEqual(self.nearest(), ['mid'])
+
+    def test_branches_on_the_revision_s_own_commit_and_in_the_bottom_s_history_do_not_count(self):
+        self.git('branch', 'copy')
+        self.git('branch', 'old', 'main')
+        self.assertEqual(self.nearest(), [])
+
+    def test_every_branch_on_the_nearest_commit_by_name(self):
+        self.git('branch', 'low', 'HEAD~2')
+        for name in ('mid-b', 'mid-a'):
+            self.git('branch', name, 'HEAD~1')
+        self.assertEqual(self.nearest(), ['mid-a', 'mid-b'])
+
+    def test_the_branches_on_each_side_of_a_merge(self):
+        self.git('branch', 'left')
+        self.git('switch', '-q', '-c', 'right', 'main')
+        self.commit('Right')
+        self.git('switch', '-q', 'top')
+        self.git('merge', '-q', '--no-edit', 'right')
+        self.assertEqual(self.nearest(), ['left', 'right'])
+
+    def test_a_bottom_that_moved_on_still_bounds_the_search(self):
+        self.git('branch', 'low', 'HEAD~2')
+        self.git('switch', '-q', 'main')
+        self.commit('Moved on')
+        self.git('switch', '-q', 'top')
+        self.assertEqual(self.nearest(), ['low'])
+
+    def test_a_tag_of_the_same_name_does_not_change_the_name(self):
+        self.git('branch', 'low', 'HEAD~2')
+        self.git('tag', 'low', 'HEAD')
+        self.assertEqual(self.nearest(), ['low'])
 
 
 class TestGetCurrentBranch(GitRepoTestCase):

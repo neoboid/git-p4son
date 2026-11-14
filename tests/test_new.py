@@ -129,12 +129,6 @@ class TestNewCleanWorkspace(NewTestCase):
         self.new_fails(message='not clean')
         self.assertEqual(self.p4.pending, {})
 
-    def test_no_edit_skips_the_check_and_opens_nothing(self):
-        self.edit('a.txt', 'dirty\n')
-        self.new('--no-edit')
-        self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
-        self.assertEqual(self.p4.opened, {})
-
 
 class TestNewAlias(NewTestCase):
     def test_existing_alias_stops_before_creating(self):
@@ -552,10 +546,6 @@ class TestNewPerCommitWithoutReview(PerCommitTestCase):
         self.assertEqual(len(self.shelves()), 2)
         self.assertEqual(len(recorded('101', self.ws).included), 2)
 
-    def test_no_edit_is_refused_before_creating(self):
-        self.new_fails('--no-edit', message='--no-edit')
-        self.assertEqual(self.p4.pending, {})
-
     def test_no_alias_is_refused_before_creating(self):
         self.new_fails('--no-alias', message='--no-alias')
         self.assertEqual(self.p4.pending, {})
@@ -729,26 +719,6 @@ class TestNewOnAnOldSync(NewTestCase):
                          message=self.NOT_BASED)
         self.assertEqual(self.p4.pending, {})
 
-    def test_no_edit_opens_nothing_so_it_runs(self):
-        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit')
-        self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
-        self.assertEqual(self.p4.opened, {})
-
-    def test_no_edit_on_a_stack_takes_the_branch_below(self):
-        """Not rebased yet, feature..top is still only top's commit."""
-        self.git('switch', '-q', '-c', 'top')
-        self.edit('e.txt', 'e1\n')
-        self.commit('Add e')
-        out = self.p4son('new', 'top', '-m', 'Top', '--no-edit')
-        self.assertRegex(
-            out, r'\[ok\] feature( -> \w+)? \(nearest (branch|bookmark) below\)\n')
-        self.assertEqual(self.p4.pending, {
-                         '102': ['Top', '', 'Changes included:', '1. Add e']})
-
-    def test_no_edit_per_commit_is_refused(self):
-        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit', '--per-commit', '--review',
-                         message=self.NOT_BASED)
-
     def test_rebased_onto_the_sync_branch_it_runs(self):
         self.git('rebase', '-q', 'main', 'feature')
         out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
@@ -811,18 +781,6 @@ class TestNewOnAnOldSync(NewTestCase):
             self.p4son_fails('review', 'feat', '-m', 'Feature',
                              '-b', base, message=f'The base {base} does not')
         self.assertEqual(self.p4.pending, {})
-        self.assertEqual(self.p4.opened, {})
-
-    def test_no_edit_takes_a_base_below_the_sync_tip(self):
-        self.git('rebase', '-q', 'main', 'feature')
-        self.git('branch', 'one-below', 'main~1')
-        self.p4son('new', 'feat', '-m', 'Feature',
-                   '-b', 'one-below', '--no-edit')
-        self.assertEqual(self.p4.opened, {})
-
-    def test_no_edit_opens_nothing_so_a_merge_runs(self):
-        self.merge_side()
-        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit')
         self.assertEqual(self.p4.opened, {})
 
     def test_a_branch_stacked_on_a_rebased_one_runs(self):

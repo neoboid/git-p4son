@@ -88,7 +88,7 @@ class JjBackend:
     def implicit_base(self) -> tuple[str, str]:
         """The nearest bookmark below the change, and "nearest bookmark below".
 
-        Raises CommandError, saying -b is required, for none or several, or one in the sync bookmark's history."""
+        Raises CommandError, saying -b is required, for none or several."""
         workspace = self.workspace
         names = workspace.nearest_bookmarks()
         sync = workspace.sync_bookmark()
@@ -98,12 +98,7 @@ class JjBackend:
                 f'-b is required, as no bookmark is below the change. Name the base it starts from{such_as}.')
         if len(names) > 1:
             raise several_nearest(names, 'the change', self.words)
-        name = names[0]
-        if name != sync and workspace.in_sync_history(name):
-            raise CommandError(f'-b is required, as {name}, the nearest bookmark below the change, is in the history '
-                               f'of {sync}, such as after its change was submitted. Name the base the change starts '
-                               f'from{such_as}.')
-        return name, 'nearest bookmark below'
+        return names[0], 'nearest bookmark below'
 
     def suggested_alias(self) -> str:
         """The alias the one bookmark at the tip suggests, else the first 8 letters of its change ID."""

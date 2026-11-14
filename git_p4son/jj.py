@@ -339,18 +339,6 @@ class Workspace:
                            '-T', 'commit_id ++ "\\n"').stdout
         return sorted(name for commit in commits for name in self.bookmarks_at(commit))
 
-    def in_sync_history(self, name: str) -> bool:
-        """Whether bookmark name is the sync bookmark's commit or below it."""
-        sync = self.sync_bookmark()
-        if sync is None:
-            return False
-        sync_commits = ' | '.join(
-            target for target in self.bookmarks[sync] if target is not None)
-        commits = ' | '.join(
-            target for target in self.bookmarks[name] if target is not None)
-        return bool(self.run('log', '-r', f'({commits}) & ::({sync_commits})', '--no-graph',
-                             '-T', 'commit_id ++ "\\n"').stdout)
-
     def only_bookmark(self) -> str | None:
         """The one unconflicted local bookmark at the tip, or None for none or several."""
         names = self.bookmarks_at(self.tip.commit)

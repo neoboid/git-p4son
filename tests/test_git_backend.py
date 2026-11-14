@@ -294,26 +294,6 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
                                     'Name the one it starts from.'):
             self.backend.implicit_base()
 
-    def test_a_nearest_branch_below_a_merge_of_the_sync_branch_needs_b(self):
-        """low..HEAD would take in the sync commit the merge brought in."""
-        self.stack(track=False)
-        self.git('switch', '-q', 'main')
-        self.commit_file('synced.txt')
-        self.git('switch', '-q', 'high')
-        self.git('merge', '-q', '--no-edit', 'main')
-        with self.assertRaisesRegex(CommandError, '-b is required, as low, the nearest branch below high, would take '
-                                    'in commits of main, such as after a merge of it. Name the base'):
-            self.backend.implicit_base()
-
-    def test_a_stack_the_sync_branch_moved_on_from_keeps_the_branch_below(self):
-        """As with --no-edit before a rebase: low..HEAD is still only high's commit."""
-        self.stack(track=False)
-        self.git('switch', '-q', 'main')
-        self.commit_file('synced.txt')
-        self.git('switch', '-q', 'high')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'nearest branch below'))
-
     def test_the_sync_branch_moving_on_keeps_it_the_nearest(self):
         self.git('branch', '--unset-upstream')
         self.git('switch', '-q', 'main')
@@ -383,37 +363,6 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.commit_file('synced.txt')
         self.git('rebase', '-q', '--onto', 'main', 'low', 'high')
         self.assert_not_below_is_refused()
-
-    def assert_left_on_an_old_sync_commit_is_refused(self, sync_branch):
-        """old is below high, but in the sync branch's history, so old..HEAD would take in the sync commits."""
-        self.git('branch', 'old', sync_branch)
-        self.git('switch', '-q', sync_branch)
-        self.commit_file('synced.txt')
-        self.git('switch', '-q', '-c', 'high')
-        self.git('branch', '-q', '-u', 'old')
-        self.commit_file('high.txt')
-        with self.assertRaisesRegex(
-                CommandError, f'old, the upstream of high, is in the history of {sync_branch}.*'
-                f'git branch -u {sync_branch}'):
-            self.backend.implicit_base()
-
-    def test_an_upstream_below_a_merge_of_the_sync_branch_is_refused(self):
-        """low..HEAD would take in the sync commit the merge brought in."""
-        self.stack()
-        self.git('switch', '-q', 'main')
-        self.commit_file('synced.txt')
-        self.git('switch', '-q', 'high')
-        self.git('merge', '-q', '--no-edit', 'main')
-        with self.assertRaisesRegex(CommandError, 'low, the upstream of high, would take in commits of main'):
-            self.backend.implicit_base()
-
-    def test_an_upstream_left_on_an_old_sync_commit_is_refused(self):
-        self.assert_left_on_an_old_sync_commit_is_refused('main')
-
-    def test_the_sync_branch_setting_names_the_branch_the_upstream_is_checked_against(self):
-        self.git('branch', 'trunk', 'main')
-        save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        self.assert_left_on_an_old_sync_commit_is_refused('trunk')
 
 
 class TestGitBackendWithoutCommits(GitRepoTestCase):

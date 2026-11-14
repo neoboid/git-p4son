@@ -75,12 +75,6 @@ def _add_sync_branch_args(parser: argparse.ArgumentParser, verb: str) -> None:
     )
 
 
-def _add_no_edit(parser: argparse.ArgumentParser) -> None:
-    """Add --no-edit, which skips opening files for edit."""
-    parser.add_argument('--no-edit', action='store_true',
-                        help='Skip opening changed files for edit in Perforce')
-
-
 def _add_ignore_out_of_date(parser: argparse.ArgumentParser) -> None:
     """Add --ignore-out-of-date, which skips checking the files are at the latest revision before shelving."""
     parser.add_argument('--ignore-out-of-date', action='store_true',
@@ -333,7 +327,7 @@ Examples:
         'the changelist.'
     )
     new_parser.set_defaults(func=new_command, new_alias=True,
-                            needs_clean=_needs_clean_to_edit)
+                            needs_clean=_always)
     _add_new_args(new_parser)
     new_parser.add_argument(
         '--no-alias',
@@ -342,7 +336,6 @@ Examples:
     )
     _add_dry_run(
         new_parser, 'Pretend and print what would be done, but do not execute')
-    _add_no_edit(new_parser)
     new_parser.add_argument(
         '--shelve',
         action='store_true',
@@ -394,7 +387,8 @@ Examples:
         action='store_true',
         help='Leave the enumerated commit list in the changelist description as it is'
     )
-    _add_no_edit(update_parser)
+    update_parser.add_argument('--no-edit', action='store_true',
+                               help='Skip opening changed files for edit in Perforce')
     update_parser.add_argument(
         '--shelve',
         action='store_true',
@@ -533,8 +527,8 @@ Examples:
         'returning to where you started.'
     )
     review_parser.set_defaults(
-        func=new_command, new_alias=True, needs_clean=_needs_clean_to_edit,
-        review=True, per_commit=True, shelve=False, no_alias=False, no_edit=False)
+        func=new_command, new_alias=True, needs_clean=_always,
+        review=True, per_commit=True, shelve=False, no_alias=False)
     _add_new_args(review_parser)
     _add_dry_run(
         review_parser, 'Print the steps, one per commit, without running them')
@@ -745,7 +739,7 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         args.base_given = args.base_branch
         args.base_branch = backend.resolve_base(args.base_branch)
         # update checks the base it takes from the alias's record, once it has read it.
-        if getattr(args, 'implicit_base', False) and _needs_clean(args):
+        if getattr(args, 'implicit_base', False):
             backend.check_base(args.base_branch, args.base_given)
         resolved = branch_name(args.base_branch)
         shown = resolved if args.base_given in (
@@ -783,6 +777,11 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
 
     check_clean_workspace(args)
     return _run_handler(args)
+
+
+def _always(args: argparse.Namespace) -> bool:
+    """For new and review, which always open files."""
+    return True
 
 
 def _needs_clean_to_edit(args: argparse.Namespace) -> bool:

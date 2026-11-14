@@ -478,7 +478,7 @@ Create a changelist from the commits since the base branch: their files are open
 the commits. Optionally shelve it, or create a review in Swarm or another [review tool](#review-tools):
 
 ```sh
-git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--dry-run] [--no-edit]
+git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--dry-run]
               [--no-alias] [--no-commit-list] [--shelve] [--review] [--review-tool NAME] [--per-commit]
               [--ignore-out-of-date]
 ```
@@ -499,7 +499,6 @@ git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--d
   commit will do. Left out, it defaults to the [branch or bookmark below](#the-default-base)
 - `-f, --force`: Overwrite an existing alias file
 - `-n, --dry-run`: Pretend and print what would be done, but do not execute. Ends with `Dry run, nothing changed`
-- `--no-edit`: Skip opening changed files for edit in Perforce
 - `--no-alias`: Skip saving a changelist alias
 - `--shelve`: Shelve the changelist after creating it
 - `--review`: Shelve and create a review with the default [review tool](#review-tools), Swarm unless
@@ -508,7 +507,7 @@ git p4son new [-b BASE_BRANCH] [-m <message> | -F <file>] [alias] [--force] [--d
   `[review-tool.NAME]` in `.git-p4son/config.toml`. Implies `--review`. The alias records the tool, Swarm included,
   which `update --shelve` then runs
 - `--per-commit`: Create the changelist on the first commit since the base branch, then update it once per later
-  commit, as described below. Refuses `--no-edit` and `--no-alias`
+  commit, as described below. Refuses `--no-alias`
 - `--ignore-out-of-date`: Shelve even if files in the change are not at the latest revision (see
   [Shelving only files at the latest revision](#shelving-only-files-at-the-latest-revision))
 
@@ -530,10 +529,6 @@ yours and the sync branch, so the sync branch becomes the base, and the branch b
 your branch onto the one below first, or record it as the upstream, which refuses that case. A branch left further
 down the same line, such as a backup, is taken as the base too; pass `-b` then.
 
-Other than the sync branch itself, a base in its history, such as one left on an old sync commit, is refused, as it
-would take in the sync commits since it. Name the base with `-b`, or with git move the upstream with
-`git branch -u main`.
-
 With two branches or bookmarks on the nearest commit below, `-b` is required, as it is with jj when no bookmark is
 below the change, and with git before the first sync, when there is no sync branch to look down to.
 `branch.autoSetupMerge = always` sets the upstream on every new branch, but with `push.default = upstream` a bare
@@ -549,8 +544,8 @@ git p4son new -m "New feature" --shelve --per-commit -b main   # a shelf per com
 ```
 
 Opening files requires a clean git workspace, untracked files included; `new` refuses to run otherwise. It also
-requires the change to be [based on the latest sync](#opening-only-changes-based-on-the-latest-sync). Both checks
-are skipped with `--no-edit`. After opening files, unchanged ones are reverted (see
+requires the change to be [based on the latest sync](#opening-only-changes-based-on-the-latest-sync). After opening
+files, unchanged ones are reverted (see
 [Keeping the changelist in sync with git](#keeping-the-changelist-in-sync-with-git)).
 
 With `--per-commit`, `new` checks out the first commit since the base branch and runs `git p4son new` on it, then
@@ -691,8 +686,8 @@ be an edit of that revision. A branch forked before the latest sync still holds 
 there, a file the sync changed would show in the review as undoing what others submitted, and would be submitted
 that way without a resolve. So before opening files, `new`, `update` and `review` check that the change contains the
 sync branch's latest commit, whatever `-b` says, and refuse otherwise. Rebase the branch onto the sync branch, or onto
-a branch that is rebased on it, and run the command again. `--no-edit` opens nothing and skips the check, except
-with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
+a branch that is rebased on it, and run the command again. `update --no-edit` opens nothing and skips the check,
+except with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
 
 The same check refuses a merge commit anywhere above the sync branch, whether it merged the sync branch or another
 branch, and wherever `-b` points. A changelist is made from a straight line of commits: below a merge of the sync

@@ -18,7 +18,7 @@ from git_p4son.jj_lock import working_copy_lock
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
-    recorded, requires_jj, run_jj, save_config, start_patch, WorkspaceTestCase,
+    recorded, requires_jj, run_jj, start_patch, WorkspaceTestCase,
 )
 
 
@@ -510,17 +510,17 @@ class TestJjNew(JjP4RepoTestCase):
 
     def test_one_alias_per_change(self):
         self.p4son('new', '-b', 'main')
-        self.p4son_fails('new', 'other', '--no-edit', '-b', 'main',
+        self.p4son_fails('new', 'other', '-b', 'main',
                          message='Alias "feat" already records this jj change, for CL 101')
-        self.p4son('new', 'other', '--no-edit', '--force', '-b', 'main')
+        self.p4son('new', 'other', '--force', '-b', 'main')
         self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
         self.assertEqual(load_changelist_alias('feat', self.ws), '101')
 
     def test_new_again_under_the_alias_in_another_case_is_the_same_alias(self):
-        self.p4son('new', 'Other', '--no-edit', '-b', 'main')
-        self.p4son_fails('new', 'OTHER', '--no-edit', '-b', 'main',
+        self.p4son('new', 'Other', '-b', 'main')
+        self.p4son_fails('new', 'OTHER', '-b', 'main',
                          message='Alias "other" already exists')
-        self.p4son('new', 'OTHER', '--no-edit', '--force', '-b', 'main')
+        self.p4son('new', 'OTHER', '--force', '-b', 'main')
         self.assertEqual(alias_changes(self.ws), {'other': self.feat_change()})
 
     def test_alias_new_records_no_change(self):
@@ -835,37 +835,10 @@ class TestJjBaseFromBookmarkBelow(JjP4RepoTestCase):
                          message='jj bookmark "main" is conflicted. Resolve it first.')
         self.assertEqual(self.p4.pending, {})
 
-    def assert_in_sync_history_is_refused(self, sync):
-        """old..feat would take in the sync commit between them, as the sync bookmark has moved on past it."""
-        self.jj('bookmark', 'create', 'old', '-r', sync)
-        self.change('Sync', 's.txt', 's1\n', parent=sync)
-        self.jj('bookmark', 'set', sync, '-r', '@')
-        self.change('Change a', 'a.txt', 'a2\n')
-        self.bookmark('feat')
-        self.change('Sync 2', 't.txt', 't1\n', parent=sync)
-        self.jj('bookmark', 'set', sync, '-r', '@')
-        self.jj('new', 'feat')
-        self.p4son_fails('new', '-m', 'Feature', '--no-edit',
-                         message=f'-b is required, as old, the nearest bookmark below the change, is in the history '
-                         f'of {sync}, .* such as {sync}\\.')
-        self.assertEqual(self.p4.pending, {})
-
-    def test_a_bookmark_in_the_sync_bookmark_s_history_is_refused(self):
-        self.assert_in_sync_history_is_refused('main')
-
-    def test_the_sync_branch_setting_names_the_sync_bookmark(self):
-        self.jj('bookmark', 'rename', 'main', 'trunk')
-        save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        self.assert_in_sync_history_is_refused('trunk')
-
     def test_no_bookmark_below_needs_b_and_suggests_the_sync_bookmark(self):
-        """A change left on an older sync commit, which main has moved on from."""
-        self.change('Change a', 'a.txt', 'a2\n', parent='main')
-        self.bookmark('feat')
-        self.change('Sync', 's.txt', 's1\n', parent='main')
-        self.jj('bookmark', 'set', 'main', '-r', '@')
-        self.jj('new', 'feat')
-        self.p4son_fails('new', '-m', 'Feature', '--no-edit',
+        """On the sync bookmark itself, whose own bookmark doesn't count."""
+        self.jj('new', 'main')
+        self.p4son_fails('new', '-m', 'Feature',
                          message=r'no bookmark is below the change. Name the base it starts from, such as main\.')
 
     def test_a_bookmark_on_an_emptied_change_stays_the_base(self):
@@ -905,14 +878,14 @@ class TestJjPerCommit(JjP4RepoTestCase):
 
     def test_a_squash_into_an_included_change_is_opened_by_the_next_update(self):
         """jj squash keeps the change ID, so with nothing new update opens every file since the base."""
-        self.p4son('new', '-b', 'main', '--no-edit')
+        self.p4son('new', '-b', 'main')
         self.write_file('n.txt', 'n1\n')
         self.jj('squash')
         self.p4son('update', 'feat')
         self.assertIn('n.txt', self.p4.opened)
 
     def test_an_abandoned_change_warns_and_the_new_one_is_still_included(self):
-        self.p4son('new', '-b', 'main', '--no-edit')
+        self.p4son('new', '-b', 'main')
         self.jj('abandon', '-r', 'feat-')
         self.add_d()
         out = self.p4son('update', 'feat')
@@ -921,7 +894,7 @@ class TestJjPerCommit(JjP4RepoTestCase):
         self.assertEqual(self.p4.pending['101'][-1], '3. Add d')
 
     def test_a_new_change_below_included_ones_is_refused(self):
-        self.p4son('new', '-b', 'main', '--no-edit')
+        self.p4son('new', '-b', 'main')
         self.jj('new', 'main', '-m', 'Add x')
         self.jj('rebase', '-s', 'feat-', '-d', '@')
         self.jj('new', 'feat')

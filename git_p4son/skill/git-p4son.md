@@ -30,7 +30,7 @@ Run commands from anywhere inside the workspace as `git p4son <command>`. Use `-
   hand when needed (see "Binary assets in a review").
 - **Never submit.** git-p4son has no submit command on purpose: submitting is left to the user, usually in P4V.
 - **Keep the workspace clean.** `sync`, `cherry-pick`, `new`, `update` and `review` refuse to run with uncommitted
-  changes, untracked files included (`new` and `update` don't check with `--no-edit`). `review` and the other
+  changes, untracked files included (`update` doesn't check with `--no-edit`). `review` and the other
   `--per-commit` runs check even on a dry run; `sync --dry-run` does not, so a clean dry run doesn't mean the sync will
   start. Commit or stash first, and keep scratch files, like a description file, outside the workspace.
 - **Preview first.** `sync`, `cherry-pick`, `new`, `update`, `review` and `alias clean` take `-n/--dry-run`, which
@@ -299,8 +299,8 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
 - **The branch is not based on the latest sync** ("... is not based on the latest main, which is what Perforce
   last synced the workspace to."). `new`, `update` and `review` open files only from a change that contains the
   sync branch's latest commit, as the files of an older fork would undo what the sync brought in. Rebase the branch
-  onto `main`, or the whole stack from the top, and run the command again. No option skips it; `--no-edit` without
-  `--per-commit`, which opens no files, runs without it.
+  onto `main`, or the whole stack from the top, and run the command again. No option skips it; `update --no-edit`
+  without `--per-commit`, which opens no files, runs without it.
 - **The branch has a merge commit** ("... has a merge commit, abc1234, above main."). The same commands refuse a
   merge anywhere above the sync branch, of `main` or of another branch, as a changelist is made from a straight line
   of commits. Rebase the branch onto `main` instead of merging, which replays its commits in a line, and run the

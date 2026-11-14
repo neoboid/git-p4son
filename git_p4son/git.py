@@ -465,6 +465,20 @@ def branches_at(commit: str, workspace_dir: str) -> list[str]:
     return [ref.removeprefix('refs/heads/') for ref in result.stdout]
 
 
+def nearest_branches_below(revision: str, bottom: str, workspace_dir: str) -> list[str]:
+    """The local branches on the nearest commits below revision that have any, outside bottom's history, by name.
+
+    Several commits are nearest when none of them is below another, as on each side of a merge."""
+    result = run(['git', 'for-each-ref', f'--merged={revision}', f'--no-merged={bottom}', f'--no-contains={revision}',
+                  '--format=%(objectname) %(refname)', 'refs/heads/'], cwd=workspace_dir)
+    branches = [line.split(' ', 1) for line in result.stdout]
+    commits = sorted({commit for commit, _ in branches})
+    if len(commits) > 1:
+        commits = run(['git', 'merge-base', '--independent',
+                      *commits], cwd=workspace_dir).stdout
+    return sorted(ref.removeprefix('refs/heads/') for commit, ref in branches if commit in commits)
+
+
 def author_dates(commits: list[str], workspace_dir: str) -> list[str]:
     """The commits' author dates as git stores them, seconds since the epoch and a time zone, in their order."""
     if not commits:

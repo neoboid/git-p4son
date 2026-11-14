@@ -27,6 +27,13 @@ def named_base(base: str, words: Words, exists: Callable[[str], bool], names_at:
     return names[0]
 
 
+def several_nearest(names: list[str], change: str, words: Words) -> CommandError:
+    """The error for several branches or bookmarks on the nearest commits below change, for a base without -b."""
+    kind = 'branches' if words.branch == 'branch' else f'{words.branch}s'
+    return CommandError(f'-b is required, as {", ".join(names)} are the nearest {kind} below {change}. '
+                        'Name the one it starts from.')
+
+
 def sync_tip_heading(sync_branch: str, commits: list[str] | None) -> str:
     """The heading of the check that the change, or each of commits, contains the tip of sync_branch."""
     return f'Checking {"each commit " if commits else ""}for the latest {sync_branch}'

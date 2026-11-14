@@ -114,10 +114,13 @@ def _new_commits(plan: Plan | None, no_edit: bool) -> list[str] | None:
 
 def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | None, args: argparse.Namespace,
           revision: str) -> Plan:
-    """plan_update under a heading of its own, closed by how many commits the CL still includes and how many are new."""
+    """plan_update from the record's checked base, under a heading closed by how many commits the CL still includes and
+    how many are new."""
     log.heading(f'Planning the update of CL {changelist}')
     base = resolve_recorded_base(
         record, alias, changelist, given, args.backend, args.workspace_dir)
+    if _checks_base(args):
+        args.backend.check_base_on_sync_tip(base.commit, base.record.base)
     plan = plan_update(base, alias, changelist,
                        args.backend, args.workspace_dir, revision)
     included = plural(included_count(plan.kept), 'commit') + \
@@ -125,6 +128,11 @@ def _plan(record: Record, alias: str, changelist: str, given: tuple[str, str] | 
     left = ', left for an update without --no-edit' if args.no_edit and plan.subjects else ''
     log.success(f'{included} included, {len(plan.subjects)} new{left}')
     return plan
+
+
+def _checks_base(args: argparse.Namespace) -> bool:
+    """Whether update checks that its base contains the sync tip, as cli does for new: once, where files are opened."""
+    return not args.per_commit_step and args.needs_clean(args)
 
 
 def update_command(args: argparse.Namespace) -> int:
@@ -149,14 +157,19 @@ def update_command(args: argparse.Namespace) -> int:
         review_tool_config(review.tool, workspace_dir)
     found = find_record(changelist, workspace_dir)
     plan = None
+    # As typed for messages, and resolved by the backend, as a jj revision means nothing to git.
+    given = None if args.base_given is None else (
+        args.base_given, args.base_branch)
     if found is None:
+        if _checks_base(args):
+            name = args.base_given or args.base_branch
+            log.heading(f'Checking the base {name}')
+            args.backend.check_base_on_sync_tip(args.base_branch, name)
+            log.success('On the sync branch or above it')
         if args.shelve:
             check_at_latest_revision(
                 args, None if args.no_edit else args.base_branch, changelist, revision)
     else:
-        # As typed for messages, and resolved by the backend, as a jj revision means nothing to git.
-        given = None if args.base_given is None else (
-            args.base_given, args.base_branch)
         plan = _plan(found[1], found[0], changelist, given, args, revision)
         _warn_dropped(plan, changelist)
         if args.per_commit:

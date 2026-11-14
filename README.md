@@ -700,6 +700,13 @@ change's. Rebase the branch instead of merging. With jj, a rebase keeps a merge:
 sync bookmark's history onto the other parent with `jj rebase -s`, then drop the parent left over with
 `jj simplify-parents`.
 
+The base has to contain the sync branch's latest commit as well: the sync branch itself, or a branch above it. The
+commits since a base further down start with sync commits, which are Perforce's content and not the change's, as
+after a miscounted `-b HEAD~3`. For `update`, that is the base the alias records. In a git stack it is the branch
+below, which stays behind when only the top branch is rebased after a sync: point it at its rebased commit with
+`git branch -f`, and next time rebase the stack from its top with `git rebase --update-refs`, which moves the
+branches below along.
+
 #### Shelving only files at the latest revision
 
 Before shelving, `new`, `update` and `review` check that the files are synced to the latest revision in the depot:

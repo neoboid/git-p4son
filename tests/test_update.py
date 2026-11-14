@@ -522,7 +522,36 @@ class TestUpdateIncluded(IncludedTestCase):
         self.update_fails('--per-commit', '--no-edit', message='--no-edit')
 
 
+class TestUpdateOnAnOldSync(UpdateTestCase):
+    """update on branch feature, after main synced past the commit it forked from."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_change_c()
+        self.commit_sync_on_main(102, {'d.txt': 'd1\n'})
+
+    def test_update_is_refused_before_touching_the_changelist(self):
+        self.p4.calls.clear()
+        for argv in ([], ['--dry-run'], ['-b', 'main'], ['--shelve']):
+            with self.subTest(argv=argv):
+                self.p4son_fails('update', '101', *argv,
+                                 message='not based on the latest main')
+        self.assertEqual(self.p4.pending['101'], FEATURE_DESCRIPTION)
+        self.assertEqual(self.p4.calls, [])
+
+    def test_no_edit_opens_nothing_so_it_runs(self):
+        self.p4son('update', '101', '--no-edit', '-m', 'Reworded')
+        self.assertEqual(self.p4.pending['101'][0], 'Reworded')
+        self.assertEqual(self.p4.opened, FEATURE_OPENED)
+
+    def test_rebased_onto_the_sync_branch_it_runs(self):
+        self.git('rebase', '-q', 'main', 'feature')
+        self.p4son('update', '101')
+        self.assertEqual(self.p4.pending['101'][-1], '3. Change c')
+
+
 TestUpdateOnJj = on_jj(TestUpdate)
+TestUpdateOnAnOldSyncOnJj = on_jj(TestUpdateOnAnOldSync)
 TestUpdateChecksOnceOnJj = on_jj(TestUpdateChecksOnce)
 
 

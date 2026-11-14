@@ -294,6 +294,10 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
 
 - **The workspace is not clean.** Commit or stash first; untracked files count. Park something unrelated, like a
   scratch file, with `git stash push -u -- <path>`, and restore it with `git stash pop` once git-p4son is done.
+- **The branch is not based on the latest sync** ("... is not based on the latest main, which is what Perforce
+  last synced the workspace to."). `new`, `update` and `review` open files only from a change that contains the
+  sync branch's latest commit, as the files of an older fork would undo what the sync brought in. Rebase the branch
+  onto `main`, or the whole stack from the top, and run the command again. There is no option to skip it.
 - **`sync` refuses because of p4-opened files** ("Workspace has p4-opened files tracked by git. Revert them
   first: ..."). Files that git
   tracks and that are opened in Perforce would collide with the commit a sync makes. When they are unchanged, for

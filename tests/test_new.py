@@ -688,6 +688,67 @@ class TestNewBaseFromUpstream(NewTestCase):
         self.assertEqual(self.p4.pending, {})
 
 
+class TestNewOnAnOldSync(NewTestCase):
+    """new and review on branch feature, forked from main before its latest sync."""
+
+    NOT_BASED = 'not based on the latest main'
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_sync_on_main(101, {'d.txt': 'd1\n'})
+
+    def test_new_is_refused_before_creating(self):
+        for argv in (['-b', 'main'], ['-b', 'main', '--dry-run'], ['-b', 'HEAD~2'], []):
+            with self.subTest(argv=argv):
+                out = self.p4son_fails(
+                    'new', 'feat', '-m', 'Feature', *argv, message=self.NOT_BASED)
+                self.assertNotIn('# Resolving base', out)
+        self.assertEqual(self.p4.pending, {})
+        self.assertEqual(self.p4.opened, {})
+
+    def test_review_is_refused(self):
+        self.p4son_fails('review', 'feat', '-m', 'Feature', '-b', 'main',
+                         message=self.NOT_BASED)
+        self.assertEqual(self.p4.pending, {})
+
+    def test_no_edit_opens_nothing_so_it_runs(self):
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit')
+        self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
+        self.assertEqual(self.p4.opened, {})
+
+    def test_no_edit_per_commit_is_refused(self):
+        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main', '--no-edit', '--per-commit', '--review',
+                         message=self.NOT_BASED)
+
+    def test_rebased_onto_the_sync_branch_it_runs(self):
+        self.git('rebase', '-q', 'main', 'feature')
+        out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertRegex(
+            out, r'# Checking for the latest main\n(>  .*\n)*\[ok\] .*\n\n# Resolving base\n')
+        self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
+
+    def test_a_branch_stacked_on_a_rebased_one_runs(self):
+        self.git('rebase', '-q', 'main', 'feature')
+        self.git('switch', '-q', '-c', 'top')
+        self.edit('e.txt', 'e1\n')
+        self.commit('Add e')
+        self.p4son('new', 'top', '-m', 'Top', '-b', 'feature')
+        self.assertEqual(set(self.p4.opened), {'e.txt'})
+
+    def test_without_the_sync_branch_there_is_nothing_to_check(self):
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertRegex(out, r'\[ok\] No (branch|bookmark) trunk yet\n')
+        self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
+
+    def test_the_sync_branch_setting_names_the_branch_to_be_based_on(self):
+        self.git('branch', 'trunk', 'main')
+        self.git('branch', '-q', '-f', 'main', 'feature~2')
+        save_config(self.ws, {'sync': {'branch': 'trunk'}})
+        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main',
+                         message='not based on the latest trunk.*Rebase it onto trunk')
+
+
 _STRAY_FILE = 'jj makes a stray file part of the working change, which the loop then takes as a commit'
 TestNewPerCommitOnJj = on_jj(TestNewPerCommit, skip={
                              'test_dirty_workspace': _STRAY_FILE})
@@ -695,6 +756,7 @@ TestNewOnJj = on_jj(TestNew)
 TestNewAliasOnJj = on_jj(TestNewAlias, skip={
     'test_a_base_no_branch_names_is_refused_before_creating': 'jj records a change without a bookmark by its ID'})
 TestNewOutOfDateOnJj = on_jj(TestNewOutOfDate)
+TestNewOnAnOldSyncOnJj = on_jj(TestNewOnAnOldSync)
 
 if __name__ == '__main__':
     unittest.main()

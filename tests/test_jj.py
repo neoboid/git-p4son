@@ -800,6 +800,18 @@ class TestJjBaseFromBookmarkBelow(JjP4RepoTestCase):
         self.p4son('new', '-m', 'Feature', '-b', 'main')
         self.assertEqual(recorded('101', self.ws).base, 'main')
 
+    def test_a_conflicted_sync_bookmark_is_named_instead_of_a_rebase(self):
+        first = self.change('First', 'a.txt', 'a2\n', parent='main')
+        second = self.change('Second', 'b.txt', 'b2\n', parent='main')
+        operation = self.jj('op', 'log', '-n', '1', '--no-graph', '-T', 'id')
+        for change in (first, second):
+            self.jj('--at-op', operation, 'bookmark',
+                    'set', 'main', '-r', change)
+        self.jj('edit', first)
+        self.p4son_fails('new', 'feat', '-m', 'Feature', '-b', 'main',
+                         message='jj bookmark "main" is conflicted. Resolve it first.')
+        self.assertEqual(self.p4.pending, {})
+
     def assert_in_sync_history_is_refused(self, sync):
         """old..feat would take in the sync commit between them, as the sync bookmark has moved on past it."""
         self.jj('bookmark', 'create', 'old', '-r', sync)

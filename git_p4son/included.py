@@ -7,7 +7,7 @@ from .backend import Backend
 from .changelist_store import Record
 from .common import CommandError, RevisionNotFoundError
 from .git import (
-    changed_paths, commit_subject, get_commits_since, merge_base, resolve_commit, sync_state,
+    changed_paths, commit_subject, get_commits_since, resolve_commit, sync_state,
 )
 from .log import plural
 
@@ -29,8 +29,6 @@ class Plan:
     # once the update is done.
     current: Record
     next: Record
-    # The base for the files to open: the record's base commit, or -b.
-    start: str
     # The last commit the CL includes, or the base's commit if none, where the commits it doesn't include start.
     after: str
     # The commit list entries to append, for the commits the CL doesn't include yet.
@@ -39,6 +37,11 @@ class Plan:
     dropped: list[int]
     # The first new commit when it is the record's catch-up, which is shelved on its own.
     catch_up: str | None = None
+
+    @property
+    def start(self) -> str:
+        """The base's commit, the record's or -b's, which the files to open and the next shelf start from."""
+        return self.next.base_commit
 
     @property
     def kept(self) -> Record:
@@ -60,8 +63,8 @@ def new_record(base: str, base_commit: str, revision: str, shelved: bool, backen
 def catch_up_subject(plan: Plan, workspace_dir: str, revision: str) -> str | None:
     """The subject of the empty commit that gives a moved base its own patch, or None if the CL's shelf needs none.
 
-    It needs one when the base the branch is on moved since the last shelve and changed a file the change touches."""
-    shelved, base = plan.current.base_commit, plan.next.base_commit
+    It needs one when the base moved since the last shelve and changed a file the change touches."""
+    shelved, base = plan.current.base_commit, plan.start
     if not shelved or shelved == base or not included_count(plan.kept):
         return None
     if not changed_paths(shelved, base, workspace_dir) & changed_paths(base, revision, workspace_dir):
@@ -132,8 +135,6 @@ def plan_update(base: RecordedBase, alias: str, changelist: str, backend: Backen
             unmatched[identity] -= 1
     included = len(identities) if first_new is None else first_new
     after = shas[included - 1] if included else base_commit
-    # The base the branch is on, which the shelf follows: a sync moves the base before the branch is rebased.
-    on = merge_base(base_commit, revision, workspace_dir)
     dropped = _dropped(record.included, unmatched)
     if new_base is not None and dropped:
         # Commits at or below a new base aren't gone from the branch, so they mustn't be recorded as dropped.
@@ -144,8 +145,7 @@ def plan_update(base: RecordedBase, alias: str, changelist: str, backend: Backen
              identity in enumerate(record.included, 1)]
     catch_up = shas[included] if included < len(
         shas) and record.catch_up == identities[included] else None
-    # Only a diff from where the branch leaves the depot names git actions that match it.
-    return Plan(alias, record, Record(record.base, on, slots + identities[included:]), base_commit, after,
+    return Plan(alias, record, Record(record.base, base_commit, slots + identities[included:]), after,
                 [commit_subject(sha, subject) for sha, subject in commits[included:]], dropped, catch_up)
 
 

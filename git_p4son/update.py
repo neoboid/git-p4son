@@ -80,7 +80,7 @@ def _catch_up(plan: Plan, args: argparse.Namespace, workspace_dir: str) -> bool:
         return False
     log.heading('Catching up with the base')
     commit: str = args.backend.insert_empty_after(plan.after, subject)
-    update_record(plan.alias, replace(plan.kept, base_commit=plan.next.base_commit,
+    update_record(plan.alias, replace(plan.kept, base_commit=plan.start,
                                       catch_up=args.backend.commit_identities([commit])[0]), workspace_dir)
     log.success(f'Inserted "{subject}" after "{after}"')
     return True

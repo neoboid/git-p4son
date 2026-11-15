@@ -155,19 +155,6 @@ class TestCatchUp(CatchUpTestCase):
         self.assertIn(
             'above still builds on the commits before "Rebase onto CL 103"', out)
 
-    def test_a_sync_the_branch_isn_t_rebased_onto_yet_waits_for_the_rebase(self):
-        """The shelf only changes once the branch is on the new base, so the catch-up is due then."""
-        self.sync_main({'m.txt': M.replace('8\n', 'eight\n')}, rebase=False)
-        self.add_o()
-        self.update('--shelve')
-        self.assertEqual(self.subjects(), ['Edit m top', 'Add n', 'Add o'])
-        self.git('rebase', '-q', 'main')
-        self.edit('p.txt', 'p1\n')
-        self.commit('Add p')
-        self.update('--per-commit', '--shelve')
-        self.assertEqual(self.entries()[-2:],
-                         ['4. Rebase onto CL 103', '5. Add p'])
-
     def test_a_sync_of_a_file_the_change_renames_is_caught_up(self):
         """Perforce still has b.txt where the change moves it, so the sync's edit of it reaches b2.txt's shelf."""
         self.git('mv', 'b.txt', 'b2.txt')

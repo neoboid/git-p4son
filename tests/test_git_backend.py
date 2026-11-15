@@ -260,30 +260,25 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.commit_file('high.txt')
 
     def test_a_branch_on_the_sync_branch_takes_it(self):
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'main')
 
     def test_a_deleted_branch_below_leaves_the_sync_branch(self):
         """The commits of low come along, as no branch marks where they end."""
         self.stack()
         self.git('branch', '-q', '-D', 'low')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'main')
 
     def test_a_detached_head_takes_the_nearest_branch_below(self):
         self.stack()
         self.git('switch', '-q', '--detach')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'low')
 
     def test_a_stacked_branch_takes_the_branch_below(self):
         self.stack()
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'low')
         self.git('switch', '-q', '-c', 'top')
         self.commit_file('top.txt')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('high', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'high')
 
     def test_two_branches_on_the_nearest_commit_need_b(self):
         self.stack()
@@ -296,8 +291,7 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.git('switch', '-q', 'main')
         self.commit_file('synced.txt')
         self.git('switch', '-q', 'feat')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'main')
 
     def test_without_the_sync_branch_b_is_required(self):
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
@@ -308,8 +302,7 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
     def test_the_sync_branch_setting_names_the_branch_the_search_stops_at(self):
         self.git('branch', 'trunk', 'main')
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        self.assertEqual(self.backend.implicit_base(),
-                         ('trunk', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'trunk')
 
     def test_a_branch_the_change_was_rebased_past_is_not_the_base(self):
         """After low is submitted and high rebased onto main, low is beside high."""
@@ -317,8 +310,7 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.git('switch', '-q', 'main')
         self.commit_file('synced.txt')
         self.git('rebase', '-q', '--onto', 'main', 'low', 'high')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'nearest branch below'))
+        self.assertEqual(self.backend.implicit_base(), 'main')
 
 
 class TestGitBackendWithoutCommits(GitRepoTestCase):

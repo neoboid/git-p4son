@@ -90,8 +90,8 @@ class GitBackend:
         resolve_commit(base, self.workspace_dir)
         return base
 
-    def implicit_base(self) -> tuple[str, str]:
-        """The nearest branch below HEAD, down to the sync branch, and "nearest branch below".
+    def implicit_base(self) -> str:
+        """The nearest branch below HEAD, down to the sync branch.
 
         Raises CommandError, saying -b is required, for several, or no sync branch."""
         sync_branch, sync_ref = self._sync_branch, self._sync_ref
@@ -102,7 +102,7 @@ class GitBackend:
             self.revision, sync_ref, self.workspace_dir)
         if len(names) > 1:
             raise several_nearest(names, self._change(), self.words)
-        return names[0] if names else sync_branch, 'nearest branch below'
+        return names[0] if names else sync_branch
 
     def suggested_alias(self) -> str:
         """The alias the current branch suggests; raise CommandError on a detached HEAD."""

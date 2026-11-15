@@ -572,14 +572,10 @@ def insert_empty_commit(after: str, message: str, workspace_dir: str) -> tuple[s
     """Commit an empty commit right after after, and recreate HEAD's commits after it on top, moving HEAD.
 
     The recreated commits are copies with their parent swapped, so the working files and the index stay as they are.
-    Returns the new commit, HEAD's old commit, and the other local branches still built on the commits it recreated.
-    Raises CommandError if a merge commit is among them."""
+    Returns the new commit, HEAD's old commit, and the other local branches still built on the commits it recreated."""
     head = get_head_commit(workspace_dir)
     commits = run(['git', 'rev-list', '--reverse',
                   f'{after}..{head}'], cwd=workspace_dir).stdout
-    if merges_above(after, head, workspace_dir):
-        raise CommandError(
-            f'A merge commit follows {after[:7]}, so no commit can be inserted after it.')
     inserted = run(['git', 'commit-tree', f'{after}^{{tree}}', '-p', after, '-m', message],
                    cwd=workspace_dir).stdout[0]
     parent = inserted

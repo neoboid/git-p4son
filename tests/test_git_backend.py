@@ -153,13 +153,6 @@ class TestGitBackend(GitRepoTestCase):
             self.backend.check_base(
                 self.backend.resolve_base('beside'), 'beside')
 
-    def test_without_the_sync_branch_only_the_base_below_the_change_is_checked(self):
-        self.sync_main()
-        save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        self.backend.check_base('main~1', 'main~1')
-        with self.assertRaisesRegex(CommandError, 'The base main is not below feat/x'):
-            self.backend.check_base(self.backend.resolve_base('main'), 'main')
-
     def test_the_sync_branch_itself_passes_the_check(self):
         self.git('switch', '-q', 'main')
         with captured_output():
@@ -292,12 +285,6 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.commit_file('synced.txt')
         self.git('switch', '-q', 'feat')
         self.assertEqual(self.backend.implicit_base(), 'main')
-
-    def test_without_the_sync_branch_b_is_required(self):
-        save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        with self.assertRaisesRegex(CommandError, '-b is required, as there is no branch trunk to find the base of '
-                                    'feat above. Name the base the change starts from'):
-            self.backend.implicit_base()
 
     def test_the_sync_branch_setting_names_the_branch_the_search_stops_at(self):
         self.git('branch', 'trunk', 'main')

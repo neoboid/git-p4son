@@ -28,8 +28,8 @@ class Backend(Protocol):
     def resolve_base(self, base: str | None) -> str:
         """The base to find the change's commits since, None for the backend's default."""
 
-    def implicit_base(self) -> tuple[str, str]:
-        """The base new and review take without -b, and where it comes from.
+    def implicit_base(self) -> str:
+        """The base new and review take without -b: the nearest branch or bookmark below the change.
 
         Raises CommandError, saying -b is required, where there is none."""
 

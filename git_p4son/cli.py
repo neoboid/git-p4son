@@ -732,8 +732,8 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
         log.heading('Resolving base')
         note = ''
         if args.base_branch is None and getattr(args, 'implicit_base', False):
-            args.base_branch, source = backend.implicit_base()
-            note = f' ({source})'
+            args.base_branch = backend.implicit_base()
+            note = f' (nearest {backend.words.branch} below)'
         # As given, as the backends resolve it, jj to a commit and git a branch to its full ref: new records the name,
         # update checks for one.
         args.base_given = args.base_branch

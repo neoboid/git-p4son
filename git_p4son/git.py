@@ -492,11 +492,6 @@ def is_ancestor(commit: str, other: str, workspace_dir: str) -> bool:
                fail_on_returncode=False).returncode == 0
 
 
-def merge_base(first: str, second: str, workspace_dir: str) -> str:
-    """The best common ancestor of two commits."""
-    return run(['git', 'merge-base', first, second], cwd=workspace_dir).stdout[0]
-
-
 def _ignored_untracked(workspace_dir: str, *, with_case: bool, env: dict[str, str] | None) -> set[str]:
     """The untracked paths git ignores, a wholly ignored folder as one path ending in /."""
     result = run(['git', *_case(with_case), 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory',

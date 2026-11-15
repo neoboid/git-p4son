@@ -165,12 +165,12 @@ class TestGitBackend(GitRepoTestCase):
         with captured_output():
             self.backend.check_on_sync_tip()
 
-    def test_without_the_sync_branch_there_is_nothing_to_check(self):
-        self.sync_main()
+    def test_without_the_sync_branch_the_change_is_refused(self):
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        with captured_output() as out:
+        with captured_output(), self.assertRaisesRegex(
+                CommandError, 'There is no sync branch trunk, which git p4son sync commits onto. Set \\[sync\\] '
+                'branch in .git-p4son/config.toml to the branch you sync onto, such as after renaming it.$'):
             self.backend.check_on_sync_tip()
-        self.assertIn('[ok] No branch trunk yet\n', out.getvalue())
 
     def test_base_candidates_ask_the_shell_for_branches(self):
         self.assertEqual(self.backend.base_candidates(), [('__branch__', '')])

@@ -78,6 +78,13 @@ def has_merge(change: str, merge: str, sync_branch: str, words: Words) -> Comman
                         f'a straight line of commits. {fix}')
 
 
+def no_sync_branch(sync_branch: str, words: Words) -> CommandError:
+    """The error for a sync branch or bookmark that doesn't exist."""
+    return CommandError(
+        f'There is no sync {words.branch} {sync_branch}, which git p4son sync commits onto. Set [sync] branch in '
+        f'.git-p4son/config.toml to the {words.branch} you sync onto, such as after renaming it.')
+
+
 def not_on_sync_tip(change: str, sync_branch: str, words: Words) -> CommandError:
     """The error for a change that does not contain the tip of sync_branch."""
     return CommandError(

@@ -212,9 +212,11 @@ class TestJjBackend(JjRepoTestCase):
             JjBackend(workspace).check_base(
                 self.commit_of('beside'), 'beside', recorded=True)
 
-    def test_without_the_sync_bookmark_there_is_nothing_to_check(self):
+    def test_without_the_sync_bookmark_the_change_is_refused(self):
         self.jj('bookmark', 'delete', 'main')
-        with self.operation() as workspace:
+        with self.operation() as workspace, self.assertRaisesRegex(
+                CommandError, 'There is no sync bookmark main, which git p4son sync commits onto. Set \\[sync\\] '
+                'branch in .git-p4son/config.toml to the bookmark you sync onto, such as after renaming it.$'):
             JjBackend(workspace).check_on_sync_tip()
 
     def test_no_subject_without_a_description(self):

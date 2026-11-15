@@ -300,6 +300,9 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   sync branch's latest commit, as the files of an older fork would undo what the sync brought in. Rebase the branch
   onto `main`, or the whole stack from the top, and run the command again. No option skips it; `update --no-edit`
   without `--per-commit`, which opens no files, runs without it.
+- **There is no sync branch** ("There is no sync branch main, ..."). The same commands need the branch that
+  `[sync] branch` names, which sync commits onto. Ask the user which branch that is, such as after renaming it, and
+  set `[sync] branch` in `.git-p4son/config.toml` to it.
 - **The branch has a merge commit** ("... has a merge commit, abc1234, above main."). The same commands refuse a
   merge anywhere above the sync branch, of `main` or of another branch, as a changelist is made from a straight line
   of commits. Rebase the branch onto `main` instead of merging, which replays its commits in a line, and run the

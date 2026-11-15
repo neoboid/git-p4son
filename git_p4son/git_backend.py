@@ -15,7 +15,9 @@ from .git import (
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .log import log
-from .words import Words, base_below_sync_tip, base_not_below, has_merge, named_base, not_on_sync_tip, several_nearest
+from .words import (
+    Words, base_below_sync_tip, base_not_below, has_merge, named_base, no_sync_branch, not_on_sync_tip, several_nearest,
+)
 
 DEFAULT_BASE = 'HEAD~1'
 
@@ -152,14 +154,12 @@ class GitBackend:
         check_git_workspace_clean(self.workspace_dir)
 
     def check_on_sync_tip(self) -> None:
-        """Raise CommandError unless HEAD contains the sync branch's tip, with no merge above it; nothing to check
-        without the branch."""
+        """Raise CommandError unless the sync branch exists and HEAD contains its tip, with no merge above it."""
         workspace_dir = self.workspace_dir
         sync_branch, sync_ref = self._sync_branch, self._sync_ref
         log.heading(f'Checking for the latest {sync_branch}')
         if sync_ref is None:
-            log.success(f'No {self.words.branch} {sync_branch} yet')
-            return
+            raise no_sync_branch(sync_branch, self.words)
         if not is_ancestor(sync_ref, 'HEAD', workspace_dir):
             raise not_on_sync_tip(self._change(), sync_branch, self.words)
         merges = merges_above(sync_ref, 'HEAD', workspace_dir)

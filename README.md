@@ -517,22 +517,18 @@ Without `-b`, `new` and `review` take the base from where the change sits, and t
 
 - **git:** the nearest branch below the current one in its history, down to the sync branch: `main` for a branch
   made from it, or the branch below in a stack. A branch on the same commit as the current one doesn't count.
-- **git, with an upstream:** when the current branch's upstream is a local branch, it is the base instead:
-  `git switch -c my-fix --track main`, or `git branch -u main` on an existing branch. An upstream on a remote, such
-  as `origin/main`, doesn't count. Like any base, the upstream must be below the branch: once it was amended or
-  rebased, or the branch was rebased onto `main` past it, such as after the branch below was submitted, it is refused,
-  as the commits since it would include others.
 - **jj:** the nearest bookmark below the change, such as `main`, or the bookmark below in a stack.
 
 With git, the history can't show that the branch below was amended or rebased: no branch is then left between
-yours and the sync branch, so the sync branch becomes the base, and the branch below's old commits come along. Rebase
-your branch onto the one below first, or record it as the upstream, which refuses that case. A branch left further
-down the same line, such as a backup, is taken as the base too; pass `-b` then.
+yours and the sync branch, so the sync branch becomes the base, and the branch below's old commits come along.
+Rebase your branch's own commits onto the one below first, such as with
+`git rebase --onto <below> <old commit> <your branch>`, `<old commit>` being the commit your branch was built on. A
+plain `git rebase <below>` replays the old commits too, which conflicts when the amend changed them. Rebasing the
+stack from its top with `git rebase --update-refs` moves the branches in it along and avoids this. A branch left
+further down the same line, such as a backup, is taken as the base too; pass `-b` then.
 
 With two branches or bookmarks on the nearest commit below, `-b` is required, as it is with jj when no bookmark is
 below the change, and with git before the first sync, when there is no sync branch to look down to.
-`branch.autoSetupMerge = always` sets the upstream on every new branch, but with `push.default = upstream` a bare
-`git push` then pushes the branch into its local upstream, such as `main`.
 
 **Examples:**
 ```sh

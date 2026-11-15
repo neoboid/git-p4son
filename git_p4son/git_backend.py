@@ -9,7 +9,7 @@ from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
     author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, is_ancestor, local_upstream, merges_above,
+    get_head_subject, insert_empty_commit, is_ancestor, merges_above,
     nearest_branches_below, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
@@ -91,32 +91,18 @@ class GitBackend:
         return base
 
     def implicit_base(self) -> tuple[str, str]:
-        """The current branch's local upstream, else the nearest branch below HEAD, and which of the two it is.
-
-        Raises CommandError, saying -b is required, where neither gives a base whose commits since are the change's."""
-        workspace_dir = self.workspace_dir
-        branch = get_current_branch(workspace_dir)
-        base = None if branch is None else local_upstream(
-            branch, workspace_dir)
-        if base is None:
-            return self._nearest_branch_below(branch or 'HEAD'), 'nearest branch below'
-        return base, f'upstream of {branch}'
-
-    def _nearest_branch_below(self, change: str) -> str:
-        """The one branch on the nearest commit below HEAD that has any, above the sync branch, else the sync branch.
+        """The nearest branch below HEAD, down to the sync branch, and "nearest branch below".
 
         Raises CommandError, saying -b is required, for several, or no sync branch."""
-        workspace_dir = self.workspace_dir
         sync_branch, sync_ref = self._sync_branch, self._sync_ref
         if sync_ref is None:
-            raise CommandError(f'-b is required, as {change} has no local upstream and there is no branch '
-                               f'{sync_branch} to find the base above. Name the base the change starts from.')
-        names = nearest_branches_below(self.revision, sync_ref, workspace_dir)
-        if not names:
-            return sync_branch
+            raise CommandError(f'-b is required, as there is no branch {sync_branch} to find the base of '
+                               f'{self._change()} above. Name the base the change starts from.')
+        names = nearest_branches_below(
+            self.revision, sync_ref, self.workspace_dir)
         if len(names) > 1:
-            raise several_nearest(names, change, self.words)
-        return names[0]
+            raise several_nearest(names, self._change(), self.words)
+        return names[0] if names else sync_branch, 'nearest branch below'
 
     def suggested_alias(self) -> str:
         """The alias the current branch suggests; raise CommandError on a detached HEAD."""

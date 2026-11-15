@@ -190,10 +190,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
-  its full ref, so that a tag of its name isn't taken for it, the branch's local upstream as `new`'s and `review`'s,
-  else the nearest branch below HEAD down to the sync branch (`git.nearest_branches_below`), the current branch,
-  `checkouts` detaching at each commit and returning to the starting branch, and the sync branch: `--branch`, else
-  `[sync] branch`, else `main`, checked out for the sync and returned from with a `git rebase` hint.
+  its full ref, so that a tag of its name isn't taken for it, the nearest branch below HEAD down to the sync branch
+  as `new`'s and `review`'s (`git.nearest_branches_below`), the current branch, `checkouts` detaching at each commit
+  and returning to the starting branch, and the sync branch: `--branch`, else `[sync] branch`, else `main`, checked
+  out for the sync and returned from with a `git rebase` hint.
 
 - **`jj_backend.py`** - `JjBackend`, the jj adapter, delegating to a `jj.Workspace`. `new`'s and `review`'s base without
   `-b` is the one nearest bookmark below the change (`nearest_bookmarks`). `base_name` records a base without a bookmark

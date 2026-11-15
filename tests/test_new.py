@@ -649,19 +649,16 @@ class TestNewImplicitBase(NewTestCase):
         self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
         self.assertEqual(recorded('101', self.ws).base, 'main')
 
-    def test_review_takes_it_too(self):
-        self.git('branch', '-q', '-u', 'main')
+    def test_review_takes_the_nearest_branch_below_too(self):
         out = self.p4son('review', 'feat', '-m', 'Feature', '--dry-run')
         self.assertRegex(
-            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(upstream of feature\)\n')
+            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(nearest branch below\)\n')
         self.assertIn('Would run 2 steps', out)
 
-    def test_b_wins_over_the_upstream(self):
-        self.git('branch', '-q', '-u', 'main')
+    def test_b_wins_over_the_nearest_branch(self):
         self.git('branch', 'mid', 'HEAD~1')
-        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'mid')
-        self.assertEqual(self.p4.pending['101'], [
-                         'Feature', '', 'Changes included:', '1. Replace b with c'])
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
 
     def test_a_per_commit_run_names_the_base_as_given(self):
         out = self.p4son('review', 'feat', '-m', 'Feature',

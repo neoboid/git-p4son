@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- With git, `new` and `review` find the base without an upstream: the nearest branch below yours, down to the sync
-  branch. A local upstream still wins
+- With git, `new` and `review` take the nearest branch below yours as the base, down to the sync branch, as jj
+  takes the nearest bookmark. The branch's upstream no longer picks it: pass `-b` for another base
 - `new`, `update` and `review` refuse a branch that isn't rebased onto the latest sync, where its files would
   undo what the sync brought in
 - `new`, `update` and `review` refuse a branch with a merge commit above the sync branch: rebase instead of merging

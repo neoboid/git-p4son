@@ -252,33 +252,20 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.write_file(name, name)
         self.commit(name)
 
-    def stack(self, sync_branch='main', track=False):
-        """Branch low off sync_branch and high off low, one commit each, as upstreams if track; HEAD ends on high."""
-        tracking = '--track' if track else '--no-track'
-        self.git('switch', '-q', '-c', 'low', tracking, sync_branch)
+    def stack(self):
+        """Branch low off main and high off low, one commit each; HEAD ends on high."""
+        self.git('switch', '-q', '-c', 'low', 'main')
         self.commit_file('low.txt')
-        self.git('switch', '-q', '-c', 'high', tracking, 'low')
+        self.git('switch', '-q', '-c', 'high', 'low')
         self.commit_file('high.txt')
 
-    def test_the_local_upstream_is_the_base(self):
-        self.git('branch', '-q', '-u', 'main')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'upstream of feat'))
-
-    def test_a_branch_on_the_sync_branch_without_an_upstream_takes_it(self):
+    def test_a_branch_on_the_sync_branch_takes_it(self):
         self.assertEqual(self.backend.implicit_base(),
                          ('main', 'nearest branch below'))
 
-    def test_a_remote_upstream_does_not_count(self):
-        self.git('remote', 'add', 'origin', self.ws)
-        self.git('fetch', '-q', 'origin')
-        self.git('branch', '-q', '-u', 'origin/main')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'nearest branch below'))
-
-    def test_a_deleted_upstream_does_not_count(self):
+    def test_a_deleted_branch_below_leaves_the_sync_branch(self):
         """The commits of low come along, as no branch marks where they end."""
-        self.stack(track=True)
+        self.stack()
         self.git('branch', '-q', '-D', 'low')
         self.assertEqual(self.backend.implicit_base(),
                          ('main', 'nearest branch below'))
@@ -289,7 +276,7 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.assertEqual(self.backend.implicit_base(),
                          ('low', 'nearest branch below'))
 
-    def test_a_stacked_branch_without_an_upstream_takes_the_branch_below(self):
+    def test_a_stacked_branch_takes_the_branch_below(self):
         self.stack()
         self.assertEqual(self.backend.implicit_base(),
                          ('low', 'nearest branch below'))
@@ -297,13 +284,6 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.commit_file('top.txt')
         self.assertEqual(self.backend.implicit_base(),
                          ('high', 'nearest branch below'))
-
-    def test_the_upstream_wins_over_a_nearer_branch(self):
-        self.stack(track=True)
-        self.commit_file('high2.txt')
-        self.git('branch', 'nearer', 'HEAD~1')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'upstream of high'))
 
     def test_two_branches_on_the_nearest_commit_need_b(self):
         self.stack()
@@ -319,10 +299,10 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.assertEqual(self.backend.implicit_base(),
                          ('main', 'nearest branch below'))
 
-    def test_without_an_upstream_and_the_sync_branch_b_is_required(self):
+    def test_without_the_sync_branch_b_is_required(self):
         save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        with self.assertRaisesRegex(CommandError, '-b is required, as feat has no local upstream and there is no '
-                                    'branch trunk to find the base above. Name the base the change starts from'):
+        with self.assertRaisesRegex(CommandError, '-b is required, as there is no branch trunk to find the base of '
+                                    'feat above. Name the base the change starts from'):
             self.backend.implicit_base()
 
     def test_the_sync_branch_setting_names_the_branch_the_search_stops_at(self):
@@ -331,57 +311,14 @@ class TestGitBackendImplicitBase(GitRepoTestCase):
         self.assertEqual(self.backend.implicit_base(),
                          ('trunk', 'nearest branch below'))
 
-    def test_the_sync_branch_moving_on_keeps_it_the_base(self):
-        self.git('branch', '-q', '-u', 'main')
-        self.git('switch', '-q', 'main')
-        self.commit_file('synced.txt')
-        self.git('switch', '-q', 'feat')
-        self.assertEqual(self.backend.implicit_base(),
-                         ('main', 'upstream of feat'))
-
-    def assert_not_below_is_refused(self):
-        """The upstream is the base, and the check of the base refuses it."""
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'upstream of high'))
-        with self.assertRaisesRegex(CommandError, 'The base low (is not below high|does not contain the latest main)'):
-            self.backend.check_base(self.backend.resolve_base('low'), 'low')
-
-    def test_a_parent_branch_below_is_the_base(self):
-        self.stack(track=True)
-        self.assertEqual(self.backend.implicit_base(),
-                         ('low', 'upstream of high'))
-
-    def test_an_amended_parent_branch_is_refused(self):
-        """low..HEAD would take in the old copy of low's commit."""
-        self.stack(track=True)
-        self.git('switch', '-q', 'low')
-        self.git('commit', '-q', '--amend', '-m', 'low.txt v2')
-        self.git('switch', '-q', 'high')
-        self.assert_not_below_is_refused()
-
-    def test_a_parent_branch_rebased_onto_the_sync_branch_is_refused(self):
-        self.stack(track=True)
-        self.git('switch', '-q', 'main')
-        self.commit_file('synced.txt')
-        self.git('rebase', '-q', 'main', 'low')
-        self.git('switch', '-q', 'high')
-        self.assert_not_below_is_refused()
-
-    def test_a_parent_branch_that_gained_commits_is_refused(self):
-        """Not below HEAD, which is all a default can check; -b low takes it."""
-        self.stack(track=True)
-        self.git('switch', '-q', 'low')
-        self.commit_file('low2.txt')
-        self.git('switch', '-q', 'high')
-        self.assert_not_below_is_refused()
-
-    def test_an_upstream_the_branch_was_rebased_past_is_refused(self):
-        """After low is submitted and high rebased onto main, low..HEAD would take in low's old commit."""
-        self.stack(track=True)
+    def test_a_branch_the_change_was_rebased_past_is_not_the_base(self):
+        """After low is submitted and high rebased onto main, low is beside high."""
+        self.stack()
         self.git('switch', '-q', 'main')
         self.commit_file('synced.txt')
         self.git('rebase', '-q', '--onto', 'main', 'low', 'high')
-        self.assert_not_below_is_refused()
+        self.assertEqual(self.backend.implicit_base(),
+                         ('main', 'nearest branch below'))
 
 
 class TestGitBackendWithoutCommits(GitRepoTestCase):

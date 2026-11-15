@@ -641,11 +641,10 @@ class TestNewPerCommitRelativeBase(P4RepoTestCase):
 class TestNewImplicitBase(NewTestCase):
     """new and review without -b, on branch feature."""
 
-    def test_new_takes_the_base_from_the_branch_s_local_upstream(self):
-        self.git('branch', '-q', '-u', 'main')
+    def test_new_takes_the_nearest_branch_below(self):
         out = self.p4son('new', 'feat', '-m', 'Feature')
         self.assertRegex(
-            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(upstream of feature\)\n')
+            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(nearest branch below\)\n')
         self.assertEqual(self.p4.pending, {'101': FEATURE_DESCRIPTION})
         self.assertEqual(recorded('101', self.ws).base, 'main')
 
@@ -679,20 +678,6 @@ class TestNewImplicitBase(NewTestCase):
                                  message='The base beside is not below feature')
         self.assertEqual(self.p4.pending, {})
 
-    def test_an_upstream_amended_after_the_branch_is_refused(self):
-        """The branch still has the upstream's old commit, which the commits since the new one would take in."""
-        self.git('branch', '-q', '-u', 'main')
-        self.git('switch', '-q', '-c', 'top')
-        self.git('branch', '-q', '-u', 'feature')
-        self.edit('e.txt', 'e1\n')
-        self.commit('Add e')
-        self.git('switch', '-q', 'feature')
-        self.git('commit', '-q', '--amend', '-m', 'Replace b with c, amended')
-        self.git('switch', '-q', 'top')
-        self.p4son_fails('new', 'top', '-m', 'Top', message='The base feature is not below top, such as after '
-                         'feature was amended or rebased')
-        self.assertEqual(self.p4.pending, {})
-
     def test_a_tag_named_like_the_base_branch_does_not_become_the_base(self):
         self.git('branch', 'mid', 'HEAD~1')
         self.git('tag', 'mid', 'main')
@@ -702,12 +687,6 @@ class TestNewImplicitBase(NewTestCase):
                                  'Feature', '--dry-run', *argv)
                 self.assertIn('1. Replace b with c', out)
                 self.assertNotIn('Change a', out)
-
-    def test_without_an_upstream_new_takes_the_nearest_branch_below(self):
-        out = self.p4son('new', 'feat', '-m', 'Feature')
-        self.assertRegex(
-            out, r'# Resolving base\n(>  .*\n)*\[ok\] main \(nearest branch below\)\n')
-        self.assertEqual(recorded('101', self.ws).base, 'main')
 
     def test_a_stacked_branch_takes_the_branch_below(self):
         self.git('switch', '-q', '-c', 'top')

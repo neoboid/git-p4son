@@ -176,12 +176,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   commit to read the change from (`revision`), the base (`resolve_base`, None for the default, and `implicit_base`, the
   one `new` and `review` take without `-b`), the alias the branch or bookmark suggests, the jj change aliases record
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
-  that the change contains the sync branch's tip, with no merge above it (`check_on_sync_tip`), the check that a base
-  contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit loop, sync's
-  commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool` hooks get as
-  `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj
-  in a jj workspace. `open_backend` holds jj's lock and operation for the whole command and yields the backend in
-  `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
+  that the sync branch exists and the change contains its tip, with no merge above it (`check_on_sync_tip`), the check
+  that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
+  loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool`
+  hooks get as `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where
+  `auto` means jj in a jj workspace. `open_backend` holds jj's lock and operation for the whole command and yields the
+  backend in `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
   `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
   `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its chain, else the
   suggested name, unless the command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so

@@ -528,7 +528,7 @@ stack from its top with `git rebase --update-refs` moves the branches in it alon
 further down the same line, such as a backup, is taken as the base too; pass `-b` then.
 
 With two branches or bookmarks on the nearest commit below, `-b` is required, as it is with jj when no bookmark is
-below the change, and with git before the first sync, when there is no sync branch to look down to.
+below the change.
 
 **Examples:**
 ```sh
@@ -683,7 +683,8 @@ there, a file the sync changed would show in the review as undoing what others s
 that way without a resolve. So before opening files, `new`, `update` and `review` check that the change contains the
 sync branch's latest commit, whatever `-b` says, and refuse otherwise. Rebase the branch onto the sync branch, or onto
 a branch that is rebased on it, and run the command again. `update --no-edit` opens nothing and skips the check,
-except with `--per-commit`. Before the first sync there is no sync branch and nothing to check.
+except with `--per-commit`. Without the sync branch, such as after it was renamed, they refuse too: set
+`[sync] branch` in `.git-p4son/config.toml` to the branch you sync onto.
 
 The same check refuses a merge commit anywhere above the sync branch, whether it merged the sync branch or another
 branch, and wherever `-b` points. A changelist is made from a straight line of commits: below a merge of the sync
@@ -699,8 +700,8 @@ below, which stays behind when only the top branch is rebased after a sync: poin
 `git branch -f`, and next time rebase the stack from its top with `git rebase --update-refs`, which moves the
 branches below along.
 
-And the base has to be below the change, also before the first sync: a branch beside it, made from the same sync,
-is refused, as the change isn't built on it. So is a branch below that was amended or rebased while the change
+And the base has to be below the change: a branch beside it, made from the same sync, is refused, as the change
+isn't built on it. So is a branch below that was amended or rebased while the change
 wasn't: rebase the change's own commits onto it with `git rebase --onto <below> <old base> <change>`.
 
 #### Shelving only files at the latest revision

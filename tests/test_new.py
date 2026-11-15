@@ -792,15 +792,16 @@ class TestNewOnAnOldSync(NewTestCase):
         self.p4son('new', 'top', '-m', 'Top', '-b', 'feature')
         self.assertEqual(set(self.p4.opened), {'e.txt'})
 
-    def test_without_the_sync_branch_only_the_base_below_the_change_is_checked(self):
-        """main moved on past the change, which nothing compares with a sync branch; the branch it left is below."""
-        save_config(self.ws, {'sync': {'branch': 'trunk'}})
-        self.git('branch', 'old', 'feature~2')
-        out = self.p4son('new', 'feat', '-m', 'Feature', '-b', 'old')
-        self.assertRegex(out, r'\[ok\] No (branch|bookmark) trunk yet\n')
-        self.assertEqual(self.p4.pending, {'102': FEATURE_DESCRIPTION})
-        self.p4son_fails('new', 'other', '-m', 'Feature', '-b',
-                         'main', message='The base main is not below')
+    def test_without_the_sync_branch_new_update_and_review_are_refused(self):
+        self.git('rebase', '-q', 'main', 'feature')
+        self.p4son('new', 'feat', '-m', 'Feature', '-b', 'main')
+        self.git('branch', '-m', 'main', 'base')
+        for argv in (['new', 'other', '-m', 'Feature', '-b', 'base'], ['review', 'other', '-m', 'Feature', '-b', 'base'],
+                     ['update', 'feat']):
+            with self.subTest(argv=argv):
+                self.p4son_fails(
+                    *argv, message='There is no sync (branch|bookmark) main')
+        self.assertEqual(list(self.p4.pending), ['102'])
 
     def test_the_sync_branch_setting_names_the_branch_to_be_based_on(self):
         self.git('branch', 'trunk', 'main')

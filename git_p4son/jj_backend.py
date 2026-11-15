@@ -11,7 +11,9 @@ from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, me
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .words import Words, base_below_sync_tip, base_not_below, has_merge, named_base, not_on_sync_tip, several_nearest
+from .words import (
+    Words, base_below_sync_tip, base_not_below, has_merge, named_base, no_sync_branch, not_on_sync_tip, several_nearest,
+)
 
 
 @dataclass
@@ -152,14 +154,13 @@ class JjBackend:
         self.workspace.check_clean()
 
     def check_on_sync_tip(self) -> None:
-        """Raise CommandError unless the change contains the sync bookmark's tip, with no merge above it, or if the
-        bookmark is conflicted; nothing to check without one."""
+        """Raise CommandError unless the sync bookmark exists, unconflicted, and the change contains its tip, with no
+        merge above it."""
         workspace = self.workspace
         sync = sync_branch_name(workspace.directory)
         log.heading(f'Checking for the latest {sync}')
         if workspace.sync_bookmark() is None:
-            log.success(f'No {self.words.branch} {sync} yet')
-            return
+            raise no_sync_branch(sync, self.words)
         tip = _unconflicted(sync, workspace.bookmarks[sync])
         if not is_ancestor(tip, workspace.tip.commit, workspace.directory):
             raise not_on_sync_tip('The change', sync, self.words)

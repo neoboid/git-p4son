@@ -93,11 +93,9 @@ class JjBackend:
         Raises CommandError, saying -b is required, for none or several."""
         workspace = self.workspace
         names = workspace.nearest_bookmarks()
-        sync = workspace.sync_bookmark()
-        such_as = f', such as {sync}' if sync is not None else ''
         if not names:
-            raise CommandError(
-                f'-b is required, as no bookmark is below the change. Name the base it starts from{such_as}.')
+            raise CommandError(f'-b is required, as no bookmark is below the change. Name the base it starts from, '
+                               f'such as {sync_branch_name(workspace.directory)}.')
         if len(names) > 1:
             raise several_nearest(names, 'the change', self.words)
         return names[0]
@@ -170,18 +168,17 @@ class JjBackend:
         log.success('Based on it')
 
     def check_base(self, base: str, name: str, recorded: bool = False) -> None:
-        """Raise CommandError, calling it name, unless base is below the change and contains the sync bookmark's tip,
-        if there is one."""
+        """Raise CommandError, calling it name, unless base is below the change and contains the sync bookmark's
+        tip."""
         workspace = self.workspace
-        sync = workspace.sync_bookmark()
-        if sync is not None:
-            tip = _unconflicted(sync, workspace.bookmarks[sync])
-            # The sync bookmark's commit is below the change once check_on_sync_tip passed, and contains itself.
-            if tip == base:
-                return
-            if not is_ancestor(tip, base, workspace.directory):
-                raise base_below_sync_tip(
-                    name, sync, self.words, name in workspace.bookmarks)
+        sync = sync_branch_name(workspace.directory)
+        tip = _unconflicted(sync, workspace.bookmarks[sync])
+        # The sync bookmark's commit is below the change once check_on_sync_tip passed, and contains itself.
+        if tip == base:
+            return
+        if not is_ancestor(tip, base, workspace.directory):
+            raise base_below_sync_tip(
+                name, sync, self.words, name in workspace.bookmarks)
         if not is_ancestor(base, workspace.tip.commit, workspace.directory):
             raise base_not_below(name, 'the change', self.words, recorded)
 

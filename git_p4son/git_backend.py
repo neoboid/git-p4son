@@ -79,9 +79,9 @@ class GitBackend:
         return sync_branch_name(self.workspace_dir)
 
     @property
-    def _sync_ref(self) -> str | None:
-        """The sync branch's full ref, or None if it doesn't exist."""
-        return f'refs/heads/{self._sync_branch}' if self._is_branch(self._sync_branch) else None
+    def _sync_ref(self) -> str:
+        """The sync branch's full ref."""
+        return f'refs/heads/{self._sync_branch}'
 
     def resolve_base(self, base: str | None) -> str:
         """The base as given, a branch by its full ref, or HEAD~1; raise CommandError if it names no commit."""
@@ -95,13 +95,10 @@ class GitBackend:
     def implicit_base(self) -> str:
         """The nearest branch below HEAD, down to the sync branch.
 
-        Raises CommandError, saying -b is required, for several, or no sync branch."""
-        sync_branch, sync_ref = self._sync_branch, self._sync_ref
-        if sync_ref is None:
-            raise CommandError(f'-b is required, as there is no branch {sync_branch} to find the base of '
-                               f'{self._change()} above. Name the base the change starts from.')
+        Raises CommandError, saying -b is required, for several."""
+        sync_branch = self._sync_branch
         names = nearest_branches_below(
-            self.revision, sync_ref, self.workspace_dir)
+            self.revision, self._sync_ref, self.workspace_dir)
         if len(names) > 1:
             raise several_nearest(names, self._change(), self.words)
         return names[0] if names else sync_branch
@@ -158,7 +155,7 @@ class GitBackend:
         workspace_dir = self.workspace_dir
         sync_branch, sync_ref = self._sync_branch, self._sync_ref
         log.heading(f'Checking for the latest {sync_branch}')
-        if sync_ref is None:
+        if not self._is_branch(sync_branch):
             raise no_sync_branch(sync_branch, self.words)
         if not is_ancestor(sync_ref, 'HEAD', workspace_dir):
             raise not_on_sync_tip(self._change(), sync_branch, self.words)
@@ -168,16 +165,13 @@ class GitBackend:
         log.success('Based on it')
 
     def check_base(self, base: str, name: str, recorded: bool = False) -> None:
-        """Raise CommandError, calling it name, unless base is below HEAD and contains the sync branch's tip, if
-        there is one."""
-        sync_ref = self._sync_ref
-        if sync_ref is not None:
-            # The sync branch is below HEAD once check_on_sync_tip passed, and contains its own tip.
-            if name == self._sync_branch:
-                return
-            if not is_ancestor(sync_ref, base, self.workspace_dir):
-                raise base_below_sync_tip(
-                    name, self._sync_branch, self.words, self._is_branch(name))
+        """Raise CommandError, calling it name, unless base is below HEAD and contains the sync branch's tip."""
+        # The sync branch is below HEAD once check_on_sync_tip passed, and contains its own tip.
+        if name == self._sync_branch:
+            return
+        if not is_ancestor(self._sync_ref, base, self.workspace_dir):
+            raise base_below_sync_tip(
+                name, self._sync_branch, self.words, self._is_branch(name))
         if not is_ancestor(base, self.revision, self.workspace_dir):
             raise base_not_below(name, self._change(), self.words, recorded)
 

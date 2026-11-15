@@ -29,7 +29,8 @@ class Backend(Protocol):
         """The base to find the change's commits since, None for the backend's default."""
 
     def implicit_base(self) -> str:
-        """The base new and review take without -b: the nearest branch or bookmark below the change.
+        """The base new and review take without -b, once check_on_sync_tip passed: the nearest branch or bookmark
+        below the change.
 
         Raises CommandError, saying -b is required, where there is none."""
 
@@ -68,7 +69,7 @@ class Backend(Protocol):
 
     def check_base(self, base: str, name: str, recorded: bool = False) -> None:
         """Raise CommandError, calling it name, unless the resolved base is below the change and contains the sync
-        branch's tip, if there is one; recorded if the alias records the base."""
+        branch's tip, once check_on_sync_tip passed; recorded if the alias records the base."""
 
     def base_candidates(self) -> list[tuple[str, str]]:
         """Completion candidates for -b, as (name, description)."""

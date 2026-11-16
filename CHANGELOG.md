@@ -2,17 +2,18 @@
 
 ## Unreleased
 
+## 0.12.0
+
 - With git, `new` and `review` take the nearest branch below yours as the base, down to the sync branch, as jj
   takes the nearest bookmark. The branch's upstream no longer picks it: pass `-b` for another base
-- `new`, `update` and `review` refuse a branch that isn't rebased onto the latest sync, where its files would
-  undo what the sync brought in
-- `new`, `update` and `review` refuse a branch with a merge commit above the sync branch: rebase instead of merging
-- `new`, `update` and `review` refuse a base below the latest sync, such as a miscounted `-b HEAD~3`
+- `new`, `update` and `review` refuse:
+  - a branch that isn't rebased onto the latest sync, where its files would undo what the sync brought in
+  - a branch with a merge commit above the sync branch: rebase instead of merging
+  - a base below the latest sync, such as a miscounted `-b HEAD~3`
+  - a base the change isn't built on, such as a branch beside it
+  - a workspace without the sync branch, such as after renaming it: set `[sync] branch` to the one you sync onto
 - With git, a base that names a branch is that branch, also when a tag has the same name
 - `new` no longer takes `--no-edit`, which created a changelist without opening its files. `update --no-edit` stays
-- `new`, `update` and `review` refuse a base the change isn't built on, such as a branch beside it
-- `new`, `update` and `review` refuse to run without the sync branch, such as after it was renamed: set
-  `[sync] branch` to the one you sync onto
 - A message printed while a command runs, such as "All files up to date" during a sync, goes below its command
   line instead of onto it
 

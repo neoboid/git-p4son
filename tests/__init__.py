@@ -1,4 +1,4 @@
-"""Tests for git_p4son, run with a global git config of their own."""
+"""Tests for git_p4son, run with a global git config of their own, outside any repository a caller set."""
 
 import atexit
 import os
@@ -20,4 +20,13 @@ def _isolate_global_git_config() -> None:
     os.environ['GIT_CONFIG_GLOBAL'] = config
 
 
+def _leave_the_calling_repository() -> None:
+    """Drop the variables that tie git to a repository, as a hook in a linked worktree passes GIT_DIR down."""
+    names = subprocess.run(['git', 'rev-parse', '--local-env-vars'], check=True, capture_output=True,
+                           text=True).stdout.split()
+    for name in names:
+        os.environ.pop(name, None)
+
+
+_leave_the_calling_repository()
 _isolate_global_git_config()

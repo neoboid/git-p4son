@@ -120,10 +120,19 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
 
-- **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order,
-  from the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a
-  failure, each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and
-  `post-sync` hooks.
+- **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order, from
+  the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a failure,
+  each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and `post-sync`
+  hooks. Their replacement, which nothing calls yet: `hook_commands` reads a hook's commands from `[hooks]` in
+  `config.toml`, each checked as a configured command with the sync variables (`$(synced)` for `post-sync` only), and
+  `run_hook` runs them in order from the workspace root through `command_line`, counting the failures without stopping
+  at one. `check_hooks` checks both hooks after `hooks_migration.check_no_old_hooks`.
+
+- **`hooks_migration.py`** - The hook setup of earlier versions, kept apart to be deleted whole one day:
+  `check_no_old_hooks` refuses a file in `.git-p4son/hooks/<hook>/` that no `[hooks]` command names, after printing the
+  hook's `[hooks]` lines, its commands followed by one per such file with the interpreter it ran with (the script
+  runners on Windows, the file itself elsewhere). A file that never ran only gets a warning. Then it refuses the script
+  runner settings, `[core.script-runners]` and `[hooks.extension-associations]`.
 
 - **`sync_targets.py`** - Sync targets: the commands under `[sync.targets]`, by name, that print a changelist
   (`sync_target_names`, checked as a whole whenever they are read), `[sync] default-target` (`default_sync_target`),

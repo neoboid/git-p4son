@@ -1,9 +1,6 @@
 """Review tools: Swarm, built in, and the command lines the workspace configures in [review-tool.<name>]."""
 
 import argparse
-import os
-import re
-from collections.abc import Callable
 from typing import Any, TypeGuard
 
 from .backend import alias_for_branch_or_none
@@ -11,8 +8,8 @@ from .changelist_store import Review, alias_review, changelist_alias_exists, mar
     set_review_tool
 from .common import CommandError, run_interactive
 from .config import ConfigError, load_config, set_setting_in_place
+from .configured_command import PERFORCE_VARIABLES, check_command_table, expand_variables, from_workspace_root
 from .log import log
-from .perforce import get_client_spec, get_p4_port, get_p4_user
 
 SWARM = 'swarm'
 
@@ -22,29 +19,7 @@ SWARM_SHELF_DELAY = 5
 _SECTION = 'review-tool'
 _DEFAULT = 'default'
 _KEYS = ('command', 'new', 'update')
-_VARIABLE = re.compile(r'\$\((\w+)\)')
-
-
-def _workspace(workspace_dir: str) -> str:
-    spec = get_client_spec(workspace_dir)
-    if spec is None:
-        raise CommandError('No Perforce workspace for $(workspace)')
-    return spec.name
-
-
-def _user(workspace_dir: str) -> str:
-    user = get_p4_user(workspace_dir)
-    if user is None:
-        raise CommandError('No Perforce user for $(user)')
-    return user
-
-
-_PERFORCE_VARIABLES: dict[str, Callable[[str], str]] = {
-    'workspace': _workspace,
-    'user': _user,
-    'p4port': get_p4_port,
-}
-_BUILT_IN = ('changelist', *_PERFORCE_VARIABLES)
+_BUILT_IN = ('changelist', *PERFORCE_VARIABLES)
 
 
 def _section(workspace_dir: str) -> dict[str, Any]:
@@ -77,24 +52,7 @@ def review_tool_config(tool: str, workspace_dir: str) -> dict[str, list[str]]:
         raise CommandError(f'Review tool {tool} is not configured. The review tools are: '
                            f'{", ".join(review_tool_names(workspace_dir))}. Configure it again, or record another tool '
                            'with "git p4son review-tool set".')
-    table = f'[{_SECTION}.{tool}]'
-    unknown = sorted(set(config) - set(_KEYS))
-    if unknown:
-        raise ConfigError(f'{table} in config.toml has unknown keys: {", ".join(unknown)}. '
-                          f'The keys are: {", ".join(_KEYS)}')
-    if 'command' not in config:
-        raise ConfigError(f'{table} in config.toml has no command')
-    for key, value in config.items():
-        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            raise ConfigError(
-                f'{key} in {table} in config.toml must be a list of strings, one per argument')
-    if not config['command']:
-        raise ConfigError(f'command in {table} in config.toml is empty')
-    for name in sorted({name for value in config.values() for item in value for name in _VARIABLE.findall(item)}):
-        if name not in _BUILT_IN and name not in os.environ:
-            raise ConfigError(f'{table} in config.toml uses $({name}), which is neither one of '
-                              f'{", ".join(_BUILT_IN)} nor an environment variable')
-    return config
+    return check_command_table(config, _KEYS, _BUILT_IN, f'[{_SECTION}.{tool}]')
 
 
 def default_review_tool(workspace_dir: str) -> str:
@@ -139,20 +97,6 @@ def shelf_delay(tool: str | None) -> int | None:
     return None if runs_command(tool) else SWARM_SHELF_DELAY
 
 
-def _expand(arguments: list[str], changelist: str, workspace_dir: str) -> list[str]:
-    """Replace each $(name) in the arguments: the changelist, a Perforce value, else an environment variable."""
-    values = {'changelist': changelist}
-
-    def value(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if name not in values:
-            lookup = _PERFORCE_VARIABLES.get(name)
-            values[name] = lookup(
-                workspace_dir) if lookup else os.environ[name]
-        return values[name]
-    return [_VARIABLE.sub(value, argument) for argument in arguments]
-
-
 def run_review_tool(tool: str, changelist: str, *, first: bool, workspace_dir: str, dry_run: bool) -> None:
     """Run the review tool's command with its new or update arguments from the workspace root, after a shelve.
 
@@ -163,11 +107,9 @@ def run_review_tool(tool: str, changelist: str, *, first: bool, workspace_dir: s
         target = f'CL {changelist}' if changelist.isdigit() else 'the new CL'
         log.success(f'Would run review tool {tool} for {target}')
         return
-    command = _expand([*config['command'], *config.get('new' if first else 'update', [])],
-                      changelist, workspace_dir)
-    if os.path.dirname(command[0]) and not os.path.isabs(command[0]):
-        # Windows looks for the program from git-p4son's own directory, not the cwd it is given.
-        command[0] = os.path.normpath(os.path.join(workspace_dir, command[0]))
+    command = from_workspace_root(
+        expand_variables([*config['command'], *config.get('new' if first else 'update', [])],
+                         {'changelist': changelist}, workspace_dir), workspace_dir)
     try:
         result = run_interactive(command, workspace_dir)
     except OSError as error:

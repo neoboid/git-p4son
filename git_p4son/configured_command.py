@@ -8,7 +8,7 @@ from .common import CommandError
 from .config import ConfigError
 from .perforce import get_client_spec, get_p4_port, get_p4_user
 
-_VARIABLE = re.compile(r'\$\((\w+)\)')
+_VARIABLE = re.compile(r'\$\(([\w-]+)\)')
 
 
 def _workspace(workspace_dir: str) -> str:

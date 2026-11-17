@@ -144,6 +144,13 @@ class TestRunReviewTool(WorkspaceTestCase):
         self.assertEqual(self.review_tool_runs('my-tool')[0]['args'], [
             '--client=myclient', 'me@ssl:perforce.example.com:1666', 'secret', '101-101'])
 
+    @mock.patch.dict(os.environ, {'MY-REVIEW-TOKEN': 'secret'})
+    def test_a_variable_name_may_hold_a_hyphen(self):
+        self.write_review_tool('my-tool', new=['$(MY-REVIEW-TOKEN)'])
+        self.run_tool()
+        self.assertEqual(self.review_tool_runs(
+            'my-tool')[0]['args'], ['secret'])
+
     def test_an_expanded_value_stays_one_argument(self):
         self.p4.user = 'some one'
         self.write_review_tool('my-tool', new=['$(user)'])

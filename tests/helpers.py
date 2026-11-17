@@ -29,14 +29,22 @@ from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
 from git_p4son.perforce import P4SyncPreviewFile
 
 
-# A review tool for the tests: it logs the run next to itself, then fails if it is run number fail_at.
-_REVIEW_TOOL_SCRIPT = """import json, os, sys
+# Logs each run's arguments and cwd as a line of JSON next to the script, for _script_runs to read.
+_LOGGING_SCRIPT = """import json, os, sys
 log = os.path.splitext(os.path.abspath(__file__))[0] + '.jsonl'
 with open(log, 'a', encoding='utf-8') as f:
     f.write(json.dumps({{'args': sys.argv[1:], 'cwd': os.getcwd()}}) + '\\n')
-with open(log, encoding='utf-8') as f:
+"""
+
+# A review tool for the tests: it logs the run next to itself, then fails if it is run number fail_at.
+_REVIEW_TOOL_SCRIPT = _LOGGING_SCRIPT + """with open(log, encoding='utf-8') as f:
     runs = len(f.readlines())
 sys.exit(3 if runs == {fail_at} else 0)
+"""
+
+_SYNC_TARGET_SCRIPT = _LOGGING_SCRIPT + """sys.stdout.write({prints!r})
+sys.stderr.write({stderr!r})
+sys.exit({exit_code})
 """
 
 
@@ -278,6 +286,25 @@ class WorkspaceTestCase(unittest.TestCase):
 
     def review_tool_runs(self, name: str) -> list[dict[str, Any]]:
         """The arguments and cwd of each run of review tool name, in order."""
+        return self._script_runs(name)
+
+    def write_sync_target(self, name: str, prints: str, exit_code: int = 0, stderr: str = '',
+                          command: list[str] | None = None) -> None:
+        """Configure sync target name, a script that logs each run's arguments and cwd, prints and exits so.
+
+        command replaces the command that runs the script."""
+        script = os.path.join(CONFIG_DIR, f'target-{name}.py')
+        self.write_file(script, _SYNC_TARGET_SCRIPT.format(
+            prints=prints, stderr=stderr, exit_code=exit_code))
+        targets = load_config(self.ws).get('sync', {}).get('targets', {})
+        targets[name] = command or [sys.executable, script]
+        save_config(self.ws, {'sync': {'targets': targets}})
+
+    def sync_target_runs(self, name: str) -> list[dict[str, Any]]:
+        """The arguments and cwd of each run of sync target name, in order."""
+        return self._script_runs(f'target-{name}')
+
+    def _script_runs(self, name: str) -> list[dict[str, Any]]:
         path = os.path.join(self.ws, CONFIG_DIR, f'{name}.jsonl')
         if not os.path.exists(path):
             return []

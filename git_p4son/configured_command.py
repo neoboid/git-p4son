@@ -33,6 +33,32 @@ _PERFORCE_VARIABLES: dict[str, Callable[[str], str]] = {
 PERFORCE_VARIABLES = tuple(_PERFORCE_VARIABLES)
 
 
+def _check_arguments(value: object, setting: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(
+            f'{setting} in config.toml must be a list of strings, one per argument')
+    return value
+
+
+def _check_variables(arguments: list[str], built_in: tuple[str, ...], setting: str) -> None:
+    for name in sorted({name for argument in arguments for name in _VARIABLE.findall(argument)}):
+        if name not in built_in and name not in os.environ:
+            raise ConfigError(f'{setting} in config.toml uses $({name}), which is neither one of '
+                              f'{", ".join(built_in)} nor an environment variable')
+
+
+def check_command(value: object, built_in: tuple[str, ...], setting: str) -> list[str]:
+    """value, the setting that configures a command as its list of arguments.
+
+    Raises ConfigError for a value that isn't a non-empty list of strings, or a $(name) that is neither built in
+    nor an environment variable."""
+    command = _check_arguments(value, setting)
+    if not command:
+        raise ConfigError(f'{setting} in config.toml is empty')
+    _check_variables(command, built_in, setting)
+    return command
+
+
 def check_command_table(config: dict[str, object], keys: tuple[str, ...], built_in: tuple[str, ...],
                         table: str) -> dict[str, list[str]]:
     """config, the table that configures a command with keys, each a list of arguments, command among them.
@@ -45,18 +71,12 @@ def check_command_table(config: dict[str, object], keys: tuple[str, ...], built_
                           f'The keys are: {", ".join(keys)}')
     if 'command' not in config:
         raise ConfigError(f'{table} in config.toml has no command')
-    arguments: dict[str, list[str]] = {}
-    for key, value in config.items():
-        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            raise ConfigError(
-                f'{key} in {table} in config.toml must be a list of strings, one per argument')
-        arguments[key] = value
+    arguments = {key: _check_arguments(
+        value, f'{key} in {table}') for key, value in config.items()}
     if not arguments['command']:
         raise ConfigError(f'command in {table} in config.toml is empty')
-    for name in sorted({name for value in arguments.values() for item in value for name in _VARIABLE.findall(item)}):
-        if name not in built_in and name not in os.environ:
-            raise ConfigError(f'{table} in config.toml uses $({name}), which is neither one of '
-                              f'{", ".join(built_in)} nor an environment variable')
+    _check_variables([item for value in arguments.values()
+                     for item in value], built_in, table)
     return arguments
 
 

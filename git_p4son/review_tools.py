@@ -8,7 +8,7 @@ from .changelist_store import Review, alias_review, changelist_alias_exists, mar
     set_review_tool
 from .common import CommandError, run_interactive
 from .config import ConfigError, load_config, set_setting_in_place
-from .configured_command import PERFORCE_VARIABLES, check_command_table, expand_variables, from_workspace_root
+from .configured_command import PERFORCE_VARIABLES, check_command_table, command_line
 from .log import log
 
 SWARM = 'swarm'
@@ -107,9 +107,8 @@ def run_review_tool(tool: str, changelist: str, *, first: bool, workspace_dir: s
         target = f'CL {changelist}' if changelist.isdigit() else 'the new CL'
         log.success(f'Would run review tool {tool} for {target}')
         return
-    command = from_workspace_root(
-        expand_variables([*config['command'], *config.get('new' if first else 'update', [])],
-                         {'changelist': changelist}, workspace_dir), workspace_dir)
+    command = command_line([*config['command'], *config.get('new' if first else 'update', [])],
+                           {'changelist': changelist}, workspace_dir)
     try:
         result = run_interactive(command, workspace_dir)
     except OSError as error:

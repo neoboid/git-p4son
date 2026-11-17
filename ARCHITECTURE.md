@@ -131,9 +131,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `$(last-synced)` and `$(depot-root)` filled in, and parses the changelist it prints.
 
 - **`configured_command.py`** - The command lines a workspace configures in `config.toml`: checking a command given as a
-  list (`check_command`) or a table with argument lists (`check_command_table`), and its `$(name)` variables, expanding
-  those, the caller's values first, then the Perforce ones and the environment (`expand_variables`), and joining a
-  relative program to the workspace root (`from_workspace_root`).
+  list (`check_command`) or a table with argument lists (`check_command_table`, with `check_keys`), and its `$(name)`
+  variables, and `command_line`, the command to run: its variables expanded, the caller's values first, then the
+  Perforce ones and the environment, and a relative program joined to the workspace root. `SYNC_VARIABLES` and
+  `sync_values` are the variables sync targets and hooks share, `$(last-synced)` and `$(depot-root)`.
 
 - **`review_tools.py`** - Review tools, and every decision about what Swarm means: Swarm (`SWARM`), built in, and the
   tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`, else

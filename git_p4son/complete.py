@@ -10,6 +10,7 @@ from .git import get_workspace_dir
 from .log import log
 from .review_tools import SWARM, review_tool_names
 from .sync_split_users import USER_PLACEHOLDER, get_split_users
+from .sync_targets import sync_target_names
 
 _HIDDEN_COMMANDS = frozenset({'complete', 'completion'})
 
@@ -119,6 +120,15 @@ def _complete_flag_value(flag: str, workspace_dir: str | None = None,
     return []
 
 
+def _get_sync_target_names(workspace_dir: str | None) -> Candidates:
+    """The configured sync targets, or none when the configuration can't be read."""
+    try:
+        names = sync_target_names(workspace_dir) if workspace_dir else []
+    except CommandError:
+        names = []
+    return [(name, 'Sync target') for name in names]
+
+
 def _get_review_tool_names(workspace_dir: str | None) -> Candidates:
     """swarm and the configured review tools, or only swarm when the configuration can't be read."""
     try:
@@ -170,15 +180,11 @@ def _complete_positional(command: str, subcommand: str | None, positional_count:
                                            bool(target.get_default('new_alias')))
 
     if command == 'sync':
+        candidates = [('head', 'Sync to the latest changelist')]
         if positional_count == 0:
-            candidates = [
-                ('head', 'Sync to the latest changelist'),
-                ('last-synced', 'Re-sync last synced changelist'),
-            ]
-            return _filter(candidates, prefix)
-        # "head" may also close out a sequence of changelist numbers.
-        return _filter(
-            [('head', 'Sync to the latest changelist')], prefix)
+            candidates.append(
+                ('last-synced', 'Re-sync last synced changelist'))
+        return _filter(candidates + _get_sync_target_names(workspace_dir), prefix)
 
     # Commands with nested actions (alias list, ...) take the action first.
     if actions and subcommand is None and positional_count == 0:

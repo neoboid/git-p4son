@@ -27,6 +27,7 @@ from tests.helpers import (
     cli_args,
     make_run_result,
     P4RepoTestCase,
+    save_config,
     start_patch,
 )
 
@@ -292,7 +293,7 @@ class TestSync(SyncTestCase):
                 (['head', '101'], 'must come last'),
                 (['last-synced', '101'], 'cannot be combined'),
                 (['50', '101'], 'without --allow-backwards'),
-                (['12a'], 'Invalid changelist number')):
+                (['12a'], 'neither a changelist number nor a sync target')):
             with self.subTest(argv=argv):
                 self.sync_fails(*argv, message=message)
         self.assertEqual(self.p4.synced(), [])
@@ -572,6 +573,96 @@ class TestSyncDryRun(SyncTestCase):
         self.sync_fails('-n', '50', message='without --allow-backwards')
 
 
+class TestSyncTargets(SyncTestCase):
+    def setUp(self):
+        super().setUp()
+        for change in (101, 102, 103):
+            self.p4.submit(change, {'a.txt': f'a{change}\n'})
+
+    def set_default_target(self, name):
+        save_config(self.ws, {'sync': {'default-target': name}})
+
+    def test_syncs_to_the_changelist_the_command_prints(self):
+        self.write_sync_target('latest-safe', '102\n')
+        out = self.sync('latest-safe')
+        self.assertEqual(self.synced_commits(), [102])
+        self.assertIn('Syncing to latest-safe CL (102)', out)
+
+    def test_the_command_gets_the_last_synced_changelist_and_the_depot_root(self):
+        self.write_sync_target('latest-safe', '102', command=[
+            sys.executable, '.git-p4son/target-latest-safe.py', '$(last-synced)', '$(depot-root)'])
+        self.sync('latest-safe')
+        self.assertEqual(self.sync_target_runs('latest-safe')
+                         [0]['args'], ['100', '//myclient'])
+
+    def test_a_target_anywhere_in_a_sequence(self):
+        self.write_sync_target('latest-safe', '102')
+        self.sync('101', 'latest-safe', 'head')
+        self.assertEqual(self.synced_commits(), [101, 102, 103])
+
+    def test_a_target_out_of_order_is_named(self):
+        self.write_sync_target('latest-safe', '101')
+        self.sync_fails('102', 'latest-safe',
+                        message=r'strictly increasing, got 102 then 101 \(latest-safe\)')
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_a_target_named_twice_runs_once(self):
+        self.write_sync_target('latest-safe', '102')
+        self.sync_fails('latest-safe', 'Latest-Safe',
+                        message='strictly increasing')
+        self.assertEqual(len(self.sync_target_runs('latest-safe')), 1)
+
+    def test_an_older_changelist_needs_allow_backwards(self):
+        self.p4.submit(50, {'a.txt': 'old\n'})
+        self.write_sync_target('latest-safe', '50')
+        self.sync_fails('latest-safe', message='without --allow-backwards')
+        self.sync('latest-safe', '--allow-backwards')
+        self.assertEqual(self.synced_commits(), [50])
+
+    def test_the_last_synced_changelist_is_already_there(self):
+        self.write_sync_target('latest-safe', '100')
+        out = self.sync('latest-safe')
+        self.assertIn('Already at CL 100, nothing to sync', out)
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_a_failing_command_syncs_nothing(self):
+        self.write_sync_target('latest-safe', '', exit_code=1)
+        self.sync_fails('101', 'latest-safe',
+                        message='Sync target latest-safe failed, with exit code 1')
+        self.assertEqual(self.p4.synced(), [])
+        self.assertEqual(self.synced_commits(), [])
+
+    def test_a_dry_run_runs_the_command(self):
+        self.write_sync_target('latest-safe', '102')
+        out = self.sync('-n', '101', 'latest-safe')
+        self.assertIn('101 102', out)
+        self.assertEqual(self.p4.synced(), [])
+
+    def test_changelist_numbers_leave_an_invalid_target_alone(self):
+        self.write_config(self.read('.git-p4son/config.toml') +
+                          '[sync.targets]\nhead = "x"\n')
+        self.sync('101')
+        self.assertEqual(self.synced_commits(), [101])
+
+    def test_a_bare_sync_resolves_the_default_target(self):
+        self.write_sync_target('latest-safe', '102')
+        self.set_default_target('latest-safe')
+        self.sync()
+        self.assertEqual(self.synced_commits(), [102])
+
+    def test_head_still_syncs_to_the_latest_changelist(self):
+        self.write_sync_target('latest-safe', '102')
+        self.set_default_target('latest-safe')
+        self.sync('head')
+        self.assertEqual(self.synced_commits(), [103])
+        self.assertEqual(self.sync_target_runs('latest-safe'), [])
+
+    def test_a_default_that_is_not_a_target(self):
+        self.set_default_target('latest-safe')
+        self.sync_fails(message='which is not a sync target')
+        self.assertEqual(self.p4.synced(), [])
+
+
 class TestSyncSplitting(SyncTestCase):
     """Last synced at 100, latest 106; me submitted 102 and 105."""
 
@@ -689,6 +780,7 @@ TestSyncOnJj = on_jj(
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
+TestSyncTargetsOnJj = on_jj(TestSyncTargets)
 TestSyncSplittingOnJj = on_jj(TestSyncSplitting)
 
 if __name__ == '__main__':

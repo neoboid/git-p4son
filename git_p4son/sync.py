@@ -14,6 +14,7 @@ from .hooks import run_hooks
 from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
+from .sync_targets import default_sync_target, resolve_sync_target
 from .sync_merge import (
     WritableSyncFileSet, merge_changed_files, prepare_writable_files,
     report_not_synced,
@@ -39,6 +40,7 @@ from .perforce import (
 
 LAST_SYNCED_LABEL = 'last synced'
 _SPLIT_LABEL = 'split'
+_SPECIFIED_LABEL = 'specified'
 
 
 @dataclass(frozen=True)
@@ -181,12 +183,12 @@ def parse_changelist(raw: str) -> int:
         raise CommandError(f'Invalid changelist number: {raw}') from None
 
 
-def check_increasing(changelists: list[int]) -> None:
-    """Raise CommandError unless changelists are strictly increasing."""
-    for prev, curr in zip(changelists, changelists[1:]):
+def _check_increasing(changelists: list[tuple[int, str]]) -> None:
+    """Raise CommandError unless the changelists, each with how the error names it, are strictly increasing."""
+    for (prev, prev_named), (curr, curr_named) in zip(changelists, changelists[1:]):
         if curr <= prev:
             raise CommandError('Changelists must be strictly increasing, '
-                               f'got {prev} then {curr}')
+                               f'got {prev_named} then {curr_named}')
 
 
 def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
@@ -314,14 +316,23 @@ def _resolve_sync_targets(
         raise CommandError('The "head" keyword must come last')
 
     targets = []
-    for c in raw or ['head']:
-        if c.lower() == 'head':
+    resolved: dict[str, int] = {}
+    for c in raw or [default_sync_target(workspace_dir) or 'head']:
+        name = c.lower()
+        if name == 'head':
             targets.append(_latest_target(depot_root, workspace_dir))
-        else:
-            targets.append((parse_changelist(c), 'specified'))
+            continue
+        try:
+            targets.append((int(c), _SPECIFIED_LABEL))
+        except ValueError:
+            if name not in resolved:
+                resolved[name] = resolve_sync_target(
+                    c, last_synced, depot_root, workspace_dir)
+            targets.append((resolved[name], name))
 
+    _check_increasing([(cl, str(cl) if label == _SPECIFIED_LABEL else f'{cl} ({label})')
+                      for cl, label in targets])
     numbers = [cl for cl, _ in targets]
-    check_increasing(numbers)
 
     if last_synced and numbers[0] < last_synced:
         if not allow_backwards:

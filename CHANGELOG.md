@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Sync targets: name a command in `[sync.targets]` in `.git-p4son/config.toml` that prints a changelist, such as
+  the newest one your CI has marked good, and `sync <name>` syncs to it. `[sync] default-target` makes a bare
+  `sync` go there, while `sync head` still goes to the latest changelist
 - A review tool's `$(name)` may hold a hyphen, as `$(depot-root)` does in a sync target's command
 
 ## 0.12.0

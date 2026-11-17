@@ -254,9 +254,10 @@ git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--allow-backwar
 ```
 
 **Arguments:**
-- `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, or `head`
-  to sync to the latest changelist. Omit to sync to the latest changelist affecting the workspace. Several
-  strictly increasing changelist numbers may be given to sync each in sequence, producing one commit per
+- `changelist` (optional): Changelist number, `last-synced` to re-sync the last synced changelist, `head`
+  to sync to the latest changelist, or the name of a [sync target](#sync-targets), to sync to the changelist its
+  command prints. Omit to sync to `[sync] default-target`, else to the latest changelist affecting the workspace.
+  Several strictly increasing changelists may be given to sync each in sequence, producing one commit per
   changelist. A trailing `head` may close out such a sequence to finish at the latest changelist.
 
 **Options:**
@@ -267,8 +268,8 @@ git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--allow-backwar
 - `--allow-backwards`: Allow syncing to changelists older than the last synced one. `-f, --force` still works for
   now, with a warning
 - `-n, --dry-run`: Print the resolved sync sequence without syncing. The arguments are validated as for a
-  real sync, but nothing else runs: no clean-workspace checks, no hooks, and no prompts. Ends with
-  `Dry run, nothing changed`
+  real sync, but nothing else runs, apart from the commands of the [sync targets](#sync-targets) it names: no
+  clean-workspace checks, no hooks, and no prompts. Ends with `Dry run, nothing changed`
 - `-u, --split-user NAME`: Also split out this user's changelists, on top of the configured
   [split users](#split-users). Repeat to give several users. Each name is checked against the Perforce server.
 - `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
@@ -282,6 +283,7 @@ git p4son sync head         # sync to latest (explicit)
 git p4son sync 12345
 git p4son sync 123 156 178  # sync each changelist in sequence, one commit each
 git p4son sync 123 156 head # sync 123, 156, then the latest changelist
+git p4son sync latest-safe  # sync to the changelist the latest-safe sync target prints
 git p4son sync last-synced
 git p4son sync 12345 --allow-backwards
 git p4son sync --dry-run    # show the changelists a sync to latest would visit
@@ -322,6 +324,42 @@ Windows and `UnrealEditor` on macOS. The check runs before the clean-workspace c
 skipping the check.
 
 Pass `--ignore-blocking-processes` to sync once without the check, or remove the setting to turn it off for good.
+
+#### Sync targets
+
+The latest changelist is often not one you want: it may not compile yet, or may not have passed the smoke tests.
+What makes a changelist good differs per team, such as a green CI build, precompiled binaries or a QA sign-off, so
+git-p4son asks a command of yours. Name it as a sync target in `.git-p4son/config.toml`:
+
+```toml
+[sync]
+default-target = "latest-safe"
+
+[sync.targets]
+latest-safe = ["python", "tools/latest-safe-cl.py", "--after", "$(last-synced)", "--path", "$(depot-root)/..."]
+```
+
+`git p4son sync latest-safe` then runs the command and syncs to the changelist it prints, exactly as if you had
+typed the number: it must be newer than the last synced one unless you pass `--allow-backwards`, and it may stand
+anywhere in a sequence, such as `git p4son sync 12345 latest-safe`. With `default-target`, a bare `git p4son sync`
+syncs to that target, while `git p4son sync head` still goes to the latest changelist. Tab completion offers the
+target names.
+
+The command runs from the workspace root, like a [review tool](#review-tools)'s: a target is a list, one string
+per argument, run without a shell, with a relative program found from the workspace root and a bare name on `PATH`.
+`$(name)` in an argument is replaced as in a review tool's command, apart from `$(changelist)`, and two more:
+
+- `$(last-synced)`: the last synced changelist, or empty before the first sync
+- `$(depot-root)`: the depot root, such as `//myclient`
+
+The command prints the changelist number on stdout, with any whitespace around it; anything else fails the sync,
+with the output shown. Its stderr shows on the terminal, so it can say why it found no changelist, and a non-zero
+exit code fails the sync before anything is synced. The command is echoed with the values in, so it can be rerun by
+hand. It runs on `--dry-run` too, to print the sequence, so it should only look things up. Like a hook, it runs
+under git-p4son's [jj lock](#locking-and-the-git-workflow), so it must not run jj commands that snapshot.
+
+A target name follows the [alias](#alias-command) name rules: lowercase, not all digits, and none of `head`,
+`last-synced` or `branch`. It is matched ignoring case, as those keywords are.
 
 #### Split users
 
@@ -1062,6 +1100,9 @@ write most of them; the rest you edit by hand.
   `$(user)` stands for you. See [Split users](#split-users)
 - `[sync] blocking-processes` (list of strings, default empty): processes that stop a sync while they run. See
   [Blocking processes](#blocking-processes)
+- `[sync] default-target` (string): the [sync target](#sync-targets) a `sync` without changelists syncs to, instead
+  of the latest changelist
+- `[sync.targets]` (table): each [sync target](#sync-targets)'s command, a list of strings under its name
 - `[review-tool] default` (string, default `"swarm"`): the [review tool](#review-tools) `new --review` and `review`
   push to without `--review-tool`
 - `[review-tool.<name>]` (table): a [review tool](#review-tools)'s `command`, and its `new` and `update` arguments

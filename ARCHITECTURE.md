@@ -126,10 +126,15 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   failure, each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and
   `post-sync` hooks.
 
-- **`configured_command.py`** - The command lines a workspace configures in `config.toml`: checking a command's
-  table, its keys, argument lists and `$(name)` variables (`check_command_table`), expanding those, the caller's
-  values first, then the Perforce ones and the environment (`expand_variables`), and joining a relative program to
-  the workspace root (`from_workspace_root`).
+- **`sync_targets.py`** - Sync targets: the commands under `[sync.targets]`, by name, that print a changelist
+  (`sync_target_names`, checked as a whole whenever they are read), `[sync] default-target` (`default_sync_target`),
+  and `resolve_sync_target`, which runs a target's command from the workspace root with `common.run_for_output`,
+  `$(last-synced)` and `$(depot-root)` filled in, and parses the changelist it prints.
+
+- **`configured_command.py`** - The command lines a workspace configures in `config.toml`: checking a command given as a
+  list (`check_command`) or a table with argument lists (`check_command_table`), and its `$(name)` variables, expanding
+  those, the caller's values first, then the Perforce ones and the environment (`expand_variables`), and joining a
+  relative program to the workspace root (`from_workspace_root`).
 
 - **`review_tools.py`** - Review tools, and every decision about what Swarm means: Swarm (`SWARM`), built in, and the
   tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`, else
@@ -276,7 +281,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands
-  run on the terminal (`run_interactive()`, used by review tools),
+  run on the terminal (`run_interactive()`, used by review tools), commands whose stdout is read while their stderr
+  shows (`run_for_output()`, used by sync targets),
   `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
   prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
 

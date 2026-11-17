@@ -282,17 +282,30 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.kill()
 
 
+def _show_command(command: list[str]) -> None:
+    """Print command on a line of its own, before it writes to the terminal."""
+    log.command(join_command_line(command))
+    log.end_command()
+    sys.stdout.flush()
+
+
 def run_interactive(command: list[str], cwd: str = '.', env: dict[str, str] | None = None) -> RunResult[list[str]]:
     """Run a command on the terminal, its output shown as it is written and its prompts answered there.
 
     The result holds no output, only the return code."""
-    log.command(join_command_line(command))
-    log.end_command()
-    sys.stdout.flush()
+    _show_command(command)
     start = time.monotonic()
     returncode = subprocess.run(
         command, cwd=cwd, env=_command_env(cwd, env)).returncode
     return RunResult(returncode, [], [], elapsed=timedelta(seconds=time.monotonic() - start))
+
+
+def run_for_output(command: list[str], cwd: str) -> RunResult[list[str]]:
+    """Run a command with its stderr on the terminal, returning its stdout lines; it may not prompt."""
+    _show_command(command)
+    result = subprocess.run(command, cwd=cwd, env=_command_env(cwd, None), stdout=subprocess.PIPE,
+                            stdin=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace')
+    return RunResult(result.returncode, result.stdout.splitlines(), [])
 
 
 def run_with_stream_output(command: list[str],

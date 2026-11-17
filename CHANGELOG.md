@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A review tool's `$(name)` may hold a hyphen, as `$(depot-root)` does in a sync target's command
+
 ## 0.12.0
 
 - With git, `new` and `review` take the nearest branch below yours as the base, down to the sync branch, as jj

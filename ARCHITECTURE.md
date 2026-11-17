@@ -126,6 +126,11 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   failure, each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and
   `post-sync` hooks.
 
+- **`configured_command.py`** - The command lines a workspace configures in `config.toml`: checking a command's
+  table, its keys, argument lists and `$(name)` variables (`check_command_table`), expanding those, the caller's
+  values first, then the Perforce ones and the environment (`expand_variables`), and joining a relative program to
+  the workspace root (`from_workspace_root`).
+
 - **`review_tools.py`** - Review tools, and every decision about what Swarm means: Swarm (`SWARM`), built in, and the
   tables under `[review-tool]` in `config.toml` (`review_tool_names`). `resolve_review_tool` picks `--review-tool`, else
   `[review-tool] default` (`default_review_tool`), else Swarm, and refuses an unknown tool through `check_review_tool`;

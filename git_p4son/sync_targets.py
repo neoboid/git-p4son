@@ -5,13 +5,13 @@ import re
 from .changelist_store import validate_alias_name
 from .common import CommandError, run_for_output
 from .config import ConfigError, get_setting
-from .configured_command import PERFORCE_VARIABLES, check_command, expand_variables, from_workspace_root
+from .configured_command import PERFORCE_VARIABLES, SYNC_VARIABLES, check_command, command_line, sync_values
 from .log import log
 
 _SECTION = 'sync'
 _TARGETS = 'targets'
 _DEFAULT = 'default-target'
-_BUILT_IN = ('last-synced', 'depot-root', *PERFORCE_VARIABLES)
+_BUILT_IN = (*SYNC_VARIABLES, *PERFORCE_VARIABLES)
 _CHANGELIST = re.compile(r'[0-9]+')
 
 
@@ -83,10 +83,8 @@ def resolve_sync_target(argument: str, last_synced: int | None, depot_root: str,
         raise CommandError(
             f'"{argument}" is neither a changelist number nor a sync target{listed}')
     log.heading(f'Resolving sync target {name}')
-    values = {'last-synced': str(last_synced or ''),
-              'depot-root': depot_root}
-    command = from_workspace_root(expand_variables(
-        targets[name], values, workspace_dir), workspace_dir)
+    command = command_line(targets[name], sync_values(
+        last_synced, depot_root), workspace_dir)
     try:
         result = run_for_output(command, workspace_dir)
     except OSError as error:

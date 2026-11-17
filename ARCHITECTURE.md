@@ -120,13 +120,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`processes.py`** - Blocking processes: reading the `[sync] blocking-processes` setting, listing running
   processes (`ps` or `tasklist`), and `check_no_blocking_processes`, which `sync_preflight` runs first.
 
-- **`hooks.py`** - User hooks: `run_hooks` runs every executable file in `.git-p4son/hooks/<name>/` in name order, from
-  the invocation directory with `GIT_P4SON_REPO_ROOT_DIR` and `GIT_P4SON_BACKEND` set, without stopping at a failure,
-  each through `scripts.script_command`, reading the script runners once. `sync` runs the `pre-sync` and `post-sync`
-  hooks. Their replacement, which nothing calls yet: `hook_commands` reads a hook's commands from `[hooks]` in
-  `config.toml`, each checked as a configured command with the sync variables (`$(synced)` for `post-sync` only), and
-  `run_hook` runs them in order from the workspace root through `command_line`, counting the failures without stopping
-  at one. `check_hooks` checks both hooks after `hooks_migration.check_no_old_hooks`.
+- **`hooks.py`** - Hooks, the commands of `pre-sync` and `post-sync` in `[hooks]` in `config.toml`: `hook_commands`
+  reads a hook's commands, each checked as a configured command with the sync variables (`$(synced)` for `post-sync`
+  only), and `run_hook` runs them in order from the workspace root through `command_line`, with `$(backend)` for the
+  backend, counting the failures without stopping at one. `check_hooks`, which `sync` and `cherry-pick` run first,
+  checks both hooks after `hooks_migration.check_no_old_hooks`. `sync` runs the `pre-sync` hooks in `sync_on_branch` and
+  the `post-sync` ones in `run_sync_passes`.
 
 - **`hooks_migration.py`** - The hook setup of earlier versions, kept apart to be deleted whole one day:
   `check_no_old_hooks` refuses a file in `.git-p4son/hooks/<hook>/` that no `[hooks]` command names, after printing the
@@ -158,10 +157,6 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   command: `list`, `default`, which writes `[review-tool] default`, `set`, which records a tool in an alias as started
   (`set_review_tool`), `show` (`alias_review`), and without an action the list and the current alias's tool, if the
   branch keyword names an existing alias.
-
-- **`scripts.py`** - `script_command`, the command that runs a workspace script: the file itself on POSIX, when
-  executable, and on Windows the runner `script_runners` gives its extension, the defaults overridden by
-  `[core.script-runners]` and the old `[hooks.extension-associations]`, where `core` wins.
 
 - **`complete.py`** - Shell completion: `run_complete` walks the argparse parser to suggest commands, flags, actions,
   aliases, split users, review tools and the `branch` keyword. Logging is silenced so stdout carries only candidates;
@@ -198,7 +193,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   that the sync branch exists and the change contains its tip, with no merge above it (`check_on_sync_tip`), the check
   that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
   loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool`
-  hooks get as `GIT_P4SON_BACKEND`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where
+  hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where
   `auto` means jj in a jj workspace. `open_backend` holds jj's lock and operation for the whole command and yields the
   backend in `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
   `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
@@ -267,8 +262,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   keeping the comments on those lines (the ones inside a value move above its key), and leaves the rest of the file as
   written. It refuses, leaving the file alone, a file that isn't valid TOML, with `load_config`'s error, and a setting
   the file can't take without replacing what it holds there, such as a table at its key. Holds the depot root,
-  `core.writable`, the split users, the blocking processes and the script runners. The review tools read their own
-  `[review-tool]` section.
+  `core.writable`, the split users, and the blocking processes. The review tools, sync targets and hooks read their own
+  settings.
 
 - **`toml_writer.py`** - `format_toml`, the minimal TOML writer behind the alias files, and `format_value`, which
   `set_setting_in_place` formats a `config.toml` value with, escaping control characters in strings; reading uses

@@ -933,11 +933,13 @@ class P4RepoTestCase(GitRepoTestCase):
         os.remove(os.path.join(self.ws, 'b.txt'))
         self.write_file('c.txt', 'c1\n')
 
-    def hook(self, name: str, body: str) -> None:
-        """Add a Python hook script under .git-p4son/hooks/<name>/."""
-        path = self.write_file(os.path.join('.git-p4son', 'hooks', name, 'hook.py'),
-                               f'#!{sys.executable}\n{body}')
-        os.chmod(path, stat.S_IRWXU)
+    def hook(self, name: str, body: str, *arguments: str) -> None:
+        """Add a Python script with body, given arguments, to hook name's commands in [hooks]."""
+        commands = load_config(self.ws).get('hooks', {}).get(name, [])
+        path = os.path.join(CONFIG_DIR, f'{name}-{len(commands) + 1}.py')
+        self.write_file(path, body)
+        save_config(self.ws, {'hooks': {
+                    name: [*commands, [sys.executable, path, *arguments]]}})
 
     def read(self, path: str) -> str:
         with open(os.path.join(self.ws, path)) as f:

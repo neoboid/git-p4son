@@ -528,9 +528,9 @@ class TestSyncHooks(SyncTestCase):
 
     def test_hooks_are_told_the_backend(self):
         path, read_log = self.hook_log()
-        code = f'import os\nopen({path!r}, "a").write(os.environ["GIT_P4SON_BACKEND"] + " ")\n'
-        self.hook('pre-sync', code)
-        self.hook('post-sync', code)
+        code = f'import sys\nopen({path!r}, "a").write(sys.argv[1] + " ")\n'
+        self.hook('pre-sync', code, '$(backend)')
+        self.hook('post-sync', code, '$(backend)')
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.sync('101')
         backend = self.backend_name or 'git'
@@ -542,13 +542,49 @@ class TestSyncHooks(SyncTestCase):
         self.sync_fails(message='pre-sync hook failed')
         self.assertEqual(self.p4.synced(), [])
 
-    @unittest.skipUnless(sys.platform == 'win32', 'PowerShell hooks run through the default .ps1 runner')
+    def test_hooks_get_the_changelists_and_the_depot_root(self):
+        path, read_log = self.hook_log()
+        code = f'import sys\nopen({path!r}, "a").write(" ".join(sys.argv[1:]) + " ")\n'
+        self.hook('pre-sync', code, 'pre', '$(last-synced)', '$(depot-root)')
+        self.hook('post-sync', code, 'post', '$(last-synced)', '$(synced)')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'a.txt': 'a3\n'})
+        self.sync('101', '102')
+        self.assertEqual(
+            read_log(), ['pre', '100', '//myclient', 'post', '100', '102'])
+
+    def test_hooks_run_from_the_workspace_root_wherever_sync_runs(self):
+        path, read_log = self.hook_log()
+        self.hook(
+            'post-sync', f'import os\nopen({path!r}, "a").write(os.getcwd() + " ")\n')
+        self.write_file(os.path.join('sub', 'x.txt'), 'x\n')
+        self.git('add', 'sub')
+        self.git('commit', '-q', '-m', 'Add sub')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.run_command(
+            sync_command, ['sync', '101'], invocation_dir=os.path.join(self.ws, 'sub'))
+        self.assertTrue(os.path.samefile(read_log()[0], self.ws))
+
+    def test_an_old_hook_directory_stops_the_sync_first(self):
+        old = self.write_file(os.path.join(
+            '.git-p4son', 'hooks', 'pre-sync', 'check.py'), 'print("old")\n')
+        os.chmod(old, stat.S_IRWXU)
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        for argv in (['101'], ['-n', '101']):
+            with self.subTest(argv=argv):
+                self.sync_fails(
+                    *argv, message=r'Hooks are configured in \[hooks\]')
+        self.assertEqual(self.p4.synced(), [])
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows PowerShell')
     def test_powershell_hook_runs(self):
         path, read_log = self.hook_log()
         # PowerShell escapes a quote inside single quotes by doubling it.
         quoted = path.replace("'", "''")
-        self.write_file(os.path.join('.git-p4son', 'hooks', 'post-sync', 'hook.ps1'),
+        self.write_file(os.path.join('.git-p4son', 'hook.ps1'),
                         f"Add-Content -Path '{quoted}' -Value 'ps1'\n")
+        save_config(self.ws, {'hooks': {'post-sync': [[
+            'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.git-p4son/hook.ps1']]}})
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.sync('101')
         self.assertEqual(read_log(), ['ps1'])

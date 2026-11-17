@@ -1106,9 +1106,7 @@ write most of them; the rest you edit by hand.
 - `[review-tool] default` (string, default `"swarm"`): the [review tool](#review-tools) `new --review` and `review`
   push to without `--review-tool`
 - `[review-tool.<name>]` (table): a [review tool](#review-tools)'s `command`, and its `new` and `update` arguments
-- `[core.script-runners]` (table, Windows only): the command that runs a hook script, by file extension.
-  See [Hooks](#hooks). The old `[hooks.extension-associations]` is still read, and `core.script-runners` wins where
-  both name an extension
+- `[hooks]` (table): the `pre-sync` and `post-sync` [hooks](#hooks), each a list of commands
 
 For example:
 
@@ -1181,34 +1179,49 @@ the terminal, so its output shows as it is written and it can prompt. Like a hoo
 
 ## Hooks
 
-Like git hooks, hooks are programs git-p4son runs at set points of a command: executables, or on Windows scripts, in
-`.git-p4son/hooks/<hook-name>/`, run in filename order.
-
-A hook runs in the directory git-p4son was run from, with `GIT_P4SON_REPO_ROOT_DIR` set to the repository root and
-`GIT_P4SON_BACKEND` to `git` or `jj`, the [backend](#choosing-the-backend) the command runs with.
-
-On Windows, `.ps1`, `.sh` and `.py` files run with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`,
-`bash.exe` and `python.exe`. Change or add script runners in `.git-p4son/config.toml`:
+Like git hooks, hooks are commands git-p4son runs at set points of a command. List them in
+`.git-p4son/config.toml`, each hook a list of commands, run in order:
 
 ```toml
-[core.script-runners]
-".ps1" = ["pwsh.exe", "-NoProfile", "-File"]
-".nu" = "nu.exe"
+[hooks]
+pre-sync = [
+  ["python", "tools/check-editor-closed.py"],
+  ["pwsh", "-File", "tools/stop-build-agent.ps1"],
+]
+post-sync = [["tools/generate-project-files.bat", "$(synced)"]]
 ```
 
-Non-executable or unrecognized hook files, and invalid runner entries, are skipped with a warning.
+A command is a list, one string per argument, run without a shell from the workspace root, like a
+[review tool](#review-tools)'s: a relative program is found from the workspace root and a bare name on `PATH`, and a
+script names its interpreter, such as `python` or `pwsh`. `$(name)` in an argument is replaced as in a
+[sync target](#sync-targets)'s command:
+
+- `$(backend)`: `git` or `jj`, the [backend](#choosing-the-backend) the command runs with
+- `$(last-synced)`: the last synced changelist when the sync started, or empty before the first sync
+- `$(depot-root)`: the depot root, such as `//myclient`
+- `$(synced)`, `post-sync` only: the changelist the sync ended at; for `cherry-pick`, and for `sync last-synced`
+  on top of cherry-picks, the last one picked
+- `$(workspace)`, `$(user)`, `$(p4port)`, and any other name as an environment variable
+
+Every command of a hook runs, also after one fails. A command's output shows once it has finished.
+
+Hooks used to be executable files in `.git-p4son/hooks/<hook-name>/`, run through `[core.script-runners]` on
+Windows. `sync` and `cherry-pick` now refuse to start while such a file isn't named by a command in `[hooks]`, and
+print the `[hooks]` lines that run the files where they are, with the interpreter each ran with, after any commands
+the hook already has. Copy them into `config.toml`, or move the scripts and name them there. A file that never ran as
+a hook, such as a non-executable one or an editor's backup, is left alone with a warning. `[core.script-runners]` and
+`[hooks.extension-associations]` are refused once the files are named: remove them.
 
 ### pre-sync hook
 
-Before `git-p4son sync` syncs any changelist, git-p4son runs executable hooks from
-`.git-p4son/hooks/pre-sync/`. All of them run, and if any exits with a non-zero code the sync is aborted before
-any changelist is synced. When a sequence of changelists is synced, the pre-sync hooks run only once,
-before the first sync.
+Before `sync` or `cherry-pick` syncs any changelist, git-p4son runs the `pre-sync` commands. If any of them exits
+with a non-zero code, the command stops before any changelist is synced. When a sequence of changelists is synced,
+the `pre-sync` hooks run only once, before the first sync.
 
 ### post-sync hook
 
-After a successful `git-p4son sync` that actually performs sync work, git-p4son runs executable hooks from
-`.git-p4son/hooks/post-sync/`. They don't run when the workspace is already at the requested changelist.
+After a successful `sync` or `cherry-pick` that actually syncs, git-p4son runs the `post-sync` commands. They don't
+run when the workspace is already at the requested changelist. A failing one is reported, as the sync is done.
 
 ## Jujutsu (jj)
 

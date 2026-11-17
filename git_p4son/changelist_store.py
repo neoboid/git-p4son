@@ -79,24 +79,24 @@ def alias_for(name: str) -> str:
     return alias
 
 
-def validate_alias_name(name: str) -> str | None:
-    """Return an error message if alias name is invalid, else None."""
+def validate_alias_name(name: str, kind: str = 'alias') -> str | None:
+    """An error message if name is not valid as the name of an alias, or of kind, else None."""
     if not name:
-        return 'Alias name cannot be empty'
+        return f'{kind.capitalize()} name cannot be empty'
     if name in RESERVED_KEYWORDS:
-        return f'Alias name "{name}" is a reserved keyword'
+        return f'{kind.capitalize()} name "{name}" is a reserved keyword'
     if not _ALIAS_NAME_RE.match(name):
         return (
-            f'Invalid alias name "{name}": must contain only letters, digits, '
+            f'Invalid {kind} name "{name}": must contain only letters, digits, '
             'hyphens, underscores, and dots, and must not start or end with a dot')
     if name.isdigit():
-        # Digit strings are taken as changelist numbers, so such an alias could never be used.
+        # Digit strings are taken as changelist numbers, so such a name could never be used.
         return (
-            f'Invalid alias name "{name}": an all-digit name would be '
+            f'Invalid {kind} name "{name}": an all-digit name would be '
             'indistinguishable from a changelist number')
     if name.split('.', 1)[0].lower() in _WINDOWS_RESERVED_NAMES:
         return (
-            f'Invalid alias name "{name}": reserved device name on Windows')
+            f'Invalid {kind} name "{name}": reserved device name on Windows')
     return None
 
 

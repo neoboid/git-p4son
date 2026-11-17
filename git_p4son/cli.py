@@ -207,10 +207,11 @@ Examples:
         nargs='*',
         metavar='CHANGELIST',
         help='Changelist number(s) to sync, "last-synced" to re-sync the last synced changelist, '
-             'or "head" to sync to the latest changelist. Give several strictly increasing '
-             'changelist numbers to sync each in sequence, one commit per changelist; "head" may '
-             'close out such a sequence as a trailing target. Omit to sync to the latest '
-             'changelist affecting the workspace'
+             '"head" to sync to the latest changelist, or the name of a sync target in '
+             '[sync.targets] in .git-p4son/config.toml, to sync to the changelist its command prints. '
+             'Give several strictly increasing changelists to sync each in sequence, one commit per '
+             'changelist; "head" may close out such a sequence as a trailing target. Omit to sync to '
+             '[sync] default-target, else the latest changelist affecting the workspace'
     )
     sync_parser.add_argument(
         '--allow-backwards',

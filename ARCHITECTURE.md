@@ -5,26 +5,25 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 ## Commands
 
 - **`sync.py`** - Syncs the git repo with Perforce, one git commit per changelist, onto the sync branch from any branch.
-  `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers, `last-synced`, or a trailing `head`;
-  none means the latest) into a `_SyncPlan`, reading the last sync from the sync branch the backend's `prepare_sync`
-  chose, or None when already synced. `sync_preflight` refuses to start while a blocking process runs (unless
-  `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce one judged by the sync branch's
-  files. `sync_command` then has the backend check out the sync branch (`start_sync`), and returns (`abandon_sync`) if a
-  pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last synced CL, syncs and commits each
-  target, merges local changes back once at the end (`sync_merge.py`) and runs the post-sync hooks. Changelist arguments
-  are numeric-only: aliases name pending CLs, which Perforce renumbers on submit. When moving forward,
-  `build_sync_targets` also syncs the CL before each split user's submit, so each of their changelists gets a commit of
-  its own; `_split_targets` finds their CLs per user, then checks them all against the depot root in one batched `-m2`
-  query. `-u` adds users for one run and `--no-split` ignores the configured ones. `finish_sync` returns to where sync
-  started, unless changes are left in the work tree, as merged-back local changes; after a failure partway, sync stays
-  on the sync branch.
+  `_plan_sync` resolves the arguments (one or more strictly increasing CL numbers or sync targets, `last-synced`, or a
+  trailing `head`; none means `[sync] default-target`, else the latest) into a `_SyncPlan`, reading the last sync from
+  the sync branch the backend's `prepare_sync` chose, or None when already synced. `sync_preflight` refuses to start
+  while a blocking process runs (unless `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce
+  one judged by the sync branch's files. `sync_command` then has the backend check out the sync branch (`start_sync`),
+  and returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last
+  synced CL, syncs and commits each target, merges local changes back once at the end (`sync_merge.py`) and runs the
+  post-sync hooks. Changelist arguments are never aliases: aliases name pending CLs, which Perforce renumbers on submit.
+  When moving forward, `build_sync_targets` also syncs the CL before each split user's submit, so each of their
+  changelists gets a commit of its own; `_split_targets` finds their CLs per user, then checks them all against the
+  depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split` ignores the configured ones.
+  `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back local changes;
+  after a failure partway, sync stays on the sync branch.
 
   The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
-  `parse_changelist` and `check_increasing`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded
-  into the first target's commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which
-  also picks the cherry-pick subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them,
-  given an `OnSyncBranch` (the parsers add its options with `_add_sync_branch_args`), passing the sync branch's
-  `SyncState` to `finish_sync` as text.
+  `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's
+  commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks the cherry-pick
+  subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an `OnSyncBranch` (the
+  parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to `finish_sync` as text.
 
 - **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
   onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or

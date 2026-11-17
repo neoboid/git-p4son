@@ -9,6 +9,7 @@ from unittest import mock
 from git_p4son.changelist_store import save_changelist_alias
 from git_p4son.cli import create_parser
 from git_p4son.common import CommandError
+from git_p4son.config import ConfigError
 from git_p4son.complete import (
     _complete,
     _filter,
@@ -202,6 +203,18 @@ class TestComplete(unittest.TestCase):
         names = self._names(result)
         self.assertIn('head', names)
         self.assertNotIn('last-synced', names)
+
+    @mock.patch('git_p4son.complete.sync_target_names', return_value=['latest-safe'])
+    def test_sync_offers_the_sync_targets_anywhere(self, _targets, _ws, _aliases):
+        for words in (['sync', ''], ['sync', '123', '']):
+            with self.subTest(words=words):
+                result = _complete(self.parser, words, workspace_dir='/ws')
+                self.assertIn(('latest-safe', 'Sync target'), result)
+
+    @mock.patch('git_p4son.complete.sync_target_names', side_effect=ConfigError('bad'))
+    def test_sync_without_valid_sync_targets_offers_the_keywords(self, _targets, _ws, _aliases):
+        result = _complete(self.parser, ['sync', ''], workspace_dir='/ws')
+        self.assertEqual(self._names(result), ['head', 'last-synced'])
 
     def test_sync_flags(self, _ws, _aliases):
         result = _complete(self.parser, ['sync', '-'], workspace_dir='/ws')

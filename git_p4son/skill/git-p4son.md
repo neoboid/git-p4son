@@ -149,7 +149,7 @@ git checkout -b feature-b           # on top of feature-a, commit part B while A
 ## Syncing
 
 ```sh
-git p4son sync              # sync main to the latest CL, from any branch
+git p4son sync              # sync main to the latest CL (or [sync] default-target), from any branch
 git rebase main             # then bring the current branch up to date
 ```
 
@@ -157,6 +157,11 @@ git rebase main             # then bring the current branch up to date
 the branch it started from, unless it merged local changes back: then it stays on the sync branch with them.
 
 - `sync 12345` syncs to a specific CL. Syncing backwards needs `--allow-backwards`; only do that when the user asks.
+- A workspace may name sync targets in `.git-p4son/config.toml` (`[sync.targets]`), such as `latest-safe`:
+  `sync latest-safe` runs its command, which prints a CL, such as the newest one CI has marked good, and syncs to it.
+  With `[sync] default-target` set, a plain `sync` goes to that target rather than the latest CL; `sync head` goes
+  to the latest CL. When the user asks to sync to a good or safe CL, use the target they mean. If its command fails,
+  report its output: don't fall back to `head` or a number of your own.
 - Changelists submitted by the split users each get a sync commit of their own, so they stand apart on `main`
   (`git p4son sync-split-users` lists them). When the user asks to split out someone else's changelists too, pass
   `-u <p4 user>` for that sync, and preview the resulting sync sequence with `--dry-run`. Add them for good with

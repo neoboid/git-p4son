@@ -6,6 +6,12 @@
   the newest one your CI has marked good, and `sync <name>` syncs to it. `[sync] default-target` makes a bare
   `sync` go there, while `sync head` still goes to the latest changelist
 - A review tool's `$(name)` may hold a hyphen, as `$(depot-root)` does in a sync target's command
+- Hooks are commands in `[hooks]` in `.git-p4son/config.toml`, `pre-sync` and `post-sync` each a list of them, run from
+  the workspace root, not the directory sync was run from, with `$(backend)`, `$(last-synced)`, `$(depot-root)` and,
+  after a sync, `$(synced)`. `GIT_P4SON_BACKEND` and `GIT_P4SON_REPO_ROOT_DIR` are no longer set: pass `$(backend)`
+  instead, and the working directory is the root. A hook file in `.git-p4son/hooks/` stops `sync` and `cherry-pick`
+  until a command names it; they print the `[hooks]` lines that run it. `[core.script-runners]` is no longer read: a
+  command names its interpreter
 
 ## 0.12.0
 

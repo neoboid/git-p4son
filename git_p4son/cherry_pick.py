@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .common import CommandError
 from .git import SyncState
+from .hooks import check_hooks
 from .log import log
 from .perforce import describe_changelist
 from .sync import (
@@ -66,6 +67,7 @@ def _plan_cherry_pick(args: argparse.Namespace, sync_revision: str) -> _CherryPi
 
 def cherry_pick_command(args: argparse.Namespace) -> int:
     """Execute the cherry-pick command."""
+    check_hooks(args.workspace_dir)
     backend = args.backend
     sync_revision = backend.prepare_sync(None)
     plan = _plan_cherry_pick(args, sync_revision)
@@ -77,9 +79,9 @@ def cherry_pick_command(args: argparse.Namespace) -> int:
 
     def run() -> SyncState:
         run_sync_passes(plan.catch_up, plan.targets, plan.settings,
-                        args.workspace_dir, args.invocation_dir, backend)
+                        plan.after.last_synced, args.workspace_dir, backend)
         return plan.after
 
     sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
-                   plan.settings.depot_root, run)
+                   plan.settings.depot_root, plan.after.last_synced, run)
     return 0

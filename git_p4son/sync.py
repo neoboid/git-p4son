@@ -10,7 +10,7 @@ from .common import CommandError
 from .git import (
     SyncState, format_cherry_pick_subject, format_sync_subject, get_head_commit, get_tracked_files, sync_state,
 )
-from .hooks import run_hooks
+from .hooks import check_hooks, run_hook
 from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
@@ -115,11 +115,10 @@ def _check_p4_workspace_clean(depot_root: str, workspace_dir: str, sync_revision
         log.success('Clean')
 
 
-def _run_pre_sync_hooks(workspace_dir: str, invocation_dir: str, backend: str) -> None:
-    """Run all pre-sync hooks; raise CommandError if any of them failed."""
-    results = run_hooks('pre-sync', workspace_dir, invocation_dir, backend)
-    if any(result.returncode != 0 for result in results):
-        raise CommandError('Aborting sync because a pre-sync hook failed. '
+def _run_pre_sync_hooks(last_synced: int | None, depot_root: str, workspace_dir: str, backend: str) -> None:
+    """Run the pre-sync hooks; raise CommandError if any of them failed."""
+    if run_hook('pre-sync', workspace_dir, backend, last_synced, depot_root):
+        raise CommandError('Stopping before anything is synced, because a pre-sync hook failed. '
                            'See its output above.')
 
 
@@ -413,9 +412,11 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
         split=_should_split(split_users, last_synced, targets))
 
 
-def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings,
-                    workspace_dir: str, invocation_dir: str, backend: Backend) -> None:
-    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes, run hooks."""
+def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings, last_synced: int | None,
+                    workspace_dir: str, backend: Backend) -> None:
+    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes, run hooks.
+
+    last_synced, the last synced changelist when the sync started, is for the hooks."""
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
@@ -447,15 +448,14 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
 
-        run_hooks('post-sync', workspace_dir,
-                  invocation_dir, backend.words.tool)
+        run_hook('post-sync', workspace_dir, backend.words.tool, last_synced, settings.depot_root,
+                 synced=(targets or catch_up)[-1].changelist)
 
 
 @dataclass(frozen=True)
 class OnSyncBranch:
     """Where and how sync and cherry-pick run on the sync branch."""
     workspace_dir: str
-    invocation_dir: str
     backend: Backend
     sync_revision: str
     ignore_blocking_processes: bool
@@ -463,20 +463,22 @@ class OnSyncBranch:
 
     @classmethod
     def from_args(cls, args: argparse.Namespace, sync_revision: str) -> 'OnSyncBranch':
-        return cls(args.workspace_dir, args.invocation_dir, args.backend, sync_revision,
+        return cls(args.workspace_dir, args.backend, sync_revision,
                    args.ignore_blocking_processes, not args.no_rebase)
 
 
-def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], SyncState],
+def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, run: Callable[[], SyncState],
                    before_run: Callable[[], None] | None = None) -> None:
-    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return."""
+    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return.
+
+    last_synced, the last synced changelist, is for the hooks."""
     backend = on.backend
     sync_preflight(depot_root, on.workspace_dir,
                    on.ignore_blocking_processes, backend, on.sync_revision)
     backend.start_sync()
     try:
-        _run_pre_sync_hooks(
-            on.workspace_dir, on.invocation_dir, backend.words.tool)
+        _run_pre_sync_hooks(last_synced, depot_root,
+                            on.workspace_dir, backend.words.tool)
         if before_run is not None:
             # Before the costly split queries, the checks and hooks have run.
             before_run()
@@ -494,6 +496,7 @@ def sync_on_branch(on: OnSyncBranch, depot_root: str, run: Callable[[], SyncStat
 def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
+    check_hooks(workspace_dir)
     if args.force:
         log.warning('--force is deprecated, use --allow-backwards instead')
         args.allow_backwards = True
@@ -518,11 +521,11 @@ def sync_command(args: argparse.Namespace) -> int:
         catch_up = catch_up_passes(
             plan.state if plan.resync_last_synced else SyncState(plan.last_synced))
         run_sync_passes(catch_up, [SyncPass(cl, label) for cl, label in plan.targets], plan.settings,
-                        workspace_dir, args.invocation_dir, backend)
+                        plan.last_synced, workspace_dir, backend)
         return SyncState(plan.targets[-1][0]) if plan.targets else plan.state
 
     sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
-                   plan.settings.depot_root, run, split)
+                   plan.settings.depot_root, plan.last_synced, run, split)
     return 0
 
 

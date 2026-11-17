@@ -46,6 +46,14 @@ class TestCherryPick(CherryPickTestCase):
         self.assertEqual(self.p4.synced(), ['@=102'])
         self.assertIn("# Syncing the files of cherry-pick CL 102\n", out)
 
+    def test_the_post_sync_hooks_get_the_last_cherry_pick(self):
+        log = os.path.join(self.ws, '.git-p4son', 'hooks.log')
+        self.hook('post-sync', f'import sys\nopen({log!r}, "a").write(" ".join(sys.argv[1:]))\n',
+                  '$(last-synced)', '$(synced)')
+        self.cherry_pick('102', '103')
+        self.assertEqual(self.read(os.path.join(
+            '.git-p4son', 'hooks.log')), '100 103')
+
     def test_the_last_synced_changelist_stays(self):
         self.cherry_pick('102')
         self.assertEqual(git_last_synced_changelist(self.ws), 100)

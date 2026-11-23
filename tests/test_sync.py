@@ -68,7 +68,7 @@ class TestMakeSyncedFilesWritable(unittest.TestCase):
         mock_make.assert_called_once_with(['/ws/a.cpp', '/ws/b.h'])
 
 
-@mock.patch('git_p4son.sync.p4_sync')
+@mock.patch('git_p4son.sync.p4_sync', return_value=[])
 class TestSyncChangelist(unittest.TestCase):
     """p4 refusing an expected (git-ignored) file is tolerated; any other refusal raises."""
 

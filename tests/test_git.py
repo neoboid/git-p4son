@@ -358,6 +358,18 @@ class TestFilesChangedOutsideSyncs(GitRepoTestCase):
         self.assertEqual(files_changed_outside_syncs(
             self.ws, 'HEAD'), {'b.cpp', 'd.cpp'})
 
+    def test_no_commit_before_the_first_sync_however_many(self):
+        self.commit_history(('Initialize git-p4son repository', {'.gitignore': '*.log'}),
+                            ('Initial submit all files', {
+                             'a.cpp': 'A', 'b.cpp': 'B'}),
+                            ('Ignore build output', {
+                             '.gitignore': '*.log\nBuild/'}),
+                            ('Tune the engine config', {'b.cpp': 'B mine'}),
+                            (SYNC_100, {'a.cpp': 'A1'}),
+                            ('Tweak', {'a.cpp': 'A1 tweak'}))
+        self.assertEqual(files_changed_outside_syncs(
+            self.ws, 'HEAD'), {'a.cpp'})
+
     def test_only_files_revision_still_tracks(self):
         self.commit_history((SYNC_100, {'a.cpp': 'A', 'b.cpp': 'B'}),
                             ('Tweak', {'a.cpp': 'A tweak', 'b.cpp': None}))

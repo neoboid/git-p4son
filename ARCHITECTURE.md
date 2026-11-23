@@ -281,7 +281,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   reverts, shelving, submitted changes and users, a changelist's status and owner (`describe_changelist`) and whether
   it is gone (one `describe` each, as a batched one skips the changelist after a missing one), and
   `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing streamed progress and raising `P4SyncClobberError`
-  or `P4SyncAbortError`.
+  or `P4SyncAbortError`, and `parse_p4_sync_entry`, which also reads allwrite's refusals, kept with exit code 0, as
+  entries carrying the refused depot path.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands

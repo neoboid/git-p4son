@@ -596,9 +596,32 @@ def is_always_writable_file_type(head_type: str) -> bool:
 
 @dataclass
 class P4SyncPreviewFile:
-    """A file a sync would affect; mode is 'add', 'upd' or 'del' relative to the have-list."""
+    """A file a sync would affect; mode is 'add', 'upd' or 'del' relative to the have-list.
+
+    refused_path is the depot path of a file allwrite won't replace or delete, as its content isn't the have
+    revision's."""
     mode: str
     filepath: str
+    refused_path: str | None = None
+
+
+# allwrite keeps a file whose content isn't its have revision's, writable or not, with exit code 0.
+_REFUSAL_RE = re.compile(
+    r"^(//[^#]+)#\d+ - can't (update modified|overwrite existing|delete modified) file (.+)$")
+_REFUSAL_MODES = {'update modified': 'upd',
+                  'overwrite existing': 'add', 'delete modified': 'del'}
+
+
+def parse_p4_sync_entry(line: str) -> P4SyncPreviewFile | None:
+    """The file of a p4 sync output line, an allwrite refusal included; None for any other line."""
+    mode, filename = parse_p4_sync_line(line)
+    if mode and filename:
+        return P4SyncPreviewFile(mode, filename)
+    match = _REFUSAL_RE.match(line)
+    if match is None:
+        return None
+    depot_path, refusal, path = match.groups()
+    return P4SyncPreviewFile(_REFUSAL_MODES[refusal], path, refused_path=depot_path)
 
 
 def _run_p4_sync(args: list[str], workspace_dir: str,

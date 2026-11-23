@@ -2,9 +2,10 @@
 
 import os
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Set as AbstractSet
 from dataclasses import dataclass, field
 
+from .common import normalize_workspace_path
 from .git import (
     find_base_commits, get_blob_oids, get_files_at_commits, get_tracked_files,
     merge_file,
@@ -139,9 +140,12 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
                            pre_sync_head_commit: str,
                            temp_root: str,
                            uses_crlf: bool,
-                           clobber_mode: ClobberMode
+                           clobber_mode: ClobberMode,
+                           changed_locally: AbstractSet[str] = frozenset()
                            ) -> WritableSyncFileSet:
-    """Classify the preview's writable files and stage the modified ones for post-sync merge."""
+    """Classify the preview's writable files and stage the modified ones for post-sync merge.
+
+    changed_locally holds the repo-relative paths commits other than syncs changed, checked whatever their write bit."""
     result = WritableSyncFileSet()
 
     log.heading('Detecting writable files')
@@ -152,13 +156,14 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         if entry.refused_path is not None:
             refused[entry.filepath] = entry.refused_path
         # allwrite refuses a file by its content, so a read-only one with local changes too.
-        if entry.filepath in refused or is_user_writable(entry.filepath):
+        if (entry.filepath in refused or is_user_writable(entry.filepath) or changed_locally
+                and normalize_workspace_path(entry.filepath, workspace_dir) in changed_locally):
             writable.append(entry.filepath)
             if entry.mode == 'add':
                 added_upstream.add(entry.filepath)
 
     log.success(
-        f'{len(writable)} of {plural(len(preview_files), "file")} writable')
+        f'{len(writable)} of {plural(len(preview_files), "file")} writable or changed locally')
     if not writable:
         return result
 

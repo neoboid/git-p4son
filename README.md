@@ -434,11 +434,11 @@ commit any files that need attention.
 
 **Workspaces with `allwrite`** - When your client spec has the `allwrite` option, every file is writable by design,
 so the read-only flag carries no information about local changes. git-p4son classifies files exactly as above (the
-verdict comes from git, not from the flag), but leaves the write bit alone on files it finds unchanged: Perforce
-compares digests before refusing to overwrite a writable file, and unchanged files pass that check. Only files with
-local changes are made read-only for the duration of the sync, since those are the ones Perforce would otherwise
-refuse to overwrite. The same digest check applies to git-ignored files: unchanged ones sync normally, and after the
-sync git-p4son lists the ones Perforce skipped because they were modified locally.
+verdict comes from git, not from the flag) and leaves the write bit alone. Perforce refuses to replace or delete a
+file whose content differs from the revision it last synced, writable or not, so git-p4son syncs the tracked files it
+refused again with `p4 sync -f` after each changelist, and merges your local changes back as above. Git-ignored files
+are left as they are: unchanged ones sync normally, and after the sync git-p4son lists the ones Perforce skipped
+because they were modified locally.
 
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.

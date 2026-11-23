@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- On `allwrite` workspaces, `sync` left files with local changes out of the sync commit, as Perforce refuses to
+  replace or delete them whatever their write bit, and files added on both sides too. It now syncs them with
+  `p4 sync -f` and merges the local changes back, and lists the git-ignored files Perforce skipped as not synced
+
 ## 0.13.0
 
 - Sync targets: name a command in `[sync.targets]` in `.git-p4son/config.toml` that prints a changelist, such as

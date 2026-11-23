@@ -51,6 +51,8 @@ class WritableSyncFileSet:
     not_synced: list[str] = field(default_factory=list)
     # Every file the preview said p4 would update, writable or not.
     synced: list[str] = field(default_factory=list)
+    # Tracked files allwrite refuses, each to its depot path, which sync -f replaces after the pass.
+    replace: dict[str, str] = field(default_factory=dict)
 
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
@@ -145,8 +147,12 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     log.heading('Detecting writable files')
     writable = []
     added_upstream = set()
+    refused = {}
     for entry in preview_files:
-        if is_user_writable(entry.filepath):
+        if entry.refused_path is not None:
+            refused[entry.filepath] = entry.refused_path
+        # allwrite refuses a file by its content, so a read-only one with local changes too.
+        if entry.filepath in refused or is_user_writable(entry.filepath):
             writable.append(entry.filepath)
             if entry.mode == 'add':
                 added_upstream.add(entry.filepath)
@@ -161,6 +167,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     tracked_set = get_tracked_files(writable, workspace_dir)
     tracked = [f for f in writable if f in tracked_set]
     result.ignored = [f for f in writable if f not in tracked_set]
+    result.replace = {f: refused[f] for f in tracked if f in refused}
     log.success(f'{len(tracked)} tracked, {len(result.ignored)} ignored')
 
     if result.ignored:
@@ -169,7 +176,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         ignored = []
         for f in result.ignored:
             head_type = ignored_types.get(f)
-            if head_type and is_always_writable_file_type(head_type):
+            if head_type and is_always_writable_file_type(head_type) and f not in refused:
                 result.always_writable.append(f)
             else:
                 ignored.append(f)
@@ -224,10 +231,6 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         metas.append(_ChangedFileMeta(filepath=f, base_commit=base))
 
     log.success(f'{len(metas)} changed, {unchanged_count} unchanged')
-
-    if clobber_mode is ClobberMode.ALLWRITE:
-        # p4 overwrites unmodified files cleanly; only strip the ones it would refuse.
-        make_read_only([m.filepath for m in metas])
 
     # Pass 2: file types of the changed files. Pass 3: stage their content.
     if metas:

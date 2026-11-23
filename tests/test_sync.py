@@ -98,10 +98,24 @@ class TestSyncChangelist(unittest.TestCase):
                       out.getvalue())
         self.assertIn('partially synced', str(ctx.exception))
 
+    def test_expected_allwrite_refusals_returned(self, mock_p4_sync):
+        mock_p4_sync.return_value = ['/ws/a.txt']
+        refused = _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
+                                   expected_refusals={'/ws/a.txt'})
+        self.assertEqual(refused, ['/ws/a.txt'])
+
+    def test_unexpected_allwrite_refusal_raises(self, mock_p4_sync):
+        mock_p4_sync.return_value = ['/ws/a.txt']
+        with captured_output() as out, \
+                self.assertRaisesRegex(CommandError, 'unexpectedly refused'):
+            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
+                             expected_refusals=set())
+        self.assertIn('\n/ws/a.txt\n', out.getvalue())
+
     def test_unexpected_clobber_raises(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')
         with captured_output() as out, \
-                self.assertRaisesRegex(CommandError, 'Unexpected clobber'):
+                self.assertRaisesRegex(CommandError, 'unexpectedly refused'):
             _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
                              expected_refusals=set())
         self.assertIn('\n/ws/a.txt\n', out.getvalue())
@@ -372,6 +386,68 @@ class TestSyncLocalChanges(SyncTestCase):
         self.assertEqual(self.read('x.log'), 'mine\n')
         self.assertIn('Files not synced (git-ignored and writable)', out)
         self.assertIn('x.log', out)
+
+    def test_allwrite_replaces_a_local_change_and_merges_it_back(self):
+        self.p4.options = 'allwrite noclobber'
+        self.edit('a.txt', 'local\na1\n')
+        self.commit('local change')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.git('show', 'HEAD:a.txt'), 'a1\nupstream')
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertIn('1 file merged successfully', out)
+        self.assertNotIn('Unparsable', out)
+
+    def test_allwrite_replaces_a_file_added_on_both_sides(self):
+        self.p4.options = 'allwrite noclobber'
+        self.write_file('c.txt', 'mine\n')
+        self.commit('add c')
+        self.p4.submit(101, {'c.txt': 'theirs\n'})
+        self.sync()
+        self.assertEqual(self.git('show', 'HEAD:c.txt'), 'theirs')
+        self.assertIn('mine', self.read('c.txt'))
+        self.assertIn('theirs', self.read('c.txt'))
+
+    def test_allwrite_deletes_a_file_with_a_local_change(self):
+        self.p4.options = 'allwrite noclobber'
+        self.edit('b.txt', 'local\n')
+        self.commit('local change')
+        self.p4.submit(101, {'b.txt': None})
+        out = self.sync()
+        self.assertEqual(self.git('ls-tree', '--name-only', 'HEAD'), 'a.txt')
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'b.txt')))
+        self.assertIn('deleted in Perforce but modified locally', out)
+        self.assertNotIn('Unparsable', out)
+
+    def test_allwrite_reports_a_modified_ignored_file_deleted_upstream(self):
+        self.p4.options = 'allwrite noclobber'
+        self.write_file('.gitignore', '*.log\n')
+        self.p4.submit(101, {'x.log': 'one\n'})
+        self.p4.sync_to(101)
+        self.commit(format_sync_subject('//myclient', 101))
+        self.edit('x.log', 'mine\n')
+        self.p4.submit(102, {'x.log': None})
+        out = self.sync()
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertIn(
+            'Files not synced (git-ignored and locally modified)', out)
+        self.assertNotIn('Unparsable', out)
+
+    def test_allwrite_reports_a_modified_ignored_file_not_synced(self):
+        self.p4.options = 'allwrite noclobber'
+        self.write_file('.gitignore', '*.log\n')
+        self.p4.submit(101, {'x.log': 'one\n'})
+        self.p4.sync_to(101)
+        self.commit(format_sync_subject('//myclient', 101))
+        self.edit('x.log', 'mine\n')
+        self.p4.submit(102, {'x.log': 'two\n', 'a.txt': 'a2\n'})
+        out = self.sync()
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertEqual(self.read('a.txt'), 'a2\n')
+        self.assertIn(
+            'Files not synced (git-ignored and locally modified)', out)
+        self.assertIn('x.log', out)
+        self.assertNotIn('Unparsable', out)
 
     def test_writable_mode_makes_synced_files_writable(self):
         self.write_config(

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `sync` merges back a committed local change in a read-only file, as `git p4son writable off` leaves it, where
+  Perforce used to overwrite it without a merge-back
 - On `allwrite` workspaces, `sync` left files with local changes out of the sync commit, as Perforce refuses to
   replace or delete them whatever their write bit, and files added on both sides too. It now syncs them with
   `p4 sync -f` and merges the local changes back, and lists the git-ignored files Perforce skipped as not synced

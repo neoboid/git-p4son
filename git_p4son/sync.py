@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from .backend import Backend
 from .common import CommandError
 from .git import (
-    SyncState, format_cherry_pick_subject, format_sync_subject, get_head_commit, get_tracked_files, sync_state,
+    SyncState, files_changed_outside_syncs, format_cherry_pick_subject, format_sync_subject, get_head_commit,
+    get_tracked_files, sync_state,
 )
 from .hooks import check_hooks, run_hook
 from .depot import resolve_depot_root
@@ -159,6 +160,8 @@ class _SyncContext:
     settings: SyncSettings
     pre_sync_head_commit: str
     temp_root: str
+    # A committed local change can be read-only, as git p4son writable off leaves it.
+    changed_locally: set[str]
 
 
 def find_sync_state(workspace_dir: str, sync_revision: str) -> SyncState:
@@ -206,7 +209,8 @@ def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
     prep = prepare_writable_files(preview, ctx.workspace_dir,
                                   ctx.pre_sync_head_commit, ctx.temp_root,
                                   uses_crlf=settings.uses_crlf,
-                                  clobber_mode=settings.clobber_mode)
+                                  clobber_mode=settings.clobber_mode,
+                                  changed_locally=ctx.changed_locally)
     if preview:
         refusing = {
             entry.filepath for entry in preview if entry.refused_path is not None}
@@ -443,8 +447,8 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
     log.success(f'{pre_sync_head_commit}')
 
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
-        ctx = _SyncContext(workspace_dir, settings,
-                           pre_sync_head_commit, temp_root)
+        ctx = _SyncContext(workspace_dir, settings, pre_sync_head_commit, temp_root,
+                           files_changed_outside_syncs(workspace_dir, pre_sync_head_commit))
 
         preps = [_sync_pass(sync_pass, ctx) for sync_pass in catch_up]
 

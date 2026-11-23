@@ -411,6 +411,8 @@ on `main` and commit it to git without submitting to Perforce. git-p4son lets th
 includes it in the sync commit (so the commit reflects pure Perforce state), then three-way merges your local
 changes on top of the new Perforce content - similar to a `git rebase`. If the merge is clean, the result appears
 as an unstaged change. If there are conflicts, standard conflict markers are inserted for you to resolve.
+A committed local change is caught even when the file is read-only, as `git p4son writable off` leaves it:
+git-p4son also checks every synced file that a commit other than a sync or cherry-pick changed since your first sync.
 
 **added both locally and in Perforce** - A file you committed to git is also being added by Perforce (p4 has never
 synced it to your workspace). There is no common baseline, so git-p4son merges the two versions against an empty

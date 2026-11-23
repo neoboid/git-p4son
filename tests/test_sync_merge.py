@@ -90,6 +90,28 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertFalse(mode & stat.S_IWUSR)
 
     @mock.patch('git_p4son.sync_merge.get_blob_oids',
+                return_value={('head123', 'a.txt'): 'oid_head', ('sync456', 'a.txt'): 'oid_base'})
+    @mock.patch('git_p4son.sync_merge.get_files_at_commits',
+                side_effect=_files_at_commits(lambda *_: b'head content'))
+    @mock.patch('git_p4son.sync_merge.find_base_commits',
+                return_value={'a.txt': 'sync456'})
+    @mock.patch('git_p4son.sync_merge.p4_head_types')
+    @mock.patch('git_p4son.sync_merge.get_tracked_files',
+                side_effect=lambda paths, ws: set(paths))
+    def test_read_only_file_changed_locally_is_staged(self, _tracked, mock_fstat, _find_base, _get_file, _oids):
+        """A committed local change can be read-only, as after writable off; a read-only file no commit changed is
+        left alone."""
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'a.txt', writable=False)
+            other = self._make_file(ws, 'b.txt', writable=False)
+            mock_fstat.return_value = {path: 'text'}
+
+            result = _prepare([preview_update(path), preview_update(other)], ws, 'head123', self.temp_root,
+                              changed_locally={'a.txt'})
+
+            self.assertEqual([cf.filepath for cf in result.changed], [path])
+
+    @mock.patch('git_p4son.sync_merge.get_blob_oids',
                 return_value={('head123', 'a.txt'): 'same_oid',
                               ('sync456', 'a.txt'): 'same_oid'})
     @mock.patch('git_p4son.sync_merge.get_files_at_commits')

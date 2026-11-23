@@ -104,11 +104,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 ## Command support
 
-- **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the
-  writable files p4 would touch, and the files allwrite refuses, into tracked and ignored ones, stages the locally
-  modified ones and keeps the depot path of each tracked file allwrite refuses (`replace`), which sync replaces with one
-  `p4 sync -f` after the pass, and `merge_changed_files` merges those local changes back after the sync.
-  `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
+- **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the files
+  p4 would touch that are writable, refused by allwrite or changed by a commit other than a sync (read-only after
+  `writable off`), into tracked and ignored ones, stages the locally modified ones and keeps the depot path of each
+  tracked file allwrite refuses (`replace`), which sync replaces with one `p4 sync -f` after the pass, and
+  `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
+  writable files p4 refused or overwrote.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip

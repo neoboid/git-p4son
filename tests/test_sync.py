@@ -387,6 +387,26 @@ class TestSyncLocalChanges(SyncTestCase):
         self.assertIn('Files not synced (git-ignored and writable)', out)
         self.assertIn('x.log', out)
 
+    def test_a_read_only_local_change_is_merged_back(self):
+        """As after git p4son writable off, which makes committed tweaks read-only too."""
+        self.edit('a.txt', 'local\na1\n')
+        self.commit('local change')
+        os.chmod(os.path.join(self.ws, 'a.txt'), stat.S_IRUSR)
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.git('show', 'HEAD:a.txt'), 'a1\nupstream')
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertIn('1 file merged successfully', out)
+
+    def test_a_file_deleted_in_a_local_commit_is_synced_without_a_report(self):
+        self.git('rm', '-q', 'a.txt')
+        self.commit('drop a')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.read('a.txt'), 'a1\nupstream\n')
+        self.assertNotIn('not synced', out)
+        self.assertNotIn('will not be synced', out)
+
     def test_allwrite_replaces_a_local_change_and_merges_it_back(self):
         self.p4.options = 'allwrite noclobber'
         self.edit('a.txt', 'local\na1\n')

@@ -60,8 +60,8 @@ class SyncPass:
 
 
 def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
-                     expected_clobber: set[str]) -> list[str]:
-    """Run sync_pass's p4 sync, returning the expected_clobber files p4 refused.
+                     expected_refusals: set[str]) -> list[str]:
+    """Run sync_pass's p4 sync, returning the expected_refusals files p4 refused.
 
     Any other refused file raises.
     """
@@ -72,7 +72,7 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
         p4_sync(sync_pass.revision, depot_root, workspace_dir)
         return []
     except P4SyncClobberError as e:
-        unexpected = [f for f in e.refused if f not in expected_clobber]
+        unexpected = [f for f in e.refused if f not in expected_refusals]
         if unexpected:
             for f in unexpected:
                 log.info(f)
@@ -203,7 +203,7 @@ def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
                                   clobber_mode=settings.clobber_mode)
     if preview:
         prep.not_synced = _sync_changelist(sync_pass, settings.depot_root, ctx.workspace_dir,
-                                           expected_clobber=set(prep.ignored))
+                                           expected_refusals=set(prep.ignored))
         prep.synced = [entry.filepath for entry in preview]
     return prep
 

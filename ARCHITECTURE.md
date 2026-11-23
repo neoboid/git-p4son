@@ -273,7 +273,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`git.py`** - The git layer: workspace discovery, dirty and staged files, `get_local_changes` (adds, edits, deletes
   and moves since a base), commit subjects, staging and commits, the sync and cherry-pick commit subjects
   (`format_sync_subject`, `format_cherry_pick_subject`; `git_last_synced_changelist` skips cherry-picks, and
-  `sync_state` gives the last sync and the cherry-picks since it as a `SyncState`), blob reads and `merge_file` for
+  `sync_state` gives the last sync and the cherry-picks since it as a `SyncState`), blob reads,
+  `files_changed_outside_syncs` (the tracked files other commits changed since the first sync) and `merge_file` for
   `sync_merge`, and `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files`
   walks, for jj's ignore check. git's `-z` output is read as bytes.
 

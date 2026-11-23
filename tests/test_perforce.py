@@ -237,6 +237,20 @@ class TestP4SyncPreview(unittest.TestCase):
             cmd, ['p4', '-L', 'en', 'sync', '-n', '//depot/...@100'])
 
     @mock.patch('git_p4son.perforce.run_with_stream_output')
+    def test_allwrite_refusals_carry_the_kept_revision(self, mock_rwo):
+        mock_rwo.return_value = make_run_result(stdout=[
+            "//depot/a.txt#2 - can't update modified file /ws/a.txt",
+            "//depot/n.txt#1 - can't overwrite existing file /ws/n.txt",
+        ])
+        result = p4_sync_preview('@100', '//depot', '/ws')
+        self.assertEqual(result, [
+            P4SyncPreviewFile(mode='upd', filepath='/ws/a.txt',
+                              refused_path='//depot/a.txt'),
+            P4SyncPreviewFile(mode='add', filepath='/ws/n.txt',
+                              refused_path='//depot/n.txt'),
+        ])
+
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_skips_unparsable_lines(self, mock_rwo):
         mock_rwo.return_value = make_run_result(stdout=[
             '//depot/foo.txt#1 - added as /ws/foo.txt',
@@ -479,6 +493,19 @@ class TestP4Sync(unittest.TestCase):
             p4_sync('@12345', '//myclient', '/ws')
         self.assertEqual(ctx.exception.refused, ['/ws/a.txt', '/ws/b.txt'])
         self.assertEqual(ctx.exception.returncode, 1)
+
+    @mock.patch('git_p4son.perforce.run_with_stream_output')
+    def test_allwrite_refusals_are_returned(self, mock_rwo):
+        def stream(command, on_output, **kwargs):
+            on_output(
+                "//myclient/a.txt#2 - can't update modified file /ws/a.txt", sys.stdout)
+            return mock.Mock(elapsed=None)
+        mock_rwo.side_effect = stream
+        with captured_output() as out:
+            refused = p4_sync('@12345', '//myclient', '/ws')
+        self.assertEqual(refused, ['/ws/a.txt'])
+        self.assertNotIn('Unparsable', out.getvalue())
+        self.assertIn('refused: 1', out.getvalue())
 
     @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_other_errors_raise_as_they_are(self, mock_rwo):

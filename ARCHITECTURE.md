@@ -105,9 +105,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 ## Command support
 
 - **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the
-  writable files p4 would touch into tracked and ignored ones and stages the locally modified ones, and
-  `merge_changed_files` merges those local changes back after the sync. `report_not_synced` lists the git-ignored
-  writable files p4 refused or overwrote.
+  writable files p4 would touch, and the files allwrite refuses, into tracked and ignored ones, stages the locally
+  modified ones and keeps the depot path of each tracked file allwrite refuses (`replace`), which sync replaces with one
+  `p4 sync -f` after the pass, and `merge_changed_files` merges those local changes back after the sync.
+  `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
@@ -280,9 +281,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   client spec (`P4ClientSpec`, `ClobberMode`), changelist specs, opened files and batched commands (`run_p4_batch`),
   reverts, shelving, submitted changes and users, a changelist's status and owner (`describe_changelist`) and whether
   it is gone (one `describe` each, as a batched one skips the changelist after a missing one), and
-  `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing streamed progress and raising `P4SyncClobberError`
-  or `P4SyncAbortError`, and `parse_p4_sync_entry`, which also reads allwrite's refusals, kept with exit code 0, as
-  entries carrying the refused depot path.
+  `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing streamed progress (`parse_p4_sync_entry`, allwrite's
+  refusals included, which keep a file with exit code 0 and which `p4_sync` returns) and raising `P4SyncClobberError`
+  or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands

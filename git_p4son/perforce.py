@@ -540,6 +540,7 @@ class P4SyncOutputProcessor:
     def __init__(self) -> None:
         self.stats: dict[str, int] = dict.fromkeys(
             [mode for mode, _ in _SYNC_LINE_PATTERNS], 0)
+        self.refused: list[str] = []
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if _UP_TO_DATE_RE.search(line):
@@ -552,20 +553,22 @@ class P4SyncOutputProcessor:
         if line.startswith(_RENAME_FAILED_PREFIX):
             raise P4SyncAbortError(line)
 
-        mode, filename = parse_p4_sync_line(line)
-        if not mode or not filename:
+        entry = parse_p4_sync_entry(line)
+        if entry is None:
             log.warning(f'Unparsable line: {line}')
-            return
-
-        self.stats[mode] += 1
+        elif entry.refused_path is not None:
+            self.refused.append(entry.filepath)
+        else:
+            self.stats[entry.mode] += 1
 
     def get_summary(self) -> str:
         """Get a one-line sync summary."""
         synced_count = self.stats['add'] + \
             self.stats['upd'] - self.stats['clb']
-        detail = ', '.join(f'{mode}: {self.stats[mode]}'
-                           for mode in ('add', 'upd', 'del', 'clb')
-                           if self.stats[mode])
+        counts = {**self.stats, 'refused': len(self.refused)}
+        detail = ', '.join(f'{mode}: {counts[mode]}'
+                           for mode in ('add', 'upd', 'del', 'clb', 'refused')
+                           if counts[mode])
         return f'synced {synced_count} files' + (f' ({detail})' if detail else '')
 
 
@@ -640,11 +643,8 @@ def p4_sync_preview(revision: str, depot_root: str, workspace_dir: str) -> list[
     result = _run_p4_sync(['-n', f'{depot_root}/...{revision}'],
                           workspace_dir, P4SyncOutputProcessor())
 
-    files = []
-    for line in result.stdout:
-        mode, filename = parse_p4_sync_line(line)
-        if mode and filename:
-            files.append(P4SyncPreviewFile(mode=mode, filepath=filename))
+    files = [entry for entry in map(parse_p4_sync_entry, result.stdout)
+             if entry is not None]
     log.success(f'{plural(len(files), "file")} would be synced')
     return files
 
@@ -657,10 +657,10 @@ class P4SyncClobberError(RunError):
         self.refused = refused
 
 
-def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> None:
+def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> list[str]:
     """Sync the depot root to revision, such as @123, or @=123 for only the files changelist 123 submitted.
 
-    Raises P4SyncClobberError when p4 refused to overwrite writable files.
+    Returns the files allwrite refused to replace. Raises P4SyncClobberError when noclobber refused writable files.
     """
     output_processor = P4SyncOutputProcessor()
     try:
@@ -674,3 +674,4 @@ def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> None:
         log.info(output_processor.get_summary())
         raise P4SyncClobberError(e, refused) from e
     log.success(output_processor.get_summary())
+    return output_processor.refused

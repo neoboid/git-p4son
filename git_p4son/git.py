@@ -691,6 +691,24 @@ def sync_state(workspace_dir: str, revision: str = 'HEAD') -> SyncState:
     return SyncState(None if last is None else last[1], picks)
 
 
+def files_changed_outside_syncs(workspace_dir: str, revision: str) -> set[str]:
+    """The paths revision tracks that commits other than syncs and cherry-picks changed since its first sync.
+
+    The commits before the first sync, such as the import of the workspace's files, hold Perforce's content."""
+    # @=? takes in cherry-picks, @=N, with syncs, @N.
+    grep = f'--grep={_subject_grep(_SYNC_AT + "=?")}'
+    syncs = run(['git', 'rev-list', '-E', grep, revision, '--'],
+                cwd=workspace_dir).stdout
+    if not syncs:
+        return set()
+    # No pathspecs: git computes diffs only for the commits the grep leaves in, which are few.
+    res = run(['git', 'log', '-z', '--format=', '--name-only', '--no-renames', '--invert-grep', '-E', grep,
+               f'{syncs[-1]}..{revision}', '--'], cwd=workspace_dir, text=False)
+    changed = set(_nul_fields(res.stdout))
+    # A path a commit deleted or untracked has no committed change left to merge back.
+    return changed.intersection(list_tracked_files(workspace_dir, revision)) if changed else changed
+
+
 def find_base_commits(filepaths: list[str], before_commit: str,
                       workspace_dir: str) -> dict[str, str | None]:
     """Map each path to its newest sync or cherry-pick commit before before_commit, else its latest add, else None."""

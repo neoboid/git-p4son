@@ -16,6 +16,7 @@ from git_p4son.git import (
     add_files,
     branch_exists,
     commit,
+    files_changed_outside_syncs,
     find_base_commits,
     format_cherry_pick_subject,
     format_sync_subject,
@@ -345,6 +346,27 @@ class TestGetHeadCommit(GitRepoTestCase):
 
 SYNC_100 = 'git-p4son: p4 sync //ws/...@100'
 SYNC_200 = 'git-p4son: p4 sync //ws/...@200'
+
+
+class TestFilesChangedOutsideSyncs(GitRepoTestCase):
+    def test_files_a_commit_above_the_first_sync_changed(self):
+        self.commit_history(('Initial submit all files', {'a.cpp': 'A', 'b.cpp': 'B', 'c.cpp': 'C'}),
+                            (SYNC_100, {'a.cpp': 'A1'}),
+                            ('Tweak', {'b.cpp': 'B tweak', 'd.cpp': 'D'}),
+                            (SYNC_200, {'c.cpp': 'C2'}),
+                            ('git-p4son: p4 sync //ws/...@=205', {'a.cpp': 'A2'}))
+        self.assertEqual(files_changed_outside_syncs(
+            self.ws, 'HEAD'), {'b.cpp', 'd.cpp'})
+
+    def test_only_files_revision_still_tracks(self):
+        self.commit_history((SYNC_100, {'a.cpp': 'A', 'b.cpp': 'B'}),
+                            ('Tweak', {'a.cpp': 'A tweak', 'b.cpp': None}))
+        self.assertEqual(files_changed_outside_syncs(
+            self.ws, 'HEAD'), {'a.cpp'})
+
+    def test_nothing_before_the_first_sync(self):
+        self.commit_history(('Initial submit all files', {'a.cpp': 'A'}))
+        self.assertEqual(files_changed_outside_syncs(self.ws, 'HEAD'), set())
 
 
 class TestFindBaseCommits(GitRepoTestCase):

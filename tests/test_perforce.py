@@ -27,6 +27,7 @@ from git_p4son.perforce import (
     is_binary_file_type,
     opened_lookup,
     p4_depot_root_exists,
+    p4_file_arg,
     p4_get_opened_files,
     p4_head_types,
     p4_revert_unchanged,
@@ -514,6 +515,19 @@ class TestP4Sync(unittest.TestCase):
         with self.assertRaises(RunError) as ctx:
             p4_sync('@12345', '//myclient', '/ws')
         self.assertNotIsInstance(ctx.exception, P4SyncClobberError)
+
+
+class TestP4FileArg(unittest.TestCase):
+    def test_a_local_path_has_its_wildcards_escaped_percent_first(self):
+        self.assertEqual(p4_file_arg('/ws/d d/a@b#c%41*.txt'),
+                         '/ws/d d/a%40b%23c%2541%2A.txt')
+
+    def test_a_plain_path_is_unchanged(self):
+        self.assertEqual(p4_file_arg('d/a.txt'), 'd/a.txt')
+
+    def test_a_depot_path_is_already_escaped(self):
+        self.assertEqual(p4_file_arg('//depot/d/at%40sign.txt'),
+                         '//depot/d/at%40sign.txt')
 
 
 class TestParseP4SyncEntry(unittest.TestCase):

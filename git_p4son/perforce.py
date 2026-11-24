@@ -326,6 +326,15 @@ def _fstat_records(res: RunResult[list[str]], workspace_dir: str,
     return records
 
 
+def p4_file_arg(path: str) -> str:
+    """path as a p4 file argument: a local one with @, #, % and * escaped, a depot one, already escaped, as it is."""
+    if path.startswith('//'):
+        return path
+    for char, code in (('%', '%25'), ('@', '%40'), ('#', '%23'), ('*', '%2A')):
+        path = path.replace(char, code)
+    return path
+
+
 def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
                                ) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
     """Return (changelist, action) for each of the files that is opened, and the other end of each opened move, keyed

@@ -286,8 +286,10 @@ def include_changes_in_changelist(changes: LocalChanges, changelist: str,
                  workspace_dir, dry_run)
     p4_output = []
     for p4_action in ('add', 'edit', 'delete'):
+        # add needs -f for names holding @, #, % or *.
         p4_output += run_p4_batch(
-            [p4_action, '-c', changelist],
+            [p4_action, *(['-f'] if p4_action == 'add' else []),
+             '-c', changelist],
             [f for f, action in to_open if action == p4_action],
             f'Opening for {p4_action}', workspace_dir, dry_run,
             fail_on_returncode=False)

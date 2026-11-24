@@ -402,7 +402,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.adds = ['new_file.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=False)
         self.assertEqual(_commands(mock_run), [
-            (['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], 'new_file.txt')])
+            (['p4', '-L', 'en', '-x', '-', 'add', '-f', '-c', '100'], 'new_file.txt')])
 
     @mock.patch('git_p4son.lib.opened_lookup',
                 return_value=mock.Mock(return_value=('200', 'add')))
@@ -539,7 +539,7 @@ class TestIncludeChangesInChangelist(unittest.TestCase):
         changes.adds = ['new.txt']
         include_changes_in_changelist(changes, '100', '/ws', dry_run=True)
         mock_run.assert_called_once_with(
-            ['p4', '-L', 'en', '-x', '-', 'add', '-c', '100'], cwd='/ws',
+            ['p4', '-L', 'en', '-x', '-', 'add', '-f', '-c', '100'], cwd='/ws',
             input='new.txt', dry_run=True, fail_on_returncode=False)
 
 

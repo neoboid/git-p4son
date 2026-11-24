@@ -35,6 +35,7 @@ from git_p4son.perforce import (
     p4_sync,
     p4_sync_preview,
     parse_p4_sync_entry,
+    run_p4_batch,
     P4ClientSpec,
     P4SyncAbortError,
     P4SyncClobberError,
@@ -367,7 +368,8 @@ class TestGetLatestChanges(unittest.TestCase):
                          [[], [10], [103, 97], [103, 97]])
         mock_run.assert_called_once_with(
             ['p4', '-L', 'en', '-ztag', '-x', '-', 'changes', '-m2', '-s', 'submitted'], cwd='/ws',
-            input='//myclient/...@3\n//myclient/...@10\n//myclient/...@104\n//myclient/...@105')
+            input='//myclient/...@3\n//myclient/...@10\n//myclient/...@104\n//myclient/...@105', dry_run=False,
+            fail_on_returncode=True)
 
     @mock.patch('git_p4son.perforce.run')
     def test_no_revisions_runs_nothing(self, mock_run):
@@ -530,6 +532,16 @@ class TestP4FileArg(unittest.TestCase):
                          '//depot/d/at%40sign.txt')
 
 
+class TestRunP4Batch(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_escapes_local_paths_but_gives_add_f_them_raw_wherever_its_f_is(self, mock_run):
+        for args, sent in ((['edit', '-c', '1'], 'd/a%40b.txt'), (['add', '-c', '1', '-f'], 'd/a@b.txt')):
+            with self.subTest(args=args), captured_output():
+                run_p4_batch(args, ['d/a@b.txt'],
+                             'Opening', '/ws', dry_run=False)
+                self.assertEqual(mock_run.call_args.kwargs['input'], sent)
+
+
 class TestParseP4SyncEntry(unittest.TestCase):
     def test_a_synced_file(self):
         self.assertEqual(parse_p4_sync_entry('//depot/a.txt#2 - updating /ws/a.txt'),
@@ -689,7 +701,7 @@ class TestGetLatestChangelist(unittest.TestCase):
         self.assertEqual(cl, 54321)
         mock_run.assert_called_once_with(
             ['p4', '-L', 'en', '-ztag', '-x', '-', 'changes', '-m1', '-s', 'submitted'], cwd='/ws',
-            input='//myclient/...#head')
+            input='//myclient/...#head', dry_run=False, fail_on_returncode=True)
 
     @mock.patch('git_p4son.perforce.run')
     def test_no_changes_found(self, mock_run):
@@ -996,7 +1008,7 @@ class TestP4RevertUnchanged(unittest.TestCase):
         self.assertEqual(reverted, ['//depot/a.txt#3 - was edit, reverted'])
         mock_run.assert_called_once_with(
             ['p4', '-L', 'en', '-x', '-', 'revert', '-a', '-c', '100'],
-            cwd='/ws', input='a.txt\nb.txt', fail_on_returncode=False)
+            cwd='/ws', input='a.txt\nb.txt', dry_run=False, fail_on_returncode=False)
 
     @mock.patch('git_p4son.perforce.run')
     def test_dry_run_previews(self, mock_run):
@@ -1005,7 +1017,7 @@ class TestP4RevertUnchanged(unittest.TestCase):
         p4_revert_unchanged(['a.txt'], '100', '/ws', dry_run=True)
         mock_run.assert_called_once_with(
             ['p4', '-L', 'en', '-x', '-', 'revert', '-a', '-n', '-c', '100'],
-            cwd='/ws', input='a.txt', fail_on_returncode=False)
+            cwd='/ws', input='a.txt', dry_run=False, fail_on_returncode=False)
 
 
 class TestP4ShelveChangelist(unittest.TestCase):

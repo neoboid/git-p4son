@@ -95,6 +95,29 @@ class TestNew(NewTestCase):
         self.assertEqual(list_changelist_aliases(self.ws), [])
 
 
+class TestNewFilesWithP4Wildcards(P4RepoTestCase):
+    """Files whose names hold @, # or %, which p4 reads as revision and wildcard syntax; Windows refuses *."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_sync(101, {'d/at@sign.txt': 'a\n',
+                         'd/hash#name.txt': 'h\n', 'd/pct%name.txt': 'p\n'})
+        self.git('switch', '-q', '-c', 'feature')
+        self.edit('d/at@sign.txt', 'a2\n')
+        self.git('rm', '-q', 'd/hash#name.txt')
+        self.move('d/pct%name.txt', 'd/moved@to%41.txt')
+        self.write_file('d/new#file.txt', 'n\n')
+        self.commit('Change files with p4 wildcards')
+
+    def test_new_opens_them(self):
+        self.run_command(
+            new_command, ['new', 'feat', '-m', 'Feature', '-b', 'main'])
+        self.assertEqual(self.p4.opened, {
+            'd/at@sign.txt': ('102', 'edit'), 'd/hash#name.txt': ('102', 'delete'),
+            'd/new#file.txt': ('102', 'add'), 'd/pct%name.txt': ('102', 'move/delete'),
+            'd/moved@to%41.txt': ('102', 'move/add')})
+
+
 class TestNewUnopened(NewTestCase):
     """new stops before shelving when p4 doesn't open a file, and update finishes the changelist once p4 takes it."""
 

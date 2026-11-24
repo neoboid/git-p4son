@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `sync`, `cherry-pick`, `new`, `review` and `update` handle files whose names hold `@`, `#`, `%` or `*`, which p4
+  read as revision and wildcard syntax, stopping the command. Local paths are now escaped for p4, and `add` runs
+  with `-f`
 - `sync` merges back a committed local change in a read-only file, as `git p4son writable off` leaves it, where
   Perforce used to overwrite it without a merge-back
 - On `allwrite` workspaces, `sync` left files with local changes out of the sync commit, as Perforce refuses to

@@ -193,8 +193,9 @@ def get_latest_changes(depot_root: str, revisions: list[str], count: int,
     if not revisions:
         return []
     # p4 runs each line as a changes command of its own; with no lower bound it walks back and stops at count.
-    res = run([*_P4, '-ztag', '-x', '-', 'changes', f'-m{count}', '-s', 'submitted'], cwd=workspace_dir,
-              input='\n'.join(f'{depot_root}/...{revision}' for revision in revisions))
+    res = _run_file_list(['changes', f'-m{count}', '-s', 'submitted'],
+                         [f'{depot_root}/...{revision}' for revision in revisions], workspace_dir,
+                         global_args=('-ztag',))
     groups: list[list[int]] = []
     for record in parse_ztag_multi_output(res.stdout):
         change = int(record['change'])
@@ -335,6 +336,15 @@ def p4_file_arg(path: str) -> str:
     return path
 
 
+def _run_file_list(p4_args: list[str], paths: list[str], workspace_dir: str, *, global_args: tuple[str, ...] = (),
+                   dry_run: bool = False, fail_on_returncode: bool = True) -> RunResult[list[str]]:
+    """Run p4 p4_args over paths as a -x - list of file arguments; add -f gets local names raw, as it escapes them."""
+    lines = paths if p4_args[0] == 'add' and '-f' in p4_args else map(
+        p4_file_arg, paths)
+    return run([*_P4, *global_args, '-x', '-', *p4_args], cwd=workspace_dir, input='\n'.join(lines),
+               dry_run=dry_run, fail_on_returncode=fail_on_returncode)
+
+
 def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
                                ) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
     """Return (changelist, action) for each of the files that is opened, and the other end of each opened move, keyed
@@ -343,10 +353,8 @@ def get_opened_files_and_moves(filenames: list[str], workspace_dir: str
     The other end is a workspace-relative path when it is among the files, else a depot path."""
     if not filenames:
         return {}, {}
-    res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Ro', '-Op',
-               '-T', 'path,clientFile,depotFile,action,change,movedFile'],
-              cwd=workspace_dir, input='\n'.join(filenames),
-              fail_on_returncode=False)
+    res = _run_file_list(['-ztag', 'fstat', '-Ro', '-Op', '-T', 'path,clientFile,depotFile,action,change,movedFile'],
+                         filenames, workspace_dir, fail_on_returncode=False)
     # Files that are not opened, or not in the depot yet, are reported per file.
     _warn_p4_errors(res, ('not opened', 'no such file'),
                     'p4 fstat failed to list opened files:')
@@ -379,10 +387,8 @@ def get_out_of_date_files(filenames: list[str], workspace_dir: str) -> list[OutO
     Raises CommandError if p4 fails for another reason, after logging its lines."""
     if not filenames:
         return []
-    res = run([*_P4, '-x', '-', '-ztag', 'fstat', '-Op',
-               '-T', 'path,clientFile,haveRev,headRev,headAction'],
-              cwd=workspace_dir, input='\n'.join(filenames),
-              fail_on_returncode=False)
+    res = _run_file_list(['-ztag', 'fstat', '-Op', '-T', 'path,clientFile,haveRev,headRev,headAction'],
+                         filenames, workspace_dir, fail_on_returncode=False)
     # Files outside the client view are left to the open step, which warns about them.
     errors = _unexpected_p4_errors(res, ('no such file', 'not in client view'))
     if errors:
@@ -423,13 +429,12 @@ def p4_move(moves: list[tuple[str, str]], to_edit: list[str], changelist: str, w
         log.info(f'  {old} -> {new}')
     output = []
     if to_edit:
-        result = run([*_P4, '-x', '-', 'edit', '-c', changelist], cwd=workspace_dir,
-                     input='\n'.join(to_edit), dry_run=dry_run, fail_on_returncode=False)
+        result = _run_file_list(['edit', '-c', changelist], to_edit, workspace_dir, dry_run=dry_run,
+                                fail_on_returncode=False)
         output += result.stdout + result.stderr
     # -b 2 hands p4 move the -x lines two at a time, as one old and new pair, all in one process.
-    result = run([*_P4, '-b', '2', '-x', '-', 'move', '-c', changelist, '-k'], cwd=workspace_dir,
-                 input='\n'.join(path for move in moves for path in move), dry_run=dry_run,
-                 fail_on_returncode=False)
+    result = _run_file_list(['move', '-c', changelist, '-k'], [path for move in moves for path in move],
+                            workspace_dir, global_args=('-b', '2'), dry_run=dry_run, fail_on_returncode=False)
     return output + result.stdout + result.stderr
 
 
@@ -442,9 +447,8 @@ def run_p4_batch(p4_args: list[str], filenames: list[str], summary: str,
     log.info(f'{summary}:')
     for filename in filenames:
         log.info(f'  {filename}')
-    result = run([*_P4, '-x', '-', *p4_args], cwd=workspace_dir,
-                 input='\n'.join(filenames), dry_run=dry_run,
-                 fail_on_returncode=fail_on_returncode)
+    result = _run_file_list(p4_args, filenames, workspace_dir, dry_run=dry_run,
+                            fail_on_returncode=fail_on_returncode)
     return result.stdout + result.stderr
 
 
@@ -465,13 +469,9 @@ def p4_revert_unchanged(filenames: list[str], changelist: str,
     """Revert files that are unchanged, or missing and opened for add; returns p4's lines."""
     if not filenames:
         return []
-    args = [*_P4, '-x', '-', 'revert', '-a']
-    if dry_run:
-        args.append('-n')
-    args += ['-c', changelist]
     # revert -a exits non-zero when none of the files qualify.
-    result = run(args, cwd=workspace_dir, input='\n'.join(filenames),
-                 fail_on_returncode=False)
+    result = _run_file_list(['revert', '-a', *(['-n'] if dry_run else []), '-c', changelist], filenames,
+                            workspace_dir, fail_on_returncode=False)
     return [line for line in result.stdout if 'reverted' in line]
 
 
@@ -586,9 +586,8 @@ def p4_head_types(filenames: list[str], workspace_dir: str) -> dict[str, str]:
     if not filenames:
         return {}
     # Use -x - so the path list doesn't hit the command-line length limit.
-    args = [*_P4, '-x', '-', '-ztag', 'fstat',
-            '-T', 'clientFile,headType']
-    result = run(args, cwd=workspace_dir, input='\n'.join(filenames))
+    result = _run_file_list(
+        ['-ztag', 'fstat', '-T', 'clientFile,headType'], filenames, workspace_dir)
     return {record['clientFile']: record['headType']
             for record in parse_ztag_multi_output(result.stdout)
             if record.get('clientFile') and record.get('headType')}

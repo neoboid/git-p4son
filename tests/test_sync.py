@@ -387,6 +387,15 @@ class TestSyncLocalChanges(SyncTestCase):
         self.assertIn('Files not synced (git-ignored and writable)', out)
         self.assertIn('x.log', out)
 
+    def test_a_local_change_to_a_file_with_p4_wildcards_in_its_name_is_merged_back(self):
+        self.commit_sync(101, {'d/at@sign#1%.txt': 'x\n'})
+        self.edit('d/at@sign#1%.txt', 'local\nx\n')
+        self.commit('local change')
+        self.p4.submit(102, {'d/at@sign#1%.txt': 'x\nupstream\n'})
+        out = self.sync()
+        self.assertEqual(self.read('d/at@sign#1%.txt'), 'local\nx\nupstream\n')
+        self.assertIn('1 file merged successfully', out)
+
     def test_a_read_only_local_change_is_merged_back(self):
         """As after git p4son writable off, which makes committed tweaks read-only too."""
         self.edit('a.txt', 'local\na1\n')

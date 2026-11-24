@@ -441,6 +441,21 @@ FEATURE_OPENED = {'a.txt': ('101', 'edit'), 'b.txt': (
     '101', 'delete'), 'c.txt': ('101', 'add')}
 
 
+# p4's wildcard characters and their escapes, % first; kept apart from git-p4son's, as the fake checks those.
+_P4_ESCAPES = (('%', '%25'), ('@', '%40'), ('#', '%23'), ('*', '%2A'))
+
+
+def _p4_escape(path: str) -> str:
+    """path with p4's wildcard characters escaped, as p4 prints depot paths."""
+    for char, code in _P4_ESCAPES:
+        path = path.replace(char, code)
+    return path
+
+
+def _p4_unescape(path: str) -> str:
+    return re.sub('%([0-9A-Fa-f]{2})', lambda match: chr(int(match.group(1), 16)), path)
+
+
 class FakeP4:
     """A scripted Perforce server for the p4 commands git-p4son runs.
 
@@ -543,11 +558,10 @@ class FakeP4:
         if not self._allwrite():
             os.chmod(local, stat.S_IRUSR)
 
-    def _force_sync(self, revisions: list[str]) -> list[str]:
-        """Write, or delete, what allwrite refused for each depot path with a revision, as sync -f does."""
+    def _force_sync(self, paths: list[str]) -> list[str]:
+        """Write, or delete, what allwrite refused for each path, as sync -f does."""
         out = []
-        for revision in revisions:
-            path = self._rel(re.split('[#@]', revision, maxsplit=1)[0])
+        for path in paths:
             content = self.held.pop(path)[1]
             local = self._local(path)
             if content is None:
@@ -560,7 +574,7 @@ class FakeP4:
         return out
 
     def _depot(self, path: str) -> str:
-        return f'//{self.client}/{path}'
+        return f'//{self.client}/{_p4_escape(path)}'
 
     def run(self, command: list[str], cwd: str = '.', dry_run: bool = False,
             input: str | None = None, env: dict[str, str] | None = None,
@@ -570,8 +584,15 @@ class FakeP4:
             return RunResult(0, [], [])
         self.calls.append(args)
         # A file list comes as -x -; the batched changes query sends depot paths, which aren't workspace files.
-        files = [self._rel(line) for line in (
-            input or '').splitlines()] if args[:2] == ['-x', '-'] else []
+        file_list = next((i + 2 for i in range(len(args) - 1)
+                         if args[i:i + 2] == ['-x', '-']), None)
+        if file_list is not None and args[file_list] == 'changes':
+            # Its lines are depot paths with revision ranges, which the changes query reads itself.
+            file_list = None
+        files, arg_errors = ([], []) if file_list is None else self._file_args(
+            (input or '').splitlines(), raw=args[file_list] == 'add' and '-f' in args[file_list:])
+        if arg_errors and fail_on_returncode:
+            raise RunError(' '.join(command), returncode=1, stderr=arg_errors)
         stderr: list[str] = []
         if args[:3] == ['-ztag', 'client', '-o']:
             out = [f'... Client {self.client}', f'... Root {self.ws}',
@@ -621,9 +642,9 @@ class FakeP4:
                 out += [f'... clientFile {self._local(path)}',
                         f'... headType {kind}', '']
         elif args[:4] == ['-x', '-', 'sync', '-f']:
-            out = self._force_sync((input or '').splitlines())
+            out = self._force_sync(files)
         elif args[:2] == ['-x', '-'] and args[2] in ('add', 'edit', 'delete'):
-            out, stderr = self._open(files, args[2], args[4])
+            out, stderr = self._open(files, args[2], args[-1])
         elif args[:3] == ['-x', '-', 'reopen']:
             out = []
             for path in files:
@@ -636,8 +657,7 @@ class FakeP4:
             out, stderr = self._revert(files, keep='-k' in args)
         elif args[:5] == ['-b', '2', '-x', '-', 'move']:
             out = []
-            lines = [self._rel(line) for line in (input or '').splitlines()]
-            for old, new in zip(lines[::2], lines[1::2]):
+            for old, new in zip(files[::2], files[1::2]):
                 moved, refused = self._move(args[6], old, new)
                 out += moved
                 stderr += refused
@@ -649,7 +669,28 @@ class FakeP4:
             out = [f'Change {change} files shelved.']
         else:
             raise AssertionError(f'unscripted p4 command: {args}')
-        return RunResult(0, out, stderr)
+        return RunResult(1 if arg_errors else 0, out, arg_errors + stderr)
+
+    def _file_args(self, lines: list[str], raw: bool) -> tuple[list[str], list[str]]:
+        """The files -x - names, and p4's errors for the lines it can't read; raw for add -f, which escapes itself."""
+        files: list[str] = []
+        errors: list[str] = []
+        wildcards = '[' + ''.join(re.escape(char)
+                                  for char, _ in _P4_ESCAPES[1:]) + ']|%(?![0-9A-Fa-f]{2})'
+        for line in lines:
+            if raw:
+                files.append(self._rel(line))
+                continue
+            # A trailing @N, @=N or #N is the revision the argument asks for.
+            path = re.sub('(@=?[0-9]+|#[0-9]+)$', '', line)
+            if re.search(wildcards, path):
+                errors.append(
+                    f'{line} - @, #, % and * in a file argument are revision and wildcard syntax.')
+            else:
+                # _rel decodes a depot path; a local one is decoded here.
+                files.append(self._rel(path if path.startswith(
+                    '//') else _p4_unescape(path)))
+        return files, errors
 
     def _changes(self, numbers: list[int]) -> list[str]:
         """The changes as p4 -ztag changes lists them."""
@@ -659,7 +700,7 @@ class FakeP4:
     def _rel(self, path: str) -> str:
         depot = f'//{self.client}/'
         if path.startswith(depot):
-            return path[len(depot):]
+            return _p4_unescape(path[len(depot):])
         return os.path.relpath(os.path.join(self.ws, path),
                                self.ws).replace(os.sep, '/')
 

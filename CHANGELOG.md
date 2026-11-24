@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.1
+
 - `sync`, `cherry-pick`, `new`, `review` and `update` handle files whose names hold `@`, `#`, `%` or `*`, which p4
   read as revision and wildcard syntax, stopping the command. Local paths are now escaped for p4, and `add` runs
   with `-f`

@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
 from .git import (
-    author_dates, branch_exists, branches_at, commit_all, get_current_branch, get_dirty_files, get_head_commit,
-    get_head_subject, insert_empty_commit, is_ancestor, merges_above,
+    author_dates, branch_exists, branches_at, commit_all, commits_above, files_changed_since, get_current_branch,
+    get_dirty_files, get_head_commit, get_head_subject, insert_empty_commit, is_ancestor, merges_above,
     nearest_branches_below, resolve_commit, switch_branch, switch_detached,
 )
 from .lib import check_git_workspace_clean
@@ -211,6 +211,48 @@ class GitBackend:
         log.heading(f'Checking out sync branch {sync.branch}')
         switch_branch(sync.branch, self.workspace_dir)
         log.success(f'From {sync.start.name}')
+
+    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool]) -> str:
+        """Check sync_branch is checked out at tip, where the interrupted sync left it, and take its start from start.
+
+        Raises CommandError, naming the way out, where it isn't."""
+        log.heading(f'Checking sync branch {sync_branch}')
+        workspace_dir = self.workspace_dir
+        if not branch_exists(sync_branch, workspace_dir):
+            raise no_sync_branch(sync_branch, self.words)
+        current = get_current_branch(workspace_dir)
+        if current != sync_branch:
+            where = 'HEAD is detached' if current is None else f'{current} is checked out'
+            raise CommandError(f'The interrupted sync left its files on {sync_branch}, but {where}. Return to it with '
+                               f'"git switch {sync_branch}", which carries the files back, then run "git p4son sync" '
+                               'again.')
+        head = get_head_commit(workspace_dir)
+        if not is_ancestor(tip, head, workspace_dir):
+            raise CommandError(f'{sync_branch} no longer holds {tip[:7]}, where the interrupted sync left it. Put it '
+                               f'back with "git reset --keep {tip}", then run "git p4son sync" again.')
+        above = commits_above(tip, head, workspace_dir)
+        if above:
+            for line in above:
+                log.info(line)
+            raise CommandError(f'The commits above were made on {sync_branch} after the interrupted sync, which '
+                               f'git-p4son cannot resume over yet. Move them to another branch, then put '
+                               f'{sync_branch} back with "git reset --keep {tip}" and run "git p4son sync" again.')
+        log.success(f'At {tip[:7]}')
+        branch = start.get('branch')
+        commit = start.get('commit', tip)
+        self._sync = _Sync(sync_branch, _Position(
+            branch if isinstance(branch, str) else None, str(commit)))
+        return f'refs/heads/{sync_branch}'
+
+    def begin_resume(self) -> None:
+        """Nothing to do: resume_sync found HEAD on the sync branch at the recorded tip."""
+
+    def returns_to(self) -> str | None:
+        sync = self._prepared()
+        return None if sync.on_sync_branch else sync.start.name
+
+    def files_changed_since(self, commit: str) -> set[str]:
+        return files_changed_since(commit, self.workspace_dir)
 
     def progress_start(self) -> tuple[str, dict[str, str | bool]]:
         """The branch sync started on, or the commit for a detached HEAD."""

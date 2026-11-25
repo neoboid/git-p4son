@@ -12,6 +12,8 @@ from unittest import mock
 from git_p4son.common import CommandError, run, RunError, RunResult
 from git_p4son.git import (
     add_all_files,
+    commits_above,
+    files_changed_since,
     case_only_ignored,
     add_files,
     branch_exists,
@@ -722,6 +724,34 @@ class TestNearestBranchesBelow(GitRepoTestCase):
         self.git('branch', 'low', 'HEAD~2')
         self.git('tag', 'low', 'HEAD')
         self.assertEqual(self.nearest(), ['low'])
+
+
+class TestChangesSince(GitRepoTestCase):
+    """A commit of a.txt and b.txt."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.write_file('a.txt', 'a\n')
+        self.write_file('b.txt', 'b\n')
+        self.commit('Base')
+
+    def test_files_changed_since_a_commit_take_in_deleted_and_untracked_ones(self):
+        base = self.git('rev-parse', 'HEAD')
+        self.write_file('a.txt', 'changed\n')
+        os.remove(os.path.join(self.ws, 'b.txt'))
+        self.write_file('new.txt', 'new\n')
+        self.write_file('.gitignore', 'ignored.txt\n')
+        self.write_file('ignored.txt', 'x\n')
+        self.assertEqual(files_changed_since(base, self.ws), {
+                         'a.txt', 'b.txt', 'new.txt', '.gitignore'})
+
+    def test_commits_above_a_commit_newest_first(self):
+        base = self.git('rev-parse', 'HEAD')
+        self.commit('One')
+        self.commit('Two')
+        self.assertEqual([line.split(' ', 1)[1] for line in commits_above(
+            base, 'HEAD', self.ws)], ['Two', 'One'])
+        self.assertEqual(commits_above('HEAD', 'HEAD', self.ws), [])
 
 
 class TestMergesAbove(GitRepoTestCase):

@@ -59,6 +59,12 @@ class TestCherryPick(CherryPickTestCase):
         self.assertEqual(self.subjects(), [
                          'git-p4son: p4 sync //myclient/...@=102'])
 
+    def test_an_interrupted_cherry_pick_leaves_no_sync_progress(self):
+        self.p4.interrupt_sync('@=102', after=1)
+        with self.assertRaises(KeyboardInterrupt):
+            self.cherry_pick('102')
+        self.assertIsNone(self.sync_progress_file())
+
     def test_the_last_synced_changelist_stays(self):
         self.cherry_pick('102')
         self.assertEqual(git_last_synced_changelist(self.ws), 100)

@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from collections.abc import Callable, Iterable, Iterator
 from datetime import timedelta
@@ -1024,6 +1025,23 @@ class P4RepoTestCase(GitRepoTestCase):
         self.git('switch', '-q', 'main')
         self.commit_sync(change, files)
         self.git('switch', '-q', branch)
+
+    def sync_progress_file(self) -> dict[str, Any] | None:
+        """The sync progress file as its TOML reads, None when there is none."""
+        path = os.path.join(self.ws, CONFIG_DIR, 'sync-progress.toml')
+        if not os.path.exists(path):
+            return None
+        with open(path, 'rb') as f:
+            return tomllib.load(f)
+
+    def interrupted_sync(self, *argv: str) -> dict[str, Any]:
+        """Run git p4son sync with argv, a Ctrl-C expected to stop it; the sync progress file it left."""
+        from git_p4son.sync import sync_command
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_command(sync_command, ['sync', *argv])
+        progress = self.sync_progress_file()
+        assert progress is not None, 'the interrupted sync left no sync progress'
+        return progress
 
     def shelves(self) -> list[list[str]]:
         """The p4 shelve calls made so far."""

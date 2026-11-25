@@ -114,7 +114,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `writable off`), into tracked and ignored ones, stages the locally modified ones and keeps the depot path of each
   tracked file allwrite refuses (`replace`), which sync replaces with one `p4 sync -f` after the pass, and
   `merge_changed_files` merges those local changes back after the sync, one file at a time (`_merge_back`), telling
-  `on_merged` after each. `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
+  `on_merged` after each, with an interrupted run's outcomes (`merged_before`) reported beside them;
+  `stage_changed_files` stages a local change (`ChangedFileRef`) from the pre-sync commit and its base, for a pass and
+  for a resume. `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
 
 - **`sync_progress.py`** - The sync progress: what an interrupted sync has left to do, in
   `.git-p4son/sync-progress.toml` (`version = 1`), written to a temporary file and renamed into place, retried a few
@@ -217,18 +219,19 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
   that the sync branch exists and the change contains its tip, with no merge above it (`check_on_sync_tip`), the check
   that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
-  loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), where the sync started for the sync progress
-  (`progress_start`: git's branch or detached commit, jj's start change and whether it was edited), and the `Words` its
-  messages use, whose `tool` hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then
-  `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds the workspace's lock for the whole
-  command, jj's lock and operation in a jj workspace and `command_lock` in a git one, and yields the backend in
-  `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
-  `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
-  `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its chain, else the
-  suggested name, unless the command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so
-  under a heading, for `run_command` and `alias rename`. `completion_backend` gives one without the lock, and
-  `workspace_lock` is `init`'s lock-only path. No command branches on jj outside the backend modules and `jj.py`, apart
-  from `init`'s offer to set jj up.
+  loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), a resume's check of where the interrupted sync
+  left the sync branch, taking the start from the sync progress (`resume_sync`), the files changed since a commit
+  (`files_changed_since`), where the sync started for the sync progress (`progress_start`: git's branch or detached
+  commit, jj's start change and whether it was edited), and the `Words` its messages use, whose `tool` hooks get as
+  `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj
+  workspace. `open_backend` holds the workspace's lock for the whole command, jj's lock and operation in a jj workspace
+  and `command_lock` in a git one, and yields the backend in `run_command` as `args.backend`; jj snapshots the working
+  copy first unless the command's parser sets `snapshot=False`. Once the lock is released, it calls the backend's
+  `after_lock`. `alias_for_branch` resolves the `branch` keyword: the alias recording the change, or the change
+  `nearest_change` finds below it in its chain, else the suggested name, unless the command (`new_alias=True` on its
+  parser) names a new one; `resolve_branch_keyword` does so under a heading, for `run_command` and `alias rename`.
+  `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command branches
+  on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
   its full ref, so that a tag of its name isn't taken for it, the nearest branch below HEAD down to the sync branch
@@ -306,12 +309,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), local paths as file arguments (`p4_file_arg`, which escapes `@#%*`, for
-  every `-x -` list through `_run_file_list`; `add -f` takes them raw), changelist specs, opened files and batched
-  commands (`run_p4_batch`), reverts, shelving, submitted changes and users, a changelist's status and owner
-  (`describe_changelist`) and whether it is gone (one `describe` each, as a batched one skips the changelist after a
-  missing one), and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing streamed progress
-  (`parse_p4_sync_entry`, allwrite's refusals included, which keep a file with exit code 0 and which `p4_sync` returns)
-  and raising `P4SyncClobberError` or `P4SyncAbortError`.
+  every `-x -` list through `_run_file_list`, `p4_off_have` (`p4 diff -se`) among them; `add -f` takes them raw),
+  changelist specs, opened files and batched commands (`run_p4_batch`), reverts, shelving, submitted changes and users,
+  a changelist's status and owner (`describe_changelist`) and whether it is gone (one `describe` each, as a batched one
+  skips the changelist after a missing one), and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing
+  streamed progress (`parse_p4_sync_entry`, allwrite's refusals included, which keep a file with exit code 0 and which
+  `p4_sync` returns) and raising `P4SyncClobberError` or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`, which `_stop`

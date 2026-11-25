@@ -2,12 +2,12 @@
 
 import contextlib
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NoReturn
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
-from .git import commit_all, get_head_commit, get_local_changes, is_ancestor, merges_above
+from .git import commit_all, files_changed_since, get_head_commit, get_local_changes, is_ancestor, merges_above
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
@@ -29,6 +29,8 @@ class _Sync:
     on_sync_branch: bool
     # Set by finish_sync, for after_lock: where the sync bookmark is now, and whether to rebase.
     finished: tuple[str, bool] | None = None
+    # A resume's: the undescribed changes jj made on the recorded commit, holding the files as Perforce left them.
+    snapshots: list[str] = field(default_factory=list)
 
     @property
     def return_command(self) -> str:
@@ -238,6 +240,53 @@ class JjBackend:
         log.heading(f'Checking out sync bookmark {sync.bookmark}')
         self.workspace.checkout(sync.commit)
         log.success(f'From {sync.start}')
+
+    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool]) -> str:
+        """Check the sync bookmark is at tip and the working change above it, with no change described since, and
+        take the start from start.
+
+        Raises CommandError, naming the way out, where it isn't."""
+        workspace = self.workspace
+        log.heading(f'Checking sync bookmark {sync_branch}')
+        if sync_branch not in workspace.bookmarks:
+            raise no_sync_branch(sync_branch, self.words)
+        if _unconflicted(sync_branch, workspace.bookmarks[sync_branch]) != tip:
+            raise CommandError(f'jj bookmark "{sync_branch}" moved since the interrupted sync left it at {tip[:12]}. '
+                               f'Put it back with "jj bookmark set {sync_branch} -r {tip} --allow-backwards", then run '
+                               '"git p4son sync" again.')
+        if not is_ancestor(tip, workspace.working.commit, workspace.directory):
+            children = workspace.children(tip)
+            back = (' or '.join(f'"jj edit {change[:12]}"' for change in children) if children
+                    else f'"jj new {tip[:12]}"')
+            raise CommandError(f'The working change is not above {sync_branch}, where the interrupted sync left its '
+                               f'files. Return to them with {back}, then run "git p4son sync" again.')
+        above = workspace.changes_above(tip)
+        described = [(change, description)
+                     for change, description in above if description]
+        if described:
+            for change, description in described:
+                log.info(f'{change[:12]} {description}')
+            raise CommandError('The jj changes above were described after the interrupted sync, which git-p4son '
+                               'cannot resume over yet. Move them off it with "jj rebase", then run "git p4son sync" '
+                               'again.')
+        log.success(f'At {tip[:12]}')
+        self._sync = _Sync(sync_branch, tip, str(start['change']), bool(start['edited']),
+                           get_head_commit(workspace.directory), bool(
+                               start['on-sync-branch']),
+                           snapshots=[change for change, _ in above])
+        return tip
+
+    def begin_resume(self) -> None:
+        """Point git's HEAD at the recorded commit, which changes no file, as jj keeps it at the working change's
+        parent."""
+        self.workspace.detach_head(self._prepared().commit)
+
+    def returns_to(self) -> str | None:
+        sync = self._prepared()
+        return None if sync.on_sync_branch else sync.start
+
+    def files_changed_since(self, commit: str) -> set[str]:
+        return files_changed_since(commit, self.workspace.directory, self.workspace.eol_conversion)
 
     def progress_start(self) -> tuple[str, dict[str, str | bool]]:
         """The change sync started from, and whether it was the working change itself."""

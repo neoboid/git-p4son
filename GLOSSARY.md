@@ -33,3 +33,17 @@ _Avoid_: changelist name, branch alias
 **Sync branch**:
 The branch (git) or bookmark (jj) that sync commits land on, usually `main`.
 _Avoid_: main, sync bookmark, depot branch
+
+**Interrupted sync**:
+A sync that stopped before it finished, leaving the workspace partly synced, with its sync progress kept so a later
+sync can finish it.
+_Avoid_: failed sync, partial sync
+
+**Sync progress**:
+What an interrupted sync has left to do, kept in `.git-p4son/sync-progress.toml`.
+_Avoid_: sync state, journal
+
+**Intersync changes**:
+Changes made in the workspace while a sync is interrupted, which the resume saves aside and merges back after the
+local changes.
+_Avoid_: interim changes

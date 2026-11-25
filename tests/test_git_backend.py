@@ -358,6 +358,20 @@ class TestGitBackendSync(GitRepoTestCase):
             self.git('log', '-1', '--format=%s', 'main'), 'sync subject')
         self.assertEqual(self.git('status', '--porcelain'), '')
 
+    def test_progress_start_is_the_branch_or_the_detached_commit(self):
+        self.git('switch', '-q', '-c', 'feature')
+        backend = GitBackend(self.ws)
+        backend.prepare_sync(None)
+        self.assertEqual(backend.progress_start(), (
+            'main', {'backend': 'git', 'branch': 'feature', 'on-sync-branch': False}))
+        self.git('switch', '-q', '--detach')
+        backend.prepare_sync(None)
+        self.assertEqual(backend.progress_start(), (
+            'main', {'backend': 'git', 'commit': self.git('rev-parse', 'HEAD'), 'on-sync-branch': False}))
+        self.git('switch', '-q', 'main')
+        backend.prepare_sync(None)
+        self.assertEqual(backend.progress_start()[1]['on-sync-branch'], True)
+
     def test_prepare_sync_chooses_the_sync_branch(self):
         self.git('branch', 'p4')
         self.assertEqual(GitBackend(self.ws).prepare_sync(

@@ -182,9 +182,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `init`: `is_supported`, `colocate` and `colocate_steps`, which match git's line endings from jj's first snapshot on,
   `has_p4son_alias` and `add_p4son_alias`.
 
-- **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `flock` on POSIX and `LockFileEx` on
-  Windows. A busy lock raises `CommandError` instead of waiting. Hooks must not run jj commands that snapshot, and
-  a git-p4son run under its caller's lock needs `--backend git`.
+- **`jj_lock.py`** - Takes jj's local working-copy lock the way jj does, with `lock.py`'s `file_lock`. Hooks must
+  not run jj commands that snapshot, and a git-p4son run under its caller's lock needs `--backend git`.
+
+- **`lock.py`** - `file_lock` locks a file with `flock` on POSIX and `LockFileEx` on Windows, as jj locks its working
+  copy. A busy lock raises `CommandError` instead of waiting. `marked_as_locked` names the locked workspace in
+  the environment, so a git-p4son its holder starts, as a hook does, finds its caller holding the lock
+  (`locked_by_caller`).
 
 ## Shared modules
 

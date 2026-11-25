@@ -329,8 +329,8 @@ class WorkspaceTestCase(unittest.TestCase):
             self.assertEqual(command(args), 0)
         return out.getvalue()
 
-    def p4son(self, *argv: str) -> str:
-        """Run git-p4son with argv as the command line would; returns everything it printed.
+    def p4son(self, *argv: str, exit_code: int = 0) -> str:
+        """Run git-p4son with argv as the command line would, expecting exit_code; returns everything it printed.
 
         If the command fails, what it printed is added to the failure."""
         from git_p4son.cli import create_parser, run_command
@@ -338,7 +338,7 @@ class WorkspaceTestCase(unittest.TestCase):
             with captured_output() as out, \
                     mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws):
                 self.assertEqual(run_command(
-                    create_parser().parse_args(argv)), 0)
+                    create_parser().parse_args(argv)), exit_code)
         except Exception as error:
             error.add_note(
                 f'git p4son {" ".join(argv)} printed:\n{out.getvalue()}')

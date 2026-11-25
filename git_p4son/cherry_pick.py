@@ -82,6 +82,5 @@ def cherry_pick_command(args: argparse.Namespace) -> int:
                         plan.settings, args.workspace_dir, backend)
         return plan.after
 
-    sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
-                   plan.settings.depot_root, plan.after.last_synced, run)
-    return 0
+    return sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
+                          plan.settings.depot_root, plan.after.last_synced, run)

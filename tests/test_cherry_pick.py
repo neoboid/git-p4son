@@ -54,6 +54,11 @@ class TestCherryPick(CherryPickTestCase):
         self.assertEqual(self.read(os.path.join(
             '.git-p4son', 'hooks.log')), '100 103')
 
+    def test_a_ctrl_c_in_the_post_sync_hooks_stops_them_and_the_cherry_pick_still_finishes(self):
+        self.p4son_stopped_in_post_sync_hooks('cherry-pick', '102')
+        self.assertEqual(self.subjects(), [
+                         'git-p4son: p4 sync //myclient/...@=102'])
+
     def test_the_last_synced_changelist_stays(self):
         self.cherry_pick('102')
         self.assertEqual(git_last_synced_changelist(self.ws), 100)

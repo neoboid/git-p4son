@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A Ctrl-C during the post-sync hooks of `sync` or `cherry-pick` stops the hooks, not the command's end: it says
+  "post-sync hooks interrupted", returns to where it started, with jj after rebasing, and exits with code 1. So
+  does an error that stops them, such as an expired p4 login for `$(user)`. It used to stay on the sync branch and
+  warn that the files were as Perforce left them, though the sync had finished
 - In a git workspace, git-p4son runs one command at a time, as it already did in a jj workspace: a command started
   while another runs stops with "Another git-p4son command is running in this workspace", where two syncs could run
   p4 and commit at once. `init` is held back too, once the workspace is set up. A hook that runs git-p4son runs under

@@ -1234,6 +1234,10 @@ the `pre-sync` hooks run only once, before the first sync.
 After a successful `sync` or `cherry-pick` that actually syncs, git-p4son runs the `post-sync` commands. They don't
 run when the workspace is already at the requested changelist. A failing one is reported, as the sync is done.
 
+A Ctrl-C while they run stops the rest of them, not the end of the command: it still returns to where you started,
+and exits with code 1. So does an error that keeps a hook from starting, such as an expired p4 login for `$(user)`.
+To run them again, use `git p4son sync last-synced`.
+
 ## Jujutsu (jj)
 
 git-p4son detects a jj workspace colocated with the git repository, which needs jj 0.41 or newer. CI tests both

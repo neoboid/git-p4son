@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .backend import Backend
-from .common import CommandError
+from .common import CommandError, RunError
 from .git import (
     SyncState, files_changed_outside_syncs, format_cherry_pick_subject, format_sync_subject, get_head_commit,
     get_tracked_files, sync_state,
@@ -487,12 +487,34 @@ class OnSyncBranch:
                    args.ignore_blocking_processes, not args.no_rebase)
 
 
-def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, run: Callable[[], SyncState],
-                   before_run: Callable[[], None] | None = None) -> None:
-    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, run the
-    post-sync hooks with the state run gives, and return.
+def _run_post_sync_hooks(synced: int | None, last_synced: int | None, depot_root: str, workspace_dir: str,
+                         backend: str) -> int:
+    """Run the post-sync hooks of a sync that ended at synced; the exit code, 1 if a Ctrl-C or an error stopped them."""
+    try:
+        run_hook('post-sync', workspace_dir, backend,
+                 last_synced, depot_root, synced=synced)
+    except KeyboardInterrupt:
+        log.error('post-sync hooks interrupted')
+        return 1
+    except RunError as error:
+        for line in error.stderr:
+            log.info(line)
+        log.error(
+            f'post-sync hooks stopped: {str(error).strip()} failed with return code {error.returncode}')
+        return 1
+    except CommandError as error:
+        log.error(f'post-sync hooks stopped: {error}')
+        return 1
+    return 0
 
-    last_synced, the last synced changelist, is for the hooks."""
+
+def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, run: Callable[[], SyncState],
+                   before_run: Callable[[], None] | None = None) -> int:
+    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, run the
+    post-sync hooks with the state run gives, and return; the command's exit code.
+
+    last_synced, the last synced changelist, is for the hooks. A Ctrl-C or an error in the post-sync hooks stops
+    them, not the return, as the sync has finished by then, and gives exit code 1."""
     backend = on.backend
     sync_preflight(depot_root, on.workspace_dir,
                    on.ignore_blocking_processes, backend, on.sync_revision)
@@ -508,12 +530,13 @@ def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, r
         raise
     try:
         state = run()
-        run_hook('post-sync', on.workspace_dir, backend.words.tool,
-                 last_synced, depot_root, synced=state.latest)
+        exit_code = _run_post_sync_hooks(
+            state.latest, last_synced, depot_root, on.workspace_dir, backend.words.tool)
     except BaseException:
         backend.fail_sync()
         raise
     backend.finish_sync(str(state), on.rebase)
+    return exit_code
 
 
 def sync_command(args: argparse.Namespace) -> int:
@@ -547,9 +570,8 @@ def sync_command(args: argparse.Namespace) -> int:
                         workspace_dir, backend)
         return SyncState(plan.targets[-1][0]) if plan.targets else plan.state
 
-    sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
-                   plan.settings.depot_root, plan.last_synced, run, split)
-    return 0
+    return sync_on_branch(OnSyncBranch.from_args(args, sync_revision),
+                          plan.settings.depot_root, plan.last_synced, run, split)
 
 
 def _add_split_targets(plan: _SyncPlan, workspace_dir: str) -> None:

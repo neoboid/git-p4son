@@ -1029,6 +1029,18 @@ class P4RepoTestCase(GitRepoTestCase):
         save_config(self.ws, {'hooks': {
                     name: [*commands, [sys.executable, path, *arguments]]}})
 
+    def p4son_stopped_in_post_sync_hooks(self, *argv: str, error: BaseException = KeyboardInterrupt(),
+                                         message: str = 'post-sync hooks interrupted') -> str:
+        """Run git-p4son with two post-sync hooks and error raised in the first, which ends them; what it printed."""
+        for _ in range(2):
+            self.hook('post-sync', 'pass\n')
+        with mock.patch('git_p4son.hooks.command_line', side_effect=error) as first_hook:
+            out = self.p4son(*argv, exit_code=1)
+        first_hook.assert_called_once()
+        self.assertIn(message, out)
+        self.assertNotIn('as Perforce left them', out)
+        return out
+
     def read(self, path: str) -> str:
         with open(os.path.join(self.ws, path)) as f:
             return f.read()

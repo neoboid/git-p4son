@@ -1279,6 +1279,20 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
                          'git-p4son: p4 sync //myclient/...@101')
         self.assertEqual(self.describe('@-'), 'Change a')
 
+    def test_the_sync_progress_records_the_start_change(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync()
+        self.assertEqual(progress['start'], {'backend': 'jj', 'change': self.describe('feat', 'change_id')[:12],
+                                             'edited': False, 'on-sync-branch': False})
+
+    def test_the_sync_progress_records_an_edited_start_change(self):
+        self.jj('edit', 'feat')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync()
+        self.assertEqual(progress['start']['edited'], True)
+
     def test_editing_a_change_returns_to_it(self):
         self.jj('edit', 'feat')
         self.p4.submit(101, {'d.txt': 'd1\n'})

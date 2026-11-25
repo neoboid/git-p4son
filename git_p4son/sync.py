@@ -1,6 +1,8 @@
 """Sync command implementation for git-p4son."""
 
 import argparse
+import dataclasses
+import os
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,17 +11,20 @@ from .backend import Backend
 from .common import CommandError, RunError, normalize_workspace_path
 from .git import (
     SyncState, files_changed_outside_syncs, format_cherry_pick_subject, format_sync_subject, get_head_commit,
-    get_tracked_files, sync_state,
+    get_tracked_files, list_tracked_files, sync_state,
 )
 from .hooks import check_hooks, run_hook
 from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
-from .sync_progress import NoProgress, ProgressPass, ProgressRecorder, SyncProgress
+from .sync_progress import (
+    LocalChange, NoProgress, PassLists, ProgressPass, ProgressRecorder, SyncProgress, local_path, progress_path,
+    read_sync_progress,
+)
 from .sync_targets import default_sync_target, resolve_sync_target
 from .sync_merge import (
-    WritableSyncFileSet, merge_changed_files, prepare_writable_files,
-    report_not_synced,
+    ChangedFile, ChangedFileRef, WritableSyncFileSet, merge_changed_files, prepare_writable_files,
+    report_not_synced, stage_changed_files,
 )
 from .writable import is_writable_mode, restore_writable
 from .sync_split_users import (
@@ -33,6 +38,7 @@ from .perforce import (
     get_latest_changes,
     get_user_changes,
     p4_get_opened_files,
+    p4_off_have,
     p4_sync,
     p4_sync_preview,
     P4SyncAbortError,
@@ -79,11 +85,12 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
         return e.refused
     except P4SyncAbortError as e:
         log.info(str(e))
+        then = ('run "git p4son sync" to finish' if os.path.exists(progress_path(workspace_dir))
+                else 'commit or restore the synced files before syncing again')
         raise CommandError(
             'Aborting sync: p4 could not replace a file, most likely because '
             'another process has it open. The workspace is left partially '
-            'synced: close that process, then commit or restore the synced '
-            'files before syncing again.') from e
+            f'synced: close that process, then {then}.') from e
     _check_refused(refused, expected_refusals, 1, workspace_dir)
     return refused
 
@@ -491,13 +498,43 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
         _end_sync(_run_passes(passes, ctx, backend), ctx)
 
 
-def _run_passes(passes: list[tuple[SyncPass, str | None]], ctx: _SyncContext, backend: Backend
-                ) -> list[WritableSyncFileSet]:
-    """Run each pass, committing the target ones, those with the subject of their commit; their preparations."""
-    preps = []
+def _local_paths(paths: list[str], workspace_dir: str) -> list[str]:
+    return [local_path(path, workspace_dir) for path in paths]
+
+
+def _staged(changes: list[LocalChange], ctx: _SyncContext) -> list[ChangedFile]:
+    """Stage again the local changes the sync progress keeps by reference."""
+    workspace_dir = ctx.workspace_dir
+    return stage_changed_files(
+        [ChangedFileRef(local_path(change.path, workspace_dir), change.base, change.binary, change.added_both)
+         for change in changes],
+        ctx.pre_sync_head_commit, workspace_dir, ctx.temp_root, ctx.settings.uses_crlf)
+
+
+def _resume_pass(sync_pass: SyncPass, lists: PassLists, ctx: _SyncContext) -> WritableSyncFileSet:
+    """Run the interrupted pass again with the lists it stored, as classifying its files again would read the ones it
+    made read-only as unchanged."""
+    workspace_dir = ctx.workspace_dir
+    prep = WritableSyncFileSet(
+        changed=_staged(lists.changed, ctx),
+        ignored=_local_paths(lists.ignored, workspace_dir),
+        always_writable=_local_paths(lists.always_writable, workspace_dir),
+        replace={local_path(path, workspace_dir): depot_path for path, depot_path in lists.replace.items()})
+    _run_pass(sync_pass, prep, _local_paths(
+        [path for _, path in lists.files], workspace_dir), ctx)
+    return prep
+
+
+def _run_passes(passes: list[tuple[SyncPass, str | None]], ctx: _SyncContext, backend: Backend,
+                resumed: PassLists | None = None) -> list[WritableSyncFileSet]:
+    """Run each pass, committing the target ones, those with the subject of their commit; their preparations.
+
+    With resumed, the first pass is the interrupted one, run with the lists it stored."""
+    preps: list[WritableSyncFileSet] = []
     # Local changes are merged back once at the end, so each commit is pure Perforce state.
     for sync_pass, subject in passes:
-        prep = _sync_pass(sync_pass, ctx)
+        prep = (_resume_pass(sync_pass, resumed, ctx) if resumed is not None and not preps
+                else _sync_pass(sync_pass, ctx))
         preps.append(prep)
         if subject is None:
             ctx.recorder.pass_made(prep)
@@ -513,16 +550,19 @@ def _run_passes(passes: list[tuple[SyncPass, str | None]], ctx: _SyncContext, ba
     return preps
 
 
-def _end_sync(preps: list[WritableSyncFileSet], ctx: _SyncContext) -> None:
-    """Merge the local changes back, report the files not synced, apply writable mode, and drop the sync progress."""
+def _end_sync(preps: list[WritableSyncFileSet], ctx: _SyncContext,
+              merged_before: list[tuple[str, str]] | None = None) -> None:
+    """Merge the local changes back, report the files not synced, apply writable mode, and drop the sync progress.
+
+    merged_before holds the (path, outcome) of the files an interrupted run merged back, reported with the rest."""
     workspace_dir = ctx.workspace_dir
     # Dedup files that showed up in several sync passes.
     changed = [cf for p in preps for cf in p.changed]
-    by_path = {_workspace_path(cf.filepath, workspace_dir): cf
-               for cf in changed}
+    by_path = {_workspace_path(
+        cf.filepath, workspace_dir): cf for cf in changed}
     changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
     merge_changed_files(changed_files, workspace_dir,
-                        ctx.temp_root, ctx.recorder.merged)
+                        ctx.temp_root, ctx.recorder.merged, merged_before)
 
     report_not_synced(preps, ctx.settings.clobber_mode, workspace_dir)
 
@@ -530,6 +570,29 @@ def _end_sync(preps: list[WritableSyncFileSet], ctx: _SyncContext) -> None:
         [f for p in preps for f in p.synced], workspace_dir)
 
     ctx.recorder.finish()
+
+
+def resume_sync_passes(progress: SyncProgress, settings: SyncSettings, workspace_dir: str, backend: Backend) -> None:
+    """Run the passes progress has left, the interrupted one with its stored lists, then the end over every pass's
+    lists, keeping progress on disk as they go."""
+    recorder = ProgressRecorder(
+        progress, workspace_dir, is_writable_mode(workspace_dir))
+    pre_sync_commit = progress.pre_sync_commit
+    with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
+        ctx = _SyncContext(workspace_dir, settings, pre_sync_commit, temp_root,
+                           files_changed_outside_syncs(workspace_dir, pre_sync_commit), recorder)
+        made = WritableSyncFileSet(
+            changed=_staged(progress.changed, ctx),
+            ignored=_local_paths(progress.ignored, workspace_dir),
+            not_synced=_local_paths(progress.not_synced, workspace_dir),
+            synced=_local_paths(progress.synced, workspace_dir))
+        merged_before = [(local_path(merged.path, workspace_dir), merged.outcome)
+                         for merged in progress.merged]
+        passes = [(SyncPass(p.changelist, p.label, p.exact), p.subject)
+                  for p in progress.passes]
+        resumed = progress.passes[0].lists if progress.passes else None
+        _end_sync([made, *_run_passes(passes, ctx, backend, resumed)],
+                  ctx, merged_before)
 
 
 @dataclass(frozen=True)
@@ -588,15 +651,111 @@ def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, r
     except BaseException:
         backend.abandon_sync()
         raise
+    return _finish_on_branch(on, depot_root, last_synced, run)
+
+
+def _finish_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None,
+                      run: Callable[[], SyncState]) -> int:
+    """Run run, then the post-sync hooks with the state it gives, and return; the command's exit code.
+
+    A failure in run leaves the sync on the sync branch, which git p4son sync finishes once there is sync progress."""
+    backend = on.backend
     try:
         state = run()
         exit_code = _run_post_sync_hooks(
             state.latest, last_synced, depot_root, on.workspace_dir, backend.words.tool)
     except BaseException:
-        backend.fail_sync()
+        backend.fail_sync(os.path.exists(progress_path(on.workspace_dir)))
         raise
     backend.finish_sync(str(state), on.rebase)
     return exit_code
+
+
+def _check_resumable_files(progress: SyncProgress, backend: Backend, workspace_dir: str) -> None:
+    """Check the files are as the interrupted sync left them, saying how many its interrupted pass synced.
+
+    Raises CommandError, after listing them, for files changed since or left partway, which a resume can't sort yet."""
+    log.heading('Checking the files against the interrupted sync')
+    lists = progress.passes[0].lists if progress.passes else None
+    # A catch-up pass's files are uncommitted until the next commit, and the interrupted pass's entry wins.
+    modes = {path: mode for mode, path in progress.uncommitted}
+    if lists:
+        modes.update((path, mode) for mode, path in lists.files)
+    # Local changes and allwrite's refusals differ from the have-list until their pass syncs them.
+    expected_off_have = {change.path for change in lists.changed} | set(
+        lists.replace) if lists else set()
+    merged = {merged.path for merged in progress.merged}
+    changed = backend.files_changed_since(progress.tip)
+    local = {path: local_path(path, workspace_dir) for path in modes}
+    tracked = set(list_tracked_files(workspace_dir, progress.tip))
+    # Git-ignored files are left to p4's clobber rules, as in a normal sync.
+    judged = [path for path in modes if path in changed or path in tracked]
+    differing, lacking = p4_off_have(
+        [local[path] for path in judged], workspace_dir)
+    off_have = lacking | differing
+    synced, unsorted = [], []
+    for path in sorted(changed | set(judged)):
+        if path in changed and path in merged:
+            continue
+        if path not in changed:
+            if local[path] in differing and path not in expected_off_have:
+                unsorted.append(path)
+            continue
+        on_disk = path in local and os.path.lexists(local[path])
+        if path not in modes:
+            unsorted.append(path)
+        elif modes[path] == 'del' and not on_disk and local[path] in lacking:
+            synced.append(path)
+        elif modes[path] != 'del' and on_disk and local[path] not in off_have:
+            synced.append(path)
+        else:
+            unsorted.append(path)
+    if unsorted:
+        for path in unsorted:
+            log.info(path)
+        raise CommandError('The files above changed since the interrupted sync, or p4 left them partway, which '
+                           'git-p4son cannot sort out yet. Put them back as the interrupted sync left them, then run '
+                           '"git p4son sync" again.')
+    log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
+
+
+def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
+    """Finish the sync progress holds: check where it left the sync branch and its files, run the pre-sync hooks,
+    then the passes left and the end."""
+    workspace_dir = args.workspace_dir
+    backend = args.backend
+    sync_revision = backend.resume_sync(
+        progress.sync_branch, progress.tip, progress.start)
+    passes = progress.passes
+    left = (f'{plural(len(passes), "changelist")} left, to CL {passes[-1].changelist}' if passes
+            else 'only the merge-back is left')
+    log.heading(f'Resuming the interrupted sync: {left}')
+    log.success(
+        f'Started {progress.started:%Y-%m-%d %H:%M} UTC by git-p4son {progress.written_by}')
+
+    depot_root = progress.depot_root
+    check_no_blocking_processes(workspace_dir, args.ignore_blocking_processes)
+    _check_p4_workspace_clean(depot_root, workspace_dir, sync_revision)
+    _check_resumable_files(progress, backend, workspace_dir)
+    if args.dry_run:
+        log.heading('Where sync returns to')
+        log.success(backend.returns_to() or f'Stays on {progress.sync_branch}')
+        return 0
+
+    last_synced = sync_state(
+        workspace_dir, progress.pre_sync_commit).last_synced
+    _run_pre_sync_hooks(last_synced, depot_root,
+                        workspace_dir, backend.words.tool)
+    # The client spec's line endings and clobber option, with the depot root as the interrupted sync planned it.
+    client = sync_settings(workspace_dir)
+    settings = dataclasses.replace(client, depot_root=depot_root)
+
+    def run() -> SyncState:
+        backend.begin_resume()
+        resume_sync_passes(progress, settings, workspace_dir, backend)
+        return sync_state(workspace_dir)
+
+    return _finish_on_branch(OnSyncBranch.from_args(args, sync_revision), depot_root, last_synced, run)
 
 
 def sync_command(args: argparse.Namespace) -> int:
@@ -607,6 +766,9 @@ def sync_command(args: argparse.Namespace) -> int:
         log.warning('--force is deprecated, use --allow-backwards instead')
         args.allow_backwards = True
     backend = args.backend
+    progress = read_sync_progress(workspace_dir)
+    if progress is not None:
+        return _resume_sync(args, progress)
     sync_revision = backend.prepare_sync(args.branch)
     plan = _plan_sync(args, sync_revision)
     if plan is None:

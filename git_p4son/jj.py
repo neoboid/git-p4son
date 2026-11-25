@@ -16,12 +16,12 @@ from .git import (
     get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
+from .lock import locked_by_caller, marked_as_locked
 from .log import log, plural
 from .sync_branch import sync_branch_name
 from .toml_writer import format_string
 
 
-_LOCK_ENV = '_GIT_P4SON_JJ_LOCK'
 USE_GIT_HINT = ('Put --backend git before the command to use git instead, '
                 'or set backend = "git" under [core] in .git-p4son/config.toml.')
 _REVISION_TEMPLATE = ('json(self) ++ "\\t" ++ empty ++ "\\t" ++ conflict'
@@ -522,19 +522,6 @@ class Workspace:
 
 
 @contextlib.contextmanager
-def _marked_as_locked(root: str, inherited: str | None) -> Iterator[None]:
-    """Mark the workspace at root as under git-p4son's lock for the processes it starts, as hooks."""
-    os.environ[_LOCK_ENV] = root
-    try:
-        yield
-    finally:
-        if inherited is None:
-            os.environ.pop(_LOCK_ENV, None)
-        else:
-            os.environ[_LOCK_ENV] = inherited
-
-
-@contextlib.contextmanager
 def operation(workspace_dir: str, *, lock_only: bool = False,
               snapshot: bool = True) -> Iterator[Workspace | None]:
     """Yield the jj workspace, holding jj's working-copy lock until the command finishes.
@@ -544,16 +531,14 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
     if not is_workspace(workspace_dir):
         yield None
         return
-    root = str(Path(workspace_dir).resolve())
-    inherited = os.environ.get(_LOCK_ENV)
-    if inherited == root:
+    if locked_by_caller(workspace_dir):
         if not lock_only:
             raise CommandError(
                 'git-p4son run under its own jj lock, as from a hook, needs --backend git')
         yield None
         return
     if lock_only:
-        with working_copy_lock(workspace_dir), _marked_as_locked(root, inherited):
+        with working_copy_lock(workspace_dir), marked_as_locked(workspace_dir):
             yield None
         return
     log.heading('Opening jj workspace')
@@ -575,7 +560,7 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
                 'The jj working change changed while git-p4son took its lock. Run the command again.')
         log.success(
             f'Change {workspace.tip.change_id[:8]} at operation {workspace.operation[:12]}')
-        with _marked_as_locked(root, inherited):
+        with marked_as_locked(workspace_dir):
             yield workspace
     if snapshot:
         log.heading('Reconciling jj workspace')

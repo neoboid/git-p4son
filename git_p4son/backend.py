@@ -111,8 +111,9 @@ class Backend(Protocol):
     def abandon_sync(self) -> None:
         """Return to where start_sync started, when sync stops before syncing anything."""
 
-    def fail_sync(self) -> None:
-        """Say where a sync that failed partway leaves the work tree: on the sync branch, as Perforce left it."""
+    def fail_sync(self, resumable: bool) -> None:
+        """Say where a sync that failed partway leaves the work tree: on the sync branch, as Perforce left it, and if
+        resumable, that git p4son sync finishes it."""
 
     def finish_sync(self, state: str, rebase: bool) -> None:
         """Return to where start_sync started, the sync branch now at state, unless changes are left; rebase is jj's."""

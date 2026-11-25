@@ -13,6 +13,7 @@ from git_p4son.common import CommandError, RunError, join_command_line
 from git_p4son.git import format_sync_subject, merge_file
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
+from git_p4son.cherry_pick import cherry_pick_command
 from git_p4son.sync import (
     build_sync_targets,
     _collect_split_users,
@@ -208,8 +209,8 @@ class SyncTestCase(P4RepoTestCase):
         return self.run_command(sync_command, ['sync', *argv])
 
     def sync_fails(self, *argv, message):
-        """Run sync with argv, expecting a CommandError matching message."""
-        self.command_fails(sync_command, ['sync', *argv], message)
+        """Run sync with argv, expecting a CommandError matching message; returns what it printed."""
+        return self.command_fails(sync_command, ['sync', *argv], message)
 
     def synced_commits(self):
         """The changelists of the sync commits after the setup's, oldest first."""
@@ -632,6 +633,159 @@ class TestSyncProgress(SyncTestCase):
         self.assertIsNone(self.sync_progress_file())
 
 
+class TestSyncResume(SyncTestCase):
+    """A plain sync finishes an interrupted sync from its sync progress."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.base = self.commit_local_changes('a.txt')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n',
+                       'd.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.submit(102, {'f.txt': 'f1\n', 'g.txt': 'g1\n'})
+
+    def assert_synced_as_if_uninterrupted(self):
+        """The end of an uninterrupted sync 101 102: a commit of each with Perforce's files, the local change merged
+        back, and no sync progress left."""
+        self.assertEqual(self.synced_commits(), [101, 102])
+        for commit, change in (('main~1', 101), ('main', 102)):
+            for path, content in self.p4.files_at(change).items():
+                self.assertEqual(
+                    self.git('show', f'{commit}:{path}'), content.rstrip('\n'), (commit, path))
+        self.assertEqual({name: self.read(name) for name in ('a.txt', 'd.txt', 'e.txt', 'f.txt', 'g.txt')},
+                         {'a.txt': 'local\na1\nupstream\n', 'd.txt': 'd1\n', 'e.txt': 'e1\n', 'f.txt': 'f1\n',
+                          'g.txt': 'g1\n'})
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_interruption_in_the_first_pass_resumes_with_only_its_files_left(self):
+        self.p4.interrupt_sync('@101', after=2)
+        self.interrupted_sync('101', '102')
+        self.p4.transferred.clear()
+        out = self.sync()
+        self.assertIn(
+            'Resuming the interrupted sync: 2 changelists left, to CL 102', out)
+        self.assertEqual(self.p4.transferred, ['e.txt', 'f.txt', 'g.txt'])
+        self.assert_synced_as_if_uninterrupted()
+
+    def test_an_interruption_in_a_later_pass_keeps_the_commit_made(self):
+        self.p4.interrupt_sync('@102', after=1)
+        self.interrupted_sync('101', '102')
+        self.p4.transferred.clear()
+        out = self.sync()
+        self.assertIn(
+            'Resuming the interrupted sync: 1 changelist left, to CL 102', out)
+        self.assertEqual(self.p4.transferred, ['g.txt'])
+        self.assert_synced_as_if_uninterrupted()
+
+    def test_with_only_the_merge_back_left_it_merges_the_rest_once(self):
+        self.commit_local_changes('b.txt')
+        self.p4.submit(103, {'b.txt': 'b1\nupstream\n'})
+        merged: list[str] = []
+
+        def merge_one_then_interrupt(*args):
+            if merged:
+                raise KeyboardInterrupt
+            merged.append(args[0])
+            return merge_file(*args)
+        with mock.patch('git_p4son.sync_merge.merge_file', side_effect=merge_one_then_interrupt):
+            self.interrupted_sync('103')
+        self.p4.transferred.clear()
+        out = self.sync()
+        self.assertIn(
+            'Resuming the interrupted sync: only the merge-back is left', out)
+        self.assertEqual(self.p4.transferred, [])
+        self.assertEqual((self.read('a.txt'), self.read('b.txt')),
+                         ('local\na1\nupstream\n', 'local\nb1\nupstream\n'))
+        self.assertIn('2 files merged successfully', out)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_resume_interrupted_again_carries_on(self):
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101', '102')
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync()
+        self.p4.transferred.clear()
+        self.sync()
+        self.assertEqual(self.p4.transferred, ['e.txt', 'f.txt', 'g.txt'])
+        self.assert_synced_as_if_uninterrupted()
+
+    def test_a_dry_run_says_what_is_left_and_changes_nothing(self):
+        self.p4.interrupt_sync('@101', after=2)
+        progress = self.interrupted_sync('101', '102')
+        synced = list(self.p4.synced())
+        out = self.sync('--dry-run')
+        self.assertIn(
+            'Resuming the interrupted sync: 2 changelists left, to CL 102', out)
+        self.assertIn('2 files synced by the interrupted run', out)
+        self.assertEqual(self.p4.synced(), synced)
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_a_failing_pre_sync_hook_leaves_the_interrupted_sync_as_it_was(self):
+        self.p4.interrupt_sync('@101', after=2)
+        progress = self.interrupted_sync('101', '102')
+        head = self.git('rev-parse', 'HEAD')
+        self.hook('pre-sync', 'raise SystemExit(1)\n')
+        self.sync_fails(message='pre-sync hook failed')
+        self.assertEqual(self.sync_progress_file(), progress)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+        self.assertEqual(self.read('d.txt'), 'd1\n')
+
+    def test_the_files_a_catch_up_pass_changed_are_resumed_with_the_pass_after_it(self):
+        self.p4.submit(103, {'x.txt': 'x1\n'})
+        self.sync('101')
+        self.commit('Merged back')
+        self.run_command(cherry_pick_command, ['cherry-pick', '103'])
+        # sync 102 catches up to CL 101 alone first, which takes the cherry-pick of CL 103 back.
+        self.p4.interrupt_sync('@102', after=1)
+        progress = self.interrupted_sync('102')
+        self.assertEqual(progress['uncommitted'], [['del', 'x.txt']])
+        self.sync()
+        self.assertEqual(self.git('log', '-1', '--format=%s',
+                         'main'), 'git-p4son: p4 sync //myclient/...@102')
+        self.assertNotIn('x.txt', self.git(
+            'ls-tree', '--name-only', 'main').splitlines())
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'x.txt')))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_file_the_pass_adds_that_p4_has_not_recorded_is_refused_for_now(self):
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101', '102')
+        self.write_file('e.txt', 'partial\n')
+        out = self.sync_fails(message='changed since the interrupted sync')
+        self.assertIn('e.txt', out.splitlines())
+
+    def test_a_file_changed_since_the_interruption_is_refused_for_now(self):
+        self.p4.interrupt_sync('@101', after=2)
+        progress = self.interrupted_sync('101', '102')
+        self.write_file('new.txt', 'mine\n')
+        os.chmod(os.path.join(self.ws, 'd.txt'), stat.S_IRUSR | stat.S_IWUSR)
+        self.edit('d.txt', 'mine\n')
+        out = self.sync_fails(message='changed since the interrupted sync')
+        listed = out.splitlines()
+        self.assertIn('new.txt', listed)
+        self.assertIn('d.txt', listed)
+        self.assertNotIn('a.txt', listed)
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_writable_mode_makes_every_synced_file_writable(self):
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n[core]\nwritable = true\n')
+        self.p4.interrupt_sync('@101', after=2)
+        self.interrupted_sync('101', '102')
+        self.sync()
+        for name in ('a.txt', 'd.txt', 'e.txt', 'f.txt'):
+            self.assertTrue(os.stat(os.path.join(self.ws, name)
+                                    ).st_mode & stat.S_IWUSR, name)
+
+    def test_under_allwrite_a_refused_local_change_is_replaced_and_merged_back(self):
+        self.p4.options = 'allwrite noclobber'
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync('101', '102')
+        self.assertEqual(progress['passes'][0]['replace'], [
+                         ['a.txt', '//myclient/a.txt']])
+        self.sync()
+        self.assert_synced_as_if_uninterrupted()
+
+
 class TestSyncBranch(SyncTestCase):
     """sync commits onto the sync branch from any branch, and returns to where it started."""
 
@@ -640,6 +794,57 @@ class TestSyncBranch(SyncTestCase):
 
     def config(self, extra):
         self.write_config(f'[depot]\nroot = "//myclient"\n\n{extra}')
+
+    def interrupt(self, revision='@101'):
+        """Submit CL 101 and 102, then have sync 101 102 interrupted in the sync to revision."""
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.submit(102, {'f.txt': 'f1\n', 'g.txt': 'g1\n'})
+        self.p4.interrupt_sync(revision, after=1)
+        return self.interrupted_sync('101', '102')
+
+    def test_an_interrupted_sync_says_to_run_sync_again_to_finish(self):
+        self.commit_feature()
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        with captured_output() as out, self.assertRaises(KeyboardInterrupt), self.command_args(['sync']) as args:
+            sync_command(args)
+        self.assertIn('Run "git p4son sync" to finish it', out.getvalue())
+        self.assertNotIn('once it is sorted out', out.getvalue())
+
+    def test_a_resume_returns_to_where_the_sync_started(self):
+        self.commit_feature()
+        feature = self.git('rev-parse', 'HEAD')
+        self.interrupt()
+        out = self.sync()
+        self.assert_at('feature', feature)
+        self.assertEqual(self.git('log', '--format=%s', '-2', 'main').splitlines(),
+                         ['git-p4son: p4 sync //myclient/...@102', 'git-p4son: p4 sync //myclient/...@101'])
+        self.assertIn('main is now at CL 102', out)
+
+    def test_a_resume_refuses_while_head_is_off_the_sync_branch(self):
+        self.interrupt()
+        self.git('switch', '-q', '-c', 'other')
+        self.sync_fails(message='git switch main')
+
+    def test_a_resume_refuses_a_sync_branch_without_the_recorded_tip(self):
+        progress = self.interrupt(revision='@102')
+        self.git('update-ref', 'refs/heads/main', 'main~1')
+        self.sync_fails(message=f'git reset --keep {progress["tip"]}')
+
+    def test_a_resume_refuses_commits_above_the_recorded_tip_for_now(self):
+        self.interrupt()
+        self.git('commit', '-q', '--allow-empty', '-m', 'Mine')
+        out = self.sync_fails(
+            message='made on main after the interrupted sync')
+        self.assertIn('Mine', out)
+
+    def test_a_resume_stays_on_the_sync_branch_when_the_start_branch_is_gone(self):
+        self.commit_feature()
+        self.interrupt()
+        self.git('branch', '-q', '-D', 'feature')
+        out = self.sync()
+        self.assertEqual(self.branch(), 'main')
+        self.assertIn('feature, where sync started, no longer exists', out)
 
     def test_on_the_sync_branch_it_stays_there(self):
         self.p4.submit(101, {'d.txt': 'd1\n'})
@@ -803,13 +1008,14 @@ class TestSyncBranch(SyncTestCase):
             return real(command, *args, **kwargs)
         start_patch(self, 'git_p4son.perforce.run_with_stream_output',
                     side_effect=fail_second_sync)
-        with captured_output() as out, self.assertRaisesRegex(CommandError, 'Aborting sync'), \
+        resumable = 'Aborting sync.*then run "git p4son sync" to finish'
+        with captured_output() as out, self.assertRaisesRegex(CommandError, resumable), \
                 self.command_args(['sync', '101', '102']) as args:
             sync_command(args)
         self.assertEqual(self.branch(), 'main')
         self.assertEqual(self.synced_commits(), [101])
-        self.assertIn(
-            'Staying on main, with the files as Perforce left them. Return to feature', out.getvalue())
+        self.assertIn('Staying on main, with the files as Perforce left them. Run "git p4son sync" to finish it, '
+                      'which returns to feature.', out.getvalue())
 
 
 class TestSyncHooks(SyncTestCase):
@@ -1127,6 +1333,7 @@ TestSyncOnJj = on_jj(
     TestSync, skip={'test_dirty_git_workspace_fails_before_syncing': _STRAY_FILE})
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncProgressOnJj = on_jj(TestSyncProgress)
+TestSyncResumeOnJj = on_jj(TestSyncResume)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncTargetsOnJj = on_jj(TestSyncTargets)

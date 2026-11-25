@@ -17,6 +17,7 @@ from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
 from git_p4son.lock import _LOCK_ENV
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
+from git_p4son.sync import sync_command
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
     recorded, requires_jj, run_jj, start_patch, WorkspaceTestCase,
@@ -1292,6 +1293,66 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.p4.interrupt_sync('@101', after=1)
         progress = self.interrupted_sync()
         self.assertEqual(progress['start']['edited'], True)
+
+    def interrupt(self):
+        """Submit CL 101 and have sync interrupted after its first file; the snapshot change jj then makes."""
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync()
+        self.jj('status')
+        return self.describe('@', 'change_id')
+
+    def test_a_resume_rebases_the_stack_returns_and_abandons_the_snapshot_change(self):
+        snapshot = self.interrupt()
+        self.p4.transferred.clear()
+        out = self.p4son('sync')
+        self.assertIn('Resuming the interrupted sync', out)
+        self.assertEqual(self.p4.transferred, ['e.txt'])
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+        self.assertEqual(self.jj(
+            'log', '-r', f'present({snapshot})', '--no-graph', '-T', 'change_id'), '')
+        self.assertEqual((self.read('a.txt'), self.read(
+            'd.txt'), self.read('e.txt')), ('a2\n', 'd1\n', 'e1\n'))
+
+    def test_an_interrupted_sync_says_to_run_sync_again_to_finish(self):
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        with captured_output() as out, self.assertRaises(KeyboardInterrupt), self.command_args(['sync']) as args:
+            sync_command(args)
+        self.assertIn('Run "git p4son sync" to finish it', out.getvalue())
+        self.assertNotIn('once it is sorted out', out.getvalue())
+
+    def test_a_dry_run_leaves_git_s_head_where_jj_keeps_it(self):
+        snapshot = self.interrupt()
+        self.jj('new')
+        head = self.git('rev-parse', 'HEAD')
+        self.p4son('sync', '--dry-run')
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+        self.p4son('sync')
+        self.assertEqual(self.jj(
+            'log', '-r', f'present({snapshot})', '--no-graph', '-T', 'change_id'), '')
+
+    def test_a_resume_refuses_a_moved_bookmark(self):
+        self.interrupt()
+        recorded = self.describe('main', 'commit_id')
+        self.jj('bookmark', 'set', 'main', '-r', 'main-', '--allow-backwards')
+        self.p4son_fails(
+            'sync', message=f'jj bookmark set main -r {recorded} --allow-backwards')
+
+    def test_a_resume_refuses_a_working_change_off_the_recorded_commit(self):
+        snapshot = self.interrupt()
+        self.jj('new', 'main-')
+        self.p4son_fails('sync', message=f'jj edit {snapshot[:12]}')
+
+    def test_a_resume_refuses_a_described_change_above_the_recorded_commit_for_now(self):
+        self.interrupt()
+        self.jj('describe', '-m', 'Mine')
+        out = self.p4son_fails('sync', message='after the interrupted sync')
+        self.assertIn('Mine', out)
 
     def test_editing_a_change_returns_to_it(self):
         self.jj('edit', 'feat')

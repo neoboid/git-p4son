@@ -193,7 +193,8 @@ Examples:
         description='Sync the Perforce workspace to one or more changelists, '
         'with a git commit for each on the sync branch, [sync] branch in .git-p4son/config.toml or main. '
         'From another branch, it checks the sync branch out and returns afterwards. Local changes to synced '
-        'files are merged back afterwards, staying on the sync branch.'
+        'files are merged back afterwards, staying on the sync branch. After an interrupted sync, it finishes that '
+        'sync from .git-p4son/sync-progress.toml instead.'
     )
     sync_parser.set_defaults(func=sync_command)
     sync_parser.add_argument(

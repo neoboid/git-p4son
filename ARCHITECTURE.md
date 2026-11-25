@@ -11,13 +11,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   while a blocking process runs (unless `--ignore-blocking-processes`), or while either workspace is dirty, the Perforce
   one judged by the sync branch's files. `sync_command` then has the backend check out the sync branch (`start_sync`),
   and returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last
-  synced CL, syncs and commits each target, merges local changes back once at the end (`sync_merge.py`) and runs the
-  post-sync hooks. Changelist arguments are never aliases: aliases name pending CLs, which Perforce renumbers on submit.
-  When moving forward, `build_sync_targets` also syncs the CL before each split user's submit, so each of their
-  changelists gets a commit of its own; `_split_targets` finds their CLs per user, then checks them all against the
-  depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split` ignores the configured ones.
-  `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back local changes;
-  after a failure partway, sync stays on the sync branch.
+  synced CL, syncs and commits each target and merges local changes back once at the end (`sync_merge.py`), and
+  `sync_on_branch` then runs the post-sync hooks. Changelist arguments are never aliases: aliases name pending CLs,
+  which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split
+  user's submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then
+  checks them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split`
+  ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as
+  merged-back local changes; after a failure partway, sync stays on the sync branch.
 
   The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
   `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's
@@ -127,7 +127,7 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   only), and `run_hook` runs them in order from the workspace root through `command_line`, with `$(backend)` for the
   backend, counting the failures without stopping at one. `check_hooks`, which `sync` and `cherry-pick` run first,
   checks both hooks after `hooks_migration.check_no_old_hooks`. `sync` runs the `pre-sync` hooks in `sync_on_branch` and
-  the `post-sync` ones in `run_sync_passes`.
+  the `post-sync` ones in `sync_on_branch`, with `SyncState.latest` as `$(synced)`.
 
 - **`hooks_migration.py`** - The hook setup of earlier versions, kept apart to be deleted whole one day:
   `check_no_old_hooks` refuses a file in `.git-p4son/hooks/<hook>/` that no `[hooks]` command names, after printing the

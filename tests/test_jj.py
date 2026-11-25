@@ -8,13 +8,14 @@ import subprocess
 import unittest
 from unittest import mock
 
-from git_p4son import jj
+from git_p4son import CONFIG_DIR, jj
 from git_p4son.common import CommandError, RunError, run
 from git_p4son.perforce import P4SyncAbortError
 from git_p4son.backend import completion_backend, open_backend
 from git_p4son.git_backend import GitBackend
 from git_p4son.jj_backend import JjBackend
 from git_p4son.jj_lock import working_copy_lock
+from git_p4son.lock import _LOCK_ENV
 from git_p4son.changelist_store import alias_changes, load_changelist_alias
 from tests.helpers import (
     captured_output, CRLF_WHITELIST_GITIGNORE, isolate_jj, jj_tracked, JjTestCase, make_run_result, P4RepoTestCase,
@@ -239,6 +240,26 @@ class TestJjBackend(JjRepoTestCase):
         with open_backend(self.ws, 'git') as backend:
             self.assertIsInstance(backend, GitBackend)
             with self.assertRaisesRegex(CommandError, 'busy'):
+                with working_copy_lock(self.ws):
+                    pass
+
+    def test_a_command_the_holder_starts_runs_under_its_lock(self):
+        with open_backend(self.ws, 'git'):
+            with open_backend(self.ws, 'git') as backend:
+                self.assertIsInstance(backend, GitBackend)
+            with self.assertRaisesRegex(CommandError, 'needs --backend git'), open_backend(self.ws, None):
+                pass
+
+    def test_a_process_that_outlives_its_holder_takes_the_lock(self):
+        """Its marker names a lock that was released, or one whose holder died and left its mark behind."""
+        with open_backend(self.ws, 'git'):
+            marker = os.environ[_LOCK_ENV]
+        for left_behind in (False, True):
+            if left_behind:
+                self.write_file(os.path.join(
+                    CONFIG_DIR, 'lock-holder'), marker)
+            with self.subTest(left_behind=left_behind), mock.patch.dict(os.environ, {_LOCK_ENV: marker}), \
+                    open_backend(self.ws, 'git'), self.assertRaisesRegex(CommandError, 'busy'):
                 with working_copy_lock(self.ws):
                     pass
 

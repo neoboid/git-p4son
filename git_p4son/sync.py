@@ -15,6 +15,7 @@ from .hooks import check_hooks, run_hook
 from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
+from .sync_progress import NoProgress, ProgressPass, ProgressRecorder, SyncProgress
 from .sync_targets import default_sync_target, resolve_sync_target
 from .sync_merge import (
     WritableSyncFileSet, merge_changed_files, prepare_writable_files,
@@ -162,6 +163,7 @@ class _SyncContext:
     temp_root: str
     # A committed local change can be read-only, as git p4son writable off leaves it.
     changed_locally: set[str]
+    recorder: ProgressRecorder | NoProgress
 
 
 def find_sync_state(workspace_dir: str, sync_revision: str) -> SyncState:
@@ -211,6 +213,7 @@ def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
                                   uses_crlf=settings.uses_crlf,
                                   clobber_mode=settings.clobber_mode,
                                   changed_locally=ctx.changed_locally)
+    ctx.recorder.before_sync(preview, prep)
     if preview:
         refusing = {
             entry.filepath for entry in preview if entry.refused_path is not None}
@@ -437,18 +440,37 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
         split=_should_split(split_users, last_synced, targets))
 
 
+def _progress_recorder(catch_up: list[SyncPass], targets: list[SyncPass], depot_root: str,
+                       pre_sync_head_commit: str, workspace_dir: str, backend: Backend) -> ProgressRecorder:
+    """A recorder of the sync progress, every pass still to run, with the sync branch at the pre-sync commit."""
+    sync_branch, start = backend.progress_start()
+    passes = [ProgressPass(p.changelist, p.label, p.exact) for p in catch_up]
+    passes += [ProgressPass(p.changelist, p.label, p.exact,
+                            p.subject(depot_root)) for p in targets]
+    progress = SyncProgress(
+        sync_branch, depot_root, pre_sync_head_commit, pre_sync_head_commit, start, passes)
+    return ProgressRecorder(progress, workspace_dir, is_writable_mode(workspace_dir))
+
+
 def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings, workspace_dir: str,
-                    backend: Backend) -> None:
-    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes."""
+                    backend: Backend, record_progress: bool = False) -> None:
+    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes.
+
+    With record_progress, the sync progress is kept from the first p4 sync until the end has run."""
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
 
+    recorder = (_progress_recorder(catch_up, targets, settings.depot_root, pre_sync_head_commit, workspace_dir,
+                                   backend) if record_progress else NoProgress())
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
         ctx = _SyncContext(workspace_dir, settings, pre_sync_head_commit, temp_root,
-                           files_changed_outside_syncs(workspace_dir, pre_sync_head_commit))
+                           files_changed_outside_syncs(workspace_dir, pre_sync_head_commit), recorder)
 
-        preps = [_sync_pass(sync_pass, ctx) for sync_pass in catch_up]
+        preps = []
+        for sync_pass in catch_up:
+            preps.append(_sync_pass(sync_pass, ctx))
+            recorder.pass_made(preps[-1])
 
         # Local changes are merged back once at the end, so each commit is pure Perforce state.
         for target in targets:
@@ -460,16 +482,20 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
             log.heading(f'Committing git changes for CL {target.changelist}')
             staged = backend.commit_sync(target.subject(settings.depot_root))
             log.success(f'Committed {plural(staged, "file")}')
+            recorder.pass_made(preps[-1], get_head_commit(workspace_dir))
 
         # Dedup files that showed up in several sync passes.
         by_path = {cf.filepath: cf for p in preps for cf in p.changed}
         changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
-        merge_changed_files(changed_files, workspace_dir, temp_root)
+        merge_changed_files(changed_files, workspace_dir,
+                            temp_root, recorder.merged)
 
         report_not_synced(preps, settings.clobber_mode, workspace_dir)
 
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
+
+        recorder.finish()
 
 
 @dataclass(frozen=True)
@@ -567,7 +593,7 @@ def sync_command(args: argparse.Namespace) -> int:
         catch_up = catch_up_passes(
             plan.state if plan.resync_last_synced else SyncState(plan.last_synced))
         run_sync_passes(catch_up, [SyncPass(cl, label) for cl, label in plan.targets], plan.settings,
-                        workspace_dir, backend)
+                        workspace_dir, backend, record_progress=True)
         return SyncState(plan.targets[-1][0]) if plan.targets else plan.state
 
     return sync_on_branch(OnSyncBranch.from_args(args, sync_revision),

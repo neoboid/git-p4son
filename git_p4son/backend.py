@@ -1,15 +1,17 @@
 """The backend: what a command asks of the tool holding the change."""
 
 import contextlib
+import os
 from collections.abc import Callable, Iterator
 from typing import ContextManager, Protocol
 
-from . import jj
+from . import CONFIG_DIR, jj
 from .common import CommandError
 from .changelist_store import aliases_by_change
 from .config import ConfigError, get_setting
 from .git_backend import GitBackend
 from .jj_backend import JjBackend
+from .lock import command_lock
 from .log import log
 from .words import Words
 
@@ -119,11 +121,13 @@ def selected_backend(workspace_dir: str, choice: str | None) -> str:
 
 @contextlib.contextmanager
 def open_backend(workspace_dir: str, choice: str | None, *, snapshot: bool = False) -> Iterator[Backend]:
-    """Open the backend for one command, holding jj's working-copy lock and operation in a jj workspace.
+    """Open the backend for one command, holding the workspace's lock: jj's working-copy lock and operation in a jj
+    workspace, else git-p4son's own.
 
     snapshot has jj snapshot the working copy first and reconcile after."""
     name = selected_backend(workspace_dir, choice)
-    with jj.operation(workspace_dir, lock_only=name == 'git', snapshot=snapshot) as workspace:
+    with _own_lock(workspace_dir), jj.operation(workspace_dir, lock_only=name == 'git',
+                                                snapshot=snapshot) as workspace:
         backend: Backend = GitBackend(
             workspace_dir) if workspace is None else JjBackend(workspace)
         yield backend
@@ -169,8 +173,16 @@ def resolve_branch_keyword(backend: Backend, workspace_dir: str, new_alias: bool
     return resolved
 
 
+def _own_lock(workspace_dir: str) -> ContextManager[None]:
+    """git-p4son's own lock on a workspace that is not a jj one, which has jj's."""
+    return contextlib.nullcontext() if jj.is_workspace(workspace_dir) else command_lock(workspace_dir)
+
+
 @contextlib.contextmanager
 def workspace_lock(workspace_dir: str) -> Iterator[None]:
-    """Hold jj's working-copy lock, in a jj workspace, so jj does not snapshot halfway through."""
-    with jj.operation(workspace_dir, lock_only=True):
+    """Hold the workspace's lock for init: jj's in a jj workspace, so jj does not snapshot halfway through, else
+    git-p4son's own once the workspace has its config directory."""
+    # Before that no command can be running in it, and an init that stops early leaves no directory behind.
+    set_up = os.path.isdir(os.path.join(workspace_dir, CONFIG_DIR))
+    with _own_lock(workspace_dir) if set_up else contextlib.nullcontext(), jj.operation(workspace_dir, lock_only=True):
         yield

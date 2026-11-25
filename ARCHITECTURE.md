@@ -201,15 +201,15 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   that the sync branch exists and the change contains its tip, with no merge above it (`check_on_sync_tip`), the check
   that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
   loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool`
-  hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where
-  `auto` means jj in a jj workspace. `open_backend` holds jj's lock and operation for the whole command and yields the
-  backend in `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
-  `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
-  `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its chain, else the
-  suggested name, unless the command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so
-  under a heading, for `run_command` and `alias rename`. `completion_backend` gives one without the lock, and
-  `workspace_lock` is `init`'s lock-only path. No command branches on jj outside the backend modules and `jj.py`, apart
-  from `init`'s offer to set jj up.
+  hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto`
+  means jj in a jj workspace. `open_backend` holds the workspace's lock for the whole command, jj's lock and operation
+  in a jj workspace and `command_lock` in a git one, and yields the backend in `run_command` as `args.backend`; jj
+  snapshots the working copy first unless the command's parser sets `snapshot=False`. Once the lock is released, it
+  calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the alias recording the change, or
+  the change `nearest_change` finds below it in its chain, else the suggested name, unless the command (`new_alias=True`
+  on its parser) names a new one; `resolve_branch_keyword` does so under a heading, for `run_command` and `alias
+  rename`. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command
+  branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
   its full ref, so that a tag of its name isn't taken for it, the nearest branch below HEAD down to the sync branch

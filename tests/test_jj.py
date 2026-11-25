@@ -243,6 +243,12 @@ class TestJjBackend(JjRepoTestCase):
                 with working_copy_lock(self.ws):
                     pass
 
+    def test_a_jj_workspace_takes_no_lock_of_git_p4sons_own(self):
+        for backend in (None, 'git'):
+            with self.subTest(backend=backend), open_backend(self.ws, backend):
+                self.assertFalse(os.path.exists(
+                    os.path.join(self.ws, CONFIG_DIR, 'lock')))
+
     def test_a_command_the_holder_starts_runs_under_its_lock(self):
         with open_backend(self.ws, 'git'):
             with open_backend(self.ws, 'git') as backend:

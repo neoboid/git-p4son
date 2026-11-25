@@ -279,7 +279,8 @@ class TestCleanCheckDefault(unittest.TestCase):
 @mock.patch('git_p4son.cli.get_workspace_dir', return_value='/ws')
 class TestRunCommand(unittest.TestCase):
     def setUp(self):
-        # The workspace is fake, so git's clean check and base lookup are too.
+        # The workspace is fake, so its lock, git's clean check and base lookup are too.
+        start_patch(self, 'git_p4son.backend.command_lock')
         self.check_clean = start_patch(
             self, 'git_p4son.git_backend.check_git_workspace_clean')
         self.check_on_sync_tip = start_patch(
@@ -471,6 +472,7 @@ class TestRunCommand(unittest.TestCase):
 
 class TestBranchKeyword(unittest.TestCase):
     def setUp(self):
+        start_patch(self, 'git_p4son.backend.command_lock')
         start_patch(self, 'git_p4son.git_backend.check_git_workspace_clean')
         start_patch(
             self, 'git_p4son.git_backend.GitBackend.check_on_sync_tip')

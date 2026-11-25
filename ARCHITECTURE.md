@@ -25,7 +25,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   first target's commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks
   the cherry-pick subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an
   `OnSyncBranch` (the parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to
-  `finish_sync` as text.
+  `finish_sync` as text. `sync` alone passes `record_progress` to `run_sync_passes`, which keeps the sync progress
+  (`sync_progress.py`) through a `ProgressRecorder`: the first pass's lists just before its `p4 sync`, a pass dropped
+  once its sync finishes (catch-up) or its commit is made (target, moving the recorded tip), each local change dropped
+  once merged back, and the file removed once the end has run, before the post-sync hooks.
 
 - **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
   onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or

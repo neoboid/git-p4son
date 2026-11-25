@@ -1,5 +1,6 @@
 """Tests for git_p4son.sync module."""
 
+import datetime
 import os
 import stat
 import sys
@@ -7,8 +8,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+from git_p4son import __version__
 from git_p4son.common import CommandError, RunError, join_command_line
-from git_p4son.git import format_sync_subject
+from git_p4son.git import format_sync_subject, merge_file
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.sync import (
@@ -448,6 +450,113 @@ class TestSyncLocalChanges(SyncTestCase):
                         & stat.S_IWUSR)
 
 
+class TestSyncProgress(SyncTestCase):
+    """sync keeps what it has left to do in the sync progress, from its first p4 sync until its end has run."""
+
+    def commit_local_changes(self, *paths):
+        """Commit a local change to each of paths on the sync branch; the base commit they are measured from."""
+        for path in paths:
+            self.edit(path, f'local\n{self.read(path)}')
+        self.commit('Local changes')
+        return self.git('rev-parse', 'HEAD~1')
+
+    def test_an_interruption_in_the_first_pass_keeps_its_lists_and_the_passes_left(self):
+        base = self.commit_local_changes('a.txt')
+        pre_sync = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n', 'd.txt': 'd1\n'})
+        self.p4.submit(102, {'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync('101', '102')
+        self.assertEqual({key: progress[key] for key in (
+            'version', 'written-by', 'sync-branch', 'depot-root', 'tip', 'pre-sync-commit')}, {
+            'version': 1, 'written-by': __version__, 'sync-branch': 'main', 'depot-root': '//myclient',
+            'tip': pre_sync, 'pre-sync-commit': pre_sync})
+        self.assertIsInstance(progress['started'], datetime.datetime)
+        self.assertEqual((progress['start']['backend'], progress['start']['on-sync-branch']),
+                         (self.backend_name or 'git', True))
+        self.assertEqual(progress['passes'], [
+            {'changelist': 101, 'label': 'specified', 'subject': 'git-p4son: p4 sync //myclient/...@101',
+             'files': [['upd', 'a.txt'], ['add', 'd.txt']], 'changed': [{'path': 'a.txt', 'base': base}],
+             'ignored': [], 'always-writable': []},
+            {'changelist': 102, 'label': 'specified', 'subject': 'git-p4son: p4 sync //myclient/...@102'}])
+        self.assertEqual(progress['end'], {
+                         'changed': [], 'merged': [], 'ignored': [], 'synced': []})
+
+    def test_an_interruption_in_a_later_pass_keeps_the_commit_made_and_its_local_changes(self):
+        base = self.commit_local_changes('a.txt')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        self.p4.submit(102, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@102', after=1)
+        progress = self.interrupted_sync('101', '102')
+        self.assertEqual(self.git('log', '-1', '--format=%s'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(progress['tip'], self.git('rev-parse', 'HEAD'))
+        self.assertEqual([p['changelist'] for p in progress['passes']], [102])
+        self.assertEqual(progress['passes'][0]['files'], [
+                         ['add', 'd.txt'], ['add', 'e.txt']])
+        self.assertEqual(progress['end']['changed'], [
+                         {'path': 'a.txt', 'base': base}])
+
+    def test_an_interruption_in_the_merge_back_keeps_the_files_left_and_the_outcomes_so_far(self):
+        base = self.commit_local_changes('a.txt', 'b.txt')
+        self.p4.submit(101, {'a.txt': 'upstream\na1\n',
+                       'b.txt': 'b1\nupstream\n'})
+        merged: list[str] = []
+
+        def merge_one_then_interrupt(*args):
+            if merged:
+                raise KeyboardInterrupt
+            merged.append(args[0])
+            return merge_file(*args)
+        start_patch(self, 'git_p4son.sync_merge.merge_file',
+                    side_effect=merge_one_then_interrupt)
+        progress = self.interrupted_sync()
+        self.assertIn('<<<<<<< Perforce', self.read('a.txt'))
+        self.assertEqual(progress['tip'], self.git('rev-parse', 'HEAD'))
+        self.assertEqual(progress['passes'], [])
+        self.assertEqual(progress['end']['changed'], [
+                         {'path': 'b.txt', 'base': base}])
+        self.assertEqual(progress['end']['merged'], [
+                         {'path': 'a.txt', 'outcome': 'conflicts'}])
+
+    def test_the_ignored_files_of_the_passes_made_are_kept_for_the_report(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit_sync(101, {'x.log': 'one\n'})
+        self.edit('x.log', 'mine\n')
+        self.p4.submit(102, {'x.log': 'two\n'})
+        self.p4.submit(103, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@103', after=1)
+        progress = self.interrupted_sync('102', '103')
+        self.assertEqual(progress['end']['ignored'], ['x.log'])
+
+    def test_in_writable_mode_the_files_synced_are_kept_for_the_end(self):
+        self.write_config(
+            '[depot]\nroot = "//myclient"\n[core]\nwritable = true\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4.submit(102, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@102', after=1)
+        progress = self.interrupted_sync('101', '102')
+        self.assertEqual(progress['end']['synced'], ['a.txt'])
+
+    def test_a_finished_sync_removes_it_before_the_post_sync_hooks(self):
+        path, read_log = self.hook_log()
+        progress = os.path.join(self.ws, '.git-p4son', 'sync-progress.toml')
+        code = (f'import os, sys\nopen({path!r}, "a").write('
+                f'sys.argv[1] + " " + str(os.path.exists({progress!r})) + " ")\n')
+        self.hook('pre-sync', code, 'pre')
+        self.hook('post-sync', code, 'post')
+        self.commit_local_changes('a.txt')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n'})
+        self.sync()
+        self.assertEqual(read_log(), ['pre', 'False', 'post', 'False'])
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_dry_run_writes_none(self):
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.sync('--dry-run')
+        self.assertIsNone(self.sync_progress_file())
+
+
 class TestSyncBranch(SyncTestCase):
     """sync commits onto the sync branch from any branch, and returns to where it started."""
 
@@ -504,6 +613,23 @@ class TestSyncBranch(SyncTestCase):
             'sync', 'last-synced', error=expired,
             message='post-sync hooks stopped: p4 user -o failed with return code 1')
         self.assertIn('Your session has expired, please login again.', out)
+
+    def test_the_sync_progress_records_the_start_branch(self):
+        self.commit_feature()
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync()
+        self.assertEqual(progress['start'], {
+                         'backend': 'git', 'branch': 'feature', 'on-sync-branch': False})
+
+    def test_the_sync_progress_records_a_detached_start_by_its_commit(self):
+        self.git('switch', '-q', '--detach')
+        start = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync()
+        self.assertEqual(progress['start'], {
+                         'backend': 'git', 'commit': start, 'on-sync-branch': False})
 
     def test_a_detached_start_is_returned_to(self):
         self.git('switch', '-q', '--detach')
@@ -925,6 +1051,7 @@ _STRAY_FILE = 'jj makes a stray file part of the working change, which sync then
 TestSyncOnJj = on_jj(
     TestSync, skip={'test_dirty_git_workspace_fails_before_syncing': _STRAY_FILE})
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
+TestSyncProgressOnJj = on_jj(TestSyncProgress)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncTargetsOnJj = on_jj(TestSyncTargets)

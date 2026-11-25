@@ -673,6 +673,11 @@ class SyncState:
     last_synced: int | None
     cherry_picks: tuple[int, ...] = ()
 
+    @property
+    def latest(self) -> int | None:
+        """The changelist synced last: the last cherry-pick since the sync, else the sync's."""
+        return self.cherry_picks[-1] if self.cherry_picks else self.last_synced
+
     def __str__(self) -> str:
         at = 'the synced changelist' if self.last_synced is None else f'CL {self.last_synced}'
         if not self.cherry_picks:

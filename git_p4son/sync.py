@@ -437,11 +437,9 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
         split=_should_split(split_users, last_synced, targets))
 
 
-def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings, last_synced: int | None,
-                    workspace_dir: str, backend: Backend) -> None:
-    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes, run hooks.
-
-    last_synced, the last synced changelist when the sync started, is for the hooks."""
+def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings: SyncSettings, workspace_dir: str,
+                    backend: Backend) -> None:
+    """Sync catch_up, folded into the first target's commit, then commit each target; merge local changes."""
     log.heading('Finding HEAD commit')
     pre_sync_head_commit = get_head_commit(workspace_dir)
     log.success(f'{pre_sync_head_commit}')
@@ -473,9 +471,6 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
         _make_synced_files_writable(
             [f for p in preps for f in p.synced], workspace_dir)
 
-        run_hook('post-sync', workspace_dir, backend.words.tool, last_synced, settings.depot_root,
-                 synced=(targets or catch_up)[-1].changelist)
-
 
 @dataclass(frozen=True)
 class OnSyncBranch:
@@ -494,7 +489,8 @@ class OnSyncBranch:
 
 def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, run: Callable[[], SyncState],
                    before_run: Callable[[], None] | None = None) -> None:
-    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, and return.
+    """Check out the sync branch after the preflight, run the pre-sync hooks and before_run, then run, run the
+    post-sync hooks with the state run gives, and return.
 
     last_synced, the last synced changelist, is for the hooks."""
     backend = on.backend
@@ -512,6 +508,8 @@ def sync_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None, r
         raise
     try:
         state = run()
+        run_hook('post-sync', on.workspace_dir, backend.words.tool,
+                 last_synced, depot_root, synced=state.latest)
     except BaseException:
         backend.fail_sync()
         raise
@@ -546,7 +544,7 @@ def sync_command(args: argparse.Namespace) -> int:
         catch_up = catch_up_passes(
             plan.state if plan.resync_last_synced else SyncState(plan.last_synced))
         run_sync_passes(catch_up, [SyncPass(cl, label) for cl, label in plan.targets], plan.settings,
-                        plan.last_synced, workspace_dir, backend)
+                        workspace_dir, backend)
         return SyncState(plan.targets[-1][0]) if plan.targets else plan.state
 
     sync_on_branch(OnSyncBranch.from_args(args, sync_revision),

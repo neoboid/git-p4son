@@ -641,6 +641,15 @@ class TestSyncHooks(SyncTestCase):
         backend = self.backend_name or 'git'
         self.assertEqual(read_log(), [backend, backend])
 
+    def test_a_hook_can_run_git_p4son(self):
+        """Under the lock of the sync that runs it, where a command of its own would find the workspace busy."""
+        self.hook('pre-sync', 'import subprocess, sys\n'
+                  'raise SystemExit(subprocess.call([sys.executable, "-m", "git_p4son", "--backend", "git", '
+                  '"alias", "list"]))\n')
+        self.p4.submit(101, {'a.txt': 'a2\n'})
+        self.p4son('sync', '101')
+        self.assertEqual(self.p4.synced(), ['@101'])
+
     def test_failing_pre_sync_hook_aborts_before_syncing(self):
         self.hook('pre-sync', 'raise SystemExit(1)\n')
         self.p4.submit(101, {'a.txt': 'a2\n'})

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- In a git workspace, git-p4son runs one command at a time, as it already did in a jj workspace: a command started
+  while another runs stops with "Another git-p4son command is running in this workspace", where two syncs could run
+  p4 and commit at once. `init` is held back too, once the workspace is set up. A hook that runs git-p4son runs under
+  the lock of the command that started it
 - In a jj workspace, a program that a hook starts and leaves running, such as an editor, no longer runs git-p4son
   without the workspace's lock
 - `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT, or a Ctrl-Break on Windows), where

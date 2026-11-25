@@ -349,6 +349,9 @@ Run it with `--porcelain`, which prints `<action> <alias> <CL>` per alias (`kept
   `git p4son writable apply` restores the mode for all tracked files.
 - **`.git-p4son/config.toml` is invalid** ("... in config.toml must be ..." or "... is not valid TOML"). Report
   the message to the user; don't edit the file yourself.
+- **"Another git-p4son command is running in this workspace."** git-p4son runs one command at a time in a
+  workspace, and another one, such as a long sync in the user's terminal, is still running. Try again once it has
+  finished, and don't start git-p4son commands side by side.
 - **In a jj workspace**, "The jj working copy is busy" means a jj command is running; try again once it finishes.
   "Run jj p4son from inside the workspace; -R is not supported" means `jj -R` named another workspace: `cd` into it
   instead. See "jj workspaces" for the rest.

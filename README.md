@@ -200,6 +200,11 @@ Alternatively, call the executable directly: `git-p4son --help`.
 - `-v, --verbose`: Show verbose output (commands, elapsed times, raw subprocess output)
 - `--version`: Show program version
 
+**One command at a time:** git-p4son runs one command at a time in a workspace. A second one, started while another
+is still running, stops with "Another git-p4son command is running in this workspace"; run it again when the first
+has finished. In a [jj workspace](#locking-and-the-git-workflow) the lock is jj's own. Shell completion is not
+held back.
+
 ### Init Command
 
 Set up git-p4son in a Perforce workspace, from anywhere inside it:
@@ -1206,6 +1211,10 @@ script names its interpreter, such as `python` or `pwsh`. `$(name)` in an argume
 - `$(workspace)`, `$(user)`, `$(p4port)`, and any other name as an environment variable
 
 Every command of a hook runs, also after one fails. A command's output shows once it has finished.
+
+A hook may run git-p4son itself: it runs under the lock of the command that started it, where any other git-p4son
+command would find the workspace busy. A program the hook starts and leaves running, such as an editor, is under
+that lock only until the command ends.
 
 Hooks used to be executable files in `.git-p4son/hooks/<hook-name>/`, run through `[core.script-runners]` on
 Windows. `sync` and `cherry-pick` now refuse to start while such a file isn't named by a command in `[hooks]`, and

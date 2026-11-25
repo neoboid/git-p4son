@@ -6,9 +6,11 @@ import sys
 from unittest import mock
 
 from git_p4son import CONFIG_DIR
+from git_p4son.backend import open_backend, workspace_lock
 from git_p4son.common import CommandError
+from git_p4son.init import init_command
 from git_p4son.lock import _LOCK_ENV, command_lock
-from tests.helpers import WorkspaceTestCase
+from tests.helpers import GitRepoTestCase, WorkspaceTestCase
 
 _BUSY = 'Another git-p4son command is running in this workspace'
 # Takes the lock on the workspace argv[1] names, prints its marker, and holds the lock until its stdin closes.
@@ -119,3 +121,34 @@ class TestCommandLock(WorkspaceTestCase):
         process.kill()
         process.wait()
         self.assert_free()
+
+
+class TestCommandsTakeTheLock(GitRepoTestCase):
+    def alias_list(self):
+        """Run git p4son alias list in the workspace as a user's second terminal would."""
+        return subprocess.run([sys.executable, '-m', 'git_p4son', 'alias', 'list'], cwd=self.ws,
+                              env=_environment_of_another_process(), capture_output=True, text=True)
+
+    def test_a_command_is_refused_while_another_runs(self):
+        with open_backend(self.ws, None):
+            refused = self.alias_list()
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn(_BUSY, refused.stdout + refused.stderr)
+        self.assertEqual(self.alias_list().returncode, 0)
+
+    def test_init_is_refused_while_another_command_runs(self):
+        self.write_config('')
+        with open_backend(self.ws, None), _as_another_process(), mock.patch('os.getcwd', return_value=self.ws), \
+                mock.patch('git_p4son.init._init_workspace') as init_workspace, \
+                self.assertRaisesRegex(CommandError, _BUSY):
+            init_command(mock.Mock())
+        init_workspace.assert_not_called()
+
+    def test_init_takes_no_lock_before_the_workspace_is_set_up(self):
+        """So an init that stops early, as outside a Perforce workspace, leaves no .git-p4son/ behind."""
+        with workspace_lock(self.ws):
+            self.assertFalse(os.path.exists(os.path.join(self.ws, CONFIG_DIR)))
+
+    def test_the_lock_file_is_out_of_gits_sight(self):
+        with open_backend(self.ws, None):
+            self.assertEqual(self.git('status', '--porcelain'), '')

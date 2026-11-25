@@ -186,9 +186,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   not run jj commands that snapshot, and a git-p4son run under its caller's lock needs `--backend git`.
 
 - **`lock.py`** - `file_lock` locks a file with `flock` on POSIX and `LockFileEx` on Windows, as jj locks its working
-  copy. A busy lock raises `CommandError` instead of waiting. `marked_as_locked` names the locked workspace in
-  the environment, so a git-p4son its holder starts, as a hook does, finds its caller holding the lock
-  (`locked_by_caller`).
+  copy. A busy lock raises `LockBusy`, a `CommandError`, instead of waiting. `marked_as_locked` marks a held lock with a
+  token, in the environment and in `.git-p4son/lock-holder` until the lock is released, so a git-p4son its holder
+  starts, as a hook does, finds its caller holding the lock (`locked_by_caller`), while a process that outlives the
+  holder does not. jj's lock trusts the mark only while the lock is busy.
 
 ## Shared modules
 

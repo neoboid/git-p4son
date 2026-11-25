@@ -2,30 +2,50 @@
 
 import contextlib
 import os
+import secrets
 import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+from . import CONFIG_DIR
 from .common import CommandError
+from .config import ensure_config_dir
 
-# Names the workspace that this process, or the git-p4son that started it, holds its lock on.
+# Holds the token of the lock that this process, or the git-p4son that started it, holds.
 _LOCK_ENV = '_GIT_P4SON_LOCK'
 
 
-def _root(workspace_dir: str) -> str:
-    return str(Path(workspace_dir).resolve())
+class LockBusy(CommandError):
+    """Raised when a lock is held by another process."""
+
+
+def _holder_file(workspace_dir: str) -> Path:
+    return Path(workspace_dir) / CONFIG_DIR / 'lock-holder'
 
 
 def locked_by_caller(workspace_dir: str) -> bool:
-    """Whether the git-p4son that started this process holds its lock on the workspace."""
-    return os.environ.get(_LOCK_ENV) == _root(workspace_dir)
+    """Whether the lock held on the workspace now is the one the git-p4son that started this process took."""
+    token = os.environ.get(_LOCK_ENV)
+    if token is None:
+        return False
+    try:
+        return _holder_file(workspace_dir).read_text(encoding='utf-8') == token
+    except OSError:
+        return False
 
 
 @contextlib.contextmanager
 def marked_as_locked(workspace_dir: str) -> Iterator[None]:
-    """Mark the workspace as under git-p4son's lock for the processes it starts, as hooks."""
+    """Mark the lock held on the workspace as this process's, for the processes it starts, as hooks.
+
+    The mark is a token, in the environment and in .git-p4son/lock-holder until the lock is released, so a process
+    that outlives the holder is not taken for one under the next holder's lock."""
+    token = secrets.token_hex(16)
+    ensure_config_dir(workspace_dir)
+    holder_file = _holder_file(workspace_dir)
+    holder_file.write_text(token, encoding='utf-8')
     inherited = os.environ.get(_LOCK_ENV)
-    os.environ[_LOCK_ENV] = _root(workspace_dir)
+    os.environ[_LOCK_ENV] = token
     try:
         yield
     finally:
@@ -33,9 +53,12 @@ def marked_as_locked(workspace_dir: str) -> Iterator[None]:
             os.environ.pop(_LOCK_ENV, None)
         else:
             os.environ[_LOCK_ENV] = inherited
+        # Windows refuses while another process reads the file. The next holder overwrites it.
+        with contextlib.suppress(PermissionError):
+            holder_file.unlink(missing_ok=True)
 
 
-# A lock on the file at path, raising CommandError(busy) when it is held. It is taken the way jj takes its
+# A lock on the file at path, raising LockBusy(busy) when it is held. It is taken the way jj takes its
 # working-copy lock, and defined per platform, so a type checker checks only the one it targets.
 if sys.platform == 'win32':
     @contextlib.contextmanager
@@ -74,7 +97,7 @@ if sys.platform == 'win32':
             if not locked:
                 error = ctypes.get_last_error()
                 if error == 33:
-                    raise CommandError(busy)
+                    raise LockBusy(busy)
                 raise ctypes.WinError(error)
             yield
         finally:
@@ -98,7 +121,7 @@ else:
                     break
             except BlockingIOError as error:
                 file.close()
-                raise CommandError(busy) from error
+                raise LockBusy(busy) from error
             except BaseException:
                 file.close()
                 raise

@@ -16,7 +16,7 @@ from .git import (
     get_autocrlf, get_changed_files, get_untracked_files, reset_files_commands,
 )
 from .jj_lock import working_copy_lock
-from .lock import locked_by_caller, marked_as_locked
+from .lock import LockBusy, locked_by_caller, marked_as_locked
 from .log import log, plural
 from .sync_branch import sync_branch_name
 from .toml_writer import format_string
@@ -521,6 +521,18 @@ class Workspace:
         _run_live(self.directory, 'edit' if editing else 'new', change)
 
 
+def _under_callers_lock(workspace_dir: str) -> bool:
+    """Whether jj's lock on the workspace is held by the git-p4son that started this process."""
+    if not locked_by_caller(workspace_dir):
+        return False
+    try:
+        with working_copy_lock(workspace_dir):
+            # Only a busy lock can be a caller's: a mark left by a holder that died names no one.
+            return False
+    except LockBusy:
+        return True
+
+
 @contextlib.contextmanager
 def operation(workspace_dir: str, *, lock_only: bool = False,
               snapshot: bool = True) -> Iterator[Workspace | None]:
@@ -531,7 +543,7 @@ def operation(workspace_dir: str, *, lock_only: bool = False,
     if not is_workspace(workspace_dir):
         yield None
         return
-    if locked_by_caller(workspace_dir):
+    if _under_callers_lock(workspace_dir):
         if not lock_only:
             raise CommandError(
                 'git-p4son run under its own jj lock, as from a hook, needs --backend git')

@@ -206,6 +206,13 @@ class SyncTestCase(P4RepoTestCase):
         return [int(s.rsplit('@', 1)[1]) for s in subjects[1:]
                 if s.startswith('git-p4son: p4 sync')]
 
+    def commit_local_changes(self, *paths):
+        """Commit a local change to each of paths on the sync branch; the base commit they are measured from."""
+        for path in paths:
+            self.edit(path, f'local\n{self.read(path)}')
+        self.commit('Local changes')
+        return self.git('rev-parse', 'HEAD~1')
+
     def hook_log(self):
         """A file outside the workspace for hooks to append to, and a reader for it."""
         tempdir = tempfile.TemporaryDirectory()
@@ -452,13 +459,6 @@ class TestSyncLocalChanges(SyncTestCase):
 
 class TestSyncProgress(SyncTestCase):
     """sync keeps what it has left to do in the sync progress, from its first p4 sync until its end has run."""
-
-    def commit_local_changes(self, *paths):
-        """Commit a local change to each of paths on the sync branch; the base commit they are measured from."""
-        for path in paths:
-            self.edit(path, f'local\n{self.read(path)}')
-        self.commit('Local changes')
-        return self.git('rev-parse', 'HEAD~1')
 
     def test_an_interruption_in_the_first_pass_keeps_its_lists_and_the_passes_left(self):
         base = self.commit_local_changes('a.txt')

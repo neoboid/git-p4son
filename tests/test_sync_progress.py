@@ -45,6 +45,7 @@ class TestSyncProgressFile(WorkspaceTestCase):
                     ignored=['Saved/x.log'], always_writable=['Saved/w.log'], replace={'c.txt': '//ws/c.txt'})),
                 ProgressPass(102, 'cherry-picked', exact=True),
                 ProgressPass(103, 'split', subject='git-p4son: p4 sync //ws/...@103')],
+            uncommitted=[('del', 'x.txt')],
             changed=[LocalChange('b.txt', 'base3')], merged=[MergedFile('a.txt', 'added-both')],
             ignored=['Saved/y.log'], not_synced=['Saved/y.log'],
             synced=['a.txt'])
@@ -147,6 +148,16 @@ class TestProgressRecorder(WorkspaceTestCase):
         self.assertEqual([p.changelist for p in result.passes], [101])
         self.assertEqual((result.changed, result.ignored, result.not_synced, result.synced, result.tip),
                          ([LocalChange('a.txt', 'base1')], ['x.log'], ['x.log'], [], 'tip1'))
+
+    def test_a_catch_up_pass_s_files_are_kept_until_a_commit(self):
+        recorder = self.recorder([ProgressPass(100, 'last synced'), ProgressPass(101, 'latest'),
+                                  ProgressPass(102, 'latest')])
+        recorder.before_sync(
+            [P4SyncPreviewFile('del', self.path('x.txt'))], WritableSyncFileSet())
+        recorder.pass_made(WritableSyncFileSet())
+        self.assertEqual(written(self.ws).uncommitted, [('del', 'x.txt')])
+        self.made(recorder, WritableSyncFileSet(), 'tip2')
+        self.assertEqual(written(self.ws).uncommitted, [])
 
     def test_a_commit_moves_the_tip(self):
         recorder = self.recorder([ProgressPass(101, 'latest')])

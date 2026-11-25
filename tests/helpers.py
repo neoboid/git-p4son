@@ -456,6 +456,14 @@ def _p4_unescape(path: str) -> str:
     return re.sub('%([0-9A-Fa-f]{2})', lambda match: chr(int(match.group(1), 16)), path)
 
 
+class _SyncStopped(Exception):
+    """FakeP4's sync stopped partway, after printing lines."""
+
+    def __init__(self, lines: list[str]) -> None:
+        super().__init__()
+        self.lines = lines
+
+
 class FakeP4:
     """A scripted Perforce server for the p4 commands git-p4son runs.
 
@@ -478,6 +486,10 @@ class FakeP4:
         self.have = 0
         # Files synced to a change on their own, as by p4 sync @=change, ahead of have.
         self.picked: dict[str, int] = {}
+        # Files an interrupted sync wrote, ahead of have and picked, with their new content or None for deleted.
+        self.landed: dict[str, str | None] = {}
+        # Set by interrupt_sync: the revision whose real sync stops, after how many files, and what it raises then.
+        self._interrupt: tuple[str, int, BaseException] | None = None
         self.opened: dict[str, tuple[str, str]] = {}
         self.moved: dict[str, str] = {}
         self.moves_made: list[tuple[str, str]] = []
@@ -514,11 +526,17 @@ class FakeP4:
                     files[path] = content
         return files
 
+    def interrupt_sync(self, revision: str, after: int, error: BaseException | None = None) -> None:
+        """Stop the real sync to revision, such as @101 or @=101, once it has written after files, the have-list at
+        exactly those, raising error, a Ctrl-C unless given."""
+        self._interrupt = (revision, after, error or KeyboardInterrupt())
+
     def had(self) -> dict[str, str]:
         """The workspace's {path: content} as the have-list holds it."""
         files = self.files_at(self.have)
-        for path, change in self.picked.items():
-            content = self.changes[change][1][path]
+        overlay = {path: self.changes[change][1][path]
+                   for path, change in self.picked.items()} | self.landed
+        for path, content in overlay.items():
             if content is None:
                 files.pop(path, None)
             else:
@@ -862,8 +880,19 @@ class FakeP4:
         if args[0] != 'sync':
             raise AssertionError(f'unscripted streamed p4 command: {args}')
         revision = args[-1].rsplit('@', 1)[1]
-        lines, refused = self._apply(int(revision.lstrip('=')), preview='-n' in args,
-                                     exact=revision.startswith('='))
+        interrupt = self._interrupt
+        if '-n' in args or interrupt is None or interrupt[0] != '@' + revision:
+            interrupt = None
+        try:
+            lines, refused = self._apply(int(revision.lstrip('=')), preview='-n' in args,
+                                         exact=revision.startswith('='),
+                                         stop_after=interrupt[1] if interrupt else None)
+        except _SyncStopped as stopped:
+            assert interrupt is not None
+            self._interrupt = None
+            for line in stopped.lines:
+                on_output(line, sys.stdout)
+            raise interrupt[2] from None
         # As p4 prints them: progress on stdout, clobber refusals on stderr.
         for line in lines:
             on_output(line, sys.stdout)
@@ -873,10 +902,14 @@ class FakeP4:
             raise RunError(' '.join(command), returncode=1, stderr=refused)
         return RunResult(0, lines if keep_stdout else [], [])
 
-    def _apply(self, change: int, preview: bool, exact: bool = False) -> tuple[list[str], list[str]]:
+    def _apply(self, change: int, preview: bool, exact: bool = False,
+               stop_after: int | None = None) -> tuple[list[str], list[str]]:
         """Sync the workspace from the have-list to change, or with exact only change's own files to it; returns
-        (output lines, clobber refusals)."""
+        (output lines, clobber refusals).
+
+        With stop_after, raises _SyncStopped once that many files are written, which the have-list then holds."""
         before = self.had()
+        written: list[str] = []
         if exact:
             after = dict(before)
             for path, content in self.changes[change][1].items():
@@ -911,13 +944,20 @@ class FakeP4:
                 if os.path.exists(local):
                     os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
                     os.remove(local)
-                continue
-            self._write(path, after[path])
+            else:
+                self._write(path, after[path])
+            written.append(path)
+            if len(written) == stop_after:
+                self.landed.update((path, after.get(path)) for path in written)
+                raise _SyncStopped(lines)
         if not preview and exact:
             self.picked.update(dict.fromkeys(self.changes[change][1], change))
+            for path in self.changes[change][1]:
+                self.landed.pop(path, None)
         elif not preview:
             self.have = change
             self.picked.clear()
+            self.landed.clear()
         if exact and not self.changes[change][1]:
             # p4 says so, with exit code 0, for a changelist with no files in the client view.
             lines.append(f'//{self.client}/...@={change} - no such file(s).')

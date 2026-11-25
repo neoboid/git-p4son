@@ -1,5 +1,6 @@
 """Tests for git_p4son.common module."""
 
+import _thread
 import contextlib
 import io
 import os
@@ -7,6 +8,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -212,8 +215,8 @@ print(os.getpid(), flush=True)
 while True:
     time.sleep(0.02)
 """
-# What the recorder gets from git-p4son: nothing on Windows, where the command is killed.
-_INTERRUPTS = [] if sys.platform == 'win32' else ['SIGINT']
+# What the recorder gets from git-p4son: Windows has no SIGINT for one console process, only Ctrl-Break for its group.
+_INTERRUPTS = ['SIGBREAK'] if sys.platform == 'win32' else ['SIGINT']
 
 
 def _raising(error):
@@ -251,15 +254,22 @@ class TestStoppingAStreamedCommand(unittest.TestCase):
         self.assertEqual(self.signals(), _INTERRUPTS)
         mock_log.error.assert_not_called()
 
-    @unittest.skipIf(sys.platform == 'win32', 'Windows kills the command at once')
-    def test_a_command_that_ignores_the_interrupt_is_killed(self):
+    def started_processes(self):
+        """The processes started from here on, as a list that fills."""
         processes: list[subprocess.Popen[str]] = []
         real_popen = subprocess.Popen
 
         def popen(*args, **kwargs):
             processes.append(real_popen(*args, **kwargs))
             return processes[-1]
-        with mock.patch('subprocess.Popen', side_effect=popen), mock.patch('git_p4son.common._STOP_TIMEOUT', 0.2):
+        patcher = mock.patch('subprocess.Popen', side_effect=popen)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return processes
+
+    def test_a_command_that_ignores_the_interrupt_is_killed(self):
+        processes = self.started_processes()
+        with mock.patch('git_p4son.common._STOP_TIMEOUT', 1.0):
             mock_log, _ = self.run_recorder(
                 'ignore', _raising(CommandError('abort')), CommandError)
         self.assertEqual(self.signals(), _INTERRUPTS)
@@ -267,13 +277,31 @@ class TestStoppingAStreamedCommand(unittest.TestCase):
         mock_log.error.assert_called_once_with(
             'Subprocess did not stop in time. Killing it...')
 
+    def test_another_ctrl_c_kills_a_command_that_ignores_the_interrupt_at_once(self):
+        processes = self.started_processes()
+        # As the signal's handler does on a Ctrl-C, here while git-p4son waits for the command to stop.
+        ctrl_c = threading.Timer(0.3, _thread.interrupt_main)
+        self.addCleanup(ctrl_c.cancel)
+
+        def fail(pid):
+            ctrl_c.start()
+            raise CommandError('abort')
+        start = time.monotonic()
+        with mock.patch('git_p4son.common._STOP_TIMEOUT', 5.0):
+            mock_log, _ = self.run_recorder('ignore', fail, KeyboardInterrupt)
+        self.assertLess(time.monotonic() - start, 3)
+        self.assertEqual(self.signals(), _INTERRUPTS)
+        # Popen leaves a process alone once a Ctrl-C has interrupted a wait for it, so the kill is seen here.
+        processes[0].wait(timeout=5)
+        mock_log.error.assert_not_called()
+
     @unittest.skipIf(sys.platform == 'win32', 'Windows sends the command no Ctrl-C of the terminal')
     def test_ctrl_c_leaves_the_command_to_the_terminals_interrupt(self):
         def ctrl_c(pid):
             # The terminal sends the interrupt to the command as well as to git-p4son.
             os.kill(pid, signal.SIGINT)
             raise KeyboardInterrupt
-        with mock.patch('git_p4son.common._INTERRUPT_GRACE', 1.0):
+        with mock.patch('git_p4son.common._INTERRUPT_GRACE', 5.0):
             mock_log, _ = self.run_recorder('slow', ctrl_c, KeyboardInterrupt)
         self.assertEqual(self.signals(), ['SIGINT'])
         mock_log.error.assert_not_called()
@@ -286,7 +314,6 @@ class TestStoppingAStreamedCommand(unittest.TestCase):
         mock_log.error.assert_not_called()
 
 
-@unittest.skipIf(sys.platform == 'win32', 'Windows kills the command at once')
 class TestStop(unittest.TestCase):
     def test_another_ctrl_c_kills_at_once(self):
         process = mock.Mock()

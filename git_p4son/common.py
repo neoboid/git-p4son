@@ -278,29 +278,40 @@ _STOP_TIMEOUT = 10.0
 # Seconds a subprocess gets to act on the terminal's own Ctrl-C before git-p4son interrupts it too.
 _INTERRUPT_GRACE = 2.0
 
+if sys.platform == 'win32':
+    # Only a Ctrl-Break can be sent to one process group, so the subprocess gets a group of its own. The console's
+    # Ctrl-C no longer reaches it there.
+    _STREAMED_CREATION_FLAGS = subprocess.CREATE_NEW_PROCESS_GROUP
+    _INTERRUPT_SIGNAL = signal.CTRL_BREAK_EVENT
+    _TERMINAL_INTERRUPTS_TOO = False
+else:
+    _STREAMED_CREATION_FLAGS = 0
+    _INTERRUPT_SIGNAL = signal.SIGINT
+    _TERMINAL_INTERRUPTS_TOO = True
+
 
 def _exits_within(process: subprocess.Popen[str], seconds: float) -> bool:
     """Whether process exits within seconds."""
-    try:
-        process.wait(timeout=seconds)
-    except subprocess.TimeoutExpired:
-        return False
-    return True
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            # In slices, as a Ctrl-C does not interrupt a wait on Windows.
+            process.wait(timeout=0.1)
+            return True
+        except subprocess.TimeoutExpired:
+            if time.monotonic() >= deadline:
+                return False
 
 
 def _stop(process: subprocess.Popen[str], by_ctrl_c: bool) -> None:
     """Interrupt a subprocess so it cleans up, killing it if it does not exit in time, or at once on another Ctrl-C.
 
-    by_ctrl_c says a Ctrl-C stops it, which the terminal sends the subprocess as well."""
-    if sys.platform == 'win32':
-        # Windows has no interrupt for one console process, so it is killed, as terminate() did there.
-        process.kill()
-        return
-    grace = _INTERRUPT_GRACE if by_ctrl_c else 0.0
+    by_ctrl_c says a Ctrl-C stops it, which the terminal sends the subprocess as well, except on Windows."""
+    grace = _INTERRUPT_GRACE if by_ctrl_c and _TERMINAL_INTERRUPTS_TOO else 0.0
     try:
         if grace and _exits_within(process, grace):
             return
-        process.send_signal(signal.SIGINT)
+        process.send_signal(_INTERRUPT_SIGNAL)
         if _exits_within(process, _STOP_TIMEOUT - grace):
             return
         log.error('Subprocess did not stop in time. Killing it...')
@@ -367,19 +378,21 @@ def run_with_stream_output(command: list[str],
                                    stderr=subprocess.PIPE,
                                    text=True,
                                    encoding='utf-8',
-                                   errors='replace')
+                                   errors='replace',
+                                   creationflags=_STREAMED_CREATION_FLAGS)
     except OSError:
         # E.g. a missing executable: stop the spinner overwriting the error.
         log.stop_spinner()
         raise
 
     with process:
-        output_queue: queue.Queue[tuple[int, str | None]] = queue.Queue()
-        for index, pipe in enumerate((process.stdout, process.stderr)):
-            threading.Thread(target=_read_lines, args=(pipe, index, output_queue),
-                             daemon=True).start()
-
+        # Everything after Popen is in the try: on Windows only the handler below stops the subprocess on a Ctrl-C.
         try:
+            output_queue: queue.Queue[tuple[int, str | None]] = queue.Queue()
+            for index, pipe in enumerate((process.stdout, process.stderr)):
+                threading.Thread(target=_read_lines, args=(pipe, index, output_queue),
+                                 daemon=True).start()
+
             # on_output runs here, not in the readers, so its exceptions and Ctrl-C reach the handlers below.
             open_pipes = 2
             while open_pipes:

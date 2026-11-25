@@ -6,6 +6,7 @@ import os
 import posixpath
 import queue
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -272,14 +273,44 @@ def _read_lines(pipe: IO[str], index: int,
     output_queue.put((index, None))
 
 
-def _terminate(process: subprocess.Popen[str]) -> None:
-    """Terminate a subprocess, killing it if it does not exit in time."""
-    process.terminate()
+# Seconds a subprocess asked to stop gets to clean up before it is killed.
+_STOP_TIMEOUT = 10.0
+# Seconds a subprocess gets to act on the terminal's own Ctrl-C before git-p4son interrupts it too.
+_INTERRUPT_GRACE = 2.0
+
+
+def _exits_within(process: subprocess.Popen[str], seconds: float) -> bool:
+    """Whether process exits within seconds."""
     try:
-        process.wait(timeout=5)
+        process.wait(timeout=seconds)
     except subprocess.TimeoutExpired:
-        log.error("Subprocess did not terminate in time. Forcing kill...")
+        return False
+    return True
+
+
+def _stop(process: subprocess.Popen[str], by_ctrl_c: bool) -> None:
+    """Interrupt a subprocess so it cleans up, killing it if it does not exit in time, or at once on another Ctrl-C.
+
+    by_ctrl_c says a Ctrl-C stops it, which the terminal sends the subprocess as well."""
+    if sys.platform == 'win32':
+        # Windows has no interrupt for one console process, so it is killed, as terminate() did there.
         process.kill()
+        return
+    grace = _INTERRUPT_GRACE if by_ctrl_c else 0.0
+    try:
+        if grace and _exits_within(process, grace):
+            return
+        process.send_signal(signal.SIGINT)
+        if _exits_within(process, _STOP_TIMEOUT - grace):
+            return
+        log.error('Subprocess did not stop in time. Killing it...')
+    except OSError as error:
+        log.error(
+            f'Could not interrupt the subprocess ({error}). Killing it...')
+    except KeyboardInterrupt:
+        process.kill()
+        raise
+    process.kill()
 
 
 def _show_command(command: list[str]) -> None:
@@ -314,7 +345,7 @@ def run_with_stream_output(command: list[str],
                            keep_stdout: bool = True) -> RunResult[list[str]]:
     """Run a command, passing each output line and its stream to on_output as it is written.
 
-    An exception raised from on_output terminates the command and propagates. Without keep_stdout,
+    An exception raised from on_output interrupts the command and propagates. Without keep_stdout,
     the result's stdout is empty; on_output still sees every line."""
     log.command(join_command_line(command),
                 truncate_for_spinner=True)
@@ -367,10 +398,10 @@ def run_with_stream_output(command: list[str],
 
             returncode = process.wait()
 
-        except BaseException:
+        except BaseException as error:
             # Ctrl-C or on_output raised: stop the subprocess rather than leave it running unobserved.
             log.stop_spinner()
-            _terminate(process)
+            _stop(process, isinstance(error, KeyboardInterrupt))
             raise
 
     log.stop_spinner()

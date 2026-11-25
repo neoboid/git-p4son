@@ -3,10 +3,10 @@
 import contextlib
 import io
 import os
+import signal
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from unittest import mock
 
@@ -21,6 +21,7 @@ from git_p4son.common import (
     run_with_stream_output,
     RunError,
     RunResult,
+    _stop,
 )
 
 
@@ -188,41 +189,120 @@ class TestRunWithOutput(unittest.TestCase):
         self.assertEqual(result.stderr[-1], 'err499')
         self.assertEqual(len(callback_lines), 5500)
 
-    def test_callback_exception_terminates_process(self):
-        """Raising from on_output stops the command instead of waiting."""
-        code = ('import sys, time\n'
-                'print("bad", flush=True)\n'
-                'time.sleep(60)\n')
 
-        def callback(line, stream):
-            raise CommandError(f'abort on {line}')
+# A command that prints its pid, then records each signal it gets in the file argv[1] names. argv[2] says what it does
+# on one: "exit" at once, "slow" after a moment, as p4 does while it cleans up, or "ignore".
+_SIGNAL_RECORDER = """
+import os, signal, sys, time
 
-        start = time.monotonic()
-        with mock.patch('git_p4son.common.log') as mock_log:
-            with self.assertRaises(CommandError) as ctx:
-                run_with_stream_output([sys.executable, '-c', code],
-                                       on_output=callback)
-        self.assertEqual(str(ctx.exception), 'abort on bad')
-        self.assertLess(time.monotonic() - start, 30)
+def record(name):
+    def handler(signum, frame):
+        with open(sys.argv[1], 'a') as f:
+            f.write(name + '\\n')
+        if sys.argv[2] == 'slow':
+            time.sleep(0.3)
+        if sys.argv[2] != 'ignore':
+            os._exit(255)
+    return handler
+
+for name in ('SIGINT', 'SIGTERM', 'SIGBREAK'):
+    if hasattr(signal, name):
+        signal.signal(getattr(signal, name), record(name))
+print(os.getpid(), flush=True)
+while True:
+    time.sleep(0.02)
+"""
+# What the recorder gets from git-p4son: nothing on Windows, where the command is killed.
+_INTERRUPTS = [] if sys.platform == 'win32' else ['SIGINT']
+
+
+def _raising(error):
+    """A callback that raises error."""
+    def on_pid(pid):
+        raise error
+    return on_pid
+
+
+class TestStoppingAStreamedCommand(unittest.TestCase):
+    """run_with_stream_output stops its command with an interrupt the command can clean up after."""
+
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.signals_file = os.path.join(tempdir.name, 'signals')
+        open(self.signals_file, 'w').close()
+
+    def run_recorder(self, reaction, on_pid, expected):
+        """Run the recorder with on_pid called once it has printed its pid; returns the log mock and the error."""
+        with mock.patch('git_p4son.common.log') as mock_log, self.assertRaises(expected) as ctx:
+            run_with_stream_output([sys.executable, '-c', _SIGNAL_RECORDER, self.signals_file, reaction],
+                                   on_output=lambda line, stream: on_pid(int(line)))
         mock_log.stop_spinner.assert_called_once()
+        return mock_log, ctx.exception
 
-    def test_ctrl_c_terminates_process_and_reaches_the_caller(self):
-        """Ctrl-C stops the command and propagates, so cli.py reports it like any other."""
-        code = ('import sys, time\n'
-                'print("line", flush=True)\n'
-                'time.sleep(60)\n')
+    def signals(self):
+        with open(self.signals_file) as f:
+            return f.read().split()
 
-        def callback(line, stream):
-            raise KeyboardInterrupt
-
-        start = time.monotonic()
-        with mock.patch('git_p4son.common.log') as mock_log:
-            with self.assertRaises(KeyboardInterrupt):
-                run_with_stream_output([sys.executable, '-c', code],
-                                       on_output=callback)
-        self.assertLess(time.monotonic() - start, 30)
-        mock_log.stop_spinner.assert_called_once()
+    def test_a_failing_callback_interrupts_the_command(self):
+        mock_log, error = self.run_recorder(
+            'exit', _raising(CommandError('abort')), CommandError)
+        self.assertEqual(str(error), 'abort')
+        self.assertEqual(self.signals(), _INTERRUPTS)
         mock_log.error.assert_not_called()
+
+    @unittest.skipIf(sys.platform == 'win32', 'Windows kills the command at once')
+    def test_a_command_that_ignores_the_interrupt_is_killed(self):
+        processes: list[subprocess.Popen[str]] = []
+        real_popen = subprocess.Popen
+
+        def popen(*args, **kwargs):
+            processes.append(real_popen(*args, **kwargs))
+            return processes[-1]
+        with mock.patch('subprocess.Popen', side_effect=popen), mock.patch('git_p4son.common._STOP_TIMEOUT', 0.2):
+            mock_log, _ = self.run_recorder(
+                'ignore', _raising(CommandError('abort')), CommandError)
+        self.assertEqual(self.signals(), _INTERRUPTS)
+        self.assertIsNotNone(processes[0].returncode)
+        mock_log.error.assert_called_once_with(
+            'Subprocess did not stop in time. Killing it...')
+
+    @unittest.skipIf(sys.platform == 'win32', 'Windows sends the command no Ctrl-C of the terminal')
+    def test_ctrl_c_leaves_the_command_to_the_terminals_interrupt(self):
+        def ctrl_c(pid):
+            # The terminal sends the interrupt to the command as well as to git-p4son.
+            os.kill(pid, signal.SIGINT)
+            raise KeyboardInterrupt
+        with mock.patch('git_p4son.common._INTERRUPT_GRACE', 1.0):
+            mock_log, _ = self.run_recorder('slow', ctrl_c, KeyboardInterrupt)
+        self.assertEqual(self.signals(), ['SIGINT'])
+        mock_log.error.assert_not_called()
+
+    def test_ctrl_c_interrupts_a_command_the_terminal_did_not(self):
+        with mock.patch('git_p4son.common._INTERRUPT_GRACE', 0.1):
+            mock_log, _ = self.run_recorder(
+                'exit', _raising(KeyboardInterrupt), KeyboardInterrupt)
+        self.assertEqual(self.signals(), _INTERRUPTS)
+        mock_log.error.assert_not_called()
+
+
+@unittest.skipIf(sys.platform == 'win32', 'Windows kills the command at once')
+class TestStop(unittest.TestCase):
+    def test_another_ctrl_c_kills_at_once(self):
+        process = mock.Mock()
+        process.wait.side_effect = KeyboardInterrupt
+        for by_ctrl_c in (False, True):
+            with self.subTest(by_ctrl_c=by_ctrl_c), self.assertRaises(KeyboardInterrupt):
+                _stop(process, by_ctrl_c)
+            process.kill.assert_called_once_with()
+            process.kill.reset_mock()
+
+    def test_a_command_that_cannot_be_interrupted_is_killed(self):
+        process = mock.Mock()
+        process.send_signal.side_effect = OSError('no console')
+        with mock.patch('git_p4son.common.log'):
+            _stop(process, False)
+        process.kill.assert_called_once_with()
 
 
 class TestRunInteractive(unittest.TestCase):

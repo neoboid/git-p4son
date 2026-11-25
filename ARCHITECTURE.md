@@ -289,11 +289,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   and raising `P4SyncClobberError` or `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
-  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`), commands
-  run on the terminal (`run_interactive()`, used by review tools), commands whose stdout is read while their stderr
-  shows (`run_for_output()`, used by sync targets),
-  `normalize_workspace_path`, `restoring` (the backends' `checkouts` return through it), and the interactive
-  prompts `prompt_choice`, `prompt_menu` and `prompt_numbered`.
+  `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`, which `_stop`
+  interrupts on an error or Ctrl-C with SIGINT, and kills after 10 seconds or on a second Ctrl-C; on Windows it kills
+  at once), commands run on the terminal (`run_interactive()`, used by review tools), commands whose stdout is read
+  while their stderr shows (`run_for_output()`, used by sync targets), `normalize_workspace_path`, `restoring` (the
+  backends' `checkouts` return through it), and the interactive prompts `prompt_choice`, `prompt_menu` and
+  `prompt_numbered`.
 
 - **`log.py`** - All user-facing output goes through the `log` singleton: headings, success, warning and error lines,
   file changes, command echo with a spinner, child process output, and quiet and verbose modes, with

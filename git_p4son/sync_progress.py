@@ -160,6 +160,11 @@ def _added(paths: list[str], more: list[str]) -> list[str]:
     return list(dict.fromkeys([*paths, *more]))
 
 
+def local_path(path: str, workspace_dir: str) -> str:
+    """The local path of a path as the sync progress stores it."""
+    return os.path.join(workspace_dir, *path.split('/'))
+
+
 def progress_path(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, CONFIG_DIR, FILE_NAME)
 

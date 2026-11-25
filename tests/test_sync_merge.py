@@ -577,6 +577,24 @@ class TestMergeChangedFiles(unittest.TestCase):
                 heard, [(binary, 'binary', b'user binary content'),
                         (gone, 'deleted-upstream', b'user binary content')])
 
+    def test_an_interrupted_run_s_outcomes_are_reported_with_these(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            binary = os.path.join(workspace, 'image.png')
+            with open(binary, 'wb') as f:
+                f.write(b'perforce binary content')
+            earlier = os.path.join(workspace, 'merged.txt')
+
+            from git_p4son.sync_merge import merge_changed_files
+            with captured_output() as out:
+                merge_changed_files(
+                    [ChangedFile(binary, 'sync456', self._stage(
+                        '.ours', b'user binary content'), None, is_binary=True)],
+                    workspace, self.temp_root, merged_before=[(earlier, 'conflicts')])
+            self.assertIn('1 file merged with conflicts', out.getvalue())
+            self.assertIn('merged.txt', out.getvalue())
+            self.assertIn('1 binary file has local changes', out.getvalue())
+            self.assertIn('resolve conflicts', out.getvalue())
+
     def test_deleted_upstream_with_local_changes_not_restored(self):
         """A file deleted upstream with local changes is not restored."""
         with tempfile.TemporaryDirectory() as workspace:

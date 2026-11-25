@@ -381,6 +381,17 @@ class Workspace:
         """The change IDs of the revisions revset names."""
         return self.run('log', '-r', revset, '--no-graph', '-T', 'change_id ++ "\\n"').stdout
 
+    def children(self, commit: str) -> list[str]:
+        """The change IDs of commit's visible children."""
+        return self._changes(f'children({commit})')
+
+    def changes_above(self, commit: str) -> list[tuple[str, str]]:
+        """The changes from commit, not included, up to the working change, as (change ID, first line of the
+        description)."""
+        lines = self.run('log', '-r', f'{commit}..@', '--no-graph',
+                         '-T', 'change_id ++ " " ++ description.first_line() ++ "\n"').stdout
+        return [(change, description) for change, _, description in (line.partition(' ') for line in lines)]
+
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids jj still has."""
         if not change_ids:
@@ -512,6 +523,16 @@ class Workspace:
         """The descendants of commit with conflicts, as "change ID, first line" lines."""
         return _run_live(self.directory, 'log', '-r', f'{commit}:: & conflicts()', '--no-graph',
                          '-T', 'change_id.short() ++ " " ++ description.first_line() ++ "\\n"').stdout
+
+    def abandon_unless_working(self, change_ids: list[str]) -> None:
+        """Abandon those of change_ids that are not the working change, which leaves the files on disk alone."""
+        if change_ids:
+            _run_live(self.directory, 'abandon', '-r',
+                      f'({changes_revset(change_ids)}) ~ @')
+
+    def change_exists(self, change_id: str) -> bool:
+        return bool(_run_live(self.directory, 'log', '-r', changes_revset([change_id]), '--no-graph',
+                              '-T', 'change_id').stdout)
 
     def working_is_empty(self) -> bool:
         return _run_live(self.directory, 'log', '-r', '@', '--no-graph', '-T', 'empty').stdout == ['true']

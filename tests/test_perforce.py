@@ -7,6 +7,7 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
+    p4_off_have,
     OutOfDate,
     extract_description_lines,
     get_changelist_spec,
@@ -294,6 +295,31 @@ class TestP4HeadTypes(unittest.TestCase):
     def test_empty_input(self):
         result = p4_head_types([], '/ws')
         self.assertEqual(result, {})
+
+
+class TestP4OffHave(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_sorts_files_that_differ_from_the_have_list_and_files_it_lacks(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['/ws/edited.txt'], stderr=['/ws/gone@1.txt - file(s) not on client.'])
+        files = ['/ws/edited.txt', '/ws/gone@1.txt', '/ws/same.txt']
+        self.assertEqual(p4_off_have(files, '/ws'),
+                         ({'/ws/edited.txt'}, {'/ws/gone@1.txt'}))
+        command = mock_run.call_args.args[0]
+        self.assertEqual(command[-2:], ['diff', '-se'])
+        self.assertEqual(mock_run.call_args.kwargs['input'].splitlines()[
+                         1], '/ws/gone%401.txt')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_another_error_raises(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['Perforce client error: connect failed'])
+        with captured_output() as out, self.assertRaisesRegex(CommandError, 'could not compare'):
+            p4_off_have(['/ws/a.txt'], '/ws')
+        self.assertIn('connect failed', out.getvalue())
+
+    def test_no_files_asks_nothing(self):
+        self.assertEqual(p4_off_have([], '/ws'), (set(), set()))
 
 
 class TestGetClientSpec(unittest.TestCase):

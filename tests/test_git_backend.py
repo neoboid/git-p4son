@@ -372,6 +372,35 @@ class TestGitBackendSync(GitRepoTestCase):
         backend.prepare_sync(None)
         self.assertEqual(backend.progress_start()[1]['on-sync-branch'], True)
 
+    def test_resume_sync_takes_the_start_from_the_sync_progress(self):
+        tip = self.git('rev-parse', 'HEAD')
+        backend = GitBackend(self.ws)
+        with captured_output():
+            self.assertEqual(backend.resume_sync('main', tip, {'backend': 'git', 'branch': 'feature',
+                                                               'on-sync-branch': False}), 'refs/heads/main')
+        self.assertEqual(backend.progress_start(), (
+            'main', {'backend': 'git', 'branch': 'feature', 'on-sync-branch': False}))
+        self.assertEqual(backend.returns_to(), 'feature')
+
+    def test_resume_sync_refuses_a_head_off_the_sync_branch_or_a_moved_one(self):
+        tip = self.git('rev-parse', 'HEAD')
+        start: dict[str, str | bool] = {
+            'backend': 'git', 'branch': 'main', 'on-sync-branch': True}
+        self.git('switch', '-q', '--detach')
+        with captured_output(), self.assertRaisesRegex(CommandError, 'HEAD is detached.*git switch main'):
+            GitBackend(self.ws).resume_sync('main', tip, start)
+        self.git('switch', '-q', 'main')
+        self.commit('Mine')
+        with captured_output() as out, self.assertRaisesRegex(CommandError, f'git reset --keep {tip}'):
+            GitBackend(self.ws).resume_sync('main', tip, start)
+        self.assertIn('Mine', out.getvalue())
+        self.git('reset', '-q', '--hard', 'HEAD~1')
+        with captured_output(), self.assertRaisesRegex(CommandError, 'no longer holds'):
+            GitBackend(self.ws).resume_sync(
+                'main', self.git('rev-parse', 'HEAD@{1}'), start)
+        with captured_output(), self.assertRaisesRegex(CommandError, 'no sync branch nope'):
+            GitBackend(self.ws).resume_sync('nope', tip, start)
+
     def test_prepare_sync_chooses_the_sync_branch(self):
         self.git('branch', 'p4')
         self.assertEqual(GitBackend(self.ws).prepare_sync(

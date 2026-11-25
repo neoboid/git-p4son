@@ -12,12 +12,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   one judged by the sync branch's files. `sync_command` then has the backend check out the sync branch (`start_sync`),
   and returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last
   synced CL, syncs and commits each target and merges local changes back once at the end (`sync_merge.py`), and
-  `sync_on_branch` then runs the post-sync hooks. Changelist arguments are never aliases: aliases name pending CLs,
-  which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split
-  user's submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then
-  checks them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split`
-  ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as
-  merged-back local changes; after a failure partway, sync stays on the sync branch.
+  `sync_on_branch` then runs the post-sync hooks, where a Ctrl-C or an error stops the hooks and not the return
+  (`_run_post_sync_hooks`), with exit code 1. Changelist arguments are never aliases: aliases name pending CLs, which
+  Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split user's
+  submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then checks
+  them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split` ignores the
+  configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back
+  local changes; after a failure partway, sync stays on the sync branch.
 
   The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
   `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's

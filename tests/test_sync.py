@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError, RunError
+from git_p4son.common import CommandError, RunError, join_command_line
 from git_p4son.git import format_sync_subject
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
@@ -515,6 +515,35 @@ class TestSyncBranch(SyncTestCase):
         self.assertEqual(self.read('a.txt'), 'a2\n')
         self.assertIn('main is now at CL 101. Run "git rebase main"', out)
 
+    def test_a_ctrl_c_in_the_post_sync_hooks_stops_them_and_sync_still_returns(self):
+        self.commit_feature()
+        feature = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.p4son_stopped_in_post_sync_hooks('sync')
+        self.assert_at('feature', feature)
+        self.assertEqual(self.git('log', '-1', '--format=%s',
+                         'main'), 'git-p4son: p4 sync //myclient/...@101')
+        self.assertIn('main is now at CL 101', out)
+
+    def test_an_error_in_the_post_sync_hooks_stops_them_and_sync_still_returns(self):
+        self.commit_feature()
+        feature = self.git('rev-parse', 'HEAD')
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4son_stopped_in_post_sync_hooks(
+            'sync', error=CommandError('No Perforce user for $(user)'),
+            message='post-sync hooks stopped: No Perforce user for $(user)')
+        self.assert_at('feature', feature)
+        self.assertEqual(self.git('log', '-1', '--format=%s',
+                         'main'), 'git-p4son: p4 sync //myclient/...@101')
+
+    def test_a_failed_p4_command_in_the_post_sync_hooks_names_its_error(self):
+        expired = RunError(
+            join_command_line(['p4', 'user', '-o']), stderr=['Your session has expired, please login again.'])
+        out = self.p4son_stopped_in_post_sync_hooks(
+            'sync', 'last-synced', error=expired,
+            message='post-sync hooks stopped: p4 user -o failed with return code 1')
+        self.assertIn('Your session has expired, please login again.', out)
+
     def test_a_detached_start_is_returned_to(self):
         self.git('switch', '-q', '--detach')
         start = self.git('rev-parse', 'HEAD')
@@ -649,6 +678,13 @@ class TestSyncHooks(SyncTestCase):
         self.p4.submit(101, {'a.txt': 'a2\n'})
         self.p4son('sync', '101')
         self.assertEqual(self.p4.synced(), ['@101'])
+
+    def test_last_synced_runs_the_hooks_of_a_finished_sync_again(self):
+        """As after a kill cut the post-sync hooks short: a sync with nothing new runs none."""
+        path, read_log = self.hook_log()
+        self.hook('post-sync', f'open({path!r}, "a").write("post ")\n')
+        self.sync('last-synced')
+        self.assertEqual(read_log(), ['post'])
 
     def test_failing_pre_sync_hook_aborts_before_syncing(self):
         self.hook('pre-sync', 'raise SystemExit(1)\n')

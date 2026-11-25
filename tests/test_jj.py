@@ -1253,6 +1253,23 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
             (self.read('a.txt'), self.read('d.txt')), ('a2\n', 'd1\n'))
         self.assertIn('main is now at CL 101', out)
 
+    def test_a_ctrl_c_in_the_post_sync_hooks_stops_them_and_sync_still_rebases_and_returns(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        out = self.p4son_stopped_in_post_sync_hooks('sync')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+        self.assertIn('main is now at CL 101', out)
+
+    def test_an_error_in_the_post_sync_hooks_stops_them_and_sync_still_rebases_and_returns(self):
+        self.p4.submit(101, {'d.txt': 'd1\n'})
+        self.p4son_stopped_in_post_sync_hooks(
+            'sync', error=CommandError('No Perforce user for $(user)'),
+            message='post-sync hooks stopped: No Perforce user for $(user)')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+
     def test_editing_a_change_returns_to_it(self):
         self.jj('edit', 'feat')
         self.p4.submit(101, {'d.txt': 'd1\n'})

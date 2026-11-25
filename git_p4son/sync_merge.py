@@ -312,8 +312,10 @@ def _merge_back(cf: ChangedFile, workspace_dir: str, temp_root: str) -> str | No
 
 def merge_changed_files(changed_files: list[ChangedFile],
                         workspace_dir: str,
-                        temp_root: str) -> None:
-    """Merge local changes back into the workspace after syncing."""
+                        temp_root: str,
+                        on_merged: Callable[[str, str | None], None] | None = None) -> None:
+    """Merge local changes back into the workspace after syncing, calling on_merged with each file's path and the
+    outcome it is reported under after it."""
     if not changed_files:
         return
 
@@ -323,6 +325,8 @@ def merge_changed_files(changed_files: list[ChangedFile],
     for cf in changed_files:
         outcome = _merge_back(cf, workspace_dir, temp_root)
         outcomes.setdefault(outcome, []).append(cf.filepath)
+        if on_merged is not None:
+            on_merged(cf.filepath, outcome)
 
     merged_conflicts = outcomes.get('conflicts', [])
     added_both_conflicts = outcomes.get('added-both', [])

@@ -85,6 +85,10 @@ class Backend(Protocol):
     def start_sync(self) -> None:
         """Put the sync branch's files in the work tree, ready for the pre-sync hooks and sync's first commit."""
 
+    def progress_start(self) -> tuple[str, dict[str, str | bool]]:
+        """The sync branch prepare_sync chose, and where the sync started, as the sync progress's [start] holds it:
+        the backend's keys, then on-sync-branch."""
+
     def commit_sync(self, subject: str) -> int:
         """Commit everything in the workspace as a sync commit on the sync branch; returns how many files it staged."""
 

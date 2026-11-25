@@ -321,15 +321,20 @@ def _merge_back(cf: ChangedFile, workspace_dir: str, temp_root: str) -> str | No
 
 
 def merge_changed_files(changed_files: list[ChangedFile], workspace_dir: str, temp_root: str,
-                        on_merged: OnMerged | None = None) -> None:
+                        on_merged: OnMerged | None = None,
+                        merged_before: list[tuple[str, str]] | None = None) -> None:
     """Merge local changes back into the workspace after syncing, calling on_merged with each file's path and the
-    outcome it is reported under after it."""
-    if not changed_files:
+    outcome it is reported under after it.
+
+    merged_before holds the (path, outcome) of files an interrupted run merged back, reported with these."""
+    if not changed_files and not merged_before:
         return
 
     log.heading('Merging local changes')
 
     outcomes: dict[str | None, list[str]] = {}
+    for path, earlier in merged_before or []:
+        outcomes.setdefault(earlier, []).append(path)
     for cf in changed_files:
         outcome = _merge_back(cf, workspace_dir, temp_root)
         outcomes.setdefault(outcome, []).append(cf.filepath)

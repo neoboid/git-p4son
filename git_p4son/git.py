@@ -189,6 +189,12 @@ def get_untracked_files(revision: str, workspace_dir: str) -> list[str]:
     return _nul_fields(result.stdout)
 
 
+def files_changed_since(revision: str, workspace_dir: str, eol_conversion: str | None = None) -> set[str]:
+    """The files whose working contents differ from revision, deleted ones included, and the untracked files git
+    does not ignore."""
+    return {*get_changed_files(revision, workspace_dir, eol_conversion), *get_untracked_files(revision, workspace_dir)}
+
+
 # --- staging and committing ---
 
 # jj's working-copy.eol-conversion values, as git's core.autocrlf.
@@ -457,6 +463,11 @@ def branches_at(commit: str, workspace_dir: str) -> list[str]:
     result = run(['git', 'for-each-ref', f'--points-at={commit}', '--format=%(refname)', 'refs/heads/'],
                  cwd=workspace_dir)
     return [ref.removeprefix('refs/heads/') for ref in result.stdout]
+
+
+def commits_above(bottom: str, revision: str, workspace_dir: str) -> list[str]:
+    """The commits in revision's history outside bottom's, newest first, as "<short sha> <subject>"."""
+    return run(['git', 'log', '--format=%h %s', f'{bottom}..{revision}'], cwd=workspace_dir).stdout
 
 
 def merges_above(bottom: str, revision: str, workspace_dir: str) -> list[str]:

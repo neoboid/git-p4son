@@ -1,5 +1,6 @@
 """Saving local changes to the files a sync overwrites, and merging them back afterwards."""
 
+import dataclasses
 import os
 import shutil
 from collections.abc import Callable, Set as AbstractSet
@@ -21,6 +22,8 @@ from .perforce import (
 from .writable import is_user_writable, make_read_only, make_writable
 
 _MERGE_LABELS = ('Perforce', 'base', 'local')
+# Told each file's path and the outcome it is reported under, once it is merged back.
+OnMerged = Callable[[str, str | None], None]
 
 
 @dataclass
@@ -34,11 +37,13 @@ class ChangedFile:
     added_both: bool = False
 
 
-@dataclass
-class _ChangedFileMeta:
-    """A file modified since its baseline; added_both means p4 adds it over local content."""
+@dataclass(frozen=True)
+class ChangedFileRef:
+    """A local change to stage: filepath at the pre-sync commit, and at base_commit; added_both means p4 adds it over
+    local content."""
     filepath: str
     base_commit: str | None
+    is_binary: bool = False
     added_both: bool = False
 
 
@@ -68,12 +73,11 @@ def _to_crlf(content: bytes) -> bytes:
     return content.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
 
 
-def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
+def _stage_changed_file(ref: ChangedFileRef, rel_path: str,
                         ours: bytes | None, base: bytes | None,
-                        temp_root: str, is_binary: bool,
-                        uses_crlf: bool) -> ChangedFile:
+                        temp_root: str, uses_crlf: bool) -> ChangedFile:
     """Stage HEAD and baseline content of a changed file, text in the workspace line ending."""
-    if uses_crlf and not is_binary:
+    if uses_crlf and not ref.is_binary:
         if ours is not None:
             ours = _to_crlf(ours)
         if base is not None:
@@ -83,9 +87,31 @@ def _stage_changed_file(meta: _ChangedFileMeta, rel_path: str,
                  if ours is not None else None)
     base_path = (_stage_temp_content(temp_root, rel_path, '.base', base)
                  if base is not None else None)
-    return ChangedFile(filepath=meta.filepath, base_commit=meta.base_commit,
+    return ChangedFile(filepath=ref.filepath, base_commit=ref.base_commit,
                        ours_path=ours_path, base_path=base_path,
-                       is_binary=is_binary, added_both=meta.added_both)
+                       is_binary=ref.is_binary, added_both=ref.added_both)
+
+
+def stage_changed_files(refs: list[ChangedFileRef], pre_sync_head_commit: str, workspace_dir: str, temp_root: str,
+                        uses_crlf: bool) -> list[ChangedFile]:
+    """Stage each local change's content at pre_sync_head_commit and at its base commit, for the merge-back."""
+    rel_paths = {ref.filepath: os.path.relpath(ref.filepath, workspace_dir)
+                 for ref in refs}
+    queries = []
+    for ref in refs:
+        queries.append((pre_sync_head_commit, rel_paths[ref.filepath]))
+        if ref.base_commit is not None:
+            queries.append((ref.base_commit, rel_paths[ref.filepath]))
+    contents = get_files_at_commits(queries, workspace_dir)
+    staged = []
+    for ref in refs:
+        rel = rel_paths[ref.filepath]
+        ours = contents[(pre_sync_head_commit, rel)]
+        base = None if ref.base_commit is None else contents.get(
+            (ref.base_commit, rel))
+        staged.append(_stage_changed_file(
+            ref, rel, ours, base, temp_root, uses_crlf))
+    return staged
 
 
 def _log_file_group(log_fn: Callable[[str], None], files: list[str], singular: str, plural_noun: str,
@@ -198,11 +224,11 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     oids = get_blob_oids(oid_queries, workspace_dir)
 
     unchanged_count = 0
-    metas: list[_ChangedFileMeta] = []
+    metas: list[ChangedFileRef] = []
     for f in tracked:
         if f in added_upstream:
             # p4 adds a file the client never had: always merge, against an empty base.
-            metas.append(_ChangedFileMeta(
+            metas.append(ChangedFileRef(
                 filepath=f, base_commit=None, added_both=True))
             continue
 
@@ -222,7 +248,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
             unchanged_count += 1
             continue
 
-        metas.append(_ChangedFileMeta(filepath=f, base_commit=base))
+        metas.append(ChangedFileRef(filepath=f, base_commit=base))
 
     log.success(f'{len(metas)} changed, {unchanged_count} unchanged')
 
@@ -236,20 +262,10 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         log.success(f'{len(metas) - len(binary)} text, {len(binary)} binary')
 
         log.heading('Staging tracked changed files for post-sync merge')
-        queries = []
-        for m in metas:
-            queries.append((pre_sync_head_commit, rel_paths[m.filepath]))
-            if m.base_commit is not None:
-                queries.append((m.base_commit, rel_paths[m.filepath]))
-        contents = get_files_at_commits(queries, workspace_dir)
-        for m in metas:
-            rel = rel_paths[m.filepath]
-            result.changed.append(_stage_changed_file(
-                m, rel, contents[(pre_sync_head_commit, rel)],
-                None if m.base_commit is None else contents.get(
-                    (m.base_commit, rel)),
-                temp_root,
-                m.filepath in binary, uses_crlf))
+        result.changed = stage_changed_files(
+            [dataclasses.replace(m, is_binary=m.filepath in binary)
+             for m in metas],
+            pre_sync_head_commit, workspace_dir, temp_root, uses_crlf)
         log.success(f'{plural(len(metas), "file")} staged')
 
     _log_prepare_summary(result, workspace_dir, clobber_mode, unchanged_count)
@@ -293,10 +309,8 @@ def _merge_back(cf: ChangedFile, workspace_dir: str, temp_root: str) -> str | No
     return 'added-both' if cf.added_both else 'conflicts'
 
 
-def merge_changed_files(changed_files: list[ChangedFile],
-                        workspace_dir: str,
-                        temp_root: str,
-                        on_merged: Callable[[str, str | None], None] | None = None) -> None:
+def merge_changed_files(changed_files: list[ChangedFile], workspace_dir: str, temp_root: str,
+                        on_merged: OnMerged | None = None) -> None:
     """Merge local changes back into the workspace after syncing, calling on_merged with each file's path and the
     outcome it is reported under after it."""
     if not changed_files:

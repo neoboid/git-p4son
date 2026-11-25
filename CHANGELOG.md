@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- On macOS and Linux, `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT), where they
-  killed it. After a failed rename or a Ctrl-C, p4 no longer leaves half-written files behind. p4 gets 10 seconds to
-  stop, and a second Ctrl-C kills it at once
+- `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT, or a Ctrl-Break on Windows), where
+  they killed it. After a failed rename or a Ctrl-C, p4 no longer leaves half-written files behind. p4 gets 10
+  seconds to stop, and a second Ctrl-C kills it at once
 
 ## 0.13.1
 

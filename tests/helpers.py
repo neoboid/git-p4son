@@ -489,6 +489,8 @@ class FakeP4:
         self.picked: dict[str, int] = {}
         # Files an interrupted sync wrote, ahead of have and picked, with their new content or None for deleted.
         self.landed: dict[str, str | None] = {}
+        # The files real syncs wrote or deleted, in order.
+        self.transferred: list[str] = []
         # Set by interrupt_sync: the revision whose real sync stops, after how many files, and what it raises then.
         self._interrupt: tuple[str, int, BaseException] | None = None
         self.opened: dict[str, tuple[str, str]] = {}
@@ -662,6 +664,8 @@ class FakeP4:
                         f'... headType {kind}', '']
         elif args[:4] == ['-x', '-', 'sync', '-f']:
             out = self._force_sync(files)
+        elif args[:4] == ['-x', '-', 'diff', '-se']:
+            out, stderr = self._diff_have(files, (input or '').splitlines())
         elif args[:2] == ['-x', '-'] and args[2] in ('add', 'edit', 'delete'):
             out, stderr = self._open(files, args[2], args[-1])
         elif args[:3] == ['-x', '-', 'reopen']:
@@ -710,6 +714,19 @@ class FakeP4:
                 files.append(self._rel(path if path.startswith(
                     '//') else _p4_unescape(path)))
         return files, errors
+
+    def _diff_have(self, files: list[str], arguments: list[str]) -> tuple[list[str], list[str]]:
+        """As p4 diff -se: the files whose content isn't their have revision's, by local path, and an error naming
+        the argument of each file the have-list lacks."""
+        had = self.had()
+        out: list[str] = []
+        errors: list[str] = []
+        for path, argument in zip(files, arguments):
+            if path not in had:
+                errors.append(f'{argument} - file(s) not on client.')
+            elif os.path.exists(self._local(path)) and self._content(path) != had[path]:
+                out.append(self._local(path))
+        return out, errors
 
     def _changes(self, numbers: list[int]) -> list[str]:
         """The changes as p4 -ztag changes lists them."""
@@ -981,6 +998,7 @@ class FakeP4:
             else:
                 self._write(path, after[path])
             written.append(path)
+            self.transferred.append(path)
             if len(written) == stop_after:
                 self.landed.update((path, after.get(path)) for path in written)
                 raise _SyncStopped(lines)

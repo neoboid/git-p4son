@@ -256,6 +256,43 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     return result
 
 
+def _empty_base(temp_root: str) -> str:
+    """A shared empty file, the base when no baseline commit exists."""
+    path = os.path.join(temp_root, '.empty_base')
+    if not os.path.exists(path):
+        open(path, 'wb').close()
+    return path
+
+
+def _merge_back(cf: ChangedFile, workspace_dir: str, temp_root: str) -> str | None:
+    """Merge cf's local change back into the workspace; the outcome it is reported under, None for none."""
+    filepath = cf.filepath
+    rel_path = os.path.relpath(filepath, workspace_dir)
+    log.info(f'{rel_path}: base = {cf.base_commit or "(none)"}')
+
+    # Deleted upstream: let the delete stand, local edits stay in git history.
+    if not os.path.exists(filepath):
+        return 'deleted-upstream' if cf.ours_path is not None else None
+
+    if cf.ours_path is None:
+        return 'deleted-locally'
+
+    if cf.is_binary:
+        make_writable([filepath])
+        shutil.copyfile(cf.ours_path, filepath)
+        return 'binary'
+
+    clean, merged = merge_file(filepath, cf.base_path or _empty_base(temp_root), cf.ours_path,
+                               _MERGE_LABELS)
+    make_writable([filepath])
+    with open(filepath, 'wb') as f:
+        f.write(merged)
+
+    if clean:
+        return 'clean'
+    return 'added-both' if cf.added_both else 'conflicts'
+
+
 def merge_changed_files(changed_files: list[ChangedFile],
                         workspace_dir: str,
                         temp_root: str) -> None:
@@ -265,68 +302,24 @@ def merge_changed_files(changed_files: list[ChangedFile],
 
     log.heading('Merging local changes')
 
-    merged_clean = []
-    merged_conflicts = []
-    added_both_conflicts = []
-    binary_file_list = []
-    deleted_upstream_with_local_changes = []
-    deleted_local_added_upstream = []
-
-    # Shared empty file used as base when no baseline commit exists.
-    empty_base_path: str | None = None
-
+    outcomes: dict[str | None, list[str]] = {}
     for cf in changed_files:
-        filepath = cf.filepath
-        rel_path = os.path.relpath(filepath, workspace_dir)
-        log.info(f'{rel_path}: base = {cf.base_commit or "(none)"}')
+        outcome = _merge_back(cf, workspace_dir, temp_root)
+        outcomes.setdefault(outcome, []).append(cf.filepath)
 
-        # Deleted upstream: let the delete stand, local edits stay in git history.
-        if not os.path.exists(filepath):
-            if cf.ours_path is not None:
-                deleted_upstream_with_local_changes.append(filepath)
-            continue
-
-        if cf.ours_path is None:
-            # Deleted locally, modified in Perforce
-            deleted_local_added_upstream.append(filepath)
-            continue
-
-        if cf.is_binary:
-            make_writable([filepath])
-            shutil.copyfile(cf.ours_path, filepath)
-            binary_file_list.append(filepath)
-            continue
-
-        base_path = cf.base_path
-        if base_path is None:
-            if empty_base_path is None:
-                empty_base_path = os.path.join(temp_root, '.empty_base')
-                open(empty_base_path, 'wb').close()
-            base_path = empty_base_path
-
-        clean, merged = merge_file(filepath, base_path, cf.ours_path,
-                                   _MERGE_LABELS)
-        make_writable([filepath])
-        with open(filepath, 'wb') as f:
-            f.write(merged)
-
-        if clean:
-            merged_clean.append(filepath)
-        elif cf.added_both:
-            added_both_conflicts.append(filepath)
-        else:
-            merged_conflicts.append(filepath)
-
+    merged_conflicts = outcomes.get('conflicts', [])
+    added_both_conflicts = outcomes.get('added-both', [])
     groups = [
-        (log.success, merged_clean, 'file', 'files', 'merged successfully'),
+        (log.success, outcomes.get('clean', []),
+         'file', 'files', 'merged successfully'),
         (log.warning, merged_conflicts, 'file', 'files', 'merged with conflicts'),
         (log.warning, added_both_conflicts, 'file was', 'files were',
          'added both locally and in Perforce - no common baseline, conflict markers show both full versions'),
-        (log.warning, binary_file_list, 'binary file has', 'binary files have',
+        (log.warning, outcomes.get('binary', []), 'binary file has', 'binary files have',
          'local changes, local version restored'),
-        (log.warning, deleted_upstream_with_local_changes, 'file', 'files',
+        (log.warning, outcomes.get('deleted-upstream', []), 'file', 'files',
          'deleted in Perforce but modified locally, local edits available via git history'),
-        (log.warning, deleted_local_added_upstream, 'file', 'files',
+        (log.warning, outcomes.get('deleted-locally', []), 'file', 'files',
          'deleted locally but modified in Perforce'),
     ]
     for log_fn, files, singular, plural, text in groups:

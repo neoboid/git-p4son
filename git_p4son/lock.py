@@ -1,4 +1,4 @@
-"""File locks that refuse when busy, and the mark of a lock a caller holds."""
+"""File locks that refuse when busy, and git-p4son's own lock on a git workspace."""
 
 import contextlib
 import os
@@ -56,6 +56,27 @@ def marked_as_locked(workspace_dir: str) -> Iterator[None]:
         # Windows refuses while another process reads the file. The next holder overwrites it.
         with contextlib.suppress(PermissionError):
             holder_file.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def command_lock(workspace_dir: str) -> Iterator[None]:
+    """Hold git-p4son's own lock on a git workspace, raising CommandError if another command holds it.
+
+    A command its holder starts, as a hook does, runs under the holder's lock."""
+    # Its .gitignore keeps the lock file out of git's sight.
+    ensure_config_dir(workspace_dir)
+    busy = 'Another git-p4son command is running in this workspace. Run the command again when it finishes.'
+    with contextlib.ExitStack() as held:
+        try:
+            held.enter_context(
+                file_lock(Path(workspace_dir) / CONFIG_DIR / 'lock', busy))
+        except LockBusy:
+            # Only a busy lock can be a caller's: a mark left by a holder that died names no one.
+            if not locked_by_caller(workspace_dir):
+                raise
+        else:
+            held.enter_context(marked_as_locked(workspace_dir))
+        yield
 
 
 # A lock on the file at path, raising LockBusy(busy) when it is held. It is taken the way jj takes its

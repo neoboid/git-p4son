@@ -85,6 +85,22 @@ class Backend(Protocol):
     def start_sync(self) -> None:
         """Put the sync branch's files in the work tree, ready for the pre-sync hooks and sync's first commit."""
 
+    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool]) -> str:
+        """In place of prepare_sync for an interrupted sync: check sync_branch is where it left it, at tip, and take
+        the start from start, the sync progress's [start]; returns the revision holding the sync branch.
+
+        Raises CommandError, naming the way out, where it isn't."""
+
+    def begin_resume(self) -> None:
+        """Ready the work tree for a resume's passes, once its dry run and pre-sync hooks are past, which leave git
+        and jj as they were."""
+
+    def returns_to(self) -> str | None:
+        """Where the sync returns to, once prepare_sync or resume_sync took its start; None for the sync branch."""
+
+    def files_changed_since(self, commit: str) -> set[str]:
+        """The files on disk that differ from commit, and the untracked ones not ignored, as slash paths."""
+
     def progress_start(self) -> tuple[str, dict[str, str | bool]]:
         """The sync branch prepare_sync chose, and where the sync started, as the sync progress's [start] holds it:
         the backend's keys, then on-sync-branch."""

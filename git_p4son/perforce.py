@@ -581,6 +581,35 @@ class P4SyncOutputProcessor:
         return f'synced {synced_count} files' + (f' ({detail})' if detail else '')
 
 
+_NOT_ON_CLIENT = ' - file(s) not on client.'
+
+
+def p4_off_have(filepaths: list[str], workspace_dir: str) -> tuple[set[str], set[str]]:
+    """Of filepaths, the ones whose content isn't their have revision's, and the ones the have-list lacks.
+
+    Raises CommandError, after listing them, for errors p4 diff -se gives other than the have-list lacking a file."""
+    if not filepaths:
+        return set(), set()
+    res = _run_file_list(['diff', '-se'], filepaths,
+                         workspace_dir, fail_on_returncode=False)
+    errors = _unexpected_p4_errors(res, ('not on client',))
+    if errors:
+        for line in errors:
+            log.info(line)
+        raise CommandError(
+            'p4 diff could not compare the files above with the have-list')
+    # It names a differing file by its local path, and a file it lacks by its argument, escaped or not.
+    by_path = {normalize_workspace_path(
+        f, workspace_dir, allow_outside=True) or f: f for f in filepaths}
+    by_argument = {f: f for f in filepaths} | {
+        p4_file_arg(f): f for f in filepaths}
+    differing = {by_path[path] for path in (normalize_workspace_path(line, workspace_dir, allow_outside=True)
+                                            for line in res.stdout) if path in by_path}
+    lacking = {by_argument[line.removesuffix(_NOT_ON_CLIENT)] for line in res.stderr
+               if line.endswith(_NOT_ON_CLIENT) and line.removesuffix(_NOT_ON_CLIENT) in by_argument}
+    return differing, lacking
+
+
 def p4_head_types(filenames: list[str], workspace_dir: str) -> dict[str, str]:
     """Map local paths to their Perforce head file type; files not found are omitted."""
     if not filenames:

@@ -36,7 +36,7 @@ _Avoid_: main, sync bookmark, depot branch
 
 **Interrupted sync**:
 A sync that stopped before it finished, leaving the workspace partly synced, with its sync progress kept so a later
-sync can finish it.
+sync can finish it, or `sync --abort` give it up.
 _Avoid_: failed sync, partial sync
 
 **Sync progress**:

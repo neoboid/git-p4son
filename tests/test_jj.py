@@ -1382,6 +1382,18 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.assertNotIn('jj bookmark set', out)
         self.assertEqual(self.describe('main', 'commit_id'), moved)
 
+    def test_an_abort_of_a_bookmark_moved_onto_a_later_sync_only_removes_the_sync_progress(self):
+        self.interrupt()
+        subject = 'git-p4son: p4 sync //myclient/...@105'
+        self.jj('new', '--no-edit', 'main', '-m', subject)
+        self.jj('bookmark', 'set', 'main', '-r',
+                f'main+ & description(exact:"{subject}\\n")')
+        moved = self.describe('main', 'commit_id')
+        out = self.p4son('sync', '--abort')
+        self.assertIn('stale', out)
+        self.assertIsNone(self.sync_progress_file())
+        self.assertEqual(self.describe('main', 'commit_id'), moved)
+
     def test_a_crash_before_the_bookmark_moves_counts_the_pass_s_commit(self):
         self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
         with mock.patch('git_p4son.jj.Workspace.move_bookmark', side_effect=KeyboardInterrupt):

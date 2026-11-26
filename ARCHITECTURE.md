@@ -17,12 +17,17 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   (`_resume_sync`), refusing the options that make a plan, a changelist argument, `--branch`, `-u`, `--no-split`,
   `--allow-backwards` and `--force`, even ones that repeat it (`_check_no_plan_options`), and a backend other than the
   one `[start]` names: the backend checks where the interrupted sync left the sync branch (`resume_sync`), the
-  blocking-process and p4-opened checks run, and `_check_resumable_files` stands in for the clean check, sorting git's
-  changes since the recorded tip against the interrupted pass's stored file list, and the uncommitted files of the
-  catch-up passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists, changed in git and
-  matching the have-list, was synced by the interrupted run, and a file merged back before the interruption is expected
-  too; any other changed file, or a listed tracked file that differs from the have-list without being a stored local
-  change, is refused for now. The pre-sync hooks run again (a failing one leaves it all as it was), then
+  blocking-process and p4-opened checks run, and `_sort_files` stands in for the clean check, sorting git's changes
+  since the recorded tip against the interrupted pass's stored file list, and the uncommitted files of the catch-up
+  passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists, changed in git and matching
+  the have-list, was synced by the interrupted run, and a file merged back before the interruption is expected too. A
+  listed tracked file clean in git that differs from the have-list, as after a `git reset --hard` or a local change p4
+  had not reached, is behind it, and so is one p4 deleted that is back; p4's leftovers (`_p4_leftovers`) are the
+  `tmp.<pid>.<hex>.<n>` files beside the pass's files and the pass's adds on disk that a `p4 sync -n` of them still
+  lists (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, found from p4,
+  not git, so ignored folders too. Any other changed file is refused for now. The pre-sync hooks run again (a failing
+  one leaves it all as it was), then `_put_right` writes the files behind the have-list again with
+  `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the deleted ones and clears the leftovers, and
   `resume_sync_passes` runs the interrupted pass with its stored lists (`_resume_pass`) and the later ones as usual
   against the pre-sync commit, and `_end_sync` covers every pass, the passes made before the interruption among them,
   local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's. A

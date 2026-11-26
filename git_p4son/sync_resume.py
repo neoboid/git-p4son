@@ -154,6 +154,15 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
         raise CommandError('The files above are symlinks made or changed while the sync was interrupted, which '
                            'git-p4son cannot keep. Remove them or put them back, then run "git p4son sync" again, '
                            f'{GIVE_UP}.')
+    # git lists an untracked repository as its folder, as it does a tracked file now a folder; a save holds only files.
+    folders = [change.path for change in intersync if os.path.isdir(
+        local_path(change.path, workspace_dir))]
+    if folders:
+        for path in folders:
+            log.info(path)
+        raise CommandError('The folders above were made while the sync was interrupted where git-p4son can keep only '
+                           'files: a git repository, or a folder in place of a file. Remove them or move them out of '
+                           f'the workspace, then run "git p4son sync" again, {GIVE_UP}.')
     # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
     # keeps it: its refusal is expected, and the end lists it as not synced.
     ignore = sorted(path for mode, path in lists.files if mode != 'add' and path not in tracked and path not in changed

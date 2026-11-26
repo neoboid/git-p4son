@@ -385,12 +385,13 @@ class Workspace:
         """The change IDs of commit's visible children."""
         return self._changes(f'children({commit})')
 
-    def changes_above(self, commit: str) -> list[tuple[str, str]]:
-        """The changes from commit, not included, up to the working change, as (change ID, first line of the
+    def changes_above(self, commit: str, top: str = '@') -> list[tuple[str, str, str]]:
+        """The changes from commit, not included, up to top, oldest first, as (commit ID, change ID, first line of the
         description)."""
-        lines = self.run('log', '-r', f'{commit}..@', '--no-graph',
-                         '-T', 'change_id ++ " " ++ description.first_line() ++ "\n"').stdout
-        return [(change, description) for change, _, description in (line.partition(' ') for line in lines)]
+        lines = self.run('log', '-r', f'{commit}..{top}', '--reversed', '--no-graph', '-T',
+                         'commit_id ++ " " ++ change_id ++ " " ++ description.first_line() ++ "\\n"').stdout
+        return [(commit_id, change, description) for commit_id, change, description
+                in (line.split(' ', 2) for line in lines)]
 
     def existing_changes(self, change_ids: list[str]) -> set[str]:
         """The change_ids jj still has."""

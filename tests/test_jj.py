@@ -150,6 +150,14 @@ class TestJjBackend(JjRepoTestCase):
             self.assertEqual(backend.progress_start(), (
                 'main', {'backend': 'jj', 'change': change[:12], 'edited': False, 'on-sync-branch': False}))
 
+    def test_changes_above_are_listed_oldest_first_with_their_commits(self):
+        def change_of(revision):
+            return self.jj('--ignore-working-copy', 'log', '-r', revision, '--no-graph', '-T', 'change_id')
+        with self.operation() as workspace:
+            above = workspace.changes_above(self.commit_of('main'))
+        self.assertEqual(above, [(self.commit_of('feat'), change_of('feat'), 'feature'),
+                                 (self.commit_of('@'), change_of('@'), '')])
+
     def test_answers_from_the_tip(self):
         with self.operation() as workspace:
             backend = JjBackend(workspace)
@@ -1348,11 +1356,44 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.jj('new', 'main-')
         self.p4son_fails('sync', message=f'jj edit {snapshot[:12]}')
 
-    def test_a_resume_refuses_a_described_change_above_the_recorded_commit_for_now(self):
-        self.interrupt()
+    def test_a_described_change_above_the_bookmark_is_unwound_and_abandoned(self):
+        snapshot = self.interrupt()
         self.jj('describe', '-m', 'Mine')
-        out = self.p4son_fails('sync', message='after the interrupted sync')
-        self.assertIn('Mine', out)
+        commit = self.describe('@', 'commit_id')
+        out = self.p4son('sync')
+        self.assertEqual(out.count(f'jj show {commit[:12]}  Mine'), 2)
+        self.assertEqual(self.jj(
+            'log', '-r', f'present({snapshot})', '--no-graph', '-T', 'change_id'), '')
+        self.assertEqual(self.describe(commit[:12]), 'Mine')
+        self.assertEqual(self.describe('feat-'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(
+            self.git('rev-parse', 'refs/git-p4son/intersync-commits'), commit)
+
+    def test_a_bookmark_moved_onto_a_later_sync_is_stale_sync_progress(self):
+        self.interrupt()
+        subject = 'git-p4son: p4 sync //myclient/...@105'
+        self.jj('new', '--no-edit', 'main', '-m', subject)
+        self.jj('bookmark', 'set', 'main', '-r',
+                f'main+ & description(exact:"{subject}\\n")')
+        moved = self.describe('main', 'commit_id')
+        out = self.p4son_fails('sync', message='stale.*git p4son sync --abort')
+        self.assertIn(subject, out)
+        self.assertNotIn('jj bookmark set', out)
+        self.assertEqual(self.describe('main', 'commit_id'), moved)
+
+    def test_a_crash_before_the_bookmark_moves_counts_the_pass_s_commit(self):
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        with mock.patch('git_p4son.jj.Workspace.move_bookmark', side_effect=KeyboardInterrupt):
+            self.interrupted_sync()
+        self.p4.transferred.clear()
+        out = self.p4son('sync')
+        self.assertIn("the interrupted pass's own commit", out)
+        self.assertEqual(self.p4.transferred, [])
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('main-'), 'Add config')
+        self.assertEqual(self.describe('@-'), 'Change a')
 
     def test_editing_a_change_returns_to_it(self):
         self.jj('edit', 'feat')

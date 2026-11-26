@@ -12,6 +12,7 @@ from .config import ConfigError, get_setting
 from .git_backend import GitBackend
 from .jj_backend import JjBackend
 from .lock import command_lock
+from .sync_progress import AboveCommit
 from .log import log
 from .words import Words
 
@@ -85,9 +86,10 @@ class Backend(Protocol):
     def start_sync(self) -> None:
         """Put the sync branch's files in the work tree, ready for the pre-sync hooks and sync's first commit."""
 
-    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool]) -> str:
-        """In place of prepare_sync for an interrupted sync: check sync_branch is where it left it, at tip, and take
-        the start from start, the sync progress's [start]; returns the revision holding the sync branch.
+    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool], pass_subject: str | None) -> str:
+        """In place of prepare_sync for an interrupted sync: check sync_branch is where it left it, at tip or above it,
+        and take the start from start, the sync progress's [start]; returns the revision holding the sync branch.
+        pass_subject, the next pass's commit subject, tells jj's bookmark moved to the pass's own commit.
 
         Raises CommandError, naming the way out, where it isn't."""
 
@@ -97,6 +99,16 @@ class Backend(Protocol):
 
     def returns_to(self) -> str | None:
         """Where the sync returns to, once prepare_sync or resume_sync took its start; None for the sync branch."""
+
+    def commits_above(self, tip: str) -> list[AboveCommit]:
+        """The commits above tip a resume sorts, oldest first, after resume_sync: git's on the sync branch, jj's
+        described changes."""
+
+    def take_crash_commit(self, commit: str) -> None:
+        """Count commit, the next pass's own, made just before the interruption, as the sync branch's."""
+
+    def unwind(self, tip: str) -> None:
+        """Take the sync branch back to tip, the commits above it unwound and the files as they are."""
 
     def files_changed_since(self, commit: str) -> set[str]:
         """The files on disk that differ from commit, and the untracked ones not ignored, as slash paths."""

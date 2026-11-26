@@ -982,6 +982,19 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.read('x.log'), 'p4\n')
         self.assertIsNone(self.sync_progress_file())
 
+    def test_a_crash_window_resume_keeps_no_git_ignored_file_for_a_pass_already_made(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.commit_sync(101, {'x.log': 'x1\n'})
+        self.p4.submit(102, {'a0.txt': 'a\n', 'x.log': 'x2\n'})
+        self.interrupted_in_the_crash_window('102')
+        self.make_writable('x.log')
+        out = self.sync()
+        self.assertIn("the interrupted pass's own commit", out)
+        self.assertNotIn('Keeping the git-ignored files', out)
+        self.assertEqual(self.synced_commits()[-1], 102)
+        self.assertIsNone(self.sync_progress_file())
+
     def interrupt_before_an_add(self):
         """Have sync 101 interrupted before p4 reaches e.txt, which CL 101 adds; the sync progress file it left."""
         self.p4.submit(101, {'d.txt': 'd\n', 'e.txt': 'e\n', 'f.txt': 'f\n'})

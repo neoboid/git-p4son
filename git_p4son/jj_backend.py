@@ -377,7 +377,9 @@ class JjBackend:
         if sync is None or sync.finished is None:
             return
         workspace = self.workspace
-        # A snapshot change still holds the files as Perforce left them; once jj is past it, nothing needs it.
+        # A snapshot change still holds the files as Perforce left them; once jj is past it, nothing needs it. With no
+        # pass left to commit, jj is still on it, and an unwound change, still described, becomes a plain one.
+        workspace.undescribe_working(sync.snapshots)
         workspace.abandon_unless_working(sync.snapshots)
         if sync.on_sync_branch:
             return

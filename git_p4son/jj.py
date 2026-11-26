@@ -531,6 +531,12 @@ class Workspace:
             _run_live(self.directory, 'abandon', '-r',
                       f'({changes_revset(change_ids)}) ~ @')
 
+    def undescribe_working(self, change_ids: list[str]) -> None:
+        """Clear the working change's description if it is one of change_ids and has one, so it holds only its files."""
+        if change_ids and _run_live(self.directory, 'log', '-r', f'({changes_revset(change_ids)}) & @ ~ '
+                                    'description(exact:"")', '--no-graph', '-T', 'change_id').stdout:
+            _run_live(self.directory, 'describe', '-r', '@', '-m', '')
+
     def change_exists(self, change_id: str) -> bool:
         return bool(_run_live(self.directory, 'log', '-r', changes_revset([change_id]), '--no-graph',
                               '-T', 'change_id').stdout)

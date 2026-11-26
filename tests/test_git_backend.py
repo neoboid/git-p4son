@@ -409,7 +409,7 @@ class TestGitBackendSync(GitRepoTestCase):
         mine = self.git('rev-parse', 'HEAD')
         self.assertEqual(backend.commits_above(tip), [
                          (mine, f'git commit -c {mine[:7]}', 'Mine')])
-        backend.unwind(tip)
+        backend.resume_at(tip)
         self.assertEqual(self.git('rev-parse', 'HEAD'), tip)
         self.assertEqual(self.git('status', '--porcelain'), '?? a.txt')
 

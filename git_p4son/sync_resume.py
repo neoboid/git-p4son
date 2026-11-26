@@ -21,8 +21,8 @@ from .sync_progress import (
     workspace_path, write_sync_progress,
 )
 from .sync_merge import IntersyncChange, WritableSyncFileSet
-from .writable import is_writable_mode, make_writable
-from .perforce import p4_off_have, p4_sync_pending, p4_sync_to_have, is_p4_temp_file
+from .writable import is_user_writable, is_writable_mode, make_read_only, make_writable
+from .perforce import ClobberMode, p4_off_have, p4_sync_pending, p4_sync_to_have, is_p4_temp_file
 from .sync_passes import (
     catch_up_passes, check_p4_workspace_clean, end_sync, finish_on_branch, OnSyncBranch, run_passes,
     run_pre_sync_hooks, stage_again, sync_settings, SyncContext, SyncPass, SyncSettings,
@@ -41,11 +41,14 @@ class _Intersync:
 @dataclass(frozen=True)
 class _PutRight:
     """What a resume puts right before its passes, as stored paths: files to write again as their have revision,
-    files p4 deleted that are back, p4's leftovers, and the changes made while it was interrupted."""
+    files p4 deleted that are back, p4's leftovers, the changes made while it was interrupted, the pass's tracked
+    files made writable since without an edit, and its git-ignored ones made writable since, which are kept."""
     resync: list[str]
     remove: list[str]
     leftovers: list[str]
     intersync: list[_Intersync] = field(default_factory=list)
+    read_only: list[str] = field(default_factory=list)
+    ignore: list[str] = field(default_factory=list)
 
 
 def _pass_of(progress_pass: ProgressPass) -> SyncPass:
@@ -78,7 +81,7 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     return leftovers
 
 
-def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) -> _PutRight:
+def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberMode, workspace_dir: str) -> _PutRight:
     """Sort the files against the interrupted sync: those it synced, those behind the have-list, and p4's leftovers.
 
     Every other file changed since is one the user changed while the sync was interrupted."""
@@ -106,6 +109,10 @@ def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) ->
     resync: list[str] = []
     remove: list[str] = []
     unsorted: list[str] = []
+    in_pass = {path for _, path in lists.files} if lists else set()
+    # noclobber refuses a writable file, and a resumed pass doesn't prepare its files again, as a fresh one would.
+    noclobber = clobber_mode is ClobberMode.NOCLOBBER
+    read_only: list[str] = []
     for path in sorted(changed | set(judged)):
         if path in leftovers or path in changed and path in merged:
             continue
@@ -116,6 +123,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) ->
                 resync.append(path)
             elif modes[path] == 'del' and on_disk and local[path] in lacking:
                 remove.append(path)
+            elif noclobber and path in in_pass and on_disk and is_user_writable(local[path]):
+                read_only.append(path)
             continue
         if path not in modes:
             unsorted.append(path)
@@ -129,7 +138,6 @@ def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) ->
     # A file p4 has not transferred yet was edited as the recorded tip had it, local change included.
     pending: set[str] = set()
     if interrupted and lists:
-        in_pass = {path for _, path in lists.files}
         pending = {workspace_path(entry.filepath, workspace_dir) for entry in p4_sync_pending(
             [local[path] for path in unsorted if path in in_pass], _pass_of(interrupted).revision, workspace_dir)}
     intersync = [_Intersync(path, progress.tip if path in pending else 'have',
@@ -145,7 +153,11 @@ def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) ->
         raise CommandError('The files above are symlinks made or changed while the sync was interrupted, which '
                            'git-p4son cannot keep. Remove them or put them back, then run "git p4son sync" again, '
                            f'{GIVE_UP}.')
-    return _PutRight(resync, remove, sorted(leftovers), intersync)
+    # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
+    # keeps it: its refusal is expected, and the end lists it as not synced.
+    ignore = sorted(path for mode, path in lists.files if mode != 'add' and path not in tracked and path not in changed
+                    and path not in lists.ignored and is_user_writable(local[path])) if noclobber and lists else []
+    return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
 
 def _log_paths(heading: str, paths: list[str]) -> None:
@@ -217,9 +229,9 @@ def _saved_changes(progress: SyncProgress, workspace_dir: str) -> list[Intersync
 
 
 def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = False) -> None:
-    """Write the files behind the have-list again, remove those p4 deleted that are back, clear p4's leftovers, and
-    put the saved changes' files back as the sync expects them, the recorded tip's content outside the pass; with
-    dry_run, only list them, with the changes it would save."""
+    """Write the files behind the have-list again, remove those p4 deleted that are back, clear p4's leftovers, put
+    the saved changes' files back as the sync expects them, the recorded tip's content outside the pass, and make the
+    pass's files made writable since read-only again; with dry_run, only list them, with the changes it would save."""
     if dry_run and put.intersync:
         _log_paths('Changes made since the interrupted sync, to save', [
                    change.path for change in put.intersync])
@@ -242,6 +254,23 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
         if not dry_run:
             _remove(put.leftovers, workspace_dir)
             log.success(f'{plural(len(put.leftovers), "file")} cleared')
+    if put.read_only:
+        _log_paths('Files made writable since, to make read-only again' if dry_run
+                   else 'Making read-only again the files made writable since', put.read_only)
+        if not dry_run:
+            make_read_only(local_paths(put.read_only, workspace_dir))
+            log.success(f'{plural(len(put.read_only), "file")} made read-only')
+    if put.ignore:
+        _log_paths('Git-ignored files made writable since, to keep' if dry_run
+                   else 'Keeping the git-ignored files made writable since', put.ignore)
+
+
+def _keep_ignored(progress: SyncProgress, paths: list[str], workspace_dir: str) -> None:
+    """Add paths to the interrupted pass's stored ignored files, so its p4 sync expects their refusal."""
+    lists = progress.passes[0].lists if progress.passes else None
+    if paths and lists is not None:
+        lists.ignored = [*lists.ignored, *paths]
+        write_sync_progress(progress, workspace_dir)
 
 
 def _log_unwound(commits: list[AboveCommit]) -> None:
@@ -413,7 +442,10 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
     depot_root = progress.depot_root
     check_no_blocking_processes(workspace_dir, args.ignore_blocking_processes)
     check_p4_workspace_clean(depot_root, workspace_dir, sync_revision)
-    put = _sort_files(progress, backend, workspace_dir)
+    # The client spec's line endings and clobber option, with the depot root as the interrupted sync planned it.
+    settings = dataclasses.replace(sync_settings(
+        workspace_dir), depot_root=depot_root)
+    put = _sort_files(progress, backend, settings.clobber_mode, workspace_dir)
     if args.dry_run:
         _put_right(put, progress.tip, workspace_dir, dry_run=True)
         log.heading('Where sync returns to')
@@ -424,9 +456,6 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
         workspace_dir, progress.pre_sync_commit).last_synced
     run_pre_sync_hooks(last_synced, depot_root,
                        workspace_dir, backend.words.tool)
-    # The client spec's line endings and clobber option, with the depot root as the interrupted sync planned it.
-    client = sync_settings(workspace_dir)
-    settings = dataclasses.replace(client, depot_root=depot_root)
 
     def run() -> SyncState:
         # The sync branch moves before the records: jj's next resume takes a bookmark on the pass's commit, not one
@@ -440,6 +469,7 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
             _take_crash_commit(progress, crash, workspace_dir)
         _save_intersync(put.intersync, progress, workspace_dir)
         _put_right(put, progress.tip, workspace_dir)
+        _keep_ignored(progress, put.ignore, workspace_dir)
         _complete_saves(progress, workspace_dir)
         if abort_to is not None:
             _abort(progress, abort_to, workspace_dir)

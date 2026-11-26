@@ -94,6 +94,8 @@ class PassLists:
     ignored: list[str] = field(default_factory=list)
     # The tracked files allwrite refuses, each to its depot path.
     replace: dict[str, str] = field(default_factory=dict)
+    # Set once a resume put the files right, after which a file p4 has not reached is at its have revision.
+    put_right: bool = False
 
 
 @dataclass
@@ -119,6 +121,8 @@ class SyncProgress:
     uncommitted: list[tuple[str, str]] = field(default_factory=list)
     # The commits a resume unwound from above the tip, named again at the end.
     unwound: list[AboveCommit] = field(default_factory=list)
+    # Set once sync --abort replaced the passes left, which then take the files back to the last commit.
+    aborting: bool = False
     changed: list[LocalChange] = field(default_factory=list)
     merged: list[MergedFile] = field(default_factory=list)
     # Merged after the local changes, oldest first.
@@ -298,6 +302,7 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         uncommitted=[(mode, path)
                      for mode, path in data.get('uncommitted', [])],
         unwound=[AboveCommit(*entry) for entry in data.get('unwound', [])],
+        aborting=data.get('aborting', False),
         changed=[_read_change(item) for item in end.get('changed', [])],
         merged=[MergedFile(item['path'], item['outcome'])
                 for item in end.get('merged', [])],
@@ -331,6 +336,7 @@ def format_sync_progress(progress: SyncProgress) -> str:
              *_array('uncommitted', [list(entry)
                      for entry in progress.uncommitted]),
              *_array('unwound', [list(entry) for entry in progress.unwound]),
+             *([_line('aborting', True)] if progress.aborting else []),
              # Only the end is left; an array of tables can't say it has none.
              *([] if progress.passes else [_line('passes', [])]),
              '', '[start]', *(_line(key, value)
@@ -357,7 +363,9 @@ def format_sync_progress(progress: SyncProgress) -> str:
                       *_array('changed', [_change(change)
                               for change in lists.changed]),
                       *_array('ignored', lists.ignored),
-                      *_array('replace', [list(entry) for entry in lists.replace.items()])]
+                      *_array('replace', [list(entry)
+                              for entry in lists.replace.items()]),
+                      *([_line('put-right', True)] if lists.put_right else [])]
     for save in progress.intersync:
         lines += ['', '[[intersync]]', _line('commit', save.commit), _line('complete', save.complete),
                   *_array('files', [{'path': file.path, 'base': file.base} for file in save.files])]
@@ -397,5 +405,5 @@ def _read_pass(item: dict[str, Any]) -> ProgressPass:
             changed=[_read_change(change)
                      for change in item.get('changed', [])],
             ignored=item.get('ignored', []),
-            replace=dict(item.get('replace', [])))
+            replace=dict(item.get('replace', [])), put_right=item.get('put-right', False))
     return ProgressPass(item['changelist'], item['label'], item.get('exact', False), item.get('subject'), lists)

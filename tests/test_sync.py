@@ -860,6 +860,22 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.git('show', 'main:d.txt'), 'd1')
         self.assertIsNone(self.sync_progress_file())
 
+    def test_an_edit_after_a_putting_right_keeps_the_local_change_of_a_file_p4_had_not_reached(self):
+        self.commit_sync(101, {'a.txt': 'a1\na2\na3\na4\n'})
+        self.commit_local_changes('a.txt')
+        self.p4.submit(
+            102, {'0.txt': '0\n', 'a.txt': 'a1\na2\na3\na4\nmore\n'})
+        self.p4.interrupt_sync('@102', after=1)
+        self.interrupted_sync('102')
+        with mock.patch('git_p4son.sync_resume._resume_sync_passes', side_effect=KeyboardInterrupt):
+            self.interrupted_sync()
+        self.assertEqual(self.read('a.txt'), 'a1\na2\na3\na4\n')
+        self.edit('a.txt', 'a1\na2\nmine\na3\na4\n')
+        self.sync()
+        self.assertEqual(self.read('a.txt'),
+                         'local\na1\na2\nmine\na3\na4\nmore\n')
+        self.assertIsNone(self.sync_progress_file())
+
     def test_a_local_change_p4_had_not_reached_is_resynced_and_merged_back(self):
         self.commit_local_changes('b.txt')
         self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
@@ -1071,10 +1087,11 @@ class TestSyncIntersync(SyncTestCase):
         self.p4.interrupt_sync('@102', after=1)
         out = self.interrupted_sync()
         self.assertEqual(len(out['intersync']), 1)
-        self.edit('e.txt', 'second\nlocal\ne1\nupstream\n')
+        self.edit('b.txt', f'second\n{self.read("b.txt")}')
         self.sync()
         self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\nfirst\n')
-        self.assertEqual(self.read('e.txt'), 'second\nlocal\ne1\nupstream\n')
+        self.assertEqual(self.read('b.txt'), 'second\nlocal\nb1\n')
+        self.assertEqual(self.read('e.txt'), 'local\ne1\nupstream\n')
         self.assertIsNone(self.sync_progress_file())
 
     def test_a_symlink_made_since_is_refused(self):
@@ -1232,8 +1249,7 @@ class TestSyncAbort(SyncTestCase):
         self.assertEqual([(p['changelist'], p['label'])
                          for p in progress['passes']], [(101, 'last synced')])
         out = self.sync()
-        self.assertIn(
-            'Resuming the interrupted sync: 1 changelist left, to CL 101', out)
+        self.assertIn('Finishing the interrupted abort: back to CL 101', out)
         self.assertEqual(self.synced_commits(), [101])
         self.assertEqual(self.p4.have, 101)
         self.assertFalse(any(os.path.exists(os.path.join(self.ws, name))
@@ -1276,6 +1292,22 @@ class TestSyncAbort(SyncTestCase):
         self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
         self.assertFalse(any(os.path.exists(os.path.join(self.ws, name))
                          for name in ('f.txt', 'g.txt')))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_edit_while_an_abort_is_interrupted_comes_back_as_only_the_edit(self):
+        self.p4.submit(
+            102, {'b2.txt': 'b2\n', 'c2.txt': 'c2\n', 'e.txt': 'e1\ne2\n'})
+        self.p4.interrupt_sync('@102', after=3)
+        self.interrupted_sync('101', '102')
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync('--abort')
+        self.assertTrue(progress['aborting'])
+        self.assertEqual(self.read('e.txt'), 'e1\ne2\n')
+        self.edit('e.txt', 'mine\ne1\ne2\n')
+        out = self.sync()
+        self.assertIn('Finishing the interrupted abort: back to CL 101', out)
+        self.assertEqual(self.read('e.txt'), 'mine\ne1\n')
+        self.assertEqual(self.synced_commits(), [101])
         self.assertIsNone(self.sync_progress_file())
 
     def test_an_abort_in_the_crash_window_keeps_the_pass_s_commit(self):

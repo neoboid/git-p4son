@@ -518,7 +518,7 @@ It goes through the same checks as a resume. With only the merge-back left, it f
 refuses after the workspace's first sync, as there is no synced changelist to go back to; finish that one with
 `git p4son sync`. With stale sync progress, it only removes it, naming any changes a resume had saved aside, which
 stay under `refs/git-p4son/intersync-changes`. An abort that is itself interrupted is finished by a plain
-`git p4son sync`, which then says it is resuming the interrupted sync.
+`git p4son sync`, which says it is finishing the interrupted abort.
 
 ### Cherry-Pick Command
 

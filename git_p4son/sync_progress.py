@@ -18,6 +18,8 @@ from .toml_writer import format_key, format_value
 VERSION = 1
 # Keeps the commits of the changes made while a sync is interrupted alive, until the sync finishes.
 INTERSYNC_REF = 'refs/git-p4son/intersync-changes'
+# The way to give up an interrupted sync, named beside each way to finish it.
+GIVE_UP = 'or "git p4son sync --abort" to give up the interrupted sync'
 
 
 class StaleSyncProgress(CommandError):
@@ -265,7 +267,8 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         return None
     if data['version'] > VERSION:
         raise CommandError(f'The interrupted sync\'s progress in {CONFIG_DIR}/{FILE_NAME} was written by git-p4son '
-                           f'{data["written-by"]}, which is newer than this one. Upgrade git-p4son to finish it.')
+                           f'{data["written-by"]}, which is newer than this one. Upgrade git-p4son to finish or abort '
+                           'it.')
     end = data.get('end', {})
     return SyncProgress(
         sync_branch=data['sync-branch'], depot_root=data['depot-root'], tip=data['tip'],
@@ -287,7 +290,7 @@ def check_no_interrupted_sync(workspace_dir: str) -> None:
     """Raise CommandError while an interrupted sync waits to be finished, for a command that works on the files."""
     if os.path.exists(progress_path(workspace_dir)):
         raise CommandError('The files on disk are partly synced, as an interrupted sync is not finished. Run '
-                           '"git p4son sync" to finish it first.')
+                           f'"git p4son sync" to finish it first, {GIVE_UP}.')
 
 
 def remove_sync_progress(workspace_dir: str) -> None:

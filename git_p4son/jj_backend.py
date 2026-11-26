@@ -11,7 +11,7 @@ from .git import (
     commit_all, files_changed_since, get_head_commit, get_local_changes, is_ancestor, is_sync_subject, merges_above,
 )
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
-from .sync_progress import AboveCommit, StaleSyncProgress
+from .sync_progress import GIVE_UP, AboveCommit, StaleSyncProgress
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .words import (
@@ -274,13 +274,13 @@ class JjBackend:
                     raise StaleSyncProgress()
             raise CommandError(f'jj bookmark "{sync_branch}" moved since the interrupted sync left it at {tip[:12]}. '
                                f'Put it back with "jj bookmark set {sync_branch} -r {tip} --allow-backwards", then run '
-                               '"git p4son sync" again.')
+                               f'"git p4son sync" again, {GIVE_UP}.')
         if not is_ancestor(tip, workspace.working.commit, workspace.directory):
             children = workspace.children(tip)
             back = (' or '.join(f'"jj edit {change[:12]}"' for change in children) if children
                     else f'"jj new {tip[:12]}"')
             raise CommandError(f'The working change is not above {sync_branch}, where the interrupted sync left its '
-                               f'files. Return to them with {back}, then run "git p4son sync" again.')
+                               f'files. Return to them with {back}, then run "git p4son sync" again, {GIVE_UP}.')
         above = workspace.changes_above(tip)
         log.success(f'At {tip[:12]}')
         self._sync = _Sync(sync_branch, tip, str(start['change']), bool(start['edited']),
@@ -354,8 +354,8 @@ class JjBackend:
         if resumable:
             back = '' if sync.on_sync_branch else f', which rebases your changes and returns to {sync.start}'
             log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
-                        f'Perforce left them. Run "git p4son sync" to finish it{back}. After a "jj edit" elsewhere, '
-                        'return to that working change with "jj edit" first.')
+                        f'Perforce left them. Run "git p4son sync" to finish it{back}, {GIVE_UP}. After a "jj edit" '
+                        'elsewhere, return to that working change with "jj edit" first.')
         elif not sync.on_sync_branch:
             log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
                         f'Perforce left them, and nothing is rebased. Your changes are as they were; return with '

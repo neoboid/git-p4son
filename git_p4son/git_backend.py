@@ -15,7 +15,7 @@ from .git import (
 )
 from .lib import check_git_workspace_clean
 from .sync_branch import choose_sync_branch, sync_branch_name
-from .sync_progress import AboveCommit
+from .sync_progress import GIVE_UP, AboveCommit
 from .log import log
 from .words import (
     Words, base_below_sync_tip, base_not_below, has_merge, named_base, no_sync_branch, not_on_sync_tip, several_nearest,
@@ -228,11 +228,11 @@ class GitBackend:
             where = 'HEAD is detached' if current is None else f'{current} is checked out'
             raise CommandError(f'The interrupted sync left its files on {sync_branch}, but {where}. Return to it with '
                                f'"git switch {sync_branch}", which carries the files back, then run "git p4son sync" '
-                               'again.')
+                               f'again, {GIVE_UP}.')
         head = get_head_commit(workspace_dir)
         if not is_ancestor(tip, head, workspace_dir):
             raise CommandError(f'{sync_branch} no longer holds {tip[:7]}, where the interrupted sync left it. Put it '
-                               f'back with "git reset --keep {tip}", then run "git p4son sync" again.')
+                               f'back with "git reset --keep {tip}", then run "git p4son sync" again, {GIVE_UP}.')
         log.success(f'At {tip[:7]}' if head == tip else f'Above {tip[:7]}')
         branch = start.get('branch')
         commit = start.get('commit', tip)
@@ -288,7 +288,7 @@ class GitBackend:
         if resumable:
             back = '' if sync.on_sync_branch else f', which returns to {sync.start.name}'
             log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. Run "git p4son sync" to '
-                        f'finish it{back}.')
+                        f'finish it{back}, {GIVE_UP}.')
         elif not sync.on_sync_branch:
             log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. '
                         f'Return to {sync.start.name} once it is sorted out.')

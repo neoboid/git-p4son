@@ -295,25 +295,17 @@ class JjBackend:
         return [AboveCommit(commit, f'jj show {commit[:12]}', description)
                 for commit, _, description in self._prepared().above if description]
 
-    def take_crash_commit(self, commit: str) -> None:
-        """Make commit, the pass's own, the sync bookmark's, and keep it from the snapshot changes after_lock
-        abandons."""
+    def resume_at(self, commit: str) -> None:
+        """Put the sync bookmark and git's HEAD at commit, its change kept from the snapshots after_lock abandons."""
         sync = self._prepared()
         if sync.bookmark_at != commit:
             self.workspace.move_bookmark(sync.bookmark, commit, sync.commit)
         sync.commit = commit
-        change = next(change for above, change,
-                      _ in sync.above if above == commit)
+        own = {change for above, change, _ in sync.above if above == commit}
         sync.snapshots = [
-            snapshot for snapshot in sync.snapshots if snapshot != change]
-
-    def unwind(self, tip: str) -> None:
-        """Nothing to do: the changes above tip are abandoned with the snapshot changes, once jj is past them."""
-
-    def begin_resume(self) -> None:
-        """Point git's HEAD at the recorded commit, which changes no file, as jj keeps it at the working change's
-        parent."""
-        self.workspace.detach_head(self._prepared().commit)
+            snapshot for snapshot in sync.snapshots if snapshot not in own]
+        # jj keeps git's HEAD at the working change's parent; moving it there changes no file.
+        self.workspace.detach_head(commit)
 
     def returns_to(self) -> str | None:
         sync = self._prepared()

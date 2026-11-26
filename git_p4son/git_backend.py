@@ -245,15 +245,10 @@ class GitBackend:
         return [AboveCommit(commit, f'git commit -c {commit[:7]}', subject)
                 for commit, subject in commits_above(tip, 'HEAD', self.workspace_dir)]
 
-    def take_crash_commit(self, commit: str) -> None:
-        """Nothing to do: the sync branch is at the commit already."""
-
-    def unwind(self, tip: str) -> None:
-        """Move the sync branch back to tip, the files as they are."""
-        reset_branch_keeping_files(tip, self.workspace_dir)
-
-    def begin_resume(self) -> None:
-        """Nothing to do: resume_sync found HEAD on the sync branch at the recorded tip."""
+    def resume_at(self, commit: str) -> None:
+        """Move the sync branch back to commit, the files as they are, where commits above it are unwound."""
+        if get_head_commit(self.workspace_dir) != commit:
+            reset_branch_keeping_files(commit, self.workspace_dir)
 
     def returns_to(self) -> str | None:
         sync = self._prepared()

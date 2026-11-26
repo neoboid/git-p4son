@@ -273,9 +273,8 @@ def _sort_commits(progress: SyncProgress, subject: str | None,
     return crash, user
 
 
-def _take_crash_commit(progress: SyncProgress, commit: str, backend: Backend, workspace_dir: str) -> None:
+def _take_crash_commit(progress: SyncProgress, commit: str, workspace_dir: str) -> None:
     """Count commit, the interrupted pass's own, as the pass made, and record it."""
-    backend.take_crash_commit(commit)
     lists = progress.passes[0].lists
     assert lists is not None, 'a pass is recorded with its lists before its p4 sync'
     prep = WritableSyncFileSet(synced=local_paths(
@@ -284,12 +283,12 @@ def _take_crash_commit(progress: SyncProgress, commit: str, backend: Backend, wo
         workspace_dir)).pass_made(prep, commit)
 
 
-def _unwind(progress: SyncProgress, commits: list[AboveCommit], backend: Backend, workspace_dir: str) -> None:
-    """Keep the user's commits above the tip under a ref, take the sync branch back to the tip, and record them."""
+def _unwind(progress: SyncProgress, commits: list[AboveCommit], at: str, backend: Backend, workspace_dir: str) -> None:
+    """Keep the user's commits above the tip under a ref, take the sync branch back to at, and record them."""
     log.heading(
         f'Unwinding {plural(len(commits), "commit")} made since the interrupted sync')
     set_ref(INTERSYNC_COMMITS_REF, commits[-1].commit, workspace_dir)
-    backend.unwind(progress.tip)
+    backend.resume_at(at)
     progress.unwound = commits
     write_sync_progress(progress, workspace_dir)
     log.success(
@@ -428,11 +427,15 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
     settings = dataclasses.replace(client, depot_root=depot_root)
 
     def run() -> SyncState:
-        if crash:
-            _take_crash_commit(progress, crash, backend, workspace_dir)
+        # The sync branch moves before the records: jj's next resume takes a bookmark on the pass's commit, not one
+        # behind it.
+        at = crash or progress.tip
         if unwind:
-            _unwind(progress, unwind, backend, workspace_dir)
-        backend.begin_resume()
+            _unwind(progress, unwind, at, backend, workspace_dir)
+        else:
+            backend.resume_at(at)
+        if crash:
+            _take_crash_commit(progress, crash, workspace_dir)
         _save_intersync(put.intersync, progress, workspace_dir)
         _put_right(put, progress.tip, workspace_dir)
         _complete_saves(progress, workspace_dir)

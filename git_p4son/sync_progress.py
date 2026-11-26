@@ -16,6 +16,8 @@ from .sync_merge import ChangedFile, WritableSyncFileSet
 from .toml_writer import format_key, format_value
 
 VERSION = 1
+# Keeps the commits of the changes made while a sync is interrupted alive, until the sync finishes.
+INTERSYNC_REF = 'refs/git-p4son/intersync-changes'
 _REPLACE_ATTEMPTS = 5
 FILE_NAME = 'sync-progress.toml'
 
@@ -37,6 +39,23 @@ class MergedFile:
     """A local change merged back, with the outcome the end reports it under, such as conflicts."""
     path: str
     outcome: str
+
+
+@dataclass(frozen=True)
+class IntersyncFile:
+    """A file changed while the sync was interrupted, and what its change is measured from: "have", the have revision's
+    content its save keeps, or a commit's."""
+    path: str
+    base: str
+
+
+@dataclass
+class IntersyncSave:
+    """The changes made while the sync was interrupted, saved in commit: each file's content under ours/, and under
+    have/ the have revision's, once complete."""
+    commit: str
+    files: list[IntersyncFile]
+    complete: bool = False
 
 
 @dataclass
@@ -74,6 +93,8 @@ class SyncProgress:
     uncommitted: list[tuple[str, str]] = field(default_factory=list)
     changed: list[LocalChange] = field(default_factory=list)
     merged: list[MergedFile] = field(default_factory=list)
+    # Merged after the local changes, oldest first.
+    intersync: list[IntersyncSave] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
     not_synced: list[str] = field(default_factory=list)
     # Filled in writable mode only.
@@ -137,6 +158,20 @@ class ProgressRecorder:
             self.progress.merged.append(MergedFile(path, outcome))
         self._write()
 
+    def intersync_merged(self, filepath: str, outcome: str | None) -> None:
+        """Drop filepath from the oldest save that holds it, once its change is merged back, and the save once empty,
+        keeping the outcome, as for a local change."""
+        path = self._stored(filepath)
+        if outcome is not None:
+            self.progress.merged.append(MergedFile(path, outcome))
+        for save in self.progress.intersync:
+            if any(file.path == path for file in save.files):
+                save.files = [file for file in save.files if file.path != path]
+                break
+        self.progress.intersync = [
+            save for save in self.progress.intersync if save.files]
+        self._write()
+
     def finish(self) -> None:
         """Remove the sync progress, once the end has nothing left to do."""
         remove_sync_progress(self.workspace_dir)
@@ -164,6 +199,9 @@ class NoProgress:
         pass
 
     def merged(self, filepath: str, outcome: str | None) -> None:
+        pass
+
+    def intersync_merged(self, filepath: str, outcome: str | None) -> None:
         pass
 
     def finish(self) -> None:
@@ -223,6 +261,8 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         changed=[_read_change(item) for item in end.get('changed', [])],
         merged=[MergedFile(item['path'], item['outcome'])
                 for item in end.get('merged', [])],
+        intersync=[IntersyncSave(item['commit'], [IntersyncFile(file['path'], file['base']) for file in item['files']],
+                                 item.get('complete', False)) for item in data.get('intersync', [])],
         ignored=end.get('ignored', []), not_synced=end.get('not-synced', []), synced=end.get('synced', []),
         written_by=data['written-by'], started=data['started'], version=data['version'])
 
@@ -274,6 +314,9 @@ def format_sync_progress(progress: SyncProgress) -> str:
                       *_array('ignored', lists.ignored), *
                       _array('always-writable', lists.always_writable),
                       *_array('replace', [list(entry) for entry in lists.replace.items()])]
+    for save in progress.intersync:
+        lines += ['', '[[intersync]]', _line('commit', save.commit), _line('complete', save.complete),
+                  *_array('files', [{'path': file.path, 'base': file.base} for file in save.files])]
     return '\n'.join(lines) + '\n'
 
 

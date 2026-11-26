@@ -2,8 +2,7 @@
 
 import dataclasses
 import os
-import shutil
-from collections.abc import Callable, Set as AbstractSet
+from collections.abc import Callable, Sequence, Set as AbstractSet
 from dataclasses import dataclass, field
 
 from .common import normalize_workspace_path
@@ -77,15 +76,24 @@ def _to_crlf(content: bytes) -> bytes:
     return content.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
 
 
+def _workspace_endings(content: bytes | None, uses_crlf: bool, binary: bool) -> bytes | None:
+    """content, as git holds it, in the workspace's line endings; binary content as it is."""
+    return _to_crlf(content) if content is not None and uses_crlf and not binary else content
+
+
+def _write_file(filepath: str, content: bytes) -> None:
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    make_writable([filepath])
+    with open(filepath, 'wb') as f:
+        f.write(content)
+
+
 def _stage_changed_file(ref: ChangedFileRef, rel_path: str,
                         ours: bytes | None, base: bytes | None,
                         temp_root: str, uses_crlf: bool) -> ChangedFile:
     """Stage HEAD and baseline content of a changed file, text in the workspace line ending."""
-    if uses_crlf and not ref.is_binary:
-        if ours is not None:
-            ours = _to_crlf(ours)
-        if base is not None:
-            base = _to_crlf(base)
+    ours = _workspace_endings(ours, uses_crlf, ref.is_binary)
+    base = _workspace_endings(base, uses_crlf, ref.is_binary)
 
     ours_path = (_stage_temp_content(temp_root, rel_path, '.ours', ours)
                  if ours is not None else None)
@@ -311,15 +319,13 @@ def _merge_back(cf: ChangedFile, workspace_dir: str, temp_root: str) -> str | No
         return 'deleted-locally'
 
     if cf.is_binary:
-        make_writable([filepath])
-        shutil.copyfile(cf.ours_path, filepath)
+        with open(cf.ours_path, 'rb') as f:
+            _write_file(filepath, f.read())
         return 'binary'
 
     clean, merged = merge_file(filepath, cf.base_path or _empty_base(temp_root), cf.ours_path,
                                _MERGE_LABELS)
-    make_writable([filepath])
-    with open(filepath, 'wb') as f:
-        f.write(merged)
+    _write_file(filepath, merged)
 
     if clean:
         return 'clean'
@@ -347,31 +353,104 @@ def merge_changed_files(changed_files: list[ChangedFile], workspace_dir: str, te
         if on_merged is not None:
             on_merged(cf.filepath, outcome)
 
-    merged_conflicts = outcomes.get('conflicts', [])
-    added_both_conflicts = outcomes.get('added-both', [])
-    groups = [
-        (log.success, outcomes.get('clean', []),
-         'file', 'files', 'merged successfully'),
-        (log.warning, merged_conflicts, 'file', 'files', 'merged with conflicts'),
-        (log.warning, added_both_conflicts, 'file was', 'files were',
-         'added both locally and in Perforce - no common baseline, conflict markers show both full versions'),
-        (log.warning, outcomes.get('binary', []), 'binary file has', 'binary files have',
-         'local changes, local version restored'),
-        (log.warning, outcomes.get('deleted-upstream', []), 'file', 'files',
-         'deleted in Perforce but modified locally, local edits available via git history'),
-        (log.warning, outcomes.get('deleted-locally', []), 'file', 'files',
-         'deleted locally but modified in Perforce'),
-    ]
-    for log_fn, files, singular, plural, text in groups:
-        _log_file_group(log_fn, files, singular, plural, text, workspace_dir)
+    _report_outcomes(outcomes, workspace_dir)
 
-    if not any(files for _, files, *_ in groups):
+
+# Each merge-back outcome, with how its files are logged: at warning unless clean, under a count and a sentence.
+_OUTCOMES = {
+    'clean': ('file', 'files', 'merged successfully'),
+    'conflicts': ('file', 'files', 'merged with conflicts'),
+    'added-both': ('file was', 'files were',
+                   'added both locally and in Perforce - no common baseline, conflict markers show both full versions'),
+    'binary': ('binary file has', 'binary files have', 'local changes, local version restored'),
+    'deleted-upstream': ('file', 'files',
+                         'deleted in Perforce but modified locally, local edits available via git history'),
+    'deleted-locally': ('file', 'files', 'deleted locally but modified in Perforce'),
+    'restored': ('file', 'files', 'deleted in Perforce but changed while the sync was interrupted, that version '
+                 'restored'),
+    'deleted-changed': ('file', 'files', 'deleted while the sync was interrupted but changed since, kept'),
+}
+
+
+def _report_outcomes(outcomes: dict[str | None, list[str]], workspace_dir: str) -> None:
+    """Log the merged files under their outcomes, then what to do next."""
+    for outcome, (singular, plural_noun, text) in _OUTCOMES.items():
+        _log_file_group(log.success if outcome == 'clean' else log.warning, outcomes.get(outcome, []), singular,
+                        plural_noun, text, workspace_dir)
+    if not any(outcomes.get(outcome) for outcome in _OUTCOMES):
         return
     log.info('')
-    if merged_conflicts or added_both_conflicts:
+    if outcomes.get('conflicts') or outcomes.get('added-both'):
         log.info('Manually review changes, resolve conflicts and commit when ready')
     else:
         log.info('Manually review changes and commit when ready')
+
+
+@dataclass(frozen=True)
+class IntersyncChange:
+    """A change made while a sync was interrupted: filepath as the user left it (ours) and what they edited (base),
+    in git's line endings, None where there was no file."""
+    filepath: str
+    ours: bytes | None
+    base: bytes | None
+
+
+def _read(filepath: str) -> bytes | None:
+    try:
+        with open(filepath, 'rb') as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _merge_intersync(change: IntersyncChange, workspace_dir: str, temp_root: str, uses_crlf: bool) -> str | None:
+    """Apply change onto the file as it now stands; the outcome it is reported under, None for no change."""
+    # Sniffed, as a file the user added has no Perforce file type to tell.
+    binary = any(b'\0' in content for content in (
+        change.ours, change.base) if content)
+    ours = _workspace_endings(change.ours, uses_crlf, binary)
+    base = _workspace_endings(change.base, uses_crlf, binary)
+    if ours == base:
+        return None
+    filepath = change.filepath
+    current = _read(filepath)
+    if ours is None:
+        if current is None:
+            return 'clean'
+        if current != base:
+            return 'deleted-changed'
+        make_writable([filepath])
+        os.remove(filepath)
+        return 'clean'
+    if current is None:
+        _write_file(filepath, ours)
+        return 'clean' if base is None else 'restored'
+    if binary:
+        _write_file(filepath, ours)
+        return 'binary'
+    rel_path = os.path.relpath(filepath, workspace_dir)
+    ours_path = _stage_temp_content(
+        temp_root, rel_path, '.intersync.ours', ours)
+    base_path = (_empty_base(temp_root) if base is None
+                 else _stage_temp_content(temp_root, rel_path, '.intersync.base', base))
+    clean, merged = merge_file(filepath, base_path, ours_path, _MERGE_LABELS)
+    _write_file(filepath, merged)
+    return 'clean' if clean else 'conflicts'
+
+
+def merge_intersync_changes(changes: Sequence[IntersyncChange], workspace_dir: str, temp_root: str, uses_crlf: bool,
+                            on_merged: OnMerged) -> None:
+    """Merge the changes made while a sync was interrupted back onto the files as they now stand, in order, calling
+    on_merged with each file's path after it."""
+    if not changes:
+        return
+    log.heading('Merging the changes made while the sync was interrupted')
+    outcomes: dict[str | None, list[str]] = {}
+    for change in changes:
+        outcome = _merge_intersync(change, workspace_dir, temp_root, uses_crlf)
+        outcomes.setdefault(outcome, []).append(change.filepath)
+        on_merged(change.filepath, outcome)
+    _report_outcomes(outcomes, workspace_dir)
 
 
 def report_not_synced(preps: list[WritableSyncFileSet],

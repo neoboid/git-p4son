@@ -486,8 +486,6 @@ class FakeP4:
         self.clients: dict[str, str] = {}
         # Paths p4 refuses to add, as for a .p4ignore match.
         self.ignored: set[str] = set()
-        # Files allwrite refused to replace: the have-list keeps the first content, sync -f writes the second.
-        self.held: dict[str, tuple[str | None, str | None]] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
         # Files of a +w type: p4 updates one it has even while it is writable, under noclobber, but adds none over a
@@ -525,11 +523,6 @@ class FakeP4:
                 files.pop(path, None)
             else:
                 files[path] = content
-        for path, (kept, _) in self.held.items():
-            if kept is None:
-                files.pop(path, None)
-            else:
-                files[path] = kept
         return files
 
     def sync_to(self, change: int) -> None:
@@ -544,37 +537,19 @@ class FakeP4:
     def _local(self, path: str) -> str:
         return os.path.join(self.ws, *path.split('/'))
 
-    def _allwrite(self) -> bool:
-        return 'allwrite' in self.options.split()
-
     def _noclobber(self) -> bool:
         return 'noclobber' in self.options.split()
 
     def _write(self, path: str, content: str) -> None:
-        """Write a synced file, read-only unless allwrite or of a +w type."""
+        """Write a synced file, read-only unless of a +w type."""
         local = self._local(path)
         os.makedirs(os.path.dirname(local), exist_ok=True)
         if os.path.exists(local):
             os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
         with open(local, 'w') as f:
             f.write(content)
-        if not self._allwrite() and path not in self.always_writable:
+        if path not in self.always_writable:
             os.chmod(local, stat.S_IRUSR)
-
-    def _force_sync(self, paths: list[str]) -> list[str]:
-        """Write, or delete, what allwrite refused for each path, as sync -f does."""
-        out = []
-        for path in paths:
-            content = self.held.pop(path)[1]
-            local = self._local(path)
-            if content is None:
-                os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
-                os.remove(local)
-                out.append(f'{self._depot(path)}#1 - deleted as {local}')
-            else:
-                self._write(path, content)
-                out.append(f'{self._depot(path)}#1 - updating {local}')
-        return out
 
     def _depot(self, path: str) -> str:
         return f'//{self.client}/{_p4_escape(path)}'
@@ -645,8 +620,6 @@ class FakeP4:
                     ('+w' if path in self.always_writable else '')
                 out += [f'... clientFile {self._local(path)}',
                         f'... headType {kind}', '']
-        elif args[:4] == ['-x', '-', 'sync', '-f']:
-            out = self._force_sync(files)
         elif args[:2] == ['-x', '-'] and args[2] in ('add', 'edit', 'delete'):
             out, stderr = self._open(files, args[2], args[-1])
         elif args[:3] == ['-x', '-', 'reopen']:
@@ -927,23 +900,13 @@ class FakeP4:
                 what = 'added as'
             writable = os.path.exists(local) and os.stat(
                 local).st_mode & stat.S_IWUSR
-            if (not preview and writable and self._noclobber() and not self._allwrite()
+            if (not preview and writable and self._noclobber()
                     and not (path in self.always_writable and path in before)):
                 refused.append(f"Can't clobber writable file {local}")
-                continue
-            if (self._allwrite() and self._noclobber() and os.path.exists(local)
-                    and self._content(path) != (before[path] if path in before else after[path])):
-                # allwrite keeps a file whose content isn't its have revision's, writable or not, with exit code 0.
-                refusal = ("can't delete modified file" if path not in after
-                           else "can't update modified file" if path in before else "can't overwrite existing file")
-                lines.append(f'{self._depot(path)}#1 - {refusal} {local}')
-                if not preview:
-                    self.held[path] = (before.get(path), after.get(path))
                 continue
             lines.append(f'{self._depot(path)}#1 - {what} {local}')
             if preview:
                 continue
-            self.held.pop(path, None)
             if path not in after:
                 if os.path.exists(local):
                     os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)

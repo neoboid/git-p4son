@@ -36,7 +36,6 @@ from .perforce import (
     p4_sync_preview,
     P4SyncAbortError,
     P4SyncClobberError,
-    run_p4_batch,
 )
 
 
@@ -62,8 +61,8 @@ class SyncPass:
 
 
 def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
-                     expected_refusals: set[str]) -> list[str]:
-    """Run sync_pass's p4 sync, returning the expected_refusals files p4 refused.
+                     expected_refusals: set[str]) -> None:
+    """Run sync_pass's p4 sync, in which p4 may refuse the expected_refusals files.
 
     Any other refused file raises.
     """
@@ -71,10 +70,9 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
     log.heading(f'Syncing the files of {label} CL {changelist}' if sync_pass.exact
                 else f'Syncing to {label} CL ({changelist})')
     try:
-        refused = p4_sync(sync_pass.revision, depot_root, workspace_dir)
+        p4_sync(sync_pass.revision, depot_root, workspace_dir)
     except P4SyncClobberError as e:
         _check_refused(e.refused, expected_refusals, e.returncode)
-        return e.refused
     except P4SyncAbortError as e:
         log.info(str(e))
         raise CommandError(
@@ -82,8 +80,6 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
             'another process has it open. The workspace is left partially '
             'synced: close that process, then commit or restore the synced '
             'files before syncing again.') from e
-    _check_refused(refused, expected_refusals, 1)
-    return refused
 
 
 def _check_refused(refused: list[str], expected: set[str], returncode: int) -> None:
@@ -215,25 +211,10 @@ def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
                                   clobber_mode=settings.clobber_mode,
                                   changed_locally=ctx.changed_locally)
     if preview:
-        refusing = {
-            entry.filepath for entry in preview if entry.refused_path is not None}
-        refused = _sync_changelist(sync_pass, settings.depot_root, ctx.workspace_dir,
-                                   expected_refusals=set(prep.ignored) | refusing)
-        prep.not_synced = [f for f in refused if f not in prep.replace]
-        _replace_refused([prep.replace[f] + sync_pass.revision for f in refused if f in prep.replace],
-                         ctx.workspace_dir)
+        _sync_changelist(sync_pass, settings.depot_root, ctx.workspace_dir,
+                         expected_refusals=set(prep.ignored))
         prep.synced = [entry.filepath for entry in preview]
     return prep
-
-
-def _replace_refused(revisions: list[str], workspace_dir: str) -> None:
-    """Sync each refused depot path, at the pass's revision, over its local changes, which the merge-back restores."""
-    if not revisions:
-        return
-    log.heading('Replacing tracked files with local changes (allwrite)')
-    run_p4_batch(['sync', '-f'], revisions,
-                 'Syncing over their local changes', workspace_dir, dry_run=False)
-    log.success(f'{plural(len(revisions), "file")} replaced')
 
 
 def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:

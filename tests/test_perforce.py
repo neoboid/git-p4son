@@ -170,8 +170,6 @@ class TestP4ClientSpec(unittest.TestCase):
         cases = [
             (['noallwrite', 'noclobber'], ClobberMode.NOCLOBBER),
             (['noallwrite', 'clobber'], ClobberMode.CLOBBER),
-            (['allwrite', 'noclobber'], ClobberMode.ALLWRITE),
-            (['allwrite', 'clobber'], ClobberMode.CLOBBER),
         ]
         for options, expected in cases:
             spec = P4ClientSpec(name='ws', root='/ws',
@@ -237,20 +235,6 @@ class TestP4SyncPreview(unittest.TestCase):
         cmd = mock_rwo.call_args[0][0]
         self.assertEqual(
             cmd, ['p4', '-L', 'en', 'sync', '-n', '//depot/...@100'])
-
-    @mock.patch('git_p4son.perforce.run_with_stream_output')
-    def test_allwrite_refusals_carry_the_kept_revision(self, mock_rwo):
-        mock_rwo.return_value = make_run_result(stdout=[
-            "//depot/a.txt#2 - can't update modified file /ws/a.txt",
-            "//depot/n.txt#1 - can't overwrite existing file /ws/n.txt",
-        ])
-        result = p4_sync_preview('@100', '//depot', '/ws')
-        self.assertEqual(result, [
-            P4SyncPreviewFile(mode='upd', filepath='/ws/a.txt',
-                              refused_path='//depot/a.txt'),
-            P4SyncPreviewFile(mode='add', filepath='/ws/n.txt',
-                              refused_path='//depot/n.txt'),
-        ])
 
     @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_skips_unparsable_lines(self, mock_rwo):
@@ -498,19 +482,6 @@ class TestP4Sync(unittest.TestCase):
         self.assertEqual(ctx.exception.returncode, 1)
 
     @mock.patch('git_p4son.perforce.run_with_stream_output')
-    def test_allwrite_refusals_are_returned(self, mock_rwo):
-        def stream(command, on_output, **kwargs):
-            on_output(
-                "//myclient/a.txt#2 - can't update modified file /ws/a.txt", sys.stdout)
-            return mock.Mock(elapsed=None)
-        mock_rwo.side_effect = stream
-        with captured_output() as out:
-            refused = p4_sync('@12345', '//myclient', '/ws')
-        self.assertEqual(refused, ['/ws/a.txt'])
-        self.assertNotIn('Unparsable', out.getvalue())
-        self.assertIn('refused: 1', out.getvalue())
-
-    @mock.patch('git_p4son.perforce.run_with_stream_output')
     def test_other_errors_raise_as_they_are(self, mock_rwo):
         mock_rwo.side_effect = RunError(
             'p4 sync failed', returncode=1, stderr=['some other error'])
@@ -546,18 +517,6 @@ class TestParseP4SyncEntry(unittest.TestCase):
     def test_a_synced_file(self):
         self.assertEqual(parse_p4_sync_entry('//depot/a.txt#2 - updating /ws/a.txt'),
                          P4SyncPreviewFile('upd', '/ws/a.txt'))
-
-    def test_a_modified_file_allwrite_refuses(self):
-        self.assertEqual(parse_p4_sync_entry("//depot/a b.txt#2 - can't update modified file /ws/a b.txt"),
-                         P4SyncPreviewFile('upd', '/ws/a b.txt', refused_path='//depot/a b.txt'))
-
-    def test_an_existing_file_at_a_path_allwrite_refuses_to_add(self):
-        self.assertEqual(parse_p4_sync_entry("//depot/n.txt#1 - can't overwrite existing file /ws/n.txt"),
-                         P4SyncPreviewFile('add', '/ws/n.txt', refused_path='//depot/n.txt'))
-
-    def test_a_modified_file_allwrite_refuses_to_delete(self):
-        self.assertEqual(parse_p4_sync_entry("//depot/d.txt#1 - can't delete modified file /ws/d.txt"),
-                         P4SyncPreviewFile('del', '/ws/d.txt', refused_path='//depot/d.txt'))
 
     def test_any_other_line(self):
         self.assertIsNone(parse_p4_sync_entry('some random output'))

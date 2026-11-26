@@ -63,7 +63,6 @@ class ClobberMode(Enum):
 
     NOCLOBBER = 'noclobber'
     CLOBBER = 'clobber'
-    ALLWRITE = 'allwrite'
 
 
 @dataclass
@@ -81,12 +80,7 @@ class P4ClientSpec:
 
     @property
     def clobber_mode(self) -> ClobberMode:
-        # clobber overwrites writable files regardless, so it wins over allwrite.
-        if 'clobber' in self.options:
-            return ClobberMode.CLOBBER
-        if self.allwrite:
-            return ClobberMode.ALLWRITE
-        return ClobberMode.NOCLOBBER
+        return ClobberMode.CLOBBER if 'clobber' in self.options else ClobberMode.NOCLOBBER
 
     @property
     def uses_crlf(self) -> bool:
@@ -549,7 +543,6 @@ class P4SyncOutputProcessor:
     def __init__(self) -> None:
         self.stats: dict[str, int] = dict.fromkeys(
             [mode for mode, _ in _SYNC_LINE_PATTERNS], 0)
-        self.refused: list[str] = []
 
     def __call__(self, line: str, stream: IO[str]) -> None:
         if _UP_TO_DATE_RE.search(line):
@@ -565,8 +558,6 @@ class P4SyncOutputProcessor:
         entry = parse_p4_sync_entry(line)
         if entry is None:
             log.warning(f'Unparsable line: {line}')
-        elif entry.refused_path is not None:
-            self.refused.append(entry.filepath)
         else:
             self.stats[entry.mode] += 1
 
@@ -574,10 +565,9 @@ class P4SyncOutputProcessor:
         """Get a one-line sync summary."""
         synced_count = self.stats['add'] + \
             self.stats['upd'] - self.stats['clb']
-        counts = {**self.stats, 'refused': len(self.refused)}
-        detail = ', '.join(f'{mode}: {counts[mode]}'
-                           for mode in ('add', 'upd', 'del', 'clb', 'refused')
-                           if counts[mode])
+        detail = ', '.join(f'{mode}: {self.stats[mode]}'
+                           for mode in ('add', 'upd', 'del', 'clb')
+                           if self.stats[mode])
         return f'synced {synced_count} files' + (f' ({detail})' if detail else '')
 
 
@@ -607,32 +597,15 @@ def is_always_writable_file_type(head_type: str) -> bool:
 
 @dataclass
 class P4SyncPreviewFile:
-    """A file a sync would affect; mode is 'add', 'upd' or 'del' relative to the have-list.
-
-    refused_path is the depot path of a file allwrite won't replace or delete, as its content isn't the have
-    revision's."""
+    """A file a sync would affect; mode is 'add', 'upd' or 'del' relative to the have-list."""
     mode: str
     filepath: str
-    refused_path: str | None = None
-
-
-# allwrite keeps a file whose content isn't its have revision's, writable or not, with exit code 0.
-_REFUSAL_RE = re.compile(
-    r"^(//[^#]+)#\d+ - can't (update modified|overwrite existing|delete modified) file (.+)$")
-_REFUSAL_MODES = {'update modified': 'upd',
-                  'overwrite existing': 'add', 'delete modified': 'del'}
 
 
 def parse_p4_sync_entry(line: str) -> P4SyncPreviewFile | None:
-    """The file of a p4 sync output line, an allwrite refusal included; None for any other line."""
+    """The file of a p4 sync output line; None for any other line."""
     mode, filename = parse_p4_sync_line(line)
-    if mode and filename:
-        return P4SyncPreviewFile(mode, filename)
-    match = _REFUSAL_RE.match(line)
-    if match is None:
-        return None
-    depot_path, refusal, path = match.groups()
-    return P4SyncPreviewFile(_REFUSAL_MODES[refusal], path, refused_path=depot_path)
+    return P4SyncPreviewFile(mode, filename) if mode and filename else None
 
 
 def _run_p4_sync(args: list[str], workspace_dir: str,
@@ -665,10 +638,10 @@ class P4SyncClobberError(RunError):
         self.refused = refused
 
 
-def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> list[str]:
+def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> None:
     """Sync the depot root to revision, such as @123, or @=123 for only the files changelist 123 submitted.
 
-    Returns the files allwrite refused to replace. Raises P4SyncClobberError when noclobber refused writable files.
+    Raises P4SyncClobberError when noclobber refused writable files.
     """
     output_processor = P4SyncOutputProcessor()
     try:
@@ -682,4 +655,3 @@ def p4_sync(revision: str, depot_root: str, workspace_dir: str) -> list[str]:
         log.info(output_processor.get_summary())
         raise P4SyncClobberError(e, refused) from e
     log.success(output_processor.get_summary())
-    return output_processor.refused

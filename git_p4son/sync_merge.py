@@ -48,12 +48,8 @@ class WritableSyncFileSet:
     changed: list[ChangedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
     always_writable: list[str] = field(default_factory=list)
-    # Ignored files p4 refused to overwrite, known only after the sync.
-    not_synced: list[str] = field(default_factory=list)
     # Every file the preview said p4 would update, writable or not.
     synced: list[str] = field(default_factory=list)
-    # Tracked files allwrite refuses, each to its depot path, which sync -f replaces after the pass.
-    replace: dict[str, str] = field(default_factory=dict)
 
 
 def _stage_temp_content(temp_root: str, rel_path: str, suffix: str,
@@ -121,18 +117,10 @@ def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
                     'file has', 'files have',
                     'local changes, will merge after sync', workspace_dir)
 
-    singular, plural = 'git-ignored writable file', 'git-ignored writable files'
-    if clobber_mode is ClobberMode.CLOBBER:
-        _log_file_group(log.warning, result.ignored, singular, plural,
-                        'will be overwritten by p4 (clobber is enabled on the workspace)',
-                        workspace_dir)
-    elif clobber_mode is ClobberMode.ALLWRITE:
-        # The skipped ones are only known after the sync, which lists them.
-        _log_file_group(log.info, result.ignored, singular, plural,
-                        'will be synced unless modified locally')
-    else:
-        _log_file_group(log.warning, result.ignored, singular, plural,
-                        'will not be synced', workspace_dir)
+    outcome = ('will be overwritten by p4 (clobber is enabled on the workspace)'
+               if clobber_mode is ClobberMode.CLOBBER else 'will not be synced')
+    _log_file_group(log.warning, result.ignored, 'git-ignored writable file', 'git-ignored writable files',
+                    outcome, workspace_dir)
 
 
 def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
@@ -151,12 +139,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     log.heading('Detecting writable files')
     writable = []
     added_upstream = set()
-    refused = {}
     for entry in preview_files:
-        if entry.refused_path is not None:
-            refused[entry.filepath] = entry.refused_path
-        # allwrite refuses a file by its content, so a read-only one with local changes too.
-        if (entry.filepath in refused or is_user_writable(entry.filepath) or changed_locally
+        if (is_user_writable(entry.filepath) or changed_locally
                 and normalize_workspace_path(entry.filepath, workspace_dir) in changed_locally):
             writable.append(entry.filepath)
             if entry.mode == 'add':
@@ -172,7 +156,6 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     tracked_set = get_tracked_files(writable, workspace_dir)
     tracked = [f for f in writable if f in tracked_set]
     result.ignored = [f for f in writable if f not in tracked_set]
-    result.replace = {f: refused[f] for f in tracked if f in refused}
     log.success(f'{len(tracked)} tracked, {len(result.ignored)} ignored')
 
     if result.ignored:
@@ -182,7 +165,7 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         for f in result.ignored:
             head_type = ignored_types.get(f)
             # p4 updates a +w file it has, writable or not, but adds none over a writable file on disk.
-            if head_type and is_always_writable_file_type(head_type) and f not in refused and f not in added_upstream:
+            if head_type and is_always_writable_file_type(head_type) and f not in added_upstream:
                 result.always_writable.append(f)
             else:
                 ignored.append(f)
@@ -361,21 +344,14 @@ def merge_changed_files(changed_files: list[ChangedFile],
 def report_not_synced(preps: list[WritableSyncFileSet],
                       clobber_mode: ClobberMode, workspace_dir: str) -> None:
     """Log the git-ignored writable files p4 refused or overwrote."""
+    files = sorted({f for p in preps for f in p.ignored})
+    if not files:
+        return
     if clobber_mode is ClobberMode.CLOBBER:
-        reported = [f for p in preps for f in p.ignored]
-        heading = 'Git-ignored writable files overwritten by p4 (clobber enabled)'
-        outcome = 'overwritten'
-    elif clobber_mode is ClobberMode.ALLWRITE:
-        reported = [f for p in preps for f in p.not_synced]
-        heading = 'Files not synced (git-ignored and locally modified)'
-        outcome = 'not synced'
+        heading, outcome = 'Git-ignored writable files overwritten by p4 (clobber enabled)', 'overwritten'
     else:
-        reported = [f for p in preps for f in p.ignored]
-        heading = 'Files not synced (git-ignored and writable)'
-        outcome = 'not synced'
-    if reported:
-        log.heading(heading)
-        files = sorted(set(reported))
-        for f in files:
-            log.info(os.path.relpath(f, workspace_dir))
-        log.warning(f'{plural(len(files), "file")} {outcome}')
+        heading, outcome = 'Files not synced (git-ignored and writable)', 'not synced'
+    log.heading(heading)
+    for f in files:
+        log.info(os.path.relpath(f, workspace_dir))
+    log.warning(f'{plural(len(files), "file")} {outcome}')

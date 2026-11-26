@@ -519,6 +519,14 @@ class FakeP4:
         start_patch(test, 'git_p4son.perforce.run', side_effect=self.run)
         start_patch(test, 'git_p4son.perforce.run_with_stream_output',
                     side_effect=self.stream)
+        start_patch(test, 'git_p4son.perforce.run_output_start',
+                    side_effect=self.output_start)
+
+    def output_start(self, command: list[str], size: int, cwd: str = '.', input: str | None = None) -> RunResult[bytes]:
+        """As run_output_start: run's bytes, cut to size."""
+        result = cast(RunResult[bytes], self.run(
+            command, cwd, input=input, text=False, fail_on_returncode=False))
+        return RunResult(result.returncode, result.stdout[:size], result.stderr)
 
     def submit(self, change: int, files: dict[str, str | None], user: str = 'other') -> None:
         """Submit files ({path: content, or None to delete}) as change."""

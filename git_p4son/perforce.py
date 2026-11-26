@@ -13,6 +13,7 @@ from .common import (
     RunResult,
     normalize_workspace_path,
     run,
+    run_output_start,
     run_with_stream_output,
 )
 from .log import log, plural
@@ -653,6 +654,14 @@ def parse_p4_sync_entry(line: str) -> P4SyncPreviewFile | None:
     """The file of a p4 sync output line; None for any other line."""
     mode, filename = parse_p4_sync_line(line)
     return P4SyncPreviewFile(mode, filename) if mode and filename else None
+
+
+def p4_print_start(filepath: str, revision: str, size: int, workspace_dir: str) -> bytes | None:
+    """The first size bytes of filepath's depot content at revision, such as @123, all of it if shorter; None where p4
+    has none. p4 is stopped once they're read, as the file can be large."""
+    res = run_output_start([*_P4, '-x', '-', 'print', '-q'], size, cwd=workspace_dir,
+                           input=p4_file_arg(filepath) + revision)
+    return res.stdout if res.returncode == 0 and not res.stderr else None
 
 
 def p4_sync_pending(filepaths: list[str], revision: str, workspace_dir: str) -> list[P4SyncPreviewFile]:

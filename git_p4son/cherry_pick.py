@@ -8,6 +8,7 @@ from .git import SyncState
 from .hooks import check_hooks
 from .log import log
 from .perforce import describe_changelist
+from .sync_progress import check_no_interrupted_sync
 from .sync import (
     OnSyncBranch, SyncPass, SyncSettings, catch_up_passes, find_sync_state, parse_changelist, run_sync_passes,
     sync_on_branch, sync_settings,
@@ -67,6 +68,7 @@ def _plan_cherry_pick(args: argparse.Namespace, sync_revision: str) -> _CherryPi
 
 def cherry_pick_command(args: argparse.Namespace) -> int:
     """Execute the cherry-pick command."""
+    check_no_interrupted_sync(args.workspace_dir)
     check_hooks(args.workspace_dir)
     backend = args.backend
     sync_revision = backend.prepare_sync(None)

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import CONFIG_DIR, __version__
-from .common import normalize_workspace_path
+from .common import CommandError, normalize_workspace_path
 from .config import ensure_config_dir
 from .perforce import P4SyncPreviewFile
 from .sync_merge import ChangedFile, WritableSyncFileSet
@@ -202,12 +202,17 @@ def write_sync_progress(progress: SyncProgress, workspace_dir: str) -> None:
 
 
 def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
-    """The sync progress an interrupted sync left, or None when there is none."""
+    """The sync progress an interrupted sync left, or None when there is none.
+
+    Raises CommandError for sync progress a newer git-p4son wrote."""
     try:
         with open(progress_path(workspace_dir), 'rb') as f:
             data = tomllib.load(f)
     except FileNotFoundError:
         return None
+    if data['version'] > VERSION:
+        raise CommandError(f'The interrupted sync\'s progress in {CONFIG_DIR}/{FILE_NAME} was written by git-p4son '
+                           f'{data["written-by"]}, which is newer than this one. Upgrade git-p4son to finish it.')
     end = data.get('end', {})
     return SyncProgress(
         sync_branch=data['sync-branch'], depot_root=data['depot-root'], tip=data['tip'],

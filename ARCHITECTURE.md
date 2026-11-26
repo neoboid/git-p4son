@@ -14,7 +14,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   synced CL, syncs and commits each target and merges local changes back once at the end (`sync_merge.py`), and
   `sync_on_branch` then runs the post-sync hooks, where a Ctrl-C or an error stops the hooks and not the return
   (`_run_post_sync_hooks`), with exit code 1. With sync progress on disk, `sync_command` resumes instead of planning
-  (`_resume_sync`): the backend checks where the interrupted sync left the sync branch (`resume_sync`), the
+  (`_resume_sync`), refusing the options that make a plan, a changelist argument, `--branch`, `-u`, `--no-split`,
+  `--allow-backwards` and `--force`, even ones that repeat it (`_check_no_plan_options`), and a backend other than the
+  one `[start]` names: the backend checks where the interrupted sync left the sync branch (`resume_sync`), the
   blocking-process and p4-opened checks run, and `_check_resumable_files` stands in for the clean check, sorting git's
   changes since the recorded tip against the interrupted pass's stored file list, and the uncommitted files of the
   catch-up passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists, changed in git and
@@ -141,8 +143,8 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   (`MergedFile`), the ignored and not-synced files and, in writable mode, the files synced. Local changes are references
   (`LocalChange`: a path, its base commit and flags), read again from the pre-sync commit and the base. Paths are slash
   paths from the workspace root, a list item per line, for a user to read. `ProgressRecorder` keeps it in step as
-  `run_sync_passes` and `resume_sync_passes` go; `read_sync_progress` reads it back for a resume, and `local_path` turns
-  a stored path into a local one.
+  `run_sync_passes` and `resume_sync_passes` go; `read_sync_progress` reads it back for a resume, refusing one a newer
+  git-p4son wrote, and `local_path` turns a stored path into a local one.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip

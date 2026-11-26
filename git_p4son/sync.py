@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .backend import Backend
-from .common import CommandError, RunError
+from .common import CommandError, RunError, normalize_workspace_path
 from .git import (
     SyncState, files_changed_outside_syncs, format_cherry_pick_subject, format_sync_subject, get_head_commit,
     get_tracked_files, sync_state,
@@ -73,7 +73,8 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
     try:
         p4_sync(sync_pass.revision, depot_root, workspace_dir)
     except P4SyncClobberError as e:
-        _check_refused(e.refused, expected_refusals, e.returncode)
+        _check_refused(e.refused, expected_refusals,
+                       e.returncode, workspace_dir)
     except P4SyncAbortError as e:
         log.info(str(e))
         raise CommandError(
@@ -83,9 +84,16 @@ def _sync_changelist(sync_pass: SyncPass, depot_root: str, workspace_dir: str,
             'files before syncing again.') from e
 
 
-def _check_refused(refused: list[str], expected: set[str], returncode: int) -> None:
+def _workspace_path(filepath: str, workspace_dir: str) -> str:
+    """filepath as a slash path from the workspace root, which tells the same file however it is spelled."""
+    return normalize_workspace_path(filepath, workspace_dir, allow_outside=True) or filepath
+
+
+def _check_refused(refused: list[str], expected: set[str], returncode: int, workspace_dir: str) -> None:
     """Raise CommandError, after listing them, if p4 refused files not in expected."""
-    unexpected = [f for f in refused if f not in expected]
+    expected_paths = {_workspace_path(f, workspace_dir) for f in expected}
+    unexpected = [f for f in refused
+                  if _workspace_path(f, workspace_dir) not in expected_paths]
     if unexpected:
         for f in unexpected:
             log.info(f)
@@ -213,11 +221,17 @@ def _sync_pass(sync_pass: SyncPass, ctx: _SyncContext) -> WritableSyncFileSet:
                                   clobber_mode=settings.clobber_mode,
                                   changed_locally=ctx.changed_locally)
     ctx.recorder.before_sync(preview, prep)
-    if preview:
-        _sync_changelist(sync_pass, settings.depot_root, ctx.workspace_dir,
-                         expected_refusals=set(prep.ignored))
-        prep.synced = [entry.filepath for entry in preview]
+    _run_pass(sync_pass, prep, [entry.filepath for entry in preview], ctx)
     return prep
+
+
+def _run_pass(sync_pass: SyncPass, prep: WritableSyncFileSet, files: list[str], ctx: _SyncContext) -> None:
+    """Run sync_pass's p4 sync of files, prepared as prep, and fill in what it synced."""
+    if not files:
+        return
+    _sync_changelist(sync_pass, ctx.settings.depot_root,
+                     ctx.workspace_dir, expected_refusals=set(prep.ignored))
+    prep.synced = files
 
 
 def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
@@ -451,35 +465,52 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
         ctx = _SyncContext(workspace_dir, settings, pre_sync_head_commit, temp_root,
                            files_changed_outside_syncs(workspace_dir, pre_sync_head_commit), recorder)
 
-        preps = []
-        for sync_pass in catch_up:
-            preps.append(_sync_pass(sync_pass, ctx))
-            recorder.pass_made(preps[-1])
+        passes: list[tuple[SyncPass, str | None]] = [
+            (sync_pass, None) for sync_pass in catch_up]
+        passes += [(target, target.subject(settings.depot_root))
+                   for target in targets]
+        _end_sync(_run_passes(passes, ctx, backend), ctx)
 
-        # Local changes are merged back once at the end, so each commit is pure Perforce state.
-        for target in targets:
-            preps.append(_sync_pass(target, ctx))
-            if target.exact and not preps[-1].synced:
-                log.warning(
-                    f'CL {target.changelist} changes no files in the workspace')
 
-            log.heading(f'Committing git changes for CL {target.changelist}')
-            staged = backend.commit_sync(target.subject(settings.depot_root))
-            log.success(f'Committed {plural(staged, "file")}')
-            recorder.pass_made(preps[-1], get_head_commit(workspace_dir))
+def _run_passes(passes: list[tuple[SyncPass, str | None]], ctx: _SyncContext, backend: Backend
+                ) -> list[WritableSyncFileSet]:
+    """Run each pass, committing the target ones, those with the subject of their commit; their preparations."""
+    preps = []
+    # Local changes are merged back once at the end, so each commit is pure Perforce state.
+    for sync_pass, subject in passes:
+        prep = _sync_pass(sync_pass, ctx)
+        preps.append(prep)
+        if subject is None:
+            ctx.recorder.pass_made(prep)
+            continue
+        if sync_pass.exact and not prep.synced:
+            log.warning(
+                f'CL {sync_pass.changelist} changes no files in the workspace')
 
-        # Dedup files that showed up in several sync passes.
-        by_path = {cf.filepath: cf for p in preps for cf in p.changed}
-        changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
-        merge_changed_files(changed_files, workspace_dir,
-                            temp_root, recorder.merged)
+        log.heading(f'Committing git changes for CL {sync_pass.changelist}')
+        staged = backend.commit_sync(subject)
+        log.success(f'Committed {plural(staged, "file")}')
+        ctx.recorder.pass_made(prep, get_head_commit(ctx.workspace_dir))
+    return preps
 
-        report_not_synced(preps, settings.clobber_mode, workspace_dir)
 
-        _make_synced_files_writable(
-            [f for p in preps for f in p.synced], workspace_dir)
+def _end_sync(preps: list[WritableSyncFileSet], ctx: _SyncContext) -> None:
+    """Merge the local changes back, report the files not synced, apply writable mode, and drop the sync progress."""
+    workspace_dir = ctx.workspace_dir
+    # Dedup files that showed up in several sync passes.
+    changed = [cf for p in preps for cf in p.changed]
+    by_path = {_workspace_path(cf.filepath, workspace_dir): cf
+               for cf in changed}
+    changed_files = sorted(by_path.values(), key=lambda cf: cf.filepath)
+    merge_changed_files(changed_files, workspace_dir,
+                        ctx.temp_root, ctx.recorder.merged)
 
-        recorder.finish()
+    report_not_synced(preps, ctx.settings.clobber_mode, workspace_dir)
+
+    _make_synced_files_writable(
+        [f for p in preps for f in p.synced], workspace_dir)
+
+    ctx.recorder.finish()
 
 
 @dataclass(frozen=True)

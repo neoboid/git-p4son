@@ -458,13 +458,14 @@ def _p4_unescape(path: str) -> str:
 
 
 class _SyncStopped(Exception):
-    """FakeP4's sync stopped partway, after printing lines, before next_path and whether it adds it."""
+    """FakeP4's sync stopped partway, after printing lines, before next_path, whether it adds it, and its content."""
 
-    def __init__(self, lines: list[str], next_path: str | None, adds_next: bool) -> None:
+    def __init__(self, lines: list[str], next_path: str | None, adds_next: bool, next_content: str = '') -> None:
         super().__init__()
         self.lines = lines
         self.next_path = next_path
         self.adds_next = adds_next
+        self.next_content = next_content
 
 
 class FakeP4:
@@ -591,15 +592,16 @@ class FakeP4:
         if not self._allwrite() and path not in self.always_writable:
             os.chmod(local, stat.S_IRUSR)
 
-    def _leave_leftovers(self, path: str, adds: bool) -> None:
-        """Leave a p4 temp file beside path, and path itself partly written if the sync adds it."""
+    def _leave_leftovers(self, path: str, adds: bool, content: str) -> None:
+        """Leave a p4 temp file beside path, and path itself partly written, the first half of content, if the sync
+        adds it."""
         local = self._local(path)
         os.makedirs(os.path.dirname(local), exist_ok=True)
         with open(os.path.join(os.path.dirname(local), 'tmp.4242.0x1f2e3d.1'), 'w') as f:
             f.write('part')
         if adds:
             with open(local, 'w') as f:
-                f.write('part')
+                f.write(content[:len(content) // 2])
 
     def _sync_have(self, paths: list[str], arguments: list[str]) -> tuple[list[str], list[str]]:
         """Write each file as its have revision holds it, as sync -f <file>#have does."""
@@ -703,6 +705,15 @@ class FakeP4:
             out, stderr = self._sync_have(files, (input or '').splitlines())
         elif args[:4] == ['-x', '-', 'sync', '-f']:
             out = self._force_sync(files)
+        elif args[:4] == ['-x', '-', 'print', '-q']:
+            # p4 print -q of one file at a revision: its content, or an error for a file the revision lacks.
+            line = (input or '').splitlines()[0]
+            content = self.files_at(
+                int(line.rsplit('@', 1)[1].lstrip('='))).get(files[0])
+            # git-p4son runs it with text=False, so its output is bytes.
+            printed = (RunResult(0, b'', f'{line} - no such file(s).\n'.encode()) if content is None
+                       else RunResult(0, content.encode(), b''))
+            return cast(RunResult[list[str]], printed)
         elif args[:4] == ['-x', '-', 'sync', '-n']:
             # Each line names a file and the revision to preview it at, which is the same for all.
             revision = (input or '').splitlines()[0].rsplit('@', 1)[1]
@@ -980,7 +991,8 @@ class FakeP4:
             for line in stopped.lines:
                 on_output(line, sys.stdout)
             if interrupt[3] and stopped.next_path is not None:
-                self._leave_leftovers(stopped.next_path, stopped.adds_next)
+                self._leave_leftovers(
+                    stopped.next_path, stopped.adds_next, stopped.next_content)
             raise interrupt[2] from None
         # As p4 prints them: progress on stdout, clobber refusals on stderr.
         for line in lines:
@@ -1053,8 +1065,8 @@ class FakeP4:
                 self.landed.update((path, after.get(path)) for path in written)
                 next_path = next((p for p in sorted(set(before) | set(after))
                                   if p > path and before.get(p) != after.get(p)), None)
-                raise _SyncStopped(
-                    lines, next_path, next_path is not None and next_path not in before)
+                raise _SyncStopped(lines, next_path, next_path is not None and next_path not in before,
+                                   after.get(next_path) or '' if next_path is not None else '')
         if not preview and exact:
             self.picked.update(dict.fromkeys(self.changes[change][1], change))
             for path in self.changes[change][1]:

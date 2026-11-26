@@ -256,6 +256,7 @@ Sync the workspace from Perforce and commit what changed onto the sync branch, `
 ```sh
 git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--allow-backwards] [--dry-run]
                [--split-user NAME ...] [--no-split] [--ignore-blocking-processes]
+git p4son sync --abort [--dry-run] [--no-rebase] [--ignore-blocking-processes]
 ```
 
 **Arguments:**
@@ -280,6 +281,8 @@ git p4son sync [changelist ...] [--branch BRANCH] [--no-rebase] [--allow-backwar
 - `--no-split`: Ignore the configured split users for this sync. Users given with `--split-user` are still split
   out, so `--no-split -u alice` splits out only alice's changelists.
 - `--ignore-blocking-processes`: Sync even while a [blocking process](#blocking-processes) is running.
+- `--abort`: Give up an [interrupted sync](#resuming-an-interrupted-sync) instead of finishing it: keep the commits it
+  made, take the files back to the last one, and merge the local changes back.
 
 **Examples:**
 ```sh
@@ -304,7 +307,8 @@ pre-sync and post-sync hooks run on the sync branch. You stay on the sync branch
 
 - local changes were [merged back](#how-sync-handles-writable-files) into the work tree, for you to review and
   commit there
-- a sync fails partway, with the files as Perforce left them and the commits so far kept
+- a sync fails partway, with the files as Perforce left them and the commits so far kept, until a plain
+  `git p4son sync` [finishes it](#resuming-an-interrupted-sync)
 
 A failing pre-sync hook, or anything else that stops `sync` before it syncs, returns you to where you started.
 
@@ -449,6 +453,71 @@ because they were modified locally.
 
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
 the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
+
+#### Resuming an interrupted sync
+
+A sync that stops partway, from a Ctrl-C, a file p4 couldn't replace, a crash or a kill, leaves the workspace partly
+synced. It keeps what it has left to do in `.git-p4son/sync-progress.toml`, and you stay on the sync branch with the
+files as Perforce left them. Run a plain `git p4son sync` to finish it:
+
+```
+# Resuming the interrupted sync: 2 changelists left, to CL 103
+```
+
+It syncs the changelists that are left, commits each as an uninterrupted sync would have, merges your local changes
+back, and returns you to where you started. The commits made before the interruption stay. The
+[pre-sync hooks](#pre-sync-hook) run again before it carries on, so they should be safe to run more than once.
+
+The resume runs the sync as it was planned, so it refuses a changelist argument, `--branch`, `-u`, `--no-split` and
+`--allow-backwards`, even ones that repeat the interrupted run's. `--dry-run`, `--no-rebase` and
+`--ignore-blocking-processes` apply, and `--dry-run` prints what the resume would do. It checks the
+[blocking processes](#blocking-processes) and the p4-opened files again.
+
+While a sync is interrupted, `new`, `update`, `review` and `cherry-pick` refuse, as the files on disk are partly at a
+newer changelist than the sync branch says. Commands that leave the files alone, such as `alias` and `list-changes`,
+keep working.
+
+**What you did since.** The resume sorts out what happened in the workspace after the interruption:
+
+- **Changes you made**, such as an edit, a new file or a deleted file, are kept. They are saved aside under
+  `refs/git-p4son/intersync-changes`, the files are put back as the sync expects them, and once the sync is done
+  your changes are merged back on top, after the local changes, with conflict markers where they clash. A binary file
+  keeps your version. An edit to a file Perforce deletes brings the file back, with a warning. A symlink made or
+  changed since is refused, as the save holds file content.
+- **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone: those files are
+  synced again.
+- **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared.
+- **Commits you made on the sync branch** are taken off it again, so the sync commits hold only Perforce's files.
+  They are kept under `refs/git-p4son/intersync-commits` until the next such resume, their changes come back
+  uncommitted, and each is named with `git commit -c <sha>` to commit them again with its message. With jj, described
+  changes above the sync bookmark are kept the same way and abandoned, each named with `jj show <commit>`.
+
+**What still refuses.** The resume needs the sync branch where the interrupted sync left it. Each refusal names the
+way back, such as `git switch main` after checking out another branch, or `git reset --keep <commit>` after moving
+the branch, and `git p4son sync --abort` beside it. A resume also refuses:
+
+- with the other [backend](#choosing-the-backend): run it with `--backend` and the one the sync started with
+- when a later sync is on the sync branch, made by an older git-p4son, as the sync progress is stale: give it up
+  with `--abort`
+- sync progress from a newer git-p4son: upgrade to finish it
+
+A sync interrupted during its [post-sync hooks](#post-sync-hook) has finished by then, and leaves nothing to resume.
+
+##### Giving up: `sync --abort`
+
+`git p4son sync --abort` gives up an interrupted sync instead of finishing it, for example when a changelist has
+been obliterated since, or it was the wrong changelist:
+
+- The commits already made stay, and the files go back to the last committed changelist, and its cherry-picks. Only
+  the files the interrupted changelist had changed are transferred, and any cherry-picked files again.
+- Your local changes and the changes you made since are merged back, the sync progress is removed, the hooks run as
+  in a resume, and sync returns you to where you started.
+
+It goes through the same checks as a resume. With only the merge-back left, it finishes that as a resume does. It
+refuses after the workspace's first sync, as there is no synced changelist to go back to; finish that one with
+`git p4son sync`. With stale sync progress, it only removes it, naming any changes a resume had saved aside, which
+stay under `refs/git-p4son/intersync-changes`. An abort that is itself interrupted is finished by a plain
+`git p4son sync`, which then says it is resuming the interrupted sync.
 
 ### Cherry-Pick Command
 
@@ -1227,7 +1296,8 @@ a hook, such as a non-executable one or an editor's backup, is left alone with a
 
 Before `sync` or `cherry-pick` syncs any changelist, git-p4son runs the `pre-sync` commands. If any of them exits
 with a non-zero code, the command stops before any changelist is synced. When a sequence of changelists is synced,
-the `pre-sync` hooks run only once, before the first sync.
+the `pre-sync` hooks run only once, before the first sync. A [resume](#resuming-an-interrupted-sync) of an
+interrupted sync runs them again, so they should be safe to run more than once.
 
 ### post-sync hook
 
@@ -1347,7 +1417,8 @@ You stay on the sync bookmark when:
 - local changes were merged back: they are in a new working change on it, for you to review, and your changes are
   still rebased
 - a sync fails partway: jj's next command puts a new working change there, holding the files as Perforce left them,
-  and nothing is rebased
+  and nothing is rebased until a plain `git p4son sync` [finishes it](#resuming-an-interrupted-sync). After a
+  `jj edit` elsewhere, return to that working change with `jj edit` first
 - the rebase fails: sync reports it with the `jj rebase` command to run and a non-zero exit code, and the sync is
   not undone
 

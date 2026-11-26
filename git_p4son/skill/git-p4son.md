@@ -179,6 +179,30 @@ the branch it started from, unless it merged local changes back: then it stays o
 - Read the summary at the end. Local changes committed on `main` come back as unstaged changes, possibly with
   conflict markers (see the ground rules). Report them to the user rather than resolving them yourself.
 
+### An interrupted sync
+
+A sync stopped partway, by a Ctrl-C, a file p4 couldn't replace, a crash or a kill, leaves the files partly synced
+and its progress in `.git-p4son/sync-progress.toml`, and stays on the sync branch.
+
+- A plain `git p4son sync` finishes it ("Resuming the interrupted sync: ..."), and is the only way to: never sync,
+  revert or reset files by hand to finish it. Run it only when the user asks, as for any sync. Pass no changelist,
+  `--branch`, `-u`, `--no-split` or `--allow-backwards`: the resume refuses them, as it runs the sync as planned.
+  `--dry-run` shows what it would do.
+- `new`, `update`, `review` and `cherry-pick` refuse while a sync is interrupted ("The files on disk are partly
+  synced, ..."). Tell the user, and offer to finish the sync.
+- Changes and commits made since the interruption are kept: the resume saves them aside, puts the files back, and
+  merges the changes back at the end. Commits on the sync branch come back as uncommitted changes, each named with
+  `git commit -c <sha>` (`jj show <commit>` with jj); report those to the user rather than committing them yourself.
+- `git p4son sync --abort` gives the sync up instead: the commits made stay, and the files go back to the last
+  committed changelist. Use it only when the user asks, such as after a changelist was obliterated or the sync was to
+  the wrong changelist. When the sync progress is stale, as a later sync is already on the branch, the refusal says
+  to run it, and it only removes the progress.
+- When the resume refuses because the sync branch isn't where the sync left it, its message names the way back, such
+  as `git switch main`; ask the user before running it. With jj, after a `jj edit` elsewhere, `jj edit` back to the
+  working change on the sync bookmark first.
+- If the resume refuses as having run with the other backend ("... ran with the jj backend. Run "git p4son --backend
+  jj sync" ..."), ask the user before adding `--backend`, as "jj workspaces" says.
+
 ## Creating a review
 
 The usual way to put a branch up for review is `review`. It checks out the branch's commits one at a time, oldest

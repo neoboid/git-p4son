@@ -110,8 +110,10 @@ def _begins_depot_revision(filepath: str, revision: str, workspace_dir: str) -> 
     return depot.replace(b'\r\n', b'\n').startswith(written.removesuffix(b'\r'))
 
 
-def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberMode, workspace_dir: str) -> _PutRight:
-    """Sort the files against the interrupted sync: those it synced, those behind the have-list, and p4's leftovers.
+def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberMode, workspace_dir: str, *,
+                crashed: bool) -> _PutRight:
+    """Sort the files against the interrupted sync: those it synced, those behind the have-list, and p4's leftovers;
+    crashed when the interrupted pass's own commit counts as made.
 
     Every other file changed since is one the user changed while the sync was interrupted."""
     interrupted = progress.passes[0] if progress.passes else None
@@ -186,7 +188,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     _refuse_folders([change.path for change in intersync if os.path.isdir(
         local_path(change.path, workspace_dir))])
     ignore: list[str] = []
-    if lists:
+    # A pass already made has no p4 sync left to refuse them.
+    if lists and not crashed:
         stored_ignored = set(lists.ignored)
 
         def untouched(path: str) -> bool:
@@ -543,7 +546,8 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
     # The client spec's line endings and clobber option, with the depot root as the interrupted sync planned it.
     settings = dataclasses.replace(sync_settings(
         workspace_dir), depot_root=depot_root)
-    put = _sort_files(progress, backend, settings.clobber_mode, workspace_dir)
+    put = _sort_files(progress, backend, settings.clobber_mode,
+                      workspace_dir, crashed=crash is not None)
     if args.dry_run:
         _put_right(put, progress.tip, workspace_dir, dry_run=True)
         log.heading('Where sync returns to')

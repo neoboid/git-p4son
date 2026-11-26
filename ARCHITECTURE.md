@@ -332,11 +332,14 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), local paths as file arguments (`p4_file_arg`, which escapes `@#%*`, for
-  every `-x -` list through `_run_file_list`, `p4_off_have` (`p4 diff -se`) among them; `add -f` takes them raw),
-  changelist specs, opened files and batched commands (`run_p4_batch`), reverts, shelving, submitted changes and users,
-  a changelist's status and owner (`describe_changelist`) and whether it is gone (one `describe` each, as a batched one
-  skips the changelist after a missing one), and `p4_sync`/`p4_sync_preview` with `P4SyncOutputProcessor` parsing
-  streamed progress (`parse_p4_sync_entry`) and raising `P4SyncClobberError` or `P4SyncAbortError`.
+  every `-x -` list through `_run_file_list`, `p4_off_have` (`p4 diff -se`) and `p4_sync_to_have`
+  (`p4 sync -f <file>#have`, a revision after each escaped file) and `p4_sync_pending` (`p4 sync -n` over files) among
+  them; `is_p4_temp_file` tells the `tmp.<pid>.<hex>.<n>` names p4 writes a file under before renaming it into place;
+  `add -f` takes them raw), changelist specs, opened files and batched commands (`run_p4_batch`), reverts, shelving,
+  submitted changes and users, a changelist's status and owner (`describe_changelist`) and whether it is gone (one
+  `describe` each, as a batched one skips the changelist after a missing one), and `p4_sync`/`p4_sync_preview` with
+  `P4SyncOutputProcessor` parsing streamed progress (`parse_p4_sync_entry`) and raising `P4SyncClobberError` or
+  `P4SyncAbortError`.
 
 - **`common.py`** - Shared utilities: the `CommandError` and `RunError` exceptions, subprocess execution (`run()`,
   `RunResult`), real-time output streaming via threading (`run_with_stream_output()`, used by `p4 sync`, which `_stop`

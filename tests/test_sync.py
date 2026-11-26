@@ -814,6 +814,22 @@ class TestWhileInterrupted(SyncTestCase):
         self.assertIsNone(self.sync_progress_file())
         self.assertEqual(self.synced_commits(), [101, 102])
 
+    def test_the_commands_that_change_files_refuse(self):
+        progress = self.interrupt()
+        for argv in (['new', '-m', 'Change'], ['new', '--per-commit', '-m', 'Change'], ['update'],
+                     ['update', '--per-commit'], ['review', '-m', 'Change'], ['cherry-pick', '102']):
+            with self.subTest(argv=argv):
+                self.p4son_fails(
+                    *argv, message='an interrupted sync is not finished')
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_the_commands_that_leave_the_files_alone_keep_working(self):
+        self.interrupt()
+        for argv in (['alias', 'list'], ['list-changes', '-b', 'main'], ['review-tool', 'list'],
+                     ['sync-split-users', 'list'], ['writable', 'apply'], ['skill', 'show'], ['completion', 'bash']):
+            with self.subTest(argv=argv):
+                self.p4son(*argv)
+
     def test_sync_refuses_to_resume_on_another_backend(self):
         progress = self.interrupt()
         mine = self.backend_name or 'git'

@@ -551,14 +551,14 @@ class FakeP4:
         return 'noclobber' in self.options.split()
 
     def _write(self, path: str, content: str) -> None:
-        """Write a synced file, read-only unless allwrite."""
+        """Write a synced file, read-only unless allwrite or of a +w type."""
         local = self._local(path)
         os.makedirs(os.path.dirname(local), exist_ok=True)
         if os.path.exists(local):
             os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)
         with open(local, 'w') as f:
             f.write(content)
-        if not self._allwrite():
+        if not self._allwrite() and path not in self.always_writable:
             os.chmod(local, stat.S_IRUSR)
 
     def _force_sync(self, paths: list[str]) -> list[str]:

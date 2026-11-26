@@ -111,9 +111,9 @@ def _begins_depot_revision(filepath: str, revision: str, workspace_dir: str) -> 
 
 
 def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberMode, workspace_dir: str, *,
-                crashed: bool) -> _PutRight:
+                crashed: bool, aborting: bool) -> _PutRight:
     """Sort the files against the interrupted sync: those it synced, those behind the have-list, and p4's leftovers;
-    crashed when the interrupted pass's own commit counts as made.
+    crashed when the interrupted pass's own commit counts as made, aborting when the passes left go back.
 
     Every other file changed since is one the user changed while the sync was interrupted."""
     interrupted = progress.passes[0] if progress.passes else None
@@ -144,7 +144,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     remove: list[str] = []
     unsorted: list[str] = []
     in_pass = {path for _, path in lists.files} if lists else set()
-    # noclobber refuses a writable file, and a resumed pass doesn't prepare its files again, as a fresh one would.
+    # noclobber refuses a writable file, and a resumed pass doesn't prepare its files again, as a fresh one would;
+    # an abort's pass goes back over the files p4 synced.
     noclobber = clobber_mode is ClobberMode.NOCLOBBER
     read_only: list[str] = []
     for path in sorted(changed | set(judged)):
@@ -168,6 +169,9 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
             synced.append(path)
         elif modes[path] != 'del' and on_disk and local[path] not in off_have:
             synced.append(path)
+            # The file holds what p4 wrote, so read-only again loses nothing.
+            if aborting and noclobber and is_user_writable(local[path]):
+                read_only.append(path)
         else:
             unsorted.append(path)
     log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
@@ -198,8 +202,9 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
         if noclobber:
             # noclobber refuses a writable file. Git has no copy of a git-ignored file to tell an edit by, so one made
             # writable since is kept, as a fresh pass keeps it: its refusal is expected, and the end lists it as not
-            # synced. Of the adds, only those the user made where p4 had still to add one.
-            kept |= {path for mode, path in lists.files if (mode != 'add' or path in users_adds)
+            # synced. Of the adds, only those the user made where p4 had still to add one, unless an abort's sync goes
+            # back over the ones p4 made.
+            kept |= {path for mode, path in lists.files if (mode != 'add' or aborting or path in users_adds)
                      and untouched(path) and is_user_writable(local[path])}
         if clobber_mode is ClobberMode.ALLWRITE:
             # allwrite refuses an add over any file on disk, by its content, and the stored list can't hold one made
@@ -546,8 +551,9 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
     # The client spec's line endings and clobber option, with the depot root as the interrupted sync planned it.
     settings = dataclasses.replace(sync_settings(
         workspace_dir), depot_root=depot_root)
-    put = _sort_files(progress, backend, settings.clobber_mode,
-                      workspace_dir, crashed=crash is not None)
+    # A crash window's abort goes back over no pass's files, as the pass counts as made.
+    put = _sort_files(progress, backend, settings.clobber_mode, workspace_dir, crashed=crash is not None,
+                      aborting=(abort_to is not None or progress.aborting) and crash is None)
     if args.dry_run:
         _put_right(put, progress.tip, workspace_dir, dry_run=True)
         log.heading('Where sync returns to')

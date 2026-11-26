@@ -71,12 +71,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   again at the end, and `_take_crash_commit` counts the crash window's commit as the pass made, then `_put_right` writes
   the files behind the have-list again with `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the deleted
   ones, clears the leftovers, and, under noclobber, makes read-only again a tracked file of the pass made writable since
-  without an edit, as the resumed pass doesn't prepare its files again, and keeps a git-ignored one made writable since,
-  which git has no copy of to tell an edit by, adding it to the stored ignored files, whose refusal the pass expects. A
-  git-ignored file the user made where the pass adds one is kept the same way, as p4 adds no file over it: a writable
-  one under noclobber, and any under allwrite, which refuses by content. Neither kind is kept in the crash window, whose
-  pass is made. The pass then records that it is put right (`_record_put_right`), after which a file p4 has not reached
-  is at its have revision, and an edit to it is measured from there, not from the recorded tip, and
+  without an edit, as the resumed pass doesn't prepare its files again, and, for an abort, whose sync goes back over
+  them, one p4 synced (`aborting`), and keeps a git-ignored one made writable since, an add of the pass too for an
+  abort, which git has no copy of to tell an edit by, adding it to the stored ignored files, whose refusal the pass
+  expects. A git-ignored file the user made where the pass adds one is kept the same way, as p4 adds no file over it: a
+  writable one under noclobber, and any under allwrite, which refuses by content. Neither kind is kept in the crash
+  window, whose pass is made. The pass then records that it is put right (`_record_put_right`), after which a file p4
+  has not reached is at its have revision, and an edit to it is measured from there, not from the recorded tip, and
   `_resume_sync_passes` runs the interrupted pass with its stored lists (`sync_passes.run_passes`) and the later ones as
   usual against the pre-sync commit, and `sync_passes.end_sync` covers every pass, the passes made before the
   interruption among them, local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes

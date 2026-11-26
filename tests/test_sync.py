@@ -1404,6 +1404,65 @@ class TestSyncAbort(SyncTestCase):
             'd.txt')), ('local\na1\nupstream\n', 'd1\n'))
         self.assertIsNone(self.sync_progress_file())
 
+    def test_an_abort_replaces_a_synced_add_of_the_pass_made_writable_since(self):
+        self.interrupt()
+        self.make_writable('f.txt')
+        out = self.sync('--abort')
+        self.assertIn('f.txt', self.listed_under(
+            out, 'Making read-only again the files made writable since'))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'f.txt')))
+        self.assertEqual(self.p4.have, 101)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_replaces_a_synced_update_of_the_pass_made_writable_since(self):
+        self.p4.interrupt_sync('@101', after=2)
+        self.interrupted_sync('101', '102')
+        self.make_writable('a.txt')
+        out = self.sync('--abort')
+        self.assertIn('a.txt', self.listed_under(
+            out, 'Making read-only again the files made writable since'))
+        self.assertEqual(self.read('a.txt'), 'local\na1\n')
+        self.assertEqual(self.p4.have, 100)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_keeps_a_synced_git_ignored_add_of_the_pass_made_writable_since(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.p4.submit(103, {'a0.txt': 'a\n', 'x.log': 'x\n', 'z.txt': 'z\n'})
+        self.p4.interrupt_sync('@103', after=2)
+        self.interrupted_sync('101', '102', '103')
+        self.make_writable('x.log')
+        out = self.sync('--abort')
+        self.assertIn('x.log', self.listed_under(
+            out, "Keeping the git-ignored files p4 won't replace"))
+        self.assertIn('x.log', self.listed_under(
+            out, 'Files not synced (git-ignored and writable)'))
+        self.assertEqual(self.read('x.log'), 'x\n')
+        self.assertEqual(self.p4.have, 102)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_interrupted_abort_finished_by_a_plain_sync_replaces_a_synced_file_made_writable_since(self):
+        self.p4.interrupt_sync('@102', after=2)
+        self.interrupted_sync('101', '102')
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('--abort')
+        self.make_writable('g.txt')
+        out = self.sync()
+        self.assertIn('Finishing the interrupted abort: back to CL 101', out)
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'g.txt')))
+        self.assertEqual(self.p4.have, 101)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_in_the_crash_window_leaves_a_file_of_the_made_pass_writable(self):
+        self.interrupted_in_the_crash_window('101', '102')
+        self.make_writable('d.txt')
+        out = self.sync('--abort')
+        self.assertNotIn('Making read-only again', out)
+        self.assertTrue(os.stat(os.path.join(
+            self.ws, 'd.txt')).st_mode & stat.S_IWUSR)
+        self.assertEqual(self.p4.have, 101)
+        self.assertIsNone(self.sync_progress_file())
+
     def test_an_abort_interrupted_in_its_own_sync_is_finished_by_a_plain_sync(self):
         self.p4.interrupt_sync('@102', after=2)
         self.interrupted_sync('101', '102')

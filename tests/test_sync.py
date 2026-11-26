@@ -474,6 +474,16 @@ class TestSyncLocalChanges(SyncTestCase):
             'b.txt')), ('a2\n', 'b1\nupstream\nagain\n'))
         self.assertEqual(self.synced_commits(), [101, 102])
 
+    def test_a_plus_w_file_an_earlier_pass_added_is_no_local_change(self):
+        self.p4.always_writable.add('w.txt')
+        self.p4.submit(101, {'w.txt': 'w1\n'})
+        self.p4.submit(102, {'w.txt': 'w2\n'})
+        out = self.sync('101', '102')
+        self.assertNotIn('has local changes', out)
+        self.assertNotIn('deleted locally', out)
+        self.assertEqual(self.read('w.txt'), 'w2\n')
+        self.assertEqual(self.synced_commits(), [101, 102])
+
     def test_allwrite_reports_a_modified_ignored_file_not_synced(self):
         self.p4.options = 'allwrite noclobber'
         self.write_file('.gitignore', '*.log\n')

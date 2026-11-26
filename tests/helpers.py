@@ -508,6 +508,9 @@ class FakeP4:
         self.held: dict[str, tuple[str | None, str | None]] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
+        # Files of a +w type: p4 updates one it has even while it is writable, under noclobber, but adds none over a
+        # writable file on disk.
+        self.always_writable: set[str] = set()
         self.in_workspace = True
         self.calls: list[list[str]] = []
 
@@ -691,7 +694,8 @@ class FakeP4:
         elif args[:4] == ['-x', '-', '-ztag', 'fstat']:
             out = []
             for path in files:
-                kind = 'binary' if path in self.binary else 'text'
+                kind = ('binary' if path in self.binary else 'text') + \
+                    ('+w' if path in self.always_writable else '')
                 out += [f'... clientFile {self._local(path)}',
                         f'... headType {kind}', '']
         elif args[:4] == ['-x', '-', 'sync', '-f'] and (input or '').endswith('#have'):
@@ -1017,8 +1021,8 @@ class FakeP4:
                 what = 'added as'
             writable = os.path.exists(local) and os.stat(
                 local).st_mode & stat.S_IWUSR
-            if (not preview and writable and self._noclobber()
-                    and not self._allwrite()):
+            if (not preview and writable and self._noclobber() and not self._allwrite()
+                    and not (path in self.always_writable and path in before)):
                 refused.append(f"Can't clobber writable file {local}")
                 continue
             if (self._allwrite() and self._noclobber() and os.path.exists(local)

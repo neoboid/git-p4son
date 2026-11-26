@@ -761,19 +761,6 @@ class TestSyncResume(SyncTestCase):
         self.assertEqual(self.p4.transferred, ['e.txt', 'f.txt', 'g.txt'])
         self.assert_synced_as_if_uninterrupted()
 
-    def test_a_file_changed_since_the_interruption_is_refused_for_now(self):
-        self.p4.interrupt_sync('@101', after=2)
-        progress = self.interrupted_sync('101', '102')
-        self.write_file('new.txt', 'mine\n')
-        os.chmod(os.path.join(self.ws, 'd.txt'), stat.S_IRUSR | stat.S_IWUSR)
-        self.edit('d.txt', 'mine\n')
-        out = self.sync_fails(message='changed since the interrupted sync')
-        listed = out.splitlines()
-        self.assertIn('new.txt', listed)
-        self.assertIn('d.txt', listed)
-        self.assertNotIn('a.txt', listed)
-        self.assertEqual(self.sync_progress_file(), progress)
-
     def test_writable_mode_makes_every_synced_file_writable(self):
         self.write_config(
             '[depot]\nroot = "//myclient"\n[core]\nwritable = true\n')
@@ -895,6 +882,103 @@ class TestSyncPutsRight(SyncTestCase):
                       "p4's leftovers to clear"))
         self.assertTrue(os.path.exists(os.path.join(
             self.ws, 'dir', 'tmp.4242.0x1f2e3d.1')))
+        self.assertEqual(self.sync_progress_file(), progress)
+
+
+class TestSyncIntersync(SyncTestCase):
+    """A resume saves the changes made while the sync was interrupted, puts their files back, and merges the changes
+    back after the local changes.
+
+    CL 101 adds e.txt. a.txt, b.txt and e.txt have local changes; CL 102 changes a.txt and e.txt, and adds c.txt, but
+    leaves b.txt alone. sync 102 is interrupted with only a.txt transferred."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_sync(101, {'e.txt': 'e1\n'})
+        self.commit_local_changes('a.txt', 'b.txt', 'e.txt')
+        self.p4.submit(102, {'a.txt': 'a1\nupstream\n',
+                       'c.txt': 'c1\n', 'e.txt': 'e1\nupstream\n'})
+
+    def interrupt(self):
+        self.p4.interrupt_sync('@102', after=1)
+        self.interrupted_sync('102')
+
+    def committed(self, path):
+        return self.git('show', f'main:{path}')
+
+    def test_edits_to_a_file_p4_transferred_and_to_one_it_had_not_reached_merge_back_as_only_the_edits(self):
+        self.interrupt()
+        self.edit('a.txt', 'a1\nupstream\nmine\n')
+        self.edit('e.txt', 'mine\nlocal\ne1\n')
+        out = self.sync()
+        saved = self.listed_under(
+            out, 'Saving 2 files changed since the interrupted sync')
+        self.assertIn('a.txt', saved)
+        self.assertIn('e.txt', saved)
+        self.assertEqual((self.committed('a.txt'), self.committed(
+            'e.txt')), ('a1\nupstream', 'e1\nupstream'))
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\nmine\n')
+        self.assertEqual(self.read('e.txt'), 'mine\nlocal\ne1\nupstream\n')
+        self.assertIsNone(self.sync_progress_file())
+        self.assertEqual(self.git('for-each-ref', 'refs/git-p4son/'), '')
+
+    def test_an_edit_outside_the_pass_leaves_its_local_change_in_the_sync_commit(self):
+        self.interrupt()
+        self.edit('b.txt', 'local\nb1\nmine\n')
+        self.sync()
+        self.assertEqual(self.committed('b.txt'), 'local\nb1')
+        self.assertEqual(self.read('b.txt'), 'local\nb1\nmine\n')
+
+    def test_an_untracked_new_file_and_a_deleted_file_are_kept(self):
+        self.interrupt()
+        self.write_file('new.txt', 'new\n')
+        os.chmod(os.path.join(self.ws, 'b.txt'), stat.S_IRUSR | stat.S_IWUSR)
+        os.remove(os.path.join(self.ws, 'b.txt'))
+        self.sync()
+        self.assertEqual(self.read('new.txt'), 'new\n')
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'b.txt')))
+        names = self.git('ls-tree', '--name-only', 'main').splitlines()
+        self.assertIn('b.txt', names)
+        self.assertNotIn('new.txt', names)
+
+    def test_a_real_conflict_gets_conflict_markers(self):
+        self.interrupt()
+        self.edit('e.txt', 'local\nmine\n')
+        out = self.sync()
+        self.assertIn('<<<<<<<', self.read('e.txt'))
+        self.assertIn('merged with conflicts', out)
+
+    def test_a_second_edit_after_a_second_interruption_is_merged_in_order(self):
+        self.interrupt()
+        self.edit('a.txt', 'a1\nupstream\nfirst\n')
+        self.p4.interrupt_sync('@102', after=1)
+        out = self.interrupted_sync()
+        self.assertEqual(len(out['intersync']), 1)
+        self.edit('e.txt', 'second\nlocal\ne1\nupstream\n')
+        self.sync()
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\nfirst\n')
+        self.assertEqual(self.read('e.txt'), 'second\nlocal\ne1\nupstream\n')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_symlink_made_since_is_refused(self):
+        self.interrupt()
+        try:
+            os.symlink('missing.txt', os.path.join(self.ws, 'link.txt'))
+        except OSError:
+            self.skipTest('this platform makes no symlinks without privileges')
+        progress = self.sync_progress_file()
+        out = self.sync_fails(message='symlinks')
+        self.assertIn('link.txt', out.splitlines())
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_a_dry_run_lists_the_changes_it_would_save_and_changes_nothing(self):
+        self.interrupt()
+        self.edit('b.txt', 'local\nb1\nmine\n')
+        progress = self.sync_progress_file()
+        out = self.sync('--dry-run')
+        self.assertIn('b.txt', self.listed_under(
+            out, 'Changes made since the interrupted sync, to save'))
+        self.assertEqual(self.read('b.txt'), 'local\nb1\nmine\n')
         self.assertEqual(self.sync_progress_file(), progress)
 
 
@@ -1521,6 +1605,7 @@ TestSyncProgressOnJj = on_jj(TestSyncProgress)
 TestSyncResumeOnJj = on_jj(TestSyncResume)
 TestWhileInterruptedOnJj = on_jj(TestWhileInterrupted)
 TestSyncPutsRightOnJj = on_jj(TestSyncPutsRight)
+TestSyncIntersyncOnJj = on_jj(TestSyncIntersync)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncTargetsOnJj = on_jj(TestSyncTargets)

@@ -25,18 +25,25 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   had not reached, is behind it, and so is one p4 deleted that is back; p4's leftovers (`_p4_leftovers`) are the
   `tmp.<pid>.<hex>.<n>` files beside the pass's files and the pass's adds on disk that a `p4 sync -n` of them still
   lists (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, found from p4,
-  not git, so ignored folders too. Any other changed file is refused for now. The pre-sync hooks run again (a failing
-  one leaves it all as it was), then `_put_right` writes the files behind the have-list again with `p4 sync -f
-  <file>#have` (`perforce.p4_sync_to_have`), removes the deleted ones and clears the leftovers, and `resume_sync_passes`
-  runs the interrupted pass with its stored lists (`_resume_pass`) and the later ones as usual against the pre-sync
-  commit, and `_end_sync` covers every pass, the passes made before the interruption among them, local changes staged
-  again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's. A dry run stops after
-  the checks, saying what is left. Changelist arguments are never aliases: aliases name pending CLs, which Perforce
-  renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split user's submit, so
-  each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then checks them all
-  against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split` ignores the configured
-  ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back local
-  changes; after a failure partway, sync stays on the sync branch.
+  not git, so ignored folders too. Any other changed file is an intersync change, one the user made while the sync was
+  interrupted (`_Intersync`): once the hooks have run, `_save_intersync` commits each such file's content under `ours/`
+  (`git.commit_files`, kept alive by `refs/git-p4son/intersync-changes`), and records the save; `_put_right` then puts
+  the files back as the sync expects them (the have revision in the pass, else the recorded tip's content with
+  `git.restore_files`, gone where there is none), and `_complete_saves` adds the have revision's content under `have/`,
+  the base of a file p4 had transferred, as no commit holds it; a file p4 had not reached is measured from the recorded
+  tip, which `p4_sync_pending` tells. A symlink among them is refused, as a save holds file content. The pre-sync hooks
+  run again (a failing one leaves it all as it was), then `_put_right` writes the files behind the have-list again with
+  `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the deleted ones and clears the leftovers, and
+  `resume_sync_passes` runs the interrupted pass with its stored lists (`_resume_pass`) and the later ones as usual
+  against the pre-sync commit, and `_end_sync` covers every pass, the passes made before the interruption among them,
+  local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's,
+  then the intersync changes, oldest save first (`_saved_changes`), and the ref is deleted with the sync progress. A dry
+  run stops after the checks, saying what is left. Changelist arguments are never aliases: aliases name pending CLs,
+  which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split
+  user's submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then
+  checks them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split`
+  ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as
+  merged-back local changes; after a failure partway, sync stays on the sync branch.
 
   The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
   `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's

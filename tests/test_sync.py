@@ -19,13 +19,10 @@ from git_p4son.sync_progress import ProgressRecorder
 from git_p4son.sync import (
     build_sync_targets,
     _collect_split_users,
-    _make_synced_files_writable,
     _should_split,
-    SyncPass,
-    _sync_changelist,
     sync_command,
-    sync_preflight,
 )
+from git_p4son.sync_passes import SyncPass, _make_synced_files_writable, _sync_changelist, sync_preflight
 from tests.helpers import (
     on_jj,
     captured_output,
@@ -42,25 +39,25 @@ def _sync_args(changelist, **overrides):
 
 
 @mock.patch('git_p4son.writable.make_writable', return_value=0)
-@mock.patch('git_p4son.sync.get_tracked_files')
+@mock.patch('git_p4son.sync_passes.get_tracked_files')
 class TestMakeSyncedFilesWritable(unittest.TestCase):
     """Writable mode's post-sync step: tracked synced files go writable."""
 
-    @mock.patch('git_p4son.sync.is_writable_mode', return_value=False)
+    @mock.patch('git_p4son.sync_passes.is_writable_mode', return_value=False)
     def test_does_nothing_when_mode_is_off(self, _mode, mock_tracked,
                                            mock_make):
         _make_synced_files_writable(['/ws/a.cpp'], '/ws')
         mock_tracked.assert_not_called()
         mock_make.assert_not_called()
 
-    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
+    @mock.patch('git_p4son.sync_passes.is_writable_mode', return_value=True)
     def test_does_nothing_when_nothing_was_synced(self, _mode, mock_tracked,
                                                   mock_make):
         _make_synced_files_writable([], '/ws')
         mock_tracked.assert_not_called()
         mock_make.assert_not_called()
 
-    @mock.patch('git_p4son.sync.is_writable_mode', return_value=True)
+    @mock.patch('git_p4son.sync_passes.is_writable_mode', return_value=True)
     def test_only_tracked_files_are_made_writable(self, _mode, mock_tracked,
                                                   mock_make):
         """Only tracked files are made writable, each looked up once."""
@@ -73,7 +70,7 @@ class TestMakeSyncedFilesWritable(unittest.TestCase):
         mock_make.assert_called_once_with(['/ws/a.cpp', '/ws/b.h'])
 
 
-@mock.patch('git_p4son.sync.p4_sync', return_value=[])
+@mock.patch('git_p4son.sync_passes.p4_sync', return_value=[])
 class TestSyncChangelist(unittest.TestCase):
     """p4 refusing an expected (git-ignored) file is tolerated; any other refusal raises."""
 
@@ -1045,7 +1042,7 @@ class TestSyncAbort(SyncTestCase):
             if len(previews) == 2:
                 raise KeyboardInterrupt
             return preview(*args)
-        with mock.patch('git_p4son.sync.p4_sync_preview', side_effect=interrupt_the_second):
+        with mock.patch('git_p4son.sync_passes.p4_sync_preview', side_effect=interrupt_the_second):
             progress = self.interrupted_sync('102')
         self.assertEqual(progress['uncommitted'], [['del', 'x.txt']])
         out = self.sync('--abort')
@@ -1255,7 +1252,7 @@ class TestSyncBranch(SyncTestCase):
     def test_an_abort_of_stale_sync_progress_names_the_changes_it_saved(self):
         self.interrupt()
         self.edit('b.txt', 'mine\n')
-        with mock.patch('git_p4son.sync._put_right', side_effect=KeyboardInterrupt):
+        with mock.patch('git_p4son.sync_resume._put_right', side_effect=KeyboardInterrupt):
             self.interrupted_sync()
         self.git('commit', '-q', '--allow-empty', '-m',
                  'git-p4son: p4 sync //myclient/...@105')
@@ -1732,9 +1729,9 @@ class TestSyncPreflight(unittest.TestCase):
         sync_preflight('//ws', '/ws', ignore_blocking_processes,
                        GitBackend('/ws'), 'main')
 
-    @mock.patch('git_p4son.sync.p4_get_opened_files')
+    @mock.patch('git_p4son.sync_passes.p4_get_opened_files')
     @mock.patch('git_p4son.lib.get_dirty_files')
-    @mock.patch('git_p4son.sync.check_no_blocking_processes',
+    @mock.patch('git_p4son.sync_passes.check_no_blocking_processes',
                 side_effect=CommandError('blocked'))
     def test_blocking_process_stops_before_everything_else(self, mock_blocking, mock_dirty, mock_opened):
         with self.assertRaisesRegex(CommandError, 'blocked'):
@@ -1743,22 +1740,22 @@ class TestSyncPreflight(unittest.TestCase):
         mock_dirty.assert_not_called()
         mock_opened.assert_not_called()
 
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[])
+    @mock.patch('git_p4son.sync_passes.p4_get_opened_files', return_value=[])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
-    @mock.patch('git_p4son.sync.check_no_blocking_processes')
+    @mock.patch('git_p4son.sync_passes.check_no_blocking_processes')
     def test_ignore_blocking_processes_is_passed_on(self, mock_blocking, _dirty, _opened):
         self.preflight(ignore_blocking_processes=True)
         mock_blocking.assert_called_once_with('/ws', True)
 
-    @mock.patch('git_p4son.sync.p4_get_opened_files')
+    @mock.patch('git_p4son.sync_passes.p4_get_opened_files')
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[('a.txt', 'modify')])
     def test_dirty_git_stops_before_p4(self, _dirty, mock_opened):
         with self.assertRaisesRegex(CommandError, 'not clean'):
             self.preflight()
         mock_opened.assert_not_called()
 
-    @mock.patch('git_p4son.sync.get_tracked_files', return_value={'a.txt'})
-    @mock.patch('git_p4son.sync.p4_get_opened_files', return_value=[('a.txt', 'modify')])
+    @mock.patch('git_p4son.sync_passes.get_tracked_files', return_value={'a.txt'})
+    @mock.patch('git_p4son.sync_passes.p4_get_opened_files', return_value=[('a.txt', 'modify')])
     @mock.patch('git_p4son.lib.get_dirty_files', return_value=[])
     def test_p4_opened_files_the_sync_branch_tracks_fail_it(self, _dirty, _opened, mock_tracked):
         with self.assertRaisesRegex(CommandError, 'p4-opened files tracked by git'):

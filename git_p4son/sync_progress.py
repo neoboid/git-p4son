@@ -197,7 +197,7 @@ class ProgressRecorder:
         write_sync_progress(self.progress, self.workspace_dir)
 
     def _stored(self, filepath: str) -> str:
-        return normalize_workspace_path(filepath, self.workspace_dir, allow_outside=True) or filepath
+        return workspace_path(filepath, self.workspace_dir)
 
     def _all_stored(self, filepaths: list[str]) -> list[str]:
         return [self._stored(filepath) for filepath in filepaths]
@@ -232,6 +232,15 @@ def _added(paths: list[str], more: list[str]) -> list[str]:
 def local_path(path: str, workspace_dir: str) -> str:
     """The local path of a path as the sync progress stores it."""
     return os.path.join(workspace_dir, *path.split('/'))
+
+
+def local_paths(paths: list[str], workspace_dir: str) -> list[str]:
+    return [local_path(path, workspace_dir) for path in paths]
+
+
+def workspace_path(filepath: str, workspace_dir: str) -> str:
+    """filepath as a slash path from the workspace root, which tells the same file however it is spelled."""
+    return normalize_workspace_path(filepath, workspace_dir, allow_outside=True) or filepath
 
 
 def progress_path(workspace_dir: str) -> str:

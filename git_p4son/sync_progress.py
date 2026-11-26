@@ -18,8 +18,16 @@ from .toml_writer import format_key, format_value
 VERSION = 1
 # Keeps the commits of the changes made while a sync is interrupted alive, until the sync finishes.
 INTERSYNC_REF = 'refs/git-p4son/intersync-changes'
-STALE_SYNC_PROGRESS = ('The sync commits above were made after the interrupted sync, so its sync progress is stale. '
-                       'Drop it with "git p4son sync --abort".')
+
+
+class StaleSyncProgress(CommandError):
+    """The sync branch synced past the interrupted sync, which an abort gets out of by dropping the sync progress."""
+
+    def __init__(self) -> None:
+        super().__init__('The sync commits above were made after the interrupted sync, so its sync progress is '
+                         'stale. Drop it with "git p4son sync --abort".')
+
+
 # Keeps the commits a resume unwound from the sync branch, until the next sync replaces it.
 INTERSYNC_COMMITS_REF = 'refs/git-p4son/intersync-commits'
 _REPLACE_ATTEMPTS = 5

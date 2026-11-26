@@ -23,6 +23,7 @@ from git_p4son.sync import (
     _should_split,
     sync_command,
 )
+from git_p4son.sync_resume import _COMPARED_BYTES, _begins_depot_revision
 from git_p4son.sync_passes import SyncPass, _make_synced_files_writable, _sync_changelist, sync_preflight
 from tests.helpers import (
     on_jj,
@@ -773,6 +774,30 @@ class TestSyncResume(SyncTestCase):
         self.assert_synced_as_if_uninterrupted()
 
 
+class TestBeginsDepotRevision(unittest.TestCase):
+    """A file on disk is p4's partial add when it starts the depot revision, line endings aside, compared over the
+    first _COMPARED_BYTES of each."""
+
+    def check(self, written, depot):
+        with tempfile.TemporaryDirectory() as ws:
+            path = os.path.join(ws, 'f.bin')
+            with open(path, 'wb') as f:
+                f.write(written)
+            with mock.patch('git_p4son.sync_resume.p4_print_start',
+                            side_effect=lambda _file, _revision, size, _ws: depot[:size]):
+                return _begins_depot_revision(path, '@101', ws)
+
+    def test_a_prefix_in_the_client_s_line_endings_is_p4_s(self):
+        self.assertTrue(self.check(b'one\r\ntwo\r', b'one\ntwo\nthree\n'))
+
+    def test_a_difference_in_the_compared_start_is_the_user_s(self):
+        self.assertFalse(self.check(b'one\nmine\n', b'one\ntwo\n'))
+
+    def test_a_difference_past_the_compared_start_is_not_read(self):
+        start = b'a' * _COMPARED_BYTES
+        self.assertTrue(self.check(start + b'mine', start + b'p4s'))
+
+
 class TestSyncPutsRight(SyncTestCase):
     """A resume first puts right what the interruption left: files behind the have-list, and p4's leftovers."""
 
@@ -951,6 +976,33 @@ class TestSyncPutsRight(SyncTestCase):
         self.p4.interrupt_sync('@101', after=1)
         progress = self.interrupted_sync('101')
         self.assertEqual(progress['passes'][0]['ignored'], ['x.log'])
+        out = self.sync()
+        self.assertNotIn("Clearing p4's leftovers", out)
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertIn('x.log', self.listed_under(
+            out, 'Files not synced (git-ignored and writable)'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_file_made_since_where_the_pass_adds_one_is_kept_and_merged_back(self):
+        self.p4.submit(101, {'a0.txt': 'a\n', 'new.txt': 'theirs\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        self.write_file('new.txt', 'mine\n')
+        out = self.sync()
+        self.assertNotIn("Clearing p4's leftovers", out)
+        self.assertIn('new.txt', self.listed_under(
+            out, 'Merging the changes made while the sync was interrupted'))
+        self.assertIn('mine', self.read('new.txt'))
+        self.assertEqual(self.git('show', 'main:new.txt'), 'theirs')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_git_ignored_file_made_since_where_the_pass_adds_one_is_kept_not_synced(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        self.write_file('x.log', 'mine\n')
         out = self.sync()
         self.assertNotIn("Clearing p4's leftovers", out)
         self.assertEqual(self.read('x.log'), 'mine\n')

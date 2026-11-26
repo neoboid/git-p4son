@@ -22,7 +22,7 @@ from .sync_progress import (
 )
 from .sync_merge import IntersyncChange, WritableSyncFileSet
 from .writable import is_user_writable, is_writable_mode, make_read_only, make_writable
-from .perforce import ClobberMode, p4_off_have, p4_sync_pending, p4_sync_to_have, is_p4_temp_file
+from .perforce import ClobberMode, p4_off_have, p4_print_start, p4_sync_pending, p4_sync_to_have, is_p4_temp_file
 from .sync_passes import (
     catch_up_passes, check_p4_workspace_clean, end_sync, finish_on_branch, OnSyncBranch, run_passes,
     run_pre_sync_hooks, stage_again, sync_settings, SyncContext, SyncPass, SyncSettings,
@@ -55,9 +55,10 @@ def _pass_of(progress_pass: ProgressPass) -> SyncPass:
     return SyncPass(progress_pass.changelist, progress_pass.label, progress_pass.exact)
 
 
-def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: str) -> set[str]:
+def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: str) -> tuple[set[str], set[str]]:
     """What p4 left of the files the interrupted pass had not finished: temp files beside its files, and adds p4
-    has not recorded that its stored lists don't account for, as an ignored file or one added on both sides.
+    has not recorded that its stored lists don't account for, as an ignored file or one added on both sides, and
+    whose content begins the depot revision p4 was writing; (those, and the adds on disk that are the user's).
 
     An abort's pass adds back the files the pass it gives up deleted, so a deleted file on disk is a candidate too."""
     accounted = set(lists.ignored) | {
@@ -68,8 +69,15 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     pending = p4_sync_pending(on_disk, _pass_of(
         interrupted).revision, workspace_dir)
     log.success(f'{plural(len(pending), "file")} on disk not synced yet')
-    leftovers = {workspace_path(entry.filepath, workspace_dir)
-                 for entry in pending if entry.mode == 'add'}
+    revision = _pass_of(interrupted).revision
+    leftovers: set[str] = set()
+    users: set[str] = set()
+    for entry in pending:
+        if entry.mode == 'add':
+            p4s = _begins_depot_revision(
+                entry.filepath, revision, workspace_dir)
+            (leftovers if p4s else users).add(
+                workspace_path(entry.filepath, workspace_dir))
     for folder in {path.rpartition('/')[0] for _, path in lists.files}:
         try:
             names = os.listdir(local_path(folder, workspace_dir)
@@ -78,7 +86,23 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
             continue
         leftovers.update(
             f'{folder}/{name}' if folder else name for name in names if is_p4_temp_file(name))
-    return leftovers
+    return leftovers, users
+
+
+# A user's file that matches the depot revision this far is taken as p4's: the compare reads no more of either.
+_COMPARED_BYTES = 1 << 20
+
+
+def _begins_depot_revision(filepath: str, revision: str, workspace_dir: str) -> bool:
+    """Whether the file on disk holds the start of its depot content at revision, as p4 leaves a file it was writing
+    when it was stopped, line endings aside, as p4 writes the client's; up to _COMPARED_BYTES of each."""
+    depot = p4_print_start(filepath, revision, _COMPARED_BYTES, workspace_dir)
+    if depot is None:
+        return False
+    with open(filepath, 'rb') as f:
+        written = f.read(_COMPARED_BYTES).replace(b'\r\n', b'\n')
+    # A file cut between \r and \n ends in a lone \r.
+    return depot.replace(b'\r\n', b'\n').startswith(written.removesuffix(b'\r'))
 
 
 def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberMode, workspace_dir: str) -> _PutRight:
@@ -87,8 +111,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     Every other file changed since is one the user changed while the sync was interrupted."""
     interrupted = progress.passes[0] if progress.passes else None
     lists = interrupted.lists if interrupted else None
-    leftovers = _p4_leftovers(
-        interrupted, lists, workspace_dir) if interrupted and lists else set()
+    leftovers, users_adds = _p4_leftovers(
+        interrupted, lists, workspace_dir) if interrupted and lists else (set(), set())
     log.heading('Checking the files against the interrupted sync')
     # A catch-up pass's files are uncommitted until the next commit, and the interrupted pass's entry wins.
     modes = {path: mode for mode, path in progress.uncommitted}
@@ -170,8 +194,10 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
                            f'the workspace, then run "git p4son sync" again, {GIVE_UP}.')
     # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
     # keeps it: its refusal is expected, and the end lists it as not synced.
-    ignore = sorted(path for mode, path in lists.files if mode != 'add' and path not in tracked and path not in changed
-                    and path not in lists.ignored and is_user_writable(local[path])) if noclobber and lists else []
+    # Of the adds, only those the user made where p4 had still to add one.
+    ignore = sorted(path for mode, path in lists.files if (mode != 'add' or path in users_adds) and path not in tracked
+                    and path not in changed and path not in lists.ignored and is_user_writable(local[path])
+                    ) if noclobber and lists else []
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
 

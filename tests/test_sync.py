@@ -216,6 +216,23 @@ class SyncTestCase(P4RepoTestCase):
         except OSError:
             self.skipTest('this platform makes no symlinks without privileges')
 
+    def make_writable(self, name):
+        """Make the workspace file name writable, as an editor or a chmod would."""
+        path = os.path.join(self.ws, name)
+        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+
+    def interrupted_in_the_crash_window(self, *argv):
+        """Run git p4son sync with argv, stopped after a pass's commit and before its record; the sync progress file
+        it left."""
+        record = ProgressRecorder.pass_made
+
+        def crash_after_the_commit(recorder, prep, tip=None):
+            if tip is not None:
+                raise KeyboardInterrupt
+            record(recorder, prep, tip)
+        with mock.patch.object(ProgressRecorder, 'pass_made', crash_after_the_commit):
+            return self.interrupted_sync(*argv)
+
     def sync_fails(self, *argv, message):
         """Run sync with argv, expecting a CommandError matching message; returns what it printed."""
         return self.command_fails(sync_command, ['sync', *argv], message)
@@ -760,14 +777,7 @@ class TestSyncResume(SyncTestCase):
         self.assertIsNone(self.sync_progress_file())
 
     def test_a_crash_between_a_pass_s_commit_and_its_record_counts_the_commit(self):
-        record = ProgressRecorder.pass_made
-
-        def crash_after_the_commit(recorder, prep, tip=None):
-            if tip is not None:
-                raise KeyboardInterrupt
-            record(recorder, prep, tip)
-        with mock.patch.object(ProgressRecorder, 'pass_made', crash_after_the_commit):
-            progress = self.interrupted_sync('101', '102')
+        progress = self.interrupted_in_the_crash_window('101', '102')
         self.assertEqual(progress['passes'][0]['changelist'], 101)
         out = self.sync()
         self.assertIn("the interrupted pass's own commit", out)
@@ -848,8 +858,7 @@ class TestSyncPutsRight(SyncTestCase):
         self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
         self.p4.interrupt_sync('@101', after=1)
         self.interrupted_sync('101')
-        path = os.path.join(self.ws, 'b.txt')
-        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+        self.make_writable('b.txt')
         out = self.sync()
         self.assertIn('b.txt', self.listed_under(
             out, 'Making read-only again the files made writable since'))
@@ -877,8 +886,7 @@ class TestSyncPutsRight(SyncTestCase):
         self.p4.submit(102, {'a0.txt': 'a\n', 'x.log': 'x2\n'})
         self.p4.interrupt_sync('@102', after=1)
         self.interrupted_sync('102')
-        path = os.path.join(self.ws, 'x.log')
-        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+        self.make_writable('x.log')
         out = self.sync()
         self.assertEqual(self.read('x.log'), 'x1\n')
         self.assertIn('x.log', self.listed_under(
@@ -1026,14 +1034,20 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.git('show', 'main:new.txt'), 'theirs')
         self.assertIsNone(self.sync_progress_file())
 
-    def test_a_git_ignored_file_made_since_where_the_pass_adds_one_is_kept_not_synced(self):
+    def interrupt_before_an_ignored_add(self, options):
+        """Under options, have sync 101 interrupted before p4 reaches x.log, a git-ignored file CL 101 adds, then make
+        x.log; what the resume printed."""
+        self.p4.options = options
         self.write_file('.gitignore', '*.log\n')
         self.commit('Ignore logs')
-        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n'})
+        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n', 'z.txt': 'z\n'})
         self.p4.interrupt_sync('@101', after=1)
         self.interrupted_sync('101')
         self.write_file('x.log', 'mine\n')
-        out = self.sync()
+        return self.sync()
+
+    def test_a_git_ignored_file_made_since_where_the_pass_adds_one_is_kept_not_synced(self):
+        out = self.interrupt_before_an_ignored_add('noallwrite noclobber')
         self.assertNotIn("Clearing p4's leftovers", out)
         self.assertEqual(self.read('x.log'), 'mine\n')
         self.assertIn('x.log', self.listed_under(
@@ -1423,14 +1437,7 @@ class TestSyncAbort(SyncTestCase):
         self.assertIsNone(self.sync_progress_file())
 
     def test_an_abort_in_the_crash_window_keeps_the_pass_s_commit(self):
-        record = ProgressRecorder.pass_made
-
-        def crash_after_the_commit(recorder, prep, tip=None):
-            if tip is not None:
-                raise KeyboardInterrupt
-            record(recorder, prep, tip)
-        with mock.patch.object(ProgressRecorder, 'pass_made', crash_after_the_commit):
-            self.interrupted_sync('101', '102')
+        self.interrupted_in_the_crash_window('101', '102')
         self.p4.transferred.clear()
         out = self.sync('--abort')
         self.assertIn('Aborting the interrupted sync: back to CL 101', out)

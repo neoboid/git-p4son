@@ -44,12 +44,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   the file removed once the end has run, before the post-sync hooks. A failure partway says to run `git p4son sync` to
   finish (`fail_sync`, resumable while the file exists).
 
-- **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
-  onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or
-  before the last synced one (`find_sync_state`), with no override, and one that isn't submitted
-  (`describe_changelist`), and warns about one older than an earlier cherry-pick. Its catch-up passes
-  (`catch_up_passes`, which `sync last-synced` uses too) sync to the last synced changelist, then each cherry-pick
-  since it in order, so the workspace matches the sync branch before the new ones.
+- **`cherry_pick.py`** - The `cherry-pick` command, refused while an interrupted sync waits
+  (`check_no_interrupted_sync`): syncs only the files of submitted changelists (`p4 sync @=N`) onto the sync branch,
+  through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or before the last synced one
+  (`find_sync_state`), with no override, and one that isn't submitted (`describe_changelist`), and warns about one older
+  than an earlier cherry-pick. Its catch-up passes (`catch_up_passes`, which `sync last-synced` uses too) sync to the
+  last synced changelist, then each cherry-pick since it in order, so the workspace matches the sync branch before the
+  new ones.
 
 - **`sync_split_users.py`** - The split users: reading and writing the `sync.split-users` list, written in place
   (`set_setting_in_place`) so the rest of `config.toml` keeps its comments and layout, resolving the `$(user)`
@@ -144,8 +145,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path, its base commit
   and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace root, a list
   item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` and `resume_sync_passes`
-  go; `read_sync_progress` reads it back for a resume, refusing one a newer git-p4son wrote, and `local_path` turns a
-  stored path into a local one.
+  go; `read_sync_progress` reads it back for a resume, refusing one a newer git-p4son wrote, `check_no_interrupted_sync`
+  refuses `new`, `update`, `review` and `cherry-pick` while it exists, as the files on disk are partly synced, and
+  `local_path` turns a stored path into a local one.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip

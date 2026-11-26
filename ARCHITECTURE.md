@@ -74,21 +74,22 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   without an edit, as the resumed pass doesn't prepare its files again, and keeps a git-ignored one made writable since,
   which git has no copy of to tell an edit by, adding it to the stored ignored files, whose refusal the pass expects. A
   git-ignored file the user made where the pass adds one is kept the same way, as p4 adds no file over it: a writable
-  one under noclobber, and any under allwrite, which refuses by content. The pass then records that it is put right
-  (`_record_put_right`), after which a file p4 has not reached is at its have revision, and an edit to it is measured
-  from there, not from the recorded tip, and `_resume_sync_passes` runs the interrupted pass with its stored lists
-  (`sync_passes.run_passes`) and the later ones as usual against the pre-sync commit, and `sync_passes.end_sync` covers
-  every pass, the passes made before the interruption among them, local changes staged again from git
-  (`stage_changed_files`) and the earlier merge outcomes reported with this run's, then the intersync changes, with
-  theirs, oldest save first (`_saved_changes`), and the ref is deleted with the sync progress. A dry run stops after the
-  checks, saying what is left. `--abort` goes through the same checks, sorting and putting right, then `_abort` replaces
-  the passes left in the sync progress with the catch-up to the sync branch's last commit (`catch_up_passes`),
-  uncommitted, when the interrupted pass's p4 sync or a catch-up pass's had run, and records them before their p4 sync,
-  so the resume that runs them, then or after an interruption, is the abort, which the sync progress marks (`aborting`),
-  so a later resume says it finishes the abort; the first runs with the interrupted pass's stored lists, as every sync
-  catches up to its last sync first, so going back there moves only that pass's files. An abort of stale sync progress
-  (`StaleSyncProgress`) only removes it, naming any changes it saved, which only the intersync ref keeps then, and one
-  with no synced changelist to go back to, a first sync, refuses.
+  one under noclobber, and any under allwrite, which refuses by content. Neither kind is kept in the crash window, whose
+  pass is made. The pass then records that it is put right (`_record_put_right`), after which a file p4 has not reached
+  is at its have revision, and an edit to it is measured from there, not from the recorded tip, and
+  `_resume_sync_passes` runs the interrupted pass with its stored lists (`sync_passes.run_passes`) and the later ones as
+  usual against the pre-sync commit, and `sync_passes.end_sync` covers every pass, the passes made before the
+  interruption among them, local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes
+  reported with this run's, then the intersync changes, with theirs, oldest save first (`_saved_changes`), and the ref
+  is deleted with the sync progress. A dry run stops after the checks, saying what is left. `--abort` goes through the
+  same checks, sorting and putting right, then `_abort` replaces the passes left in the sync progress with the catch-up
+  to the sync branch's last commit (`catch_up_passes`), uncommitted, when the interrupted pass's p4 sync or a catch-up
+  pass's had run, and records them before their p4 sync, so the resume that runs them, then or after an interruption, is
+  the abort, which the sync progress marks (`aborting`), so a later resume says it finishes the abort; the first runs
+  with the interrupted pass's stored lists, as every sync catches up to its last sync first, so going back there moves
+  only that pass's files. An abort of stale sync progress (`StaleSyncProgress`) only removes it, naming any changes it
+  saved, which only the intersync ref keeps then, and one with no synced changelist to go back to, a first sync,
+  refuses.
 
 - **`cherry_pick.py`** - The `cherry-pick` command, refused while an interrupted sync waits
   (`check_no_interrupted_sync`): syncs only the files of submitted changelists (`p4 sync @=N`) onto the sync branch,

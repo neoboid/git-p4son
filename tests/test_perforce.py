@@ -7,7 +7,10 @@ from unittest import mock
 from git_p4son.common import CommandError, RunError
 from git_p4son.perforce import (
     ClobberMode,
+    is_p4_temp_file,
     p4_off_have,
+    p4_sync_pending,
+    p4_sync_to_have,
     OutOfDate,
     extract_description_lines,
     get_changelist_spec,
@@ -336,6 +339,53 @@ class TestP4OffHave(unittest.TestCase):
 
     def test_no_files_asks_nothing(self):
         self.assertEqual(p4_off_have([], '/ws'), (set(), set()))
+
+
+class TestP4TempFiles(unittest.TestCase):
+    def test_names_p4_writes_a_file_under_before_renaming_it(self):
+        # p4 2025.1 on macOS writes the middle part as 0x and hex; MSVC's %p would leave the 0x out.
+        for name in ('tmp.53782.0x1ffde1300.91', 'tmp.4242.1F2E3D.1'):
+            self.assertTrue(is_p4_temp_file(name), name)
+        for name in ('tmp.txt', 'tmp.4242.1f2e3d', 'a/tmp.1.2.3', 'tmp.x.1.1'):
+            self.assertFalse(is_p4_temp_file(name), name)
+
+
+class TestP4SyncPending(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_lists_the_files_a_sync_to_the_revision_would_still_sync(self, mock_run):
+        mock_run.return_value = make_run_result(
+            stdout=['//ws/b.txt#1 - added as /ws/b.txt'], stderr=['/ws/a.txt@101 - file(s) up-to-date.'],
+            returncode=1)
+        self.assertEqual(p4_sync_pending(['/ws/a.txt', '/ws/b.txt'], '@101', '/ws'),
+                         [P4SyncPreviewFile('add', '/ws/b.txt')])
+        self.assertEqual(mock_run.call_args.args[0][-2:], ['sync', '-n'])
+        self.assertEqual(
+            mock_run.call_args.kwargs['input'], '/ws/a.txt@101\n/ws/b.txt@101')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_another_error_raises(self, mock_run):
+        mock_run.return_value = make_run_result(
+            returncode=1, stderr=['Perforce client error: connect failed'])
+        with captured_output(), self.assertRaisesRegex(CommandError, 'could not say'):
+            p4_sync_pending(['/ws/a.txt'], '@101', '/ws')
+
+    def test_no_files_asks_nothing(self):
+        self.assertEqual(p4_sync_pending([], '@101', '/ws'), [])
+
+
+class TestP4SyncToHave(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run')
+    def test_each_file_escaped_then_at_its_have_revision(self, mock_run):
+        mock_run.return_value = make_run_result()
+        p4_sync_to_have(['/ws/a@b.txt', '/ws/c.txt'], '/ws')
+        self.assertEqual(mock_run.call_args.args[0][-2:], ['sync', '-f'])
+        self.assertEqual(
+            mock_run.call_args.kwargs['input'], '/ws/a%40b.txt#have\n/ws/c.txt#have')
+
+    @mock.patch('git_p4son.perforce.run')
+    def test_no_files_runs_nothing(self, mock_run):
+        p4_sync_to_have([], '/ws')
+        mock_run.assert_not_called()
 
 
 class TestGetClientSpec(unittest.TestCase):

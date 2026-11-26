@@ -20,6 +20,10 @@
 - The messages of a sync that fails partway name `git p4son sync` to finish it and `git p4son sync --abort` to give
   it up, where they said to return once it was sorted out, and a file p4 couldn't replace to commit or restore the
   synced files
+- `sync` no longer stops with "p4 unexpectedly refused to replace the files above" when Perforce adds a git-ignored
+  file of a `+w` type where a writable file is already on disk. p4 overwrites a `+w` file it has synced before, but
+  adds none over a writable file, so this one is kept and listed as not synced, as other git-ignored writable files
+  are
 - A Ctrl-C during the post-sync hooks of `sync` or `cherry-pick` stops the hooks, not the command's end: it says
   "post-sync hooks interrupted", returns to where it started, with jj after rebasing, and exits with code 1. So
   does an error that stops them, such as an expired p4 login for `$(user)`. It used to stay on the sync branch and

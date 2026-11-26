@@ -4,11 +4,12 @@ import sys
 import unittest
 from unittest import mock
 
-from git_p4son.common import CommandError, RunError
+from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.perforce import (
     ClobberMode,
     is_p4_temp_file,
     p4_off_have,
+    p4_print_start,
     p4_sync_pending,
     p4_sync_to_have,
     OutOfDate,
@@ -348,6 +349,25 @@ class TestP4TempFiles(unittest.TestCase):
             self.assertTrue(is_p4_temp_file(name), name)
         for name in ('tmp.txt', 'tmp.4242.1f2e3d', 'a/tmp.1.2.3', 'tmp.x.1.1'):
             self.assertFalse(is_p4_temp_file(name), name)
+
+
+class TestP4PrintStart(unittest.TestCase):
+    @mock.patch('git_p4son.perforce.run_output_start')
+    def test_gives_the_start_of_the_depot_content_at_the_revision(self, mock_run):
+        mock_run.return_value = RunResult(0, b'a\x00b', b'')
+        self.assertEqual(p4_print_start(
+            '/ws/d@1.txt', '@101', 3, '/ws'), b'a\x00b')
+        self.assertEqual(
+            mock_run.call_args.args[0][-4:], ['-x', '-', 'print', '-q'])
+        self.assertEqual(mock_run.call_args.args[1], 3)
+        self.assertEqual(
+            mock_run.call_args.kwargs['input'], '/ws/d%401.txt@101')
+
+    @mock.patch('git_p4son.perforce.run_output_start')
+    def test_a_file_the_revision_lacks_gives_none(self, mock_run):
+        mock_run.return_value = RunResult(
+            0, b'', b'/ws/x.txt@101 - no such file(s).\n')
+        self.assertIsNone(p4_print_start('/ws/x.txt', '@101', 3, '/ws'))
 
 
 class TestP4SyncPending(unittest.TestCase):

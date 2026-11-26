@@ -21,6 +21,7 @@ from git_p4son.common import (
     prompt_numbered,
     run,
     run_interactive,
+    run_output_start,
     run_with_stream_output,
     RunError,
     RunResult,
@@ -494,3 +495,19 @@ class TestPromptNumbered(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestRunOutputStart(unittest.TestCase):
+    def test_reads_only_the_first_bytes_and_ends_the_command(self):
+        script = 'import sys\nwhile True:\n    sys.stdout.write("x" * 65536)\n'
+        result = run_output_start([sys.executable, '-c', script], 10)
+        self.assertEqual((result.returncode, result.stdout), (0, b'x' * 10))
+
+    def test_gives_all_of_a_shorter_output_with_its_stderr_and_return_code(self):
+        # It closes its stdout before it exits, so the read ends while the command still runs.
+        script = ('import os, sys, time\nsys.stdout.write(sys.stdin.read())\nsys.stdout.flush()\nos.close(1)\n'
+                  'sys.stderr.write("oops")\ntime.sleep(0.5)\nsys.exit(3)\n')
+        result = run_output_start(
+            [sys.executable, '-c', script], 100, input='abc')
+        self.assertEqual((result.returncode, result.stdout,
+                         result.stderr), (3, b'abc', b'oops'))

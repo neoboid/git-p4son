@@ -66,10 +66,9 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     on_disk = [local_path(path, workspace_dir) for mode, path in lists.files
                if mode in ('add', 'del') and path not in accounted and os.path.lexists(local_path(path, workspace_dir))]
     log.heading('Finding what p4 has left to sync')
-    pending = p4_sync_pending(on_disk, _pass_of(
-        interrupted).revision, workspace_dir)
-    log.success(f'{plural(len(pending), "file")} on disk not synced yet')
     revision = _pass_of(interrupted).revision
+    pending = p4_sync_pending(on_disk, revision, workspace_dir)
+    log.success(f'{plural(len(pending), "file")} on disk not synced yet')
     leftovers: set[str] = set()
     users: set[str] = set()
     for entry in pending:
@@ -175,23 +174,11 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
                  else _Intersync(path, progress.tip, 'restore' if path in tracked else 'remove')
                  for path in unsorted]
     # A save holds file content, which a link would lose or, dangling, fail on.
-    links = [change.path for change in intersync if os.path.islink(
-        local_path(change.path, workspace_dir))]
-    if links:
-        for path in links:
-            log.info(path)
-        raise CommandError('The files above are symlinks made or changed while the sync was interrupted, which '
-                           'git-p4son cannot keep. Remove them or put them back, then run "git p4son sync" again, '
-                           f'{GIVE_UP}.')
+    _refuse_links([change.path for change in intersync if os.path.islink(
+        local_path(change.path, workspace_dir))])
     # git lists an untracked repository as its folder, as it does a tracked file now a folder; a save holds only files.
-    folders = [change.path for change in intersync if os.path.isdir(
-        local_path(change.path, workspace_dir))]
-    if folders:
-        for path in folders:
-            log.info(path)
-        raise CommandError('The folders above were made while the sync was interrupted where git-p4son can keep only '
-                           'files: a git repository, or a folder in place of a file. Remove them or move them out of '
-                           f'the workspace, then run "git p4son sync" again, {GIVE_UP}.')
+    _refuse_folders([change.path for change in intersync if os.path.isdir(
+        local_path(change.path, workspace_dir))])
     # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
     # keeps it: its refusal is expected, and the end lists it as not synced.
     # Of the adds, only those the user made where p4 had still to add one.
@@ -199,6 +186,26 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
                     and path not in changed and path not in lists.ignored and is_user_writable(local[path])
                     ) if noclobber and lists else []
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
+
+
+def _refuse_links(paths: list[str]) -> None:
+    """Raise CommandError, after listing them, for symlinks made or changed while the sync was interrupted."""
+    if paths:
+        for path in paths:
+            log.info(path)
+        raise CommandError('The files above are symlinks made or changed while the sync was interrupted, which '
+                           'git-p4son cannot keep. Remove them or put them back, then run "git p4son sync" again, '
+                           f'{GIVE_UP}.')
+
+
+def _refuse_folders(paths: list[str]) -> None:
+    """Raise CommandError, after listing them, for folders made while the sync was interrupted."""
+    if paths:
+        for path in paths:
+            log.info(path)
+        raise CommandError('The folders above were made while the sync was interrupted where git-p4son can keep only '
+                           'files: a git repository, or a folder in place of a file. Remove them or move them out of '
+                           f'the workspace, then run "git p4son sync" again, {GIVE_UP}.')
 
 
 def _log_paths(heading: str, paths: list[str]) -> None:

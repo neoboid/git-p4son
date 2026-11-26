@@ -11,7 +11,7 @@ from .git import (
     commit_all, files_changed_since, get_head_commit, get_local_changes, is_ancestor, is_sync_subject, merges_above,
 )
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
-from .sync_progress import STALE_SYNC_PROGRESS, AboveCommit
+from .sync_progress import AboveCommit, StaleSyncProgress
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .words import (
@@ -271,7 +271,7 @@ class JjBackend:
                 if synced:
                     for description in synced:
                         log.info(description)
-                    raise CommandError(STALE_SYNC_PROGRESS)
+                    raise StaleSyncProgress()
             raise CommandError(f'jj bookmark "{sync_branch}" moved since the interrupted sync left it at {tip[:12]}. '
                                f'Put it back with "jj bookmark set {sync_branch} -r {tip} --allow-backwards", then run '
                                '"git p4son sync" again.')

@@ -1370,6 +1370,28 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.assertEqual(
             self.git('rev-parse', 'refs/git-p4son/intersync-commits'), commit)
 
+    def test_changes_unwound_by_two_resumes_of_one_sync_are_all_named_once_and_kept(self):
+        self.interrupt()
+        self.write_file('a.txt', 'one\n')
+        self.jj('describe', '-m', 'One')
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync()
+        self.jj('new', '-m', 'Two')
+        self.write_file('t.txt', 'two\n')
+        self.jj('status')
+        one, two = (self.describe(
+            f'description(exact:"{name}\\n")', 'commit_id') for name in ('One', 'Two'))
+        out = self.p4son('sync')
+        end = out.split('The commits unwound, now changes to review', 1)[
+            1].split('\n# ', 1)[0]
+        self.assertEqual([line for line in end.splitlines() if line.startswith('jj show ')],
+                         [f'jj show {one[:12]}  One', f'jj show {two[:12]}  Two'])
+        for commit in (one, two):
+            self.git('merge-base', '--is-ancestor', commit,
+                     'refs/git-p4son/intersync-commits')
+        self.assertEqual(
+            (self.read('a.txt'), self.read('t.txt')), ('one\n', 'two\n'))
+
     def test_a_bookmark_moved_onto_a_later_sync_is_stale_sync_progress(self):
         self.interrupt()
         subject = 'git-p4son: p4 sync //myclient/...@105'

@@ -8,10 +8,10 @@ import tempfile
 from dataclasses import dataclass, field
 
 from .backend import Backend
-from .common import CommandError
+from .common import CommandError, RevisionNotFoundError
 from .git import (
     SyncState, files_changed_outside_syncs, commit_files, delete_ref, is_sync_subject, get_files_at_commits,
-    get_blob_oids, restore_files, set_ref, sync_state,
+    get_blob_oids, join_commits, resolve_commit, restore_files, set_ref, sync_state,
 )
 from .log import log, plural
 from .processes import check_no_blocking_processes
@@ -191,6 +191,7 @@ def _on_disk(paths: list[str], prefix: str, workspace_dir: str) -> dict[str, str
     return {prefix + path: local[path] for path in paths if os.path.lexists(local[path])}
 
 
+_UNWOUND_MESSAGE = 'git-p4son: commits unwound while a sync was interrupted'
 _SAVE_MESSAGE = 'git-p4son: changes made while a sync was interrupted'
 
 
@@ -325,13 +326,34 @@ def _take_crash_commit(progress: SyncProgress, commit: str, workspace_dir: str) 
 
 
 def _unwind(progress: SyncProgress, commits: list[AboveCommit], at: str, backend: Backend, workspace_dir: str) -> None:
-    """Keep the user's commits above the tip under a ref, take the sync branch back to at, and record them."""
+    """Keep the user's commits above the tip under a ref, beside those an earlier resume of the sync unwound, record
+    them, then take the sync branch back to at."""
     log.heading(
         f'Unwinding {plural(len(commits), "commit")} made since the interrupted sync')
-    set_ref(INTERSYNC_COMMITS_REF, commits[-1].commit, workspace_dir)
-    backend.resume_at(at)
-    progress.unwound = commits
+    unwound = list(progress.unwound)
+    known = {commit.identity: at_index for at_index,
+             commit in enumerate(unwound)}
+    changed = False
+    for commit in commits:
+        if commit.identity not in known:
+            unwound.append(commit)
+            changed = True
+        elif unwound[known[commit.identity]].commit != commit.commit:
+            # jj rewrote the change since: name its latest version.
+            unwound[known[commit.identity]] = commit
+            changed = True
+    if changed:
+        top = commits[-1].commit
+        if progress.unwound:
+            # The ref keeps what the earlier resume unwound, so this one joins it.
+            with contextlib.suppress(RevisionNotFoundError):
+                top = join_commits([resolve_commit(INTERSYNC_COMMITS_REF, workspace_dir), top], _UNWOUND_MESSAGE,
+                                   workspace_dir)
+        set_ref(INTERSYNC_COMMITS_REF, top, workspace_dir)
+    progress.unwound = unwound
+    # Before the move: a rerun finds the same commits above the tip, where after it nothing would name them.
     write_sync_progress(progress, workspace_dir)
+    backend.resume_at(at)
     log.success(
         f'Kept under {INTERSYNC_COMMITS_REF}; their changes are merged back at the end')
 

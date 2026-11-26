@@ -458,11 +458,13 @@ def _p4_unescape(path: str) -> str:
 
 
 class _SyncStopped(Exception):
-    """FakeP4's sync stopped partway, after printing lines."""
+    """FakeP4's sync stopped partway, after printing lines, before next_path and whether it adds it."""
 
-    def __init__(self, lines: list[str]) -> None:
+    def __init__(self, lines: list[str], next_path: str | None, adds_next: bool) -> None:
         super().__init__()
         self.lines = lines
+        self.next_path = next_path
+        self.adds_next = adds_next
 
 
 class FakeP4:
@@ -491,8 +493,9 @@ class FakeP4:
         self.landed: dict[str, str | None] = {}
         # The files real syncs wrote or deleted, in order.
         self.transferred: list[str] = []
-        # Set by interrupt_sync: the revision whose real sync stops, after how many files, and what it raises then.
-        self._interrupt: tuple[str, int, BaseException] | None = None
+        # Set by interrupt_sync: the revision whose real sync stops, after how many files, what it raises then, and
+        # whether it leaves p4's leftovers.
+        self._interrupt: tuple[str, int, BaseException, bool] | None = None
         self.opened: dict[str, tuple[str, str]] = {}
         self.moved: dict[str, str] = {}
         self.moves_made: list[tuple[str, str]] = []
@@ -529,10 +532,15 @@ class FakeP4:
                     files[path] = content
         return files
 
-    def interrupt_sync(self, revision: str, after: int, error: BaseException | None = None) -> None:
+    def interrupt_sync(self, revision: str, after: int, error: BaseException | None = None,
+                       leftovers: bool = False) -> None:
         """Stop the real sync to revision, such as @101 or @=101, once it has written after files, the have-list at
-        exactly those, raising error, a Ctrl-C unless given."""
-        self._interrupt = (revision, after, error or KeyboardInterrupt())
+        exactly those, raising error, a Ctrl-C unless given.
+
+        With leftovers, it leaves what a killed p4 does beside the next file: a tmp.<pid>.<hex>.<n> file, and the
+        next file itself, partly written and not in the have-list, when the sync adds it."""
+        self._interrupt = (
+            revision, after, error or KeyboardInterrupt(), leftovers)
 
     def had(self) -> dict[str, str]:
         """The workspace's {path: content} as the have-list holds it."""
@@ -571,6 +579,30 @@ class FakeP4:
             f.write(content)
         if path not in self.always_writable:
             os.chmod(local, stat.S_IRUSR)
+
+    def _leave_leftovers(self, path: str, adds: bool) -> None:
+        """Leave a p4 temp file beside path, and path itself partly written if the sync adds it."""
+        local = self._local(path)
+        os.makedirs(os.path.dirname(local), exist_ok=True)
+        with open(os.path.join(os.path.dirname(local), 'tmp.4242.0x1f2e3d.1'), 'w') as f:
+            f.write('part')
+        if adds:
+            with open(local, 'w') as f:
+                f.write('part')
+
+    def _sync_have(self, paths: list[str], arguments: list[str]) -> tuple[list[str], list[str]]:
+        """Write each file as its have revision holds it, as sync -f <file>#have does."""
+        had = self.had()
+        out: list[str] = []
+        errors: list[str] = []
+        for path, argument in zip(paths, arguments):
+            if path not in had:
+                errors.append(f'{argument} - file(s) not on client.')
+                continue
+            self._write(path, had[path])
+            out.append(
+                f'{self._depot(path)}#1 - refreshing {self._local(path)}')
+        return out, errors
 
     def _depot(self, path: str) -> str:
         return f'//{self.client}/{_p4_escape(path)}'
@@ -641,6 +673,15 @@ class FakeP4:
                     ('+w' if path in self.always_writable else '')
                 out += [f'... clientFile {self._local(path)}',
                         f'... headType {kind}', '']
+        elif args[:4] == ['-x', '-', 'sync', '-f'] and (input or '').endswith('#have'):
+            out, stderr = self._sync_have(files, (input or '').splitlines())
+        elif args[:4] == ['-x', '-', 'sync', '-n']:
+            # Each line names a file and the revision to preview it at, which is the same for all.
+            revision = (input or '').splitlines()[0].rsplit('@', 1)[1]
+            lines, _ = self._apply(
+                int(revision.lstrip('=')), preview=True, exact=revision.startswith('='))
+            wanted = {self._local(path) for path in files}
+            out = [line for line in lines if line.rsplit(' ', 1)[-1] in wanted]
         elif args[:4] == ['-x', '-', 'diff', '-se']:
             out, stderr = self._diff_have(files, (input or '').splitlines())
         elif args[:2] == ['-x', '-'] and args[2] in ('add', 'edit', 'delete'):
@@ -682,7 +723,7 @@ class FakeP4:
                 files.append(self._rel(line))
                 continue
             # A trailing @N, @=N or #N is the revision the argument asks for.
-            path = re.sub('(@=?[0-9]+|#[0-9]+)$', '', line)
+            path = re.sub('(@=?[0-9]+|#[0-9]+|#have)$', '', line)
             if re.search(wildcards, path):
                 errors.append(
                     f'{line} - @, #, % and * in a file argument are revision and wildcard syntax.')
@@ -910,6 +951,8 @@ class FakeP4:
             self._interrupt = None
             for line in stopped.lines:
                 on_output(line, sys.stdout)
+            if interrupt[3] and stopped.next_path is not None:
+                self._leave_leftovers(stopped.next_path, stopped.adds_next)
             raise interrupt[2] from None
         # As p4 prints them: progress on stdout, clobber refusals on stderr.
         for line in lines:
@@ -968,7 +1011,10 @@ class FakeP4:
             self.transferred.append(path)
             if len(written) == stop_after:
                 self.landed.update((path, after.get(path)) for path in written)
-                raise _SyncStopped(lines)
+                next_path = next((p for p in sorted(set(before) | set(after))
+                                  if p > path and before.get(p) != after.get(p)), None)
+                raise _SyncStopped(
+                    lines, next_path, next_path is not None and next_path not in before)
         if not preview and exact:
             self.picked.update(dict.fromkeys(self.changes[change][1], change))
             for path in self.changes[change][1]:

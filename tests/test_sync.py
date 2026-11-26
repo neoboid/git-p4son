@@ -1436,6 +1436,44 @@ class TestSyncBranch(SyncTestCase):
                     self.git('show', f'{commit}:{path}'), content.rstrip('\n'), (commit, path))
         self.assertEqual(self.read('a.txt'), 'mine\n')
 
+    def test_commits_unwound_by_two_resumes_of_one_sync_are_all_named_and_kept(self):
+        self.interrupt()
+        self.edit('a.txt', 'one\n')
+        self.commit('One')
+        one = self.git('rev-parse', 'HEAD')
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync()
+        self.edit('b.txt', 'two\n')
+        self.commit('Two')
+        two = self.git('rev-parse', 'HEAD')
+        out = self.sync()
+        named = self.listed_under(
+            out, 'The commits unwound, now changes to review')
+        self.assertIn(f'git commit -c {one[:7]}  One', named)
+        self.assertIn(f'git commit -c {two[:7]}  Two', named)
+        for commit in (one, two):
+            self.git('merge-base', '--is-ancestor', commit,
+                     'refs/git-p4son/intersync-commits')
+        self.assertEqual(
+            (self.read('a.txt'), self.read('b.txt')), ('one\n', 'two\n'))
+
+    def test_an_interruption_between_the_unwind_and_its_record_still_names_the_commits(self):
+        self.interrupt()
+        self.edit('a.txt', 'one\n')
+        self.commit('One')
+        one = self.git('rev-parse', 'HEAD')
+        resume_at = GitBackend.resume_at
+
+        def move_then_interrupt(backend, commit):
+            resume_at(backend, commit)
+            raise KeyboardInterrupt
+        with mock.patch.object(GitBackend, 'resume_at', move_then_interrupt):
+            self.interrupted_sync()
+        out = self.sync()
+        self.assertIn(f'git commit -c {one[:7]}  One',
+                      self.listed_under(out, 'The commits unwound, now changes to review'))
+        self.assertEqual(self.read('a.txt'), 'one\n')
+
     def test_several_commits_above_the_tip_are_each_named(self):
         self.interrupt()
         self.edit('a.txt', 'one\n')

@@ -839,7 +839,7 @@ class TestSyncPutsRight(SyncTestCase):
                        f'{folder}/y.txt': 'y1\n'})
         self.p4.interrupt_sync('@101', after=1, leftovers=True)
         self.interrupted_sync('101')
-        self.assertEqual(self.read(f'{folder}/y.txt'), 'part')
+        self.assertEqual(self.read(f'{folder}/y.txt'), 'y')
 
     def assert_leftovers_cleared(self, folder):
         out = self.sync()

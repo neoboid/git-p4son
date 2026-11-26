@@ -698,11 +698,31 @@ def _check_resumable_files(progress: SyncProgress, backend: Backend, workspace_d
     log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
 
 
+def _check_no_plan_options(args: argparse.Namespace) -> None:
+    """Raise CommandError for the options that make a sync's plan, which a resume runs as the interrupted sync made it,
+    even ones that repeat it."""
+    given = [option for option, value in (
+        (' '.join(args.changelist),
+         args.changelist), ('--branch', args.branch is not None),
+        ('-u', args.split_user), ('--no-split',
+                                  args.no_split), ('--allow-backwards', args.allow_backwards),
+        ('--force', args.force)) if value]
+    if given:
+        raise CommandError(f'{", ".join(given)} would change the plan of the interrupted sync, which a resume runs as '
+                           f'it was made. Run "git p4son sync" without {"it" if len(given) == 1 else "them"} to '
+                           'finish the interrupted sync.')
+
+
 def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
     """Finish the sync progress holds: check where it left the sync branch and its files, run the pre-sync hooks,
     then the passes left and the end."""
     workspace_dir = args.workspace_dir
     backend = args.backend
+    # [start] and the sync branch's shape are the backend's, as much a part of the plan as its passes.
+    recorded = progress.start['backend']
+    if recorded != backend.words.tool:
+        raise CommandError(f'The interrupted sync ran with the {recorded} backend. Run "git p4son --backend '
+                           f'{recorded} sync" to finish it.')
     sync_revision = backend.resume_sync(
         progress.sync_branch, progress.tip, progress.start)
     passes = progress.passes
@@ -741,13 +761,14 @@ def sync_command(args: argparse.Namespace) -> int:
     """Execute the sync command."""
     workspace_dir = args.workspace_dir
     check_hooks(workspace_dir)
+    progress = read_sync_progress(workspace_dir)
+    if progress is not None:
+        _check_no_plan_options(args)
+        return _resume_sync(args, progress)
     if args.force:
         log.warning('--force is deprecated, use --allow-backwards instead')
         args.allow_backwards = True
     backend = args.backend
-    progress = read_sync_progress(workspace_dir)
-    if progress is not None:
-        return _resume_sync(args, progress)
     sync_revision = backend.prepare_sync(args.branch)
     plan = _plan_sync(args, sync_revision)
     if plan is None:

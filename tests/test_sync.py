@@ -710,6 +710,63 @@ class TestSyncResume(SyncTestCase):
         self.assertEqual(self.sync_progress_file(), progress)
 
 
+class TestWhileInterrupted(SyncTestCase):
+    """What refuses, and what keeps working, while an interrupted sync waits to be finished."""
+
+    def interrupt(self):
+        """Submit CL 101 and 102, and have sync 101 102 interrupted after its first file."""
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.submit(102, {'f.txt': 'f1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        return self.interrupted_sync('101', '102')
+
+    def test_sync_refuses_the_options_that_change_the_plan(self):
+        progress = self.interrupt()
+        for argv in (['102'], ['head'], ['last-synced'], ['--branch', 'main'], ['-u', 'other'], ['--no-split'],
+                     ['--allow-backwards'], ['-f']):
+            with self.subTest(argv=argv):
+                out = self.sync_fails(
+                    *argv, message='would change the plan of the interrupted sync')
+                self.assertNotIn('Resuming the interrupted sync', out)
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_the_options_that_only_shape_the_run_apply_to_the_resume(self):
+        self.interrupt()
+        self.sync('--dry-run')
+        self.assertIsNotNone(self.sync_progress_file())
+        self.sync('--no-rebase', '--ignore-blocking-processes')
+        self.assertIsNone(self.sync_progress_file())
+        self.assertEqual(self.synced_commits(), [101, 102])
+
+    def test_sync_refuses_to_resume_on_another_backend(self):
+        progress = self.interrupt()
+        mine = self.backend_name or 'git'
+        other = 'jj' if mine == 'git' else 'git'
+        path = os.path.join(self.ws, '.git-p4son', 'sync-progress.toml')
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text.replace(
+                f'backend = "{mine}"', f'backend = "{other}"', 1))
+        self.sync_fails(message=f'The interrupted sync ran with the {other} backend. Run "git p4son --backend '
+                        f'{other} sync" to finish it')
+        left = self.sync_progress_file()
+        assert left is not None
+        self.assertEqual(
+            (left['start']['backend'], left['passes']), (other, progress['passes']))
+
+    def test_sync_refuses_sync_progress_from_a_newer_git_p4son(self):
+        self.interrupt()
+        path = os.path.join(self.ws, '.git-p4son', 'sync-progress.toml')
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(text.replace('version = 1\n', 'version = 2\n', 1).replace(
+                f'written-by = "{__version__}"', 'written-by = "9.0.0"', 1))
+        self.sync_fails(
+            message='written by git-p4son 9.0.0, which is newer than this one. Upgrade git-p4son')
+
+
 class TestSyncBranch(SyncTestCase):
     """sync commits onto the sync branch from any branch, and returns to where it started."""
 
@@ -1258,6 +1315,7 @@ TestSyncOnJj = on_jj(
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncProgressOnJj = on_jj(TestSyncProgress)
 TestSyncResumeOnJj = on_jj(TestSyncResume)
+TestWhileInterruptedOnJj = on_jj(TestWhileInterrupted)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncTargetsOnJj = on_jj(TestSyncTargets)

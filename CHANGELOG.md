@@ -19,6 +19,10 @@
   `allwrite` workspaces and for a file of a `+w` type, which Perforce leaves writable. When a later changelist
   changed the file again, it said the file had local changes, and at the end that it was "deleted locally but
   modified in Perforce", though nothing had changed it
+- `sync` no longer stops with "p4 unexpectedly refused to replace the files above" when Perforce adds a git-ignored
+  file of a `+w` type where a writable file is already on disk. p4 overwrites a `+w` file it has synced before, but
+  adds none over a writable file, so this one is kept and listed as not synced, as other git-ignored writable files
+  are
 
 ## 0.13.1
 

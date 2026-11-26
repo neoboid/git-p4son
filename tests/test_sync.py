@@ -387,6 +387,19 @@ class TestSyncLocalChanges(SyncTestCase):
         self.assertIn('Files not synced (git-ignored and writable)', out)
         self.assertIn('x.log', out)
 
+    def test_a_git_ignored_add_of_a_plus_w_type_over_a_writable_file_is_reported_not_synced(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.write_file('x.log', 'mine\n')
+        self.p4.always_writable.add('x.log')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n'})
+        out = self.sync('101')
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertIn('Files not synced (git-ignored and writable)', out)
+        self.assertIn('x.log', out.split(
+            'Files not synced (git-ignored and writable)', 1)[1])
+        self.assertEqual(self.synced_commits(), [101])
+
     def test_a_local_change_to_a_file_with_p4_wildcards_in_its_name_is_merged_back(self):
         self.commit_sync(101, {'d/at@sign#1%.txt': 'x\n'})
         self.edit('d/at@sign#1%.txt', 'local\nx\n')

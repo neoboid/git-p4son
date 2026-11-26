@@ -136,7 +136,10 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `merge_changed_files` merges those local changes back after the sync, one file at a time (`_merge_back`), telling
   `on_merged` after each, with an interrupted run's outcomes (`merged_before`) reported beside them;
   `stage_changed_files` stages a local change (`ChangedFileRef`) from the pre-sync commit and its base, for a pass and
-  for a resume. `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
+  for a resume. `merge_intersync_changes` applies the changes made while a sync was interrupted (`IntersyncChange`) onto
+  the files as they then stand: a 3-way merge for text, the user's version for binary, an add written, a delete applied
+  to an unchanged file and kept for a changed one, and an edit to a file Perforce deleted restored. `report_not_synced`
+  lists the git-ignored writable files p4 refused or overwrote.
 
 - **`sync_progress.py`** - The sync progress: what an interrupted sync has left to do, in
   `.git-p4son/sync-progress.toml` (`version = 1`), written to a temporary file and renamed into place, retried a few
@@ -146,12 +149,14 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   until the next commit), the first one with the `PassLists` its preview and `prepare_writable_files` gave (the files
   with their modes, the local changes, the ignored and always-writable files and allwrite's `replace`), and, in `[end]`,
   what the end needs from the passes made: the local changes still to merge back, the outcome of each one merged
-  (`MergedFile`), the ignored and not-synced files and, in writable mode, the files synced. Local changes are references
-  (`LocalChange`: a path, its base commit and flags), read again from the pre-sync commit and the base. Paths are slash
-  paths from the workspace root, a list item per line, for a user to read. `ProgressRecorder` keeps it in step as
-  `run_sync_passes` and `resume_sync_passes` go; `read_sync_progress` reads it back for a resume, refusing one a newer
-  git-p4son wrote, `check_no_interrupted_sync` refuses `new`, `update`, `review` and `cherry-pick` while it exists, as
-  the files on disk are partly synced, and `local_path` turns a stored path into a local one.
+  (`MergedFile`), the intersync saves (`IntersyncSave`, kept alive by `INTERSYNC_REF`: the commit, each file with its
+  base, `have` or a commit, and whether its `have/` content is kept yet, which `intersync_merged` drops one by one), the
+  ignored and not-synced files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a
+  path, its base commit and flags), read again from the pre-sync commit and the base. Paths are slash paths from the
+  workspace root, a list item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` and
+  `resume_sync_passes` go; `read_sync_progress` reads it back for a resume, refusing one a newer git-p4son wrote,
+  `check_no_interrupted_sync` refuses `new`, `update`, `review` and `cherry-pick` while it exists, as the files on disk
+  are partly synced, and `local_path` turns a stored path into a local one.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
@@ -332,7 +337,9 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `sync_state` gives the last sync and the cherry-picks since it as a `SyncState`), blob reads,
   `files_changed_outside_syncs` (the tracked files other commits changed since the first sync) and `merge_file` for
   `sync_merge`, and `added_files`, `ignored_files`, `case_only` and `case_only_ignored`, which compares two `ls-files`
-  walks, for jj's ignore check. git's `-z` output is read as bytes.
+  walks, for jj's ignore check. For a resume: `files_changed_since`, `commits_above`, `commit_files` (a commit of local
+  files at tree paths of its own, through a temporary index), `set_ref`/`delete_ref`, and `restore_files` (files as a
+  commit holds them, the real index left alone). git's `-z` output is read as bytes.
 
 - **`perforce.py`** - The Perforce layer, with every p4 call pinned to English output (`-L en`): ztag parsing, the
   client spec (`P4ClientSpec`, `ClobberMode`), local paths as file arguments (`p4_file_arg`, which escapes `@#%*`, for

@@ -9,8 +9,8 @@ from unittest import mock
 from git_p4son.perforce import P4SyncPreviewFile
 from git_p4son.sync_merge import ChangedFile, WritableSyncFileSet
 from git_p4son.sync_progress import (
-    LocalChange, MergedFile, NoProgress, PassLists, ProgressPass, ProgressRecorder, SyncProgress, format_sync_progress,
-    progress_path, read_sync_progress, remove_sync_progress, write_sync_progress,
+    IntersyncFile, IntersyncSave, LocalChange, MergedFile, NoProgress, PassLists, ProgressPass, ProgressRecorder,
+    SyncProgress, format_sync_progress, progress_path, read_sync_progress, remove_sync_progress, write_sync_progress,
 )
 from tests.helpers import WorkspaceTestCase
 
@@ -47,6 +47,8 @@ class TestSyncProgressFile(WorkspaceTestCase):
                 ProgressPass(103, 'split', subject='git-p4son: p4 sync //ws/...@103')],
             uncommitted=[('del', 'x.txt')],
             changed=[LocalChange('b.txt', 'base3')], merged=[MergedFile('a.txt', 'added-both')],
+            intersync=[IntersyncSave('c1', [IntersyncFile('a.txt', 'have'), IntersyncFile('d/b.txt', 'tip1')], True),
+                       IntersyncSave('c2', [IntersyncFile('a.txt', 'have')])],
             ignored=['Saved/y.log'], not_synced=['Saved/y.log'],
             synced=['a.txt'])
         write_sync_progress(kept, self.ws)
@@ -189,6 +191,19 @@ class TestProgressRecorder(WorkspaceTestCase):
             changed=[self.changed('a.txt')]))
         recorder.merged(self.path('a.txt'), None)
         self.assertEqual(written(self.ws).merged, [])
+
+    def test_an_intersync_file_merged_leaves_its_oldest_save_and_keeps_its_outcome(self):
+        recorder = self.recorder([])
+        recorder.progress.intersync = [IntersyncSave('c1', [IntersyncFile('a.txt', 'have')], True),
+                                       IntersyncSave('c2', [IntersyncFile('a.txt', 'have'),
+                                                            IntersyncFile('b.txt', 'tip1')], True)]
+        recorder.intersync_merged(self.path('a.txt'), 'clean')
+        self.assertEqual(
+            [save.commit for save in written(self.ws).intersync], ['c2'])
+        recorder.intersync_merged(self.path('a.txt'), None)
+        result = written(self.ws)
+        self.assertEqual((result.intersync[0].files, result.merged),
+                         ([IntersyncFile('b.txt', 'tip1')], [MergedFile('a.txt', 'clean')]))
 
     def test_no_progress_writes_nothing(self):
         recorder = NoProgress()

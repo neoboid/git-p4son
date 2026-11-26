@@ -1458,6 +1458,21 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.assertEqual(self.describe('main-'), 'Add config')
         self.assertEqual(self.describe('@-'), 'Change a')
 
+    def test_a_described_change_in_the_crash_window_of_the_last_pass_is_unwound_and_gone(self):
+        self.p4.submit(101, {'d.txt': 'd1\n', 'e.txt': 'e1\n'})
+        with mock.patch('git_p4son.jj.Workspace.move_bookmark', side_effect=KeyboardInterrupt):
+            self.interrupted_sync()
+        self.jj('describe', '-m', 'Mine')
+        change = self.describe('@', 'change_id')
+        commit = self.describe('@', 'commit_id')
+        out = self.p4son('sync')
+        self.assertIn(f'jj show {commit[:12]}  Mine', out)
+        self.assertEqual(
+            self.jj('log', '-r', f'present({change})', '--no-graph', '-T', 'change_id'), '')
+        self.assertEqual(self.describe('main'),
+                         'git-p4son: p4 sync //myclient/...@101')
+        self.assertEqual(self.describe('@-'), 'Change a')
+
     def test_editing_a_change_returns_to_it(self):
         self.jj('edit', 'feat')
         self.p4.submit(101, {'d.txt': 'd1\n'})

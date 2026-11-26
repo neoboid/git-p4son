@@ -140,9 +140,10 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
         else:
             unsorted.append(path)
     log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
-    # A file p4 has not transferred yet was edited as the recorded tip had it, local change included.
+    # Until a resume puts the files right, a file p4 has not reached is at the recorded tip's content, which an edit
+    # is made against; after, at its have revision.
     pending: set[str] = set()
-    if interrupted and lists:
+    if interrupted and lists and not lists.put_right:
         pending = {workspace_path(entry.filepath, workspace_dir) for entry in p4_sync_pending(
             [local[path] for path in unsorted if path in in_pass], _pass_of(interrupted).revision, workspace_dir)}
     intersync = [_Intersync(path, progress.tip if path in pending else 'have',
@@ -280,11 +281,13 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
                    else 'Keeping the git-ignored files made writable since', put.ignore)
 
 
-def _keep_ignored(progress: SyncProgress, paths: list[str], workspace_dir: str) -> None:
-    """Add paths to the interrupted pass's stored ignored files, so its p4 sync expects their refusal."""
+def _record_put_right(progress: SyncProgress, ignore: list[str], workspace_dir: str) -> None:
+    """Record on the interrupted pass that its files are put right, with ignore among its stored ignored files, so
+    its p4 sync expects their refusal."""
     lists = progress.passes[0].lists if progress.passes else None
-    if paths and lists is not None:
-        lists.ignored = [*lists.ignored, *paths]
+    if lists is not None:
+        lists.ignored = [*lists.ignored, *ignore]
+        lists.put_right = True
         write_sync_progress(progress, workspace_dir)
 
 
@@ -377,6 +380,7 @@ def _abort(progress: SyncProgress, state: SyncState, workspace_dir: str) -> None
         p.changelist, p.label, p.exact) for p in catch_up]
     if progress.passes:
         progress.passes[0].lists = interrupted
+    progress.aborting = True
     write_sync_progress(progress, workspace_dir)
 
 
@@ -470,6 +474,9 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
             raise CommandError('The interrupted sync is the workspace\'s first, so there is no synced changelist to '
                                'go back to. Run "git p4son sync" to finish it.')
         log.heading(f'Aborting the interrupted sync: back to {abort_to}')
+    elif progress.aborting:
+        log.heading(
+            f'Finishing the interrupted abort: back to {sync_state(workspace_dir, progress.tip)}')
     else:
         left = (f'{plural(len(passes), "changelist")} left, to CL {passes[-1].changelist}' if passes
                 else 'only the merge-back is left')
@@ -507,7 +514,7 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
             _take_crash_commit(progress, crash, workspace_dir)
         _save_intersync(put.intersync, progress, workspace_dir)
         _put_right(put, progress.tip, workspace_dir)
-        _keep_ignored(progress, put.ignore, workspace_dir)
+        _record_put_right(progress, put.ignore, workspace_dir)
         _complete_saves(progress, workspace_dir)
         if abort_to is not None:
             _abort(progress, abort_to, workspace_dir)

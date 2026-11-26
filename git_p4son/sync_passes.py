@@ -236,7 +236,6 @@ def _resume_pass(sync_pass: SyncPass, lists: PassLists, ctx: SyncContext) -> Wri
     prep = WritableSyncFileSet(
         changed=stage_again(lists.changed, ctx),
         ignored=local_paths(lists.ignored, workspace_dir),
-        always_writable=local_paths(lists.always_writable, workspace_dir),
         replace={local_path(path, workspace_dir): depot_path for path, depot_path in lists.replace.items()})
     _run_pass(sync_pass, prep, local_paths(
         [path for _, path in lists.files], workspace_dir), ctx)

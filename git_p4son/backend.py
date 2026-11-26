@@ -93,10 +93,6 @@ class Backend(Protocol):
 
         Raises CommandError, naming the way out, where it isn't."""
 
-    def begin_resume(self) -> None:
-        """Ready the work tree for a resume's passes, once its dry run and pre-sync hooks are past, which leave git
-        and jj as they were."""
-
     def returns_to(self) -> str | None:
         """Where the sync returns to, once prepare_sync or resume_sync took its start; None for the sync branch."""
 
@@ -104,11 +100,10 @@ class Backend(Protocol):
         """The commits above tip a resume sorts, oldest first, after resume_sync: git's on the sync branch, jj's
         described changes."""
 
-    def take_crash_commit(self, commit: str) -> None:
-        """Count commit, the next pass's own, made just before the interruption, as the sync branch's."""
-
-    def unwind(self, tip: str) -> None:
-        """Take the sync branch back to tip, the commits above it unwound and the files as they are."""
+    def resume_at(self, commit: str) -> None:
+        """Put the sync branch at commit for a resume's passes, the files as they are, once its dry run and pre-sync
+        hooks are past: the recorded tip, or the next pass's own commit made just before the interruption, with the
+        commits above it unwound."""
 
     def files_changed_since(self, commit: str) -> set[str]:
         """The files on disk that differ from commit, and the untracked ones not ignored, as slash paths."""

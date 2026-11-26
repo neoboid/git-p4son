@@ -232,8 +232,8 @@ class GitBackend:
                                f'back with "git reset --keep {tip}", then run "git p4son sync" again.')
         above = commits_above(tip, head, workspace_dir)
         if above:
-            for line in above:
-                log.info(line)
+            for above_commit, subject in above:
+                log.info(f'{above_commit[:7]} {subject}')
             raise CommandError(f'The commits above were made on {sync_branch} after the interrupted sync, which '
                                f'git-p4son cannot resume over yet. Move them to another branch, then put '
                                f'{sync_branch} back with "git reset --keep {tip}" and run "git p4son sync" again.')

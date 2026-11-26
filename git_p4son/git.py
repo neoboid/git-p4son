@@ -505,9 +505,11 @@ def branches_at(commit: str, workspace_dir: str) -> list[str]:
     return [ref.removeprefix('refs/heads/') for ref in result.stdout]
 
 
-def commits_above(bottom: str, revision: str, workspace_dir: str) -> list[str]:
-    """The commits in revision's history outside bottom's, newest first, as "<short sha> <subject>"."""
-    return run(['git', 'log', '--format=%h %s', f'{bottom}..{revision}'], cwd=workspace_dir).stdout
+def commits_above(bottom: str, revision: str, workspace_dir: str) -> list[tuple[str, str]]:
+    """The commits in revision's history outside bottom's, oldest first, as (commit, subject)."""
+    lines = run(['git', 'log', '--reverse', '--format=%H %s',
+                f'{bottom}..{revision}'], cwd=workspace_dir).stdout
+    return [(commit, subject) for commit, _, subject in (line.partition(' ') for line in lines)]
 
 
 def merges_above(bottom: str, revision: str, workspace_dir: str) -> list[str]:

@@ -750,12 +750,13 @@ class TestChangesSince(GitRepoTestCase):
         self.assertEqual(files_changed_since(base, self.ws), {
                          'a.txt', 'b.txt', 'new.txt', '.gitignore'})
 
-    def test_commits_above_a_commit_newest_first(self):
+    def test_commits_above_a_commit_oldest_first(self):
         base = self.git('rev-parse', 'HEAD')
         self.commit('One')
         self.commit('Two')
-        self.assertEqual([line.split(' ', 1)[1] for line in commits_above(
-            base, 'HEAD', self.ws)], ['Two', 'One'])
+        above = commits_above(base, 'HEAD', self.ws)
+        self.assertEqual([subject for _, subject in above], ['One', 'Two'])
+        self.assertEqual(above[1][0], self.git('rev-parse', 'HEAD'))
         self.assertEqual(commits_above('HEAD', 'HEAD', self.ws), [])
 
 

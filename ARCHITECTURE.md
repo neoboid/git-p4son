@@ -59,22 +59,23 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `git.restore_files`, gone where there is none), and `_complete_saves` adds the have revision's content under `have/`,
   the base of a file p4 had transferred, as no commit holds it; a file p4 had not reached is measured from the recorded
   tip, which `p4_sync_pending` tells. A symlink among them is refused, as a save holds file content. The pre-sync hooks
-  run again (a failing one leaves it all as it was), then `_take_crash_commit` counts the crash window's commit as the
-  pass made, `_unwind` keeps the user's commits under `refs/git-p4son/intersync-commits` and takes the sync branch back
-  to the tip, their content then sorted with the work tree and named again at the end, then `_put_right` writes the
-  files behind the have-list again with `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the deleted ones
-  and clears the leftovers, and `_resume_sync_passes` runs the interrupted pass with its stored lists
-  (`sync_passes.run_passes`) and the later ones as usual against the pre-sync commit, and `sync_passes.end_sync` covers
-  every pass, the passes made before the interruption among them, local changes staged again from git
-  (`stage_changed_files`) and the earlier merge outcomes reported with this run's, then the intersync changes, oldest
-  save first (`_saved_changes`), and the ref is deleted with the sync progress. A dry run stops after the checks, saying
-  what is left. `--abort` goes through the same checks, sorting and putting right, then `_abort` replaces the passes
-  left in the sync progress with the catch-up to the sync branch's last commit (`catch_up_passes`), uncommitted, when
-  the interrupted pass's p4 sync or a catch-up pass's had run, and records them before their p4 sync, so the resume that
-  runs them, then or after an interruption, is the abort; the first runs with the interrupted pass's stored lists, as
-  every sync catches up to its last sync first, so going back there moves only that pass's files. An abort of stale sync
-  progress (`StaleSyncProgress`) only removes it, naming any changes it saved, which only the intersync ref keeps then,
-  and one with no synced changelist to go back to, a first sync, refuses.
+  run again (a failing one leaves it all as it was), then the backend puts the sync branch at the recorded tip or the
+  crash window's commit (`resume_at`), before the records: `_unwind` keeps the user's commits under
+  `refs/git-p4son/intersync-commits` before the move takes the branch back below them, their content then sorted with
+  the work tree and named again at the end, and `_take_crash_commit` counts the crash window's commit as the pass made,
+  then `_put_right` writes the files behind the have-list again with `p4 sync -f <file>#have`
+  (`perforce.p4_sync_to_have`), removes the deleted ones and clears the leftovers, and `_resume_sync_passes` runs the
+  interrupted pass with its stored lists (`sync_passes.run_passes`) and the later ones as usual against the pre-sync
+  commit, and `sync_passes.end_sync` covers every pass, the passes made before the interruption among them, local
+  changes staged again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's, then
+  the intersync changes, oldest save first (`_saved_changes`), and the ref is deleted with the sync progress. A dry run
+  stops after the checks, saying what is left. `--abort` goes through the same checks, sorting and putting right, then
+  `_abort` replaces the passes left in the sync progress with the catch-up to the sync branch's last commit
+  (`catch_up_passes`), uncommitted, when the interrupted pass's p4 sync or a catch-up pass's had run, and records them
+  before their p4 sync, so the resume that runs them, then or after an interruption, is the abort; the first runs with
+  the interrupted pass's stored lists, as every sync catches up to its last sync first, so going back there moves only
+  that pass's files. An abort of stale sync progress (`StaleSyncProgress`) only removes it, naming any changes it saved,
+  which only the intersync ref keeps then, and one with no synced changelist to go back to, a first sync, refuses.
 
 - **`cherry_pick.py`** - The `cherry-pick` command, refused while an interrupted sync waits
   (`check_no_interrupted_sync`): syncs only the files of submitted changelists (`p4 sync @=N`) onto the sync branch,
@@ -279,19 +280,19 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
   loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), a resume's check of where the interrupted sync
   left the sync branch, taking the start from the sync progress (`resume_sync`), the commits above the tip a resume
-  sorts, taking the crash window's and unwinding the user's (`commits_above`, `take_crash_commit`, `unwind`), the files
-  changed since a commit (`files_changed_since`), where the sync started for the sync progress (`progress_start`: git's
-  branch or detached commit, jj's start change and whether it was edited), and the `Words` its messages use, whose
-  `tool` hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where
-  `auto` means jj in a jj workspace. `open_backend` holds the workspace's lock for the whole command, jj's lock and
-  operation in a jj workspace and `command_lock` in a git one, and yields the backend in `run_command` as
-  `args.backend`; jj snapshots the working copy first unless the command's parser sets `snapshot=False`. Once the lock
-  is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the alias
-  recording the change, or the change `nearest_change` finds below it in its chain, else the suggested name, unless the
-  command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so under a heading, for
-  `run_command` and `alias rename`. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s
-  lock-only path. No command branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj
-  up.
+  sorts (`commits_above`), where the resume puts the sync branch for its passes, the recorded tip or the crash window's
+  commit, with the user's commits unwound (`resume_at`), the files changed since a commit (`files_changed_since`), where
+  the sync started for the sync progress (`progress_start`: git's branch or detached commit, jj's start change and
+  whether it was edited), and the `Words` its messages use, whose `tool` hooks get as `$(backend)`. `selected_backend`
+  picks git or jj from `--backend`, then `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds
+  the workspace's lock for the whole command, jj's lock and operation in a jj workspace and `command_lock` in a git one,
+  and yields the backend in `run_command` as `args.backend`; jj snapshots the working copy first unless the command's
+  parser sets `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch`
+  resolves the `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its
+  chain, else the suggested name, unless the command (`new_alias=True` on its parser) names a new one;
+  `resolve_branch_keyword` does so under a heading, for `run_command` and `alias rename`. `completion_backend` gives one
+  without the lock, and `workspace_lock` is `init`'s lock-only path. No command branches on jj outside the backend
+  modules and `jj.py`, apart from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
   its full ref, so that a tag of its name isn't taken for it, the nearest branch below HEAD down to the sync branch
@@ -307,12 +308,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back changes
   are left. A resume (`resume_sync`) wants the bookmark at the recorded commit, or on the pass's own commit above it
   where jj's `commit_sync` moved it before a crash, and the working change above it, the described changes between being
-  the user's commits, a bookmark moved onto later sync commits refusing as stale sync progress, and `begin_resume`, once
-  the dry run and the pre-sync hooks are past, points git's HEAD at the recorded commit. `after_lock` then abandons the
-  undescribed snapshot changes jj made there, once jj is past them, and a start change that is gone leaves the sync on
-  the bookmark with a warning, as a gone start branch does with git. Its `checkouts` puts each commit's files on disk
-  with git under the lock, as the revision and clean check a step reads, and the working change's files back at the end,
-  so jj sees no change.
+  the user's commits, a bookmark moved onto later sync commits refusing as stale sync progress, and `resume_at`, once
+  the dry run and the pre-sync hooks are past, moves the bookmark to the crash window's commit where the interruption
+  left it behind, keeps that commit's change from the snapshot changes, and points git's HEAD at the commit.
+  `after_lock` then abandons the undescribed snapshot changes jj made there, once jj is past them, and a start change
+  that is gone leaves the sync on the bookmark with a warning, as a gone start branch does with git. Its `checkouts`
+  puts each commit's files on disk with git under the lock, as the revision and clean check a step reads, and the
+  working change's files back at the end, so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `check_own_pending` (refuses a CL
   `describe_changelist` doesn't find pending and owned by the current user and client, `get_p4_user_and_client`,

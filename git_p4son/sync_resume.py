@@ -42,7 +42,7 @@ class _Intersync:
 class _PutRight:
     """What a resume puts right before its passes, as stored paths: files to write again as their have revision,
     files p4 deleted that are back, p4's leftovers, the changes made while it was interrupted, the pass's tracked
-    files made writable since without an edit, and its git-ignored ones made writable since, which are kept."""
+    files made writable since without an edit, and the git-ignored files p4 won't replace, which are kept."""
     resync: list[str]
     remove: list[str]
     leftovers: list[str]
@@ -185,12 +185,15 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     # git lists an untracked repository as its folder, as it does a tracked file now a folder; a save holds only files.
     _refuse_folders([change.path for change in intersync if os.path.isdir(
         local_path(change.path, workspace_dir))])
-    # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
-    # keeps it: its refusal is expected, and the end lists it as not synced.
-    # Of the adds, only those the user made where p4 had still to add one.
-    ignore = sorted(path for mode, path in lists.files if (mode != 'add' or path in users_adds) and path not in tracked
-                    and path not in changed and path not in lists.ignored and is_user_writable(local[path])
-                    ) if noclobber and lists else []
+    ignore: list[str] = []
+    if lists and noclobber:
+        # noclobber refuses a writable file. Git has no copy of a git-ignored file to tell an edit by, so one made
+        # writable since is kept, as a fresh pass keeps it: its refusal is expected, and the end lists it as not synced.
+        # Of the adds, only those the user made where p4 had still to add one.
+        stored_ignored = set(lists.ignored)
+        ignore = sorted(path for mode, path in lists.files if (mode != 'add' or path in users_adds)
+                        and path not in tracked and path not in changed and path not in stored_ignored
+                        and is_user_writable(local[path]))
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
 
@@ -316,8 +319,8 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
             make_read_only(local_paths(put.read_only, workspace_dir))
             log.success(f'{plural(len(put.read_only), "file")} made read-only')
     if put.ignore:
-        _log_paths('Git-ignored files made writable since, to keep' if dry_run
-                   else 'Keeping the git-ignored files made writable since', put.ignore)
+        _log_paths("Git-ignored files p4 won't replace, to keep" if dry_run
+                   else "Keeping the git-ignored files p4 won't replace", put.ignore)
 
 
 def _record_put_right(progress: SyncProgress, ignore: list[str], workspace_dir: str) -> None:

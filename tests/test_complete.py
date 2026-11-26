@@ -220,6 +220,7 @@ class TestComplete(unittest.TestCase):
         result = _complete(self.parser, ['sync', '-'], workspace_dir='/ws')
         names = self._names(result)
         self.assertIn('--allow-backwards', names)
+        self.assertIn('--abort', names)
         self.assertIn('-n', names)
         self.assertIn('--dry-run', names)
         self.assertIn('--split-user', names)

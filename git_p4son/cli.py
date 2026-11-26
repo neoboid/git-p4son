@@ -195,7 +195,7 @@ Examples:
         'with a git commit for each on the sync branch, [sync] branch in .git-p4son/config.toml or main. '
         'From another branch, it checks the sync branch out and returns afterwards. Local changes to synced '
         'files are merged back afterwards, staying on the sync branch. After an interrupted sync, it finishes that '
-        'sync from .git-p4son/sync-progress.toml instead.'
+        'sync from .git-p4son/sync-progress.toml instead, or with --abort gives it up.'
     )
     sync_parser.set_defaults(func=sync_command)
     sync_parser.add_argument(
@@ -214,6 +214,12 @@ Examples:
              'Give several strictly increasing changelists to sync each in sequence, one commit per '
              'changelist; "head" may close out such a sequence as a trailing target. Omit to sync to '
              '[sync] default-target, else the latest changelist affecting the workspace'
+    )
+    sync_parser.add_argument(
+        '--abort',
+        action='store_true',
+        help='Give up an interrupted sync: keep the commits it made, take the files back to the last one, and merge '
+             'the local changes back'
     )
     sync_parser.add_argument(
         '--allow-backwards',

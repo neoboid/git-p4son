@@ -185,12 +185,20 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     # git lists an untracked repository as its folder, as it does a tracked file now a folder; a save holds only files.
     _refuse_folders([change.path for change in intersync if os.path.isdir(
         local_path(change.path, workspace_dir))])
-    # Git has no copy of a git-ignored file to tell an edit by, so one made writable since is kept, as a fresh pass
-    # keeps it: its refusal is expected, and the end lists it as not synced.
-    # Of the adds, only those the user made where p4 had still to add one.
-    ignore = sorted(path for mode, path in lists.files if (mode != 'add' or path in users_adds) and path not in tracked
-                    and path not in changed and path not in lists.ignored and is_user_writable(local[path])
-                    ) if noclobber and lists else []
+    ignore: list[str] = []
+    if lists:
+        stored_ignored = set(lists.ignored)
+
+        def untouched(path: str) -> bool:
+            return path not in tracked and path not in changed and path not in stored_ignored
+        kept: set[str] = set()
+        if noclobber:
+            # noclobber refuses a writable file. Git has no copy of a git-ignored file to tell an edit by, so one made
+            # writable since is kept, as a fresh pass keeps it: its refusal is expected, and the end lists it as not
+            # synced. Of the adds, only those the user made where p4 had still to add one.
+            kept |= {path for mode, path in lists.files if (mode != 'add' or path in users_adds)
+                     and untouched(path) and is_user_writable(local[path])}
+        ignore = sorted(kept)
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
 

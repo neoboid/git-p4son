@@ -9,9 +9,9 @@ from .hooks import check_hooks
 from .log import log
 from .perforce import describe_changelist
 from .sync_progress import check_no_interrupted_sync
-from .sync import (
-    OnSyncBranch, SyncPass, SyncSettings, catch_up_passes, find_sync_state, parse_changelist, run_sync_passes,
-    sync_on_branch, sync_settings,
+from .sync_passes import (
+    OnSyncBranch, SyncPass, SyncSettings, catch_up_passes, find_sync_state, run_sync_passes, sync_on_branch,
+    sync_settings,
 )
 
 
@@ -22,6 +22,14 @@ class _CherryPickPlan:
     catch_up: list[SyncPass]
     targets: list[SyncPass]
     after: SyncState
+
+
+def _parse_changelist(raw: str) -> int:
+    """The changelist number raw gives; raise CommandError if it isn't one."""
+    try:
+        return int(raw)
+    except ValueError:
+        raise CommandError(f'Invalid changelist number: {raw}') from None
 
 
 def _check_submitted(changelists: list[int], workspace_dir: str) -> None:
@@ -40,7 +48,7 @@ def _check_submitted(changelists: list[int], workspace_dir: str) -> None:
 def _plan_cherry_pick(args: argparse.Namespace, sync_revision: str) -> _CherryPickPlan:
     """Resolve the cherry-picks against the sync branch at sync_revision; raise CommandError for one going backwards."""
     workspace_dir = args.workspace_dir
-    changelists = [parse_changelist(c) for c in args.changelist]
+    changelists = [_parse_changelist(c) for c in args.changelist]
     for changelist in changelists:
         if changelists.count(changelist) > 1:
             raise CommandError(f'CL {changelist} is given twice')

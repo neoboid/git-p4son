@@ -276,6 +276,11 @@ def checkout_detached(commit: str, workspace_dir: str, eol_conversion: str | Non
         '--force', '--detach', commit], cwd=workspace_dir)
 
 
+def reset_branch_keeping_files(commit: str, workspace_dir: str) -> None:
+    """Move the checked-out branch, and the index, to commit, leaving the work tree as it is."""
+    run(['git', 'reset', '-q', '--mixed', commit], cwd=workspace_dir)
+
+
 def reset_files_commands(commit: str, index_commit: str, eol_conversion: str | None = None) -> list[list[str]]:
     """The git commands that put commit's files on disk, with jj's line endings, and index_commit in the index."""
     return [[*_git_for(eol_conversion), 'read-tree', '-u', '--reset', commit],
@@ -697,6 +702,11 @@ def parse_cherry_pick_subject(subject: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def is_sync_subject(subject: str) -> bool:
+    """Whether subject is a sync's or a cherry-pick's."""
+    return bool(_SYNC_SUBJECT_RE.match(subject) or _CHERRY_PICK_SUBJECT_RE.match(subject))
+
+
 def parse_sync_subject(subject: str) -> int | None:
     """Return the changelist of a sync commit subject, or None for any other subject."""
     match = _SYNC_SUBJECT_RE.match(subject)
@@ -794,8 +804,7 @@ def find_base_commits(filepaths: list[str], before_commit: str,
             header, _, status = token.partition('\n')
             _, current_sha, subject = header.split('\x01', 2)
             # A cherry-pick commit holds Perforce's content for the files it touched, as a sync commit does.
-            current_is_sync = parse_sync_subject(
-                subject) is not None or parse_cherry_pick_subject(subject) is not None
+            current_is_sync = is_sync_subject(subject)
             if not status:
                 continue
         path = next(tokens, '')

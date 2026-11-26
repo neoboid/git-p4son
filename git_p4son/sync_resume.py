@@ -101,8 +101,10 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     # Looked up path by path: a listing reads the whole tree, and pathspecs match every entry against every path.
     tracked = {path for (_, path), oid in get_blob_oids(
         [(progress.tip, path) for path in sorted(set(modes) | changed)], workspace_dir).items() if oid}
-    # Git-ignored files are left to p4's clobber rules, as in a normal sync.
-    judged = [path for path in modes if path in changed or path in tracked]
+    # Git-ignored files are left to p4's clobber rules, as in a normal sync; but an add p4 made that is gone again,
+    # by a git clean or a checkout, is neither changed nor tracked, and p4 would not send it again.
+    judged = [path for path in modes if path in changed or path in tracked
+              or modes[path] != 'del' and not os.path.lexists(local[path])]
     differing, lacking = p4_off_have(
         [local[path] for path in judged], workspace_dir)
     off_have = lacking | differing
@@ -124,6 +126,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
                 resync.append(path)
             elif modes[path] == 'del' and on_disk and local[path] in lacking:
                 remove.append(path)
+            elif modes[path] != 'del' and not on_disk and local[path] not in lacking:
+                resync.append(path)
             elif noclobber and path in in_pass and on_disk and is_user_writable(local[path]):
                 read_only.append(path)
             continue

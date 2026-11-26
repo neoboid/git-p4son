@@ -11,7 +11,7 @@ from .backend import Backend
 from .common import CommandError
 from .git import (
     SyncState, files_changed_outside_syncs, commit_files, delete_ref, is_sync_subject, get_files_at_commits,
-    list_tracked_files, restore_files, set_ref, sync_state,
+    get_blob_oids, restore_files, set_ref, sync_state,
 )
 from .log import log, plural
 from .processes import check_no_blocking_processes
@@ -94,7 +94,9 @@ def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) ->
     merged = {merged.path for merged in progress.merged}
     changed = backend.files_changed_since(progress.tip)
     local = {path: local_path(path, workspace_dir) for path in modes}
-    tracked = set(list_tracked_files(workspace_dir, progress.tip))
+    # Looked up path by path: a listing reads the whole tree, and pathspecs match every entry against every path.
+    tracked = {path for (_, path), oid in get_blob_oids(
+        [(progress.tip, path) for path in sorted(set(modes) | changed)], workspace_dir).items() if oid}
     # Git-ignored files are left to p4's clobber rules, as in a normal sync.
     judged = [path for path in modes if path in changed or path in tracked]
     differing, lacking = p4_off_have(

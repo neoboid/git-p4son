@@ -489,10 +489,11 @@ keep working.
 - **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone: those files are
   synced again.
 - **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared.
-- **Commits you made on the sync branch** are taken off it again, so the sync commits hold only Perforce's files.
-  They are kept under `refs/git-p4son/intersync-commits` until the next such resume, their changes come back
-  uncommitted, and each is named with `git commit -c <sha>` to commit them again with its message. With jj, described
-  changes above the sync bookmark are kept the same way and abandoned, each named with `jj show <commit>`.
+- **Commits you made on the sync branch** are taken off it again, so the sync commits hold only Perforce's files. They
+  are kept under `refs/git-p4son/intersync-commits`, with those a later resume of the same sync takes off, until another
+  sync takes commits off. Their changes come back uncommitted, and each is named with `git commit -c <sha>` to commit
+  them again with its message. With jj, described changes above the sync bookmark are kept the same way and abandoned,
+  each named with `jj show <commit>`.
 
 **What still refuses.** The resume needs the sync branch where the interrupted sync left it. Each refusal names the
 way back, such as `git switch main` after checking out another branch, or `git reset --keep <commit>` after moving

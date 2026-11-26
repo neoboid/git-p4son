@@ -222,6 +222,14 @@ def set_ref(ref: str, commit: str, workspace_dir: str) -> None:
     run(['git', 'update-ref', ref, commit], cwd=workspace_dir)
 
 
+def join_commits(commits: list[str], message: str, workspace_dir: str) -> str:
+    """A commit with commits as its parents and the last one's tree, which keeps them all reachable from one ref."""
+    command = ['git', 'commit-tree', f'{commits[-1]}^{{tree}}', '-m', message]
+    for commit in commits:
+        command += ['-p', commit]
+    return run(command, cwd=workspace_dir).stdout[0]
+
+
 def delete_ref(ref: str, workspace_dir: str) -> None:
     """Delete ref, if it exists."""
     run(['git', 'update-ref', '-d', ref],

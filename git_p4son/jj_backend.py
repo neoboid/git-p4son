@@ -292,8 +292,9 @@ class JjBackend:
     def commits_above(self, tip: str) -> list[AboveCommit]:
         """The described changes above tip, oldest first, each with a jj show of its commit, which still resolves once
         the change is abandoned."""
-        return [AboveCommit(commit, f'jj show {commit[:12]}', description)
-                for commit, _, description in self._prepared().above if description]
+        # jj's snapshots rewrite a change while the sync is interrupted, so its change ID tells it apart.
+        return [AboveCommit(commit, f'jj show {commit[:12]}', description, change)
+                for commit, change, description in self._prepared().above if description]
 
     def resume_at(self, commit: str) -> None:
         """Put the sync bookmark and git's HEAD at commit, its change kept from the snapshots after_lock abandons."""

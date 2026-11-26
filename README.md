@@ -1417,9 +1417,10 @@ You stay on the sync bookmark when:
 
 - local changes were merged back: they are in a new working change on it, for you to review, and your changes are
   still rebased
-- a sync fails partway: jj's next command puts a new working change there, holding the files as Perforce left them,
-  and nothing is rebased until a plain `git p4son sync` [finishes it](#resuming-an-interrupted-sync). After a
-  `jj edit` elsewhere, return to that working change with `jj edit` first
+- a sync fails partway: jj's next command puts a new working change there, holding the files as Perforce left them, and
+  nothing is rebased until a plain `git p4son sync` [finishes it](#resuming-an-interrupted-sync). After a `jj edit`
+  elsewhere, your own changes included, return to that working change with `jj edit` first: a resume refuses to run from
+  the changes the sync started from
 - the rebase fails: sync reports it with the `jj rebase` command to run and a non-zero exit code, and the sync is
   not undone
 

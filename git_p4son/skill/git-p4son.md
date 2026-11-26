@@ -197,9 +197,10 @@ and its progress in `.git-p4son/sync-progress.toml`, and stays on the sync branc
   committed changelist. Use it only when the user asks, such as after a changelist was obliterated or the sync was to
   the wrong changelist. When the sync progress is stale, as a later sync is already on the branch, the refusal says
   to run it, and it only removes the progress.
-- When the resume refuses because the sync branch isn't where the sync left it, its message names the way back, such
-  as `git switch main`; ask the user before running it. With jj, after a `jj edit` elsewhere, `jj edit` back to the
-  working change on the sync bookmark first.
+- When the resume refuses because the sync branch isn't where the sync left it, its message names the way back, such as
+  `git switch main`; ask the user before running it. With jj, after a `jj edit` elsewhere, the user's own changes
+  included, `jj edit` back to the working change on the sync bookmark first: a resume refuses to run from the changes
+  the sync started from.
 - If the resume refuses as having run with the other backend ("... ran with the jj backend. Run "git p4son --backend
   jj sync" ..."), ask the user before adding `--backend`, as "jj workspaces" says.
 

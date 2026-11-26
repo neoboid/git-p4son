@@ -48,11 +48,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   files of the catch-up passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists,
   changed in git and matching the have-list, was synced by the interrupted run, and a file merged back before the
   interruption is expected too. A listed tracked file clean in git that differs from the have-list, as after a `git
-  reset --hard` or a local change p4 had not reached, is behind it, and so is one p4 deleted that is back; p4's
-  leftovers (`_p4_leftovers`) are the `tmp.<pid>.<hex>.<n>` files beside the pass's files and the pass's adds on disk
-  that a `p4 sync -n` of them still lists as adds, and its deletes, which an abort's pass adds back,
-  (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, found from p4, not
-  git, so ignored folders too. Any other changed file is an intersync change, one the user made while the sync was
+  reset --hard` or a local change p4 had not reached, is behind it, and so is one p4 deleted that is back, and one p4
+  added that is gone again, by a `git clean` or a checkout, which git sees neither changed nor tracked, so it is judged
+  for being missing; p4's leftovers (`_p4_leftovers`) are the `tmp.<pid>.<hex>.<n>` files beside the pass's files and
+  the pass's adds on disk that a `p4 sync -n` of them still lists as adds, and its deletes, which an abort's pass adds
+  back, (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, found from p4,
+  not git, so ignored folders too. Any other changed file is an intersync change, one the user made while the sync was
   interrupted (`_Intersync`): once the hooks have run, `_save_intersync` commits each such file's content under `ours/`
   (`git.commit_files`, kept alive by `refs/git-p4son/intersync-changes`), and records the save; `_put_right` then puts
   the files back as the sync expects them (the have revision in the pass, else the recorded tip's content with

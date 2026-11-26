@@ -462,6 +462,18 @@ class TestSyncLocalChanges(SyncTestCase):
             'Files not synced (git-ignored and locally modified)', out)
         self.assertNotIn('Unparsable', out)
 
+    def test_allwrite_takes_no_file_an_earlier_pass_wrote_for_a_local_change(self):
+        self.p4.options = 'allwrite noclobber'
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
+        self.p4.submit(
+            102, {'a0.txt': 'a2\n', 'b.txt': 'b1\nupstream\nagain\n'})
+        out = self.sync('101', '102')
+        self.assertNotIn('has local changes', out)
+        self.assertNotIn('deleted locally', out)
+        self.assertEqual((self.read('a0.txt'), self.read(
+            'b.txt')), ('a2\n', 'b1\nupstream\nagain\n'))
+        self.assertEqual(self.synced_commits(), [101, 102])
+
     def test_allwrite_reports_a_modified_ignored_file_not_synced(self):
         self.p4.options = 'allwrite noclobber'
         self.write_file('.gitignore', '*.log\n')

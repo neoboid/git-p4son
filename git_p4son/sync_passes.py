@@ -281,11 +281,13 @@ def _make_synced_files_writable(synced: list[str], workspace_dir: str) -> None:
 
 def end_sync(preps: list[WritableSyncFileSet], ctx: SyncContext,
              merged_before: list[tuple[str, str]] | None = None,
-             intersync: Sequence[IntersyncChange] = ()) -> None:
+             intersync: Sequence[IntersyncChange] = (),
+             intersync_before: list[tuple[str, str]] | None = None) -> None:
     """Merge the local changes back, then the intersync changes, report the files not synced, apply writable mode,
     and drop the sync progress.
 
-    merged_before holds the (path, outcome) of the files an interrupted run merged back, reported with the rest."""
+    merged_before and intersync_before hold the (path, outcome) of the local and the intersync changes an interrupted
+    run merged back, each reported with the rest of its kind."""
     workspace_dir = ctx.workspace_dir
     # Dedup files that showed up in several sync passes.
     changed = [cf for p in preps for cf in p.changed]
@@ -295,7 +297,7 @@ def end_sync(preps: list[WritableSyncFileSet], ctx: SyncContext,
     merge_changed_files(changed_files, workspace_dir,
                         ctx.temp_root, ctx.recorder.merged, merged_before)
     merge_intersync_changes(intersync, workspace_dir, ctx.temp_root, ctx.settings.uses_crlf,
-                            ctx.recorder.intersync_merged)
+                            ctx.recorder.intersync_merged, intersync_before)
 
     report_not_synced(preps, ctx.settings.clobber_mode, workspace_dir)
 

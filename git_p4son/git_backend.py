@@ -212,6 +212,14 @@ class GitBackend:
         switch_branch(sync.branch, self.workspace_dir)
         log.success(f'From {sync.start.name}')
 
+    def progress_start(self) -> tuple[str, dict[str, str | bool]]:
+        """The branch sync started on, or the commit for a detached HEAD."""
+        sync = self._prepared()
+        start = sync.start
+        where: dict[str, str | bool] = {
+            'branch': start.branch} if start.branch else {'commit': start.commit}
+        return sync.branch, {'backend': 'git', **where, 'on-sync-branch': sync.on_sync_branch}
+
     def commit_sync(self, subject: str) -> int:
         return commit_all(subject, self.workspace_dir)
 

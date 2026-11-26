@@ -239,6 +239,12 @@ class JjBackend:
         self.workspace.checkout(sync.commit)
         log.success(f'From {sync.start}')
 
+    def progress_start(self) -> tuple[str, dict[str, str | bool]]:
+        """The change sync started from, and whether it was the working change itself."""
+        sync = self._prepared()
+        return sync.bookmark, {'backend': 'jj', 'change': sync.start, 'edited': sync.editing,
+                               'on-sync-branch': sync.on_sync_branch}
+
     def commit_sync(self, subject: str) -> int:
         """Stage with jj's line endings, and move the sync bookmark to the commit."""
         sync = self._prepared()

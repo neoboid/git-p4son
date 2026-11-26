@@ -555,6 +555,28 @@ class TestMergeChangedFiles(unittest.TestCase):
 
             mock_merge.assert_not_called()
 
+    def test_on_merged_hears_of_each_file_once_it_is_merged_back(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            binary = os.path.join(workspace, 'image.png')
+            with open(binary, 'wb') as f:
+                f.write(b'perforce binary content')
+            gone = os.path.join(workspace, 'gone.txt')
+            heard = []
+
+            def on_merged(path, outcome):
+                with open(binary, 'rb') as f:
+                    heard.append((path, outcome, f.read()))
+
+            from git_p4son.sync_merge import merge_changed_files
+            with captured_output():
+                merge_changed_files(
+                    [ChangedFile(binary, 'sync456', self._stage('.ours', b'user binary content'), None, is_binary=True),
+                     ChangedFile(gone, 'sync456', self._stage('.ours', b'local'), None)],
+                    workspace, self.temp_root, on_merged)
+            self.assertEqual(
+                heard, [(binary, 'binary', b'user binary content'),
+                        (gone, 'deleted-upstream', b'user binary content')])
+
     def test_deleted_upstream_with_local_changes_not_restored(self):
         """A file deleted upstream with local changes is not restored."""
         with tempfile.TemporaryDirectory() as workspace:

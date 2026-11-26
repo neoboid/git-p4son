@@ -111,7 +111,20 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
 - **`sync_merge.py`** - Saves what a sync would overwrite and merges it back: `prepare_writable_files` sorts the files
   p4 would touch that are writable or changed by a commit other than a sync (read-only after `writable off`), into
   tracked and ignored ones, stages the locally modified ones, and `merge_changed_files` merges those local changes back
-  after the sync. `report_not_synced` lists the git-ignored writable files p4 refused or overwrote.
+  after the sync, one file at a time (`_merge_back`), telling `on_merged` after each. `report_not_synced` lists the
+  git-ignored writable files p4 refused or overwrote.
+
+- **`sync_progress.py`** - The sync progress: what an interrupted sync has left to do, in
+  `.git-p4son/sync-progress.toml` (`version = 1`), written to a temporary file and renamed into place, retried a few
+  times while Windows refuses the rename. A `SyncProgress` holds the git-p4son that wrote it, the start time, the sync
+  branch, the depot root, the recorded tip, the pre-sync commit, the backend's `[start]` (`Backend.progress_start`), the
+  passes left (`ProgressPass`), the first one with the `PassLists` its preview and `prepare_writable_files` gave (the
+  files with their modes, the local changes, the ignored and always-writable files), and, in `[end]`, what the end needs
+  from the passes made: the local changes still to merge back, the outcome of each one merged (`MergedFile`), the
+  ignored files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path, its base
+  commit and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace root, a
+  list item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` goes. Nothing reads
+  it yet but the tests.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
@@ -202,16 +215,18 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   (`change_id`, `existing_changes`), the default message, the clean check (`check_clean`, which sync shares), the check
   that the sync branch exists and the change contains its tip, with no merge above it (`check_on_sync_tip`), the check
   that a base contains it too and is below the change (`check_base`), `-b` completions, `checkouts` for the per-commit
-  loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), and the `Words` its messages use, whose `tool`
-  hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then `core.backend`, where `auto`
-  means jj in a jj workspace. `open_backend` holds the workspace's lock for the whole command, jj's lock and operation
-  in a jj workspace and `command_lock` in a git one, and yields the backend in `run_command` as `args.backend`; jj
-  snapshots the working copy first unless the command's parser sets `snapshot=False`. Once the lock is released, it
-  calls the backend's `after_lock`. `alias_for_branch` resolves the `branch` keyword: the alias recording the change, or
-  the change `nearest_change` finds below it in its chain, else the suggested name, unless the command (`new_alias=True`
-  on its parser) names a new one; `resolve_branch_keyword` does so under a heading, for `run_command` and `alias
-  rename`. `completion_backend` gives one without the lock, and `workspace_lock` is `init`'s lock-only path. No command
-  branches on jj outside the backend modules and `jj.py`, apart from `init`'s offer to set jj up.
+  loop, sync's commits (`prepare_sync`, `start_sync`, `commit_sync`), where the sync started for the sync progress
+  (`progress_start`: git's branch or detached commit, jj's start change and whether it was edited), and the `Words` its
+  messages use, whose `tool` hooks get as `$(backend)`. `selected_backend` picks git or jj from `--backend`, then
+  `core.backend`, where `auto` means jj in a jj workspace. `open_backend` holds the workspace's lock for the whole
+  command, jj's lock and operation in a jj workspace and `command_lock` in a git one, and yields the backend in
+  `run_command` as `args.backend`; jj snapshots the working copy first unless the command's parser sets
+  `snapshot=False`. Once the lock is released, it calls the backend's `after_lock`. `alias_for_branch` resolves the
+  `branch` keyword: the alias recording the change, or the change `nearest_change` finds below it in its chain, else the
+  suggested name, unless the command (`new_alias=True` on its parser) names a new one; `resolve_branch_keyword` does so
+  under a heading, for `run_command` and `alias rename`. `completion_backend` gives one without the lock, and
+  `workspace_lock` is `init`'s lock-only path. No command branches on jj outside the backend modules and `jj.py`, apart
+  from `init`'s offer to set jj up.
 
 - **`git_backend.py`** - `GitBackend`, the git adapter: `HEAD`, `HEAD~1` as the default base, a branch as the base by
   its full ref, so that a tag of its name isn't taken for it, the nearest branch below HEAD down to the sync branch

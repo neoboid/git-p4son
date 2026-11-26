@@ -94,7 +94,8 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
     modes = {path: mode for mode, path in progress.uncommitted}
     if lists:
         modes.update((path, mode) for mode, path in lists.files)
-    merged = {merged.path for merged in progress.merged}
+    merged = {merged.path for merged in [
+        *progress.merged, *progress.intersync_merged]}
     changed = backend.files_changed_since(progress.tip)
     local = {path: local_path(path, workspace_dir) for path in modes}
     # Looked up path by path: a listing reads the whole tree, and pathspecs match every entry against every path.
@@ -359,11 +360,13 @@ def _resume_sync_passes(progress: SyncProgress, settings: SyncSettings, workspac
             synced=local_paths(progress.synced, workspace_dir))
         merged_before = [(local_path(merged.path, workspace_dir), merged.outcome)
                          for merged in progress.merged]
+        intersync_before = [(local_path(merged.path, workspace_dir), merged.outcome)
+                            for merged in progress.intersync_merged]
         passes = [(_pass_of(p), p.subject) for p in progress.passes]
         resumed = progress.passes[0].lists if progress.passes else None
         intersync = _saved_changes(progress, workspace_dir)
         end_sync([made, *run_passes(passes, ctx, backend, resumed)],
-                 ctx, merged_before, intersync)
+                 ctx, merged_before, intersync, intersync_before)
     delete_ref(INTERSYNC_REF, workspace_dir)
 
 

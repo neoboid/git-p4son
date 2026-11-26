@@ -200,8 +200,8 @@ class TestProgressRecorder(WorkspaceTestCase):
             [save.commit for save in written(self.ws).intersync], ['c2'])
         recorder.intersync_merged(self.path('a.txt'), None)
         result = written(self.ws)
-        self.assertEqual((result.intersync[0].files, result.merged),
-                         ([IntersyncFile('b.txt', 'tip1')], [MergedFile('a.txt', 'clean')]))
+        self.assertEqual((result.intersync[0].files, result.intersync_merged, result.merged),
+                         ([IntersyncFile('b.txt', 'tip1')], [MergedFile('a.txt', 'clean')], []))
 
     def test_no_progress_writes_nothing(self):
         recorder = NoProgress()

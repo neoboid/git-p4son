@@ -209,6 +209,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertTrue(mode & stat.S_IWUSR)
 
+    @mock.patch('git_p4son.sync_merge.get_blob_oids', return_value={('head123', 'a.txt'): 'oid_head'})
     @mock.patch('git_p4son.sync_merge.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync_merge.find_base_commits',
@@ -217,8 +218,8 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync_merge.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_no_baseline_treated_as_changed(self, _tracked, mock_fstat,
-                                            _find_base, _get_file):
-        """A file without a baseline commit is queued for merge."""
+                                            _find_base, _get_file, _oids):
+        """A file without a baseline commit, added locally before the sync, is queued for merge."""
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'a.txt')
             mock_fstat.return_value = {
@@ -233,6 +234,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertIsNone(cf.base_path)
             self.assertEqual(self._read(cf.ours_path), b'head content')
 
+    @mock.patch('git_p4son.sync_merge.get_blob_oids', return_value={('head123', 'image.png'): 'oid_head'})
     @mock.patch('git_p4son.sync_merge.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'head content'))
     @mock.patch('git_p4son.sync_merge.find_base_commits',
@@ -241,7 +243,7 @@ class TestPrepareWritableFiles(unittest.TestCase):
     @mock.patch('git_p4son.sync_merge.get_tracked_files',
                 side_effect=lambda paths, ws: set(paths))
     def test_binary_files_tracked(self, _tracked, mock_fstat, _find_base,
-                                  _get_file):
+                                  _get_file, _oids):
         with tempfile.TemporaryDirectory() as ws:
             path = self._make_file(ws, 'image.png')
             mock_fstat.return_value = {

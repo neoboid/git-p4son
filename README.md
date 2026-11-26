@@ -484,8 +484,8 @@ keep working.
   changes are merged back on top, after the local changes, with conflict markers where they clash. A binary file keeps
   your version. An edit to a file Perforce deletes brings the file back, with a warning. A symlink made or changed
   since, or a git repository or a folder in place of a file made since, is refused, as the save holds file content.
-- **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone: those files are
-  synced again.
+- **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone, and so is a
+  `git clean` or a checkout that removed a file the sync had added: those files are synced again.
 - **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared.
 - **Commits you made on the sync branch** are taken off it again, so the sync commits hold only Perforce's files. They
   are kept under `refs/git-p4son/intersync-commits`, with those a later resume of the same sync takes off, until another

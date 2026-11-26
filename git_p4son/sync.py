@@ -1,6 +1,7 @@
 """Sync command implementation for git-p4son."""
 
 import argparse
+import contextlib
 import dataclasses
 import os
 import tempfile
@@ -26,7 +27,7 @@ from .sync_merge import (
     ChangedFile, ChangedFileRef, WritableSyncFileSet, merge_changed_files, prepare_writable_files,
     report_not_synced, stage_changed_files,
 )
-from .writable import is_writable_mode, restore_writable
+from .writable import is_writable_mode, make_writable, restore_writable
 from .sync_split_users import (
     canonical_split_users,
     get_split_users,
@@ -39,6 +40,9 @@ from .perforce import (
     get_user_changes,
     p4_get_opened_files,
     p4_off_have,
+    p4_sync_pending,
+    p4_sync_to_have,
+    is_p4_temp_file,
     p4_sync,
     p4_sync_preview,
     P4SyncAbortError,
@@ -588,8 +592,7 @@ def resume_sync_passes(progress: SyncProgress, settings: SyncSettings, workspace
             synced=_local_paths(progress.synced, workspace_dir))
         merged_before = [(local_path(merged.path, workspace_dir), merged.outcome)
                          for merged in progress.merged]
-        passes = [(SyncPass(p.changelist, p.label, p.exact), p.subject)
-                  for p in progress.passes]
+        passes = [(_pass_of(p), p.subject) for p in progress.passes]
         resumed = progress.passes[0].lists if progress.passes else None
         _end_sync([made, *_run_passes(passes, ctx, backend, resumed)],
                   ctx, merged_before)
@@ -671,19 +674,56 @@ def _finish_on_branch(on: OnSyncBranch, depot_root: str, last_synced: int | None
     return exit_code
 
 
-def _check_resumable_files(progress: SyncProgress, backend: Backend, workspace_dir: str) -> None:
-    """Check the files are as the interrupted sync left them, saying how many its interrupted pass synced.
+@dataclass(frozen=True)
+class _PutRight:
+    """What a resume puts right before its passes, as stored paths: files to write again as their have revision,
+    files p4 deleted that are back, and p4's leftovers."""
+    resync: list[str]
+    remove: list[str]
+    leftovers: list[str]
 
-    Raises CommandError, after listing them, for files changed since or left partway, which a resume can't sort yet."""
+
+def _pass_of(progress_pass: ProgressPass) -> SyncPass:
+    return SyncPass(progress_pass.changelist, progress_pass.label, progress_pass.exact)
+
+
+def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: str) -> set[str]:
+    """What p4 left of the files the interrupted pass had not finished: temp files beside its files, and adds p4
+    has not recorded that its stored lists don't account for, as an ignored file or one added on both sides."""
+    accounted = set(lists.ignored) | {
+        change.path for change in lists.changed if change.added_both}
+    on_disk = [local_path(path, workspace_dir) for mode, path in lists.files
+               if mode == 'add' and path not in accounted and os.path.lexists(local_path(path, workspace_dir))]
+    log.heading('Finding what p4 has left to sync')
+    pending = p4_sync_pending(on_disk, _pass_of(
+        interrupted).revision, workspace_dir)
+    log.success(f'{plural(len(pending), "file")} on disk not synced yet')
+    leftovers = {_workspace_path(entry.filepath, workspace_dir)
+                 for entry in pending if entry.mode == 'add'}
+    for folder in {path.rpartition('/')[0] for _, path in lists.files}:
+        try:
+            names = os.listdir(local_path(folder, workspace_dir)
+                               if folder else workspace_dir)
+        except FileNotFoundError:
+            continue
+        leftovers.update(
+            f'{folder}/{name}' if folder else name for name in names if is_p4_temp_file(name))
+    return leftovers
+
+
+def _sort_files(progress: SyncProgress, backend: Backend, workspace_dir: str) -> _PutRight:
+    """Sort the files against the interrupted sync: those it synced, those behind the have-list, and p4's leftovers.
+
+    Raises CommandError, after listing them, for files changed since, which a resume can't sort yet."""
+    interrupted = progress.passes[0] if progress.passes else None
+    lists = interrupted.lists if interrupted else None
+    leftovers = _p4_leftovers(
+        interrupted, lists, workspace_dir) if interrupted and lists else set()
     log.heading('Checking the files against the interrupted sync')
-    lists = progress.passes[0].lists if progress.passes else None
     # A catch-up pass's files are uncommitted until the next commit, and the interrupted pass's entry wins.
     modes = {path: mode for mode, path in progress.uncommitted}
     if lists:
         modes.update((path, mode) for mode, path in lists.files)
-    # Local changes and allwrite's refusals differ from the have-list until their pass syncs them.
-    expected_off_have = {change.path for change in lists.changed} | set(
-        lists.replace) if lists else set()
     merged = {merged.path for merged in progress.merged}
     changed = backend.files_changed_since(progress.tip)
     local = {path: local_path(path, workspace_dir) for path in modes}
@@ -693,15 +733,18 @@ def _check_resumable_files(progress: SyncProgress, backend: Backend, workspace_d
     differing, lacking = p4_off_have(
         [local[path] for path in judged], workspace_dir)
     off_have = lacking | differing
-    synced, unsorted = [], []
+    synced, resync, remove, unsorted = [], [], [], []
     for path in sorted(changed | set(judged)):
-        if path in changed and path in merged:
-            continue
-        if path not in changed:
-            if local[path] in differing and path not in expected_off_have:
-                unsorted.append(path)
+        if path in leftovers or path in changed and path in merged:
             continue
         on_disk = path in local and os.path.lexists(local[path])
+        if path not in changed:
+            # Clean in git: put back by a reset, or a local change p4 had not reached yet.
+            if local[path] in differing:
+                resync.append(path)
+            elif modes[path] == 'del' and on_disk and local[path] in lacking:
+                remove.append(path)
+            continue
         if path not in modes:
             unsorted.append(path)
         elif modes[path] == 'del' and not on_disk and local[path] in lacking:
@@ -713,10 +756,45 @@ def _check_resumable_files(progress: SyncProgress, backend: Backend, workspace_d
     if unsorted:
         for path in unsorted:
             log.info(path)
-        raise CommandError('The files above changed since the interrupted sync, or p4 left them partway, which '
-                           'git-p4son cannot sort out yet. Put them back as the interrupted sync left them, then run '
-                           '"git p4son sync" again.')
+        raise CommandError('The files above changed since the interrupted sync, which git-p4son cannot sort out '
+                           'yet. Put them back as the interrupted sync left them, then run "git p4son sync" again.')
     log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
+    return _PutRight(resync, remove, sorted(leftovers))
+
+
+def _log_paths(heading: str, paths: list[str]) -> None:
+    log.heading(heading)
+    for path in paths:
+        log.info(path)
+
+
+def _remove(paths: list[str], workspace_dir: str) -> None:
+    local = _local_paths(paths, workspace_dir)
+    # Windows refuses to remove a read-only file, as p4 leaves synced ones.
+    make_writable([path for path in local if os.path.lexists(path)])
+    for path in local:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)
+
+
+def _put_right(put: _PutRight, workspace_dir: str, dry_run: bool = False) -> None:
+    """Write the files behind the have-list again, remove those p4 deleted that are back, and clear p4's leftovers;
+    with dry_run, only list them."""
+    behind = put.resync + put.remove
+    if behind:
+        _log_paths('Files behind the have-list to resync' if dry_run else 'Resyncing the files behind the have-list',
+                   behind)
+        if not dry_run:
+            p4_sync_to_have(_local_paths(
+                put.resync, workspace_dir), workspace_dir)
+            _remove(put.remove, workspace_dir)
+            log.success(f'{plural(len(behind), "file")} resynced')
+    if put.leftovers:
+        _log_paths(
+            "p4's leftovers to clear" if dry_run else "Clearing p4's leftovers", put.leftovers)
+        if not dry_run:
+            _remove(put.leftovers, workspace_dir)
+            log.success(f'{plural(len(put.leftovers), "file")} cleared')
 
 
 def _check_no_plan_options(args: argparse.Namespace) -> None:
@@ -756,8 +834,9 @@ def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
     depot_root = progress.depot_root
     check_no_blocking_processes(workspace_dir, args.ignore_blocking_processes)
     _check_p4_workspace_clean(depot_root, workspace_dir, sync_revision)
-    _check_resumable_files(progress, backend, workspace_dir)
+    put = _sort_files(progress, backend, workspace_dir)
     if args.dry_run:
+        _put_right(put, workspace_dir, dry_run=True)
         log.heading('Where sync returns to')
         log.success(backend.returns_to() or f'Stays on {progress.sync_branch}')
         return 0
@@ -772,6 +851,7 @@ def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
 
     def run() -> SyncState:
         backend.begin_resume()
+        _put_right(put, workspace_dir)
         resume_sync_passes(progress, settings, workspace_dir, backend)
         return sync_state(workspace_dir)
 

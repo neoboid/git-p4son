@@ -77,15 +77,18 @@ class TestSyncChangelist(unittest.TestCase):
             RunError('p4 sync failed', 1, []), list(refused))
 
     def test_clean_sync_refuses_nothing(self, mock_p4_sync):
-        self.assertEqual(
-            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws', expected_refusals=set()), [])
+        with captured_output() as out:
+            _sync_changelist(SyncPass(12345, 'test'),
+                             '//myclient', '/ws', expected_refusals=set())
         mock_p4_sync.assert_called_once_with('@12345', '//myclient', '/ws')
+        self.assertNotIn('refusal', out.getvalue())
 
     def test_expected_clobber_tolerated(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt', '/ws/b.txt')
-        refused = _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
-                                   expected_refusals={'/ws/a.txt', '/ws/b.txt'})
-        self.assertEqual(refused, ['/ws/a.txt', '/ws/b.txt'])
+        with captured_output() as out:
+            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
+                             expected_refusals={'/ws/a.txt', '/ws/b.txt'})
+        self.assertIn('2 expected refusals', out.getvalue())
 
     def test_failed_rename_aborts_with_advice(self, mock_p4_sync):
         mock_p4_sync.side_effect = P4SyncAbortError(
@@ -97,20 +100,6 @@ class TestSyncChangelist(unittest.TestCase):
         self.assertIn('\nrename: failed to rename D:\\ws\\a.uasset\n',
                       out.getvalue())
         self.assertIn('partially synced', str(ctx.exception))
-
-    def test_expected_allwrite_refusals_returned(self, mock_p4_sync):
-        mock_p4_sync.return_value = ['/ws/a.txt']
-        refused = _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
-                                   expected_refusals={'/ws/a.txt'})
-        self.assertEqual(refused, ['/ws/a.txt'])
-
-    def test_unexpected_allwrite_refusal_raises(self, mock_p4_sync):
-        mock_p4_sync.return_value = ['/ws/a.txt']
-        with captured_output() as out, \
-                self.assertRaisesRegex(CommandError, 'unexpectedly refused'):
-            _sync_changelist(SyncPass(12345, 'test'), '//myclient', '/ws',
-                             expected_refusals=set())
-        self.assertIn('\n/ws/a.txt\n', out.getvalue())
 
     def test_unexpected_clobber_raises(self, mock_p4_sync):
         mock_p4_sync.side_effect = self._clobber('/ws/a.txt')

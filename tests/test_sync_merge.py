@@ -136,55 +136,6 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertFalse(mode & stat.S_IWUSR)
 
-    @mock.patch('git_p4son.sync_merge.get_blob_oids',
-                return_value={('head123', 'a.txt'): 'same_oid',
-                              ('sync456', 'a.txt'): 'same_oid'})
-    @mock.patch('git_p4son.sync_merge.get_files_at_commits')
-    @mock.patch('git_p4son.sync_merge.find_base_commits',
-                return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync_merge.p4_head_types')
-    @mock.patch('git_p4son.sync_merge.get_tracked_files',
-                side_effect=lambda paths, ws: set(paths))
-    def test_allwrite_keeps_unchanged_file_writable(
-            self, _tracked, mock_fstat, _find_base, _get_file, _oids):
-        """With allwrite an unchanged file keeps its write bit."""
-        with tempfile.TemporaryDirectory() as ws:
-            path = self._make_file(ws, 'a.txt')
-            mock_fstat.return_value = {path: 'text'}
-
-            result = _prepare([preview_update(path)], ws, 'head123',
-                              self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
-
-            self.assertEqual(result.changed, [])
-            mode = os.stat(path).st_mode
-            self.assertTrue(mode & stat.S_IWUSR)
-
-    @mock.patch('git_p4son.sync_merge.get_blob_oids')
-    @mock.patch('git_p4son.sync_merge.get_files_at_commits',
-                side_effect=_files_at_commits(lambda *_: b'head content'))
-    @mock.patch('git_p4son.sync_merge.find_base_commits',
-                return_value={'a.txt': 'sync456'})
-    @mock.patch('git_p4son.sync_merge.p4_head_types')
-    @mock.patch('git_p4son.sync_merge.get_tracked_files',
-                side_effect=lambda paths, ws: {p for p in paths if p.endswith('a.txt')})
-    def test_allwrite_refused_tracked_files_are_replaced(
-            self, _tracked, mock_fstat, _find_base, _get_file, mock_oids):
-        """A tracked file allwrite refuses, read-only or not, is staged and replaced; an ignored one is not."""
-        with tempfile.TemporaryDirectory() as ws:
-            path = self._make_file(ws, 'a.txt', writable=False)
-            ignored = self._make_file(ws, 'x.log')
-            mock_fstat.return_value = {path: 'text'}
-            mock_oids.return_value = {('head123', 'a.txt'): 'oid_head',
-                                      ('sync456', 'a.txt'): 'oid_base'}
-
-            result = _prepare([P4SyncPreviewFile('upd', path, refused_path='//ws/a.txt'),
-                               P4SyncPreviewFile('upd', ignored, refused_path='//ws/x.log')],
-                              ws, 'head123', self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
-
-            self.assertEqual([cf.filepath for cf in result.changed], [path])
-            self.assertEqual(result.replace, {path: '//ws/a.txt'})
-            self.assertEqual(result.ignored, [ignored])
-
     @mock.patch('git_p4son.sync_merge.get_blob_oids')
     @mock.patch('git_p4son.sync_merge.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'head content'))
@@ -491,18 +442,6 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertEqual(result.ignored, [ignored])
             self.assertEqual(result.always_writable, [always])
 
-    def test_an_always_writable_file_allwrite_refuses_stays_ignored(self):
-        """A +w file allwrite refuses won't sync normally, so it stays with the ignored files."""
-        with tempfile.TemporaryDirectory() as ws:
-            always = self._make_file(ws, 'Tool.exe')
-            with mock.patch('git_p4son.sync_merge.get_tracked_files', return_value=set()), \
-                    mock.patch('git_p4son.sync_merge.p4_head_types', return_value={always: 'binary+w'}):
-                result = _prepare([P4SyncPreviewFile('upd', always, refused_path='//ws/Tool.exe')], ws, 'head123',
-                                  self.temp_root, clobber_mode=ClobberMode.ALLWRITE)
-
-            self.assertEqual(result.ignored, [always])
-            self.assertEqual(result.always_writable, [])
-
     def _run_with_tracked_and_ignored(self, ws, mode):
         """Prepare one unchanged tracked and one ignored file, returning what it printed."""
         tracked = self._make_file(ws, 'a.txt')
@@ -536,15 +475,6 @@ class TestPrepareWritableFiles(unittest.TestCase):
                 ws, ClobberMode.CLOBBER)
             self.assertIn('overwritten', warnings)
             self.assertNotIn('will not be synced', warnings)
-
-    def test_ignored_message_with_allwrite(self):
-        """With allwrite the summary says ignored files sync unless modified."""
-        with tempfile.TemporaryDirectory() as ws:
-            out = self._run_with_tracked_and_ignored(
-                ws, ClobberMode.ALLWRITE)
-            self.assertNotIn('will not be synced', out)
-            self.assertIn('unless modified locally', out)
-            self.assertNotIn('build.log', out)
 
     def test_nonexistent_files_skipped(self):
         result = _prepare(

@@ -140,6 +140,15 @@ class TestJjBackend(JjRepoTestCase):
                 for name in ('feat', 'main')])
             self.assertEqual(JjBackend(workspace).commit_identities([]), [])
 
+    def test_progress_start_is_the_tip_change_and_whether_it_is_the_working_change(self):
+        change = self.jj('--ignore-working-copy', 'log', '-r',
+                         'feat', '--no-graph', '-T', 'change_id')
+        with self.operation() as workspace:
+            backend = JjBackend(workspace)
+            backend.prepare_sync(None)
+            self.assertEqual(backend.progress_start(), (
+                'main', {'backend': 'jj', 'change': change[:12], 'edited': False, 'on-sync-branch': False}))
+
     def test_answers_from_the_tip(self):
         with self.operation() as workspace:
             backend = JjBackend(workspace)

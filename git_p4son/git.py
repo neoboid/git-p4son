@@ -115,11 +115,13 @@ _PORCELAIN_KINDS = {'A': 'add', 'D': 'delete', '??': 'untracked'}
 
 
 @contextlib.contextmanager
-def _index_from(revision: str, workspace_dir: str) -> Iterator[dict[str, str]]:
-    """Yield the environment for git commands to use a fresh index read from revision, leaving the real one alone."""
+def _index_from(revision: str | None, workspace_dir: str) -> Iterator[dict[str, str]]:
+    """Yield the environment for git commands to use a fresh index read from revision, else empty, leaving the real
+    one alone."""
     with tempfile.TemporaryDirectory(prefix='git-p4son-index-') as directory:
         env = {'GIT_INDEX_FILE': os.path.join(directory, 'index')}
-        run(['git', 'read-tree', revision], cwd=workspace_dir, env=env)
+        if revision is not None:
+            run(['git', 'read-tree', revision], cwd=workspace_dir, env=env)
         yield env
 
 
@@ -196,6 +198,44 @@ def files_changed_since(revision: str, workspace_dir: str, eol_conversion: str |
 
 
 # --- staging and committing ---
+
+def commit_files(files: dict[str, str], message: str, workspace_dir: str, parent: str | None = None,
+                 tree_from: str | None = None) -> str:
+    """A commit on parent whose tree holds, at each path files names, the content of the local file it maps to,
+    filtered as git add would, added to tree_from's tree; the real index is left alone."""
+    with _index_from(tree_from, workspace_dir) as env:
+        if files:
+            oids = run(['git', 'hash-object', '-w', '--stdin-paths'], cwd=workspace_dir,
+                       input='\n'.join(files.values())).stdout
+            entries = ''.join(
+                f'100644 {oid}\t{path}\0' for path, oid in zip(files, oids))
+            run(['git', 'update-index', '-z', '--index-info'],
+                cwd=workspace_dir, env=env, input=entries)
+        tree = run(['git', 'write-tree'], cwd=workspace_dir, env=env).stdout[0]
+    command = ['git', 'commit-tree', tree, '-m', message]
+    if parent is not None:
+        command += ['-p', parent]
+    return run(command, cwd=workspace_dir).stdout[0]
+
+
+def set_ref(ref: str, commit: str, workspace_dir: str) -> None:
+    run(['git', 'update-ref', ref, commit], cwd=workspace_dir)
+
+
+def delete_ref(ref: str, workspace_dir: str) -> None:
+    """Delete ref, if it exists."""
+    run(['git', 'update-ref', '-d', ref],
+        cwd=workspace_dir, fail_on_returncode=False)
+
+
+def restore_files(commit: str, paths: list[str], workspace_dir: str) -> None:
+    """Write each of paths, repo-relative, as commit holds it, with git's line endings; the real index is left
+    alone."""
+    if paths:
+        with _index_from(commit, workspace_dir) as env:
+            run(['git', 'checkout-index', '-f', '-z', '--stdin'], cwd=workspace_dir, env=env,
+                input='\0'.join(paths))
+
 
 # jj's working-copy.eol-conversion values, as git's core.autocrlf.
 _AUTOCRLF = {'none': 'false', 'input': 'input', 'input-output': 'true'}

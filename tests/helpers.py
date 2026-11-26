@@ -504,6 +504,8 @@ class FakeP4:
         self.clients: dict[str, str] = {}
         # Paths p4 refuses to add, as for a .p4ignore match.
         self.ignored: set[str] = set()
+        # Files p4 refused to replace under noclobber, which the have-list keeps at their earlier content.
+        self.held: dict[str, str | None] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
         # Files of a +w type: p4 updates one it has even while it is writable, under noclobber, but adds none over a
@@ -547,7 +549,7 @@ class FakeP4:
         files = self.files_at(self.have)
         overlay = {path: self.changes[change][1][path]
                    for path, change in self.picked.items()} | self.landed
-        for path, content in overlay.items():
+        for path, content in (overlay | self.held).items():
             if content is None:
                 files.pop(path, None)
             else:
@@ -997,10 +999,13 @@ class FakeP4:
             if (not preview and writable and self._noclobber()
                     and not (path in self.always_writable and path in before)):
                 refused.append(f"Can't clobber writable file {local}")
+                # p4 keeps the refused file at its have revision, so a later sync refuses it again.
+                self.held[path] = before.get(path)
                 continue
             lines.append(f'{self._depot(path)}#1 - {what} {local}')
             if preview:
                 continue
+            self.held.pop(path, None)
             if path not in after:
                 if os.path.exists(local):
                     os.chmod(local, stat.S_IRUSR | stat.S_IWUSR)

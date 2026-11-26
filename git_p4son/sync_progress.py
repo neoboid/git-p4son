@@ -56,10 +56,16 @@ class MergedFile:
 
 
 class AboveCommit(NamedTuple):
-    """A commit above the recorded tip of an interrupted sync: the commit, how to get it back, and its subject."""
+    """A commit above the recorded tip of an interrupted sync: the commit, how to get it back, its subject, and what
+    tells it apart from the others where its commit can change, as jj's change ID does."""
     commit: str
     back: str
     subject: str
+    key: str = ''
+
+    @property
+    def identity(self) -> str:
+        return self.key or self.commit
 
 
 @dataclass(frozen=True)

@@ -209,6 +209,13 @@ class SyncTestCase(P4RepoTestCase):
         """Run sync with argv; returns everything it printed."""
         return self.run_command(sync_command, ['sync', *argv])
 
+    def make_symlink(self, target, path):
+        """Make path, in the workspace, a symlink to target; the test is skipped where that needs privileges."""
+        try:
+            os.symlink(target, os.path.join(self.ws, path))
+        except OSError:
+            self.skipTest('this platform makes no symlinks without privileges')
+
     def sync_fails(self, *argv, message):
         """Run sync with argv, expecting a CommandError matching message; returns what it printed."""
         return self.command_fails(sync_command, ['sync', *argv], message)
@@ -1148,10 +1155,7 @@ class TestSyncIntersync(SyncTestCase):
 
     def test_a_symlink_made_since_is_refused(self):
         self.interrupt()
-        try:
-            os.symlink('missing.txt', os.path.join(self.ws, 'link.txt'))
-        except OSError:
-            self.skipTest('this platform makes no symlinks without privileges')
+        self.make_symlink('missing.txt', 'link.txt')
         progress = self.sync_progress_file()
         out = self.sync_fails(message='symlinks')
         self.assertIn('link.txt', out.splitlines())

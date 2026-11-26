@@ -1356,6 +1356,25 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
         self.jj('new', 'main-')
         self.p4son_fails('sync', message=f'jj edit {snapshot[:12]}')
 
+    def assert_the_start_stack_is_refused(self, back):
+        """Go back to the start stack with jj back after an interruption in the first pass: the resume refuses,
+        naming the snapshot change only, and leaves the stack alone."""
+        snapshot = self.interrupt()
+        feat = self.describe('feat', 'commit_id')
+        self.jj(back, 'feat')
+        out = self.p4son_fails(
+            'sync', message=f'stack the interrupted sync started from.*jj edit {snapshot[:12]}')
+        self.assertNotIn(
+            f'jj edit {self.describe("feat", "change_id")[:12]}', out)
+        self.assertEqual(self.describe('feat', 'commit_id'), feat)
+        self.assertIsNotNone(self.sync_progress_file())
+
+    def test_a_resume_refuses_a_jj_edit_of_the_stack_sync_started_from(self):
+        self.assert_the_start_stack_is_refused('edit')
+
+    def test_a_resume_refuses_a_jj_new_on_the_stack_sync_started_from(self):
+        self.assert_the_start_stack_is_refused('new')
+
     def test_a_described_change_above_the_bookmark_is_unwound_and_abandoned(self):
         snapshot = self.interrupt()
         self.jj('describe', '-m', 'Mine')

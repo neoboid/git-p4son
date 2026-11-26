@@ -316,14 +316,15 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
   <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back changes
   are left. A resume (`resume_sync`) wants the bookmark at the recorded commit, or on the pass's own commit above it
-  where jj's `commit_sync` moved it before a crash, and the working change above it, the described changes between being
-  the user's commits, a bookmark moved onto later sync commits refusing as stale sync progress, and `resume_at`, once
-  the dry run and the pre-sync hooks are past, moves the bookmark to the crash window's commit where the interruption
-  left it behind, keeps that commit's change from the snapshot changes, and points git's HEAD at the commit.
-  `after_lock` then abandons the undescribed snapshot changes jj made there, once jj is past them, and a start change
-  that is gone leaves the sync on the bookmark with a warning, as a gone start branch does with git. Its `checkouts`
-  puts each commit's files on disk with git under the lock, as the revision and clean check a step reads, and the
-  working change's files back at the end, so jj sees no change.
+  where jj's `commit_sync` moved it before a crash, and the working change above it, not on the stack sync started from,
+  which sits on the recorded commit too until a pass commits, the described changes between being the user's commits, a
+  bookmark moved onto later sync commits refusing as stale sync progress, and `resume_at`, once the dry run and the
+  pre-sync hooks are past, moves the bookmark to the crash window's commit where the interruption left it behind, keeps
+  that commit's change from the snapshot changes, and points git's HEAD at the commit. `after_lock` then abandons the
+  undescribed snapshot changes jj made there, once jj is past them, and a start change that is gone leaves the sync on
+  the bookmark with a warning, as a gone start branch does with git. Its `checkouts` puts each commit's files on disk
+  with git under the lock, as the revision and clean check a step reads, and the working change's files back at the end,
+  so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `check_own_pending` (refuses a CL
   `describe_changelist` doesn't find pending and owned by the current user and client, `get_p4_user_and_client`,

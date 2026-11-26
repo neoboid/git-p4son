@@ -790,6 +790,22 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertNotIn("Clearing p4's leftovers", out)
         self.assertEqual(self.read('x.log'), 'mine\n')
 
+    def test_a_plus_w_file_from_before_the_sync_is_not_cleared(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.write_file('x.log', 'mine\n')
+        self.p4.always_writable.add('x.log')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync('101')
+        self.assertEqual(progress['passes'][0]['ignored'], ['x.log'])
+        out = self.sync()
+        self.assertNotIn("Clearing p4's leftovers", out)
+        self.assertEqual(self.read('x.log'), 'mine\n')
+        self.assertIn('x.log', self.listed_under(
+            out, 'Files not synced (git-ignored and writable)'))
+        self.assertIsNone(self.sync_progress_file())
+
     def test_a_file_added_on_both_sides_is_not_cleared(self):
         self.write_file('new.txt', 'mine\n')
         self.commit('Add new')

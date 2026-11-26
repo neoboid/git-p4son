@@ -1074,6 +1074,28 @@ class TestSyncIntersync(SyncTestCase):
         self.assertIn('link.txt', out.splitlines())
         self.assertEqual(self.sync_progress_file(), progress)
 
+    def test_a_git_repository_made_since_is_refused_by_name_with_nothing_changed(self):
+        self.interrupt()
+        os.makedirs(os.path.join(self.ws, 'tool'))
+        self.git('-C', 'tool', 'init', '-q')
+        self.write_file('tool/x.txt', 'x\n')
+        progress = self.sync_progress_file()
+        head = self.git('rev-parse', 'HEAD')
+        out = self.sync_fails(message='made while the sync was interrupted where git-p4son can keep only files.*'
+                              '"git p4son sync --abort"')
+        self.assertIn('tool/', out.splitlines())
+        self.assertEqual(self.sync_progress_file(), progress)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def test_a_folder_made_in_place_of_a_tracked_file_is_refused_by_name_with_nothing_changed(self):
+        self.interrupt()
+        os.remove(os.path.join(self.ws, 'b.txt'))
+        self.write_file('b.txt/x.txt', 'x\n')
+        progress = self.sync_progress_file()
+        out = self.sync_fails(message='a folder in place of a file')
+        self.assertIn('b.txt', [line.rstrip('/') for line in out.splitlines()])
+        self.assertEqual(self.sync_progress_file(), progress)
+
     def test_a_dry_run_lists_the_changes_it_would_save_and_changes_nothing(self):
         self.interrupt()
         self.edit('b.txt', 'local\nb1\nmine\n')

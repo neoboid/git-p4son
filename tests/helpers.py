@@ -504,7 +504,8 @@ class FakeP4:
         self.clients: dict[str, str] = {}
         # Paths p4 refuses to add, as for a .p4ignore match.
         self.ignored: set[str] = set()
-        # Files allwrite refused to replace: the have-list keeps the first content, sync -f writes the second.
+        # Files p4 refused to replace, by allwrite's content check or noclobber's write bit: the have-list keeps the
+        # first content, sync -f writes the second.
         self.held: dict[str, tuple[str | None, str | None]] = {}
         self.shelved: dict[str, dict[str, str | None]] = {}
         self.binary: set[str] = set()
@@ -1024,6 +1025,8 @@ class FakeP4:
             if (not preview and writable and self._noclobber() and not self._allwrite()
                     and not (path in self.always_writable and path in before)):
                 refused.append(f"Can't clobber writable file {local}")
+                # p4 keeps the refused file at its have revision, so a later sync refuses it again.
+                self.held[path] = (before.get(path), after.get(path))
                 continue
             if (self._allwrite() and self._noclobber() and os.path.exists(local)
                     and self._content(path) != (before[path] if path in before else after[path])):

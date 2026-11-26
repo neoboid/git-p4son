@@ -275,13 +275,23 @@ class JjBackend:
             raise CommandError(f'jj bookmark "{sync_branch}" moved since the interrupted sync left it at {tip[:12]}. '
                                f'Put it back with "jj bookmark set {sync_branch} -r {tip} --allow-backwards", then run '
                                f'"git p4son sync" again, {GIVE_UP}.')
-        if not is_ancestor(tip, workspace.working.commit, workspace.directory):
-            children = workspace.children(tip)
-            back = (' or '.join(f'"jj edit {change[:12]}"' for change in children) if children
+        # Before a pass commits, the stack sync started from sits on the recorded commit too, beside the snapshot.
+        start_stack = set() if start['on-sync-branch'] else {
+            change for _, change, _ in workspace.changes_above(tip, f'({changes_revset([str(start["change"])])})')}
+
+        def back() -> str:
+            children = [change for change in workspace.children(
+                tip) if change not in start_stack]
+            return (' or '.join(f'"jj edit {change[:12]}"' for change in children) if children
                     else f'"jj new {tip[:12]}"')
+        if not is_ancestor(tip, workspace.working.commit, workspace.directory):
             raise CommandError(f'The working change is not above {sync_branch}, where the interrupted sync left its '
-                               f'files. Return to them with {back}, then run "git p4son sync" again, {GIVE_UP}.')
+                               f'files. Return to them with {back()}, then run "git p4son sync" again, {GIVE_UP}.')
         above = workspace.changes_above(tip)
+        if start_stack & {change for _, change, _ in above}:
+            raise CommandError(f'The working change is on the stack the interrupted sync started from, not on the '
+                               f'files it left on {sync_branch}. Return to them with {back()}, then run "git p4son '
+                               f'sync" again, {GIVE_UP}.')
         log.success(f'At {tip[:12]}')
         self._sync = _Sync(sync_branch, tip, str(start['change']), bool(start['edited']),
                            get_head_commit(workspace.directory), bool(

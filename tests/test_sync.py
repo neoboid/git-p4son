@@ -14,6 +14,7 @@ from git_p4son.git import format_sync_subject, merge_file
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.cherry_pick import cherry_pick_command
+from git_p4son import perforce
 from git_p4son.sync_progress import ProgressRecorder
 from git_p4son.sync import (
     build_sync_targets,
@@ -1010,10 +1011,10 @@ class TestWhileInterrupted(SyncTestCase):
     def test_sync_refuses_the_options_that_change_the_plan(self):
         progress = self.interrupt()
         for argv in (['102'], ['head'], ['last-synced'], ['--branch', 'main'], ['-u', 'other'], ['--no-split'],
-                     ['--allow-backwards'], ['-f']):
+                     ['--allow-backwards'], ['-f'], ['--abort', '102']):
             with self.subTest(argv=argv):
-                out = self.sync_fails(
-                    *argv, message='would change the plan of the interrupted sync')
+                out = self.sync_fails(*argv, message='would change the plan of the interrupted sync.*'
+                                      '"git p4son sync --abort"')
                 self.assertNotIn('Resuming the interrupted sync', out)
         self.assertEqual(self.sync_progress_file(), progress)
 
@@ -1066,8 +1067,177 @@ class TestWhileInterrupted(SyncTestCase):
         with open(path, 'w', encoding='utf-8') as f:
             f.write(text.replace('version = 1\n', 'version = 2\n', 1).replace(
                 f'written-by = "{__version__}"', 'written-by = "9.0.0"', 1))
+        for argv in ([], ['--abort']):
+            with self.subTest(argv=argv):
+                self.sync_fails(*argv, message='written by git-p4son 9.0.0, which is newer than this one. Upgrade '
+                                'git-p4son to finish or abort it')
+
+
+class TestSyncAbort(SyncTestCase):
+    """sync --abort gives up an interrupted sync: the workspace back at the last commit, the changes merged back."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.commit_local_changes('a.txt')
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n',
+                       'd.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.submit(102, {'f.txt': 'f1\n', 'g.txt': 'g1\n'})
+
+    def interrupt(self):
+        """Have sync 101 102 interrupted after CL 102's first file; the sync progress."""
+        self.p4.interrupt_sync('@102', after=1)
+        return self.interrupted_sync('101', '102')
+
+    def test_an_abort_in_a_later_pass_keeps_the_commits_made_and_goes_back_to_the_last(self):
+        self.interrupt()
+        self.p4.transferred.clear()
+        out = self.sync('--abort')
+        self.assertIn('Aborting the interrupted sync: back to CL 101', out)
+        self.assertEqual(self.p4.transferred, ['f.txt'])
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.p4.have, 101)
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'f.txt')))
+        self.assertEqual((self.read('a.txt'), self.read(
+            'd.txt')), ('local\na1\nupstream\n', 'd1\n'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_interrupted_in_its_own_sync_is_finished_by_a_plain_sync(self):
+        self.p4.interrupt_sync('@102', after=2)
+        self.interrupted_sync('101', '102')
+        self.p4.interrupt_sync('@101', after=1)
+        progress = self.interrupted_sync('--abort')
+        self.assertEqual([(p['changelist'], p['label'])
+                         for p in progress['passes']], [(101, 'last synced')])
+        out = self.sync()
+        self.assertIn(
+            'Resuming the interrupted sync: 1 changelist left, to CL 101', out)
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.p4.have, 101)
+        self.assertFalse(any(os.path.exists(os.path.join(self.ws, name))
+                         for name in ('f.txt', 'g.txt')))
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_after_a_catch_up_pass_puts_back_the_cherry_picks_it_took_back(self):
+        self.p4.submit(103, {'x.txt': 'x3\n'})
+        self.sync('101')
+        self.commit('Keep the local change')
+        self.run_command(cherry_pick_command, ['cherry-pick', '103'])
+        preview = perforce.p4_sync_preview
+        previews = []
+
+        def interrupt_the_second(*args):
+            previews.append(args)
+            if len(previews) == 2:
+                raise KeyboardInterrupt
+            return preview(*args)
+        with mock.patch('git_p4son.sync.p4_sync_preview', side_effect=interrupt_the_second):
+            progress = self.interrupted_sync('102')
+        self.assertEqual(progress['uncommitted'], [['del', 'x.txt']])
+        out = self.sync('--abort')
+        self.assertIn('back to CL 101 with cherry-picks 103', out)
+        self.assertEqual(self.read('x.txt'), 'x3\n')
+        self.assertEqual(self.p4.picked.get('x.txt'), 103)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_interrupted_in_its_own_sync_clears_a_file_it_was_adding_back(self):
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n',
+                       'd.txt': 'd1\n', 'e.txt': 'e1\n', 'z.txt': 'z1\nzz\n'})
+        self.p4.submit(102, {'f.txt': 'f1\n', 'g.txt': 'g1\n', 'z.txt': None})
+        self.p4.interrupt_sync('@102', after=3)
+        self.interrupted_sync('101', '102')
+        self.p4.interrupt_sync('@101', after=2, leftovers=True)
+        self.interrupted_sync('--abort')
+        self.sync()
+        self.assertEqual(self.read('z.txt'), 'z1\nzz\n')
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertFalse(any(os.path.exists(os.path.join(self.ws, name))
+                         for name in ('f.txt', 'g.txt')))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_in_the_crash_window_keeps_the_pass_s_commit(self):
+        record = ProgressRecorder.pass_made
+
+        def crash_after_the_commit(recorder, prep, tip=None):
+            if tip is not None:
+                raise KeyboardInterrupt
+            record(recorder, prep, tip)
+        with mock.patch.object(ProgressRecorder, 'pass_made', crash_after_the_commit):
+            self.interrupted_sync('101', '102')
+        self.p4.transferred.clear()
+        out = self.sync('--abort')
+        self.assertIn('Aborting the interrupted sync: back to CL 101', out)
+        self.assertEqual(self.p4.transferred, [])
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.read('a.txt'), 'local\na1\nupstream\n')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_merges_back_the_local_and_the_intersync_changes(self):
+        self.p4.submit(102, {'a.txt': 'a1\nupstream\nmore\n',
+                       'f.txt': 'f1\n', 'g.txt': 'g1\n'})
+        self.interrupt()
+        self.edit('e.txt', 'e1\nmine\n')
+        self.sync('--abort')
+        self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.git('show', 'main:a.txt'), 'a1\nupstream')
+        self.assertEqual((self.read('a.txt'), self.read('e.txt')),
+                         ('local\na1\nupstream\n', 'e1\nmine\n'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_puts_back_files_cherry_picked_before_the_sync_with_their_local_changes(self):
+        self.p4.submit(103, {'b.txt': 'b3\n'})
+        self.run_command(cherry_pick_command, ['cherry-pick', '103'])
+        self.commit_local_changes('b.txt')
+        self.p4.submit(105, {'f.txt': 'f5\n', 'g.txt': 'g5\n'})
+        self.p4.interrupt_sync('@105', after=1)
+        self.interrupted_sync('105')
+        tip = self.git('rev-parse', 'main')
+        out = self.sync('--abort')
+        self.assertIn('back to CL 100 with cherry-picks 103', out)
+        self.assertEqual(self.git('rev-parse', 'main'), tip)
+        self.assertEqual((self.read('a.txt'), self.read(
+            'b.txt')), ('local\na1\n', 'local\nb3\n'))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'f.txt')))
+
+    def test_with_only_the_merge_back_left_an_abort_finishes_it_as_a_resume(self):
+        merged: list[str] = []
+
+        def merge_once_then_interrupt(*args):
+            if merged:
+                raise KeyboardInterrupt
+            merged.append(args[0])
+            return merge_file(*args)
+        self.commit_local_changes('b.txt')
+        self.p4.submit(103, {'b.txt': 'b1\nupstream\n'})
+        with mock.patch('git_p4son.sync_merge.merge_file', side_effect=merge_once_then_interrupt):
+            self.interrupted_sync('103')
+        out = self.sync('--abort')
+        self.assertIn(
+            'Resuming the interrupted sync: only the merge-back is left', out)
+        self.assertEqual(self.synced_commits(), [103])
+        self.assertEqual((self.read('a.txt'), self.read('b.txt')),
+                         ('local\na1\nupstream\n', 'local\nb1\nupstream\n'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_an_abort_of_the_workspace_s_first_sync_refuses(self):
+        initial = self.git('commit-tree', 'HEAD^{tree}', '-m', 'Initial')
+        self.git('reset', '-q', '--soft', initial)
+        self.p4.interrupt_sync('@102', after=1)
+        self.interrupted_sync('102')
         self.sync_fails(
-            message='written by git-p4son 9.0.0, which is newer than this one. Upgrade git-p4son')
+            '--abort', message='no synced changelist to go back to.*"git p4son sync"')
+        self.assertIsNotNone(self.sync_progress_file())
+
+    def test_an_abort_without_an_interrupted_sync_refuses(self):
+        self.sync_fails('--abort', message='no interrupted sync to abort')
+
+    def test_a_dry_run_abort_changes_nothing(self):
+        progress = self.interrupt()
+        self.p4.transferred.clear()
+        out = self.sync('--abort', '--dry-run')
+        self.assertIn('Aborting the interrupted sync: back to CL 101', out)
+        self.assertEqual(self.p4.transferred, [])
+        self.assertEqual(self.sync_progress_file(), progress)
 
 
 class TestSyncBranch(SyncTestCase):
@@ -1155,6 +1325,32 @@ class TestSyncBranch(SyncTestCase):
         out = self.sync_fails(message='stale.*git p4son sync --abort')
         self.assertIn('git-p4son: p4 sync //myclient/...@105', out)
         self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def test_an_abort_of_stale_sync_progress_only_removes_it(self):
+        self.interrupt()
+        self.git('commit', '-q', '--allow-empty', '-m',
+                 'git-p4son: p4 sync //myclient/...@105')
+        head = self.git('rev-parse', 'HEAD')
+        self.p4.transferred.clear()
+        out = self.sync('--abort')
+        self.assertIn('stale', out)
+        self.assertIsNone(self.sync_progress_file())
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+        self.assertEqual(self.p4.transferred, [])
+
+    def test_an_abort_of_stale_sync_progress_names_the_changes_it_saved(self):
+        self.interrupt()
+        self.edit('b.txt', 'mine\n')
+        with mock.patch('git_p4son.sync._put_right', side_effect=KeyboardInterrupt):
+            self.interrupted_sync()
+        self.git('commit', '-q', '--allow-empty', '-m',
+                 'git-p4son: p4 sync //myclient/...@105')
+        out = self.sync('--abort')
+        self.assertEqual(self.listed_under(
+            out, 'stay saved under refs/git-p4son/intersync-changes')[1:], ['b.txt'])
+        self.assertEqual(
+            self.git('show', 'refs/git-p4son/intersync-changes:ours/b.txt'), 'mine')
+        self.assertIsNone(self.sync_progress_file())
 
     def test_a_dry_run_names_the_commits_it_would_unwind(self):
         self.interrupt()
@@ -1342,7 +1538,8 @@ class TestSyncBranch(SyncTestCase):
         self.assertEqual(self.branch(), 'main')
         self.assertEqual(self.synced_commits(), [101])
         self.assertIn('Staying on main, with the files as Perforce left them. Run "git p4son sync" to finish it, '
-                      'which returns to feature.', out.getvalue())
+                      'which returns to feature, or "git p4son sync --abort" to give up the interrupted sync.',
+                      out.getvalue())
 
 
 class TestSyncHooks(SyncTestCase):
@@ -1661,6 +1858,7 @@ TestSyncOnJj = on_jj(
 TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncProgressOnJj = on_jj(TestSyncProgress)
 TestSyncResumeOnJj = on_jj(TestSyncResume)
+TestSyncAbortOnJj = on_jj(TestSyncAbort)
 TestWhileInterruptedOnJj = on_jj(TestWhileInterrupted)
 TestSyncPutsRightOnJj = on_jj(TestSyncPutsRight)
 TestSyncIntersyncOnJj = on_jj(TestSyncIntersync)

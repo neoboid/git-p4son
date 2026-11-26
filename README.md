@@ -480,10 +480,10 @@ keep working.
 **What you did since.** The resume sorts out what happened in the workspace after the interruption:
 
 - **Changes you made**, such as an edit, a new file or a deleted file, are kept. They are saved aside under
-  `refs/git-p4son/intersync-changes`, the files are put back as the sync expects them, and once the sync is done
-  your changes are merged back on top, after the local changes, with conflict markers where they clash. A binary file
-  keeps your version. An edit to a file Perforce deletes brings the file back, with a warning. A symlink made or
-  changed since is refused, as the save holds file content.
+  `refs/git-p4son/intersync-changes`, the files are put back as the sync expects them, and once the sync is done your
+  changes are merged back on top, after the local changes, with conflict markers where they clash. A binary file keeps
+  your version. An edit to a file Perforce deletes brings the file back, with a warning. A symlink made or changed
+  since, or a git repository or a folder in place of a file made since, is refused, as the save holds file content.
 - **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone: those files are
   synced again.
 - **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared.

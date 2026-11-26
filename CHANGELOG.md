@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- An interrupted sync can be finished: a sync stopped partway, by a Ctrl-C, a file p4 couldn't replace, a crash or a
+  kill, keeps its progress in `.git-p4son/sync-progress.toml`, and a plain `git p4son sync` resumes it, syncing the
+  changelists left and merging the local changes back as an uninterrupted sync would. See "Resuming an interrupted
+  sync" in the README:
+  - Changes made in the workspace since the interruption are saved aside under `refs/git-p4son/intersync-changes`,
+    the files put back, and the changes merged back at the end, after the local changes
+  - Files put back by a `git reset --hard`, and the `tmp.*` files and half-written adds a killed p4 leaves, are put
+    right first
+  - Commits made on the sync branch since are taken off it, kept under `refs/git-p4son/intersync-commits`, and come
+    back as uncommitted changes, each named with `git commit -c <sha>`, or `jj show <commit>` with jj
+  - The resume refuses the options that change the sync's plan, such as a changelist, and a sync branch that isn't
+    where the sync left it, naming the way back. The pre-sync hooks run again
+  - `new`, `update`, `review` and `cherry-pick` refuse while a sync is interrupted
+- `git p4son sync --abort` gives up an interrupted sync instead: the commits it made stay, the files go back to the
+  last committed changelist, and the local changes are merged back. It also removes stale sync progress
+- The messages of a sync that fails partway name `git p4son sync` to finish it and `git p4son sync --abort` to give
+  it up, where they said to return once it was sorted out, and a file p4 couldn't replace to commit or restore the
+  synced files
+
 ## 0.14.0
 
 - **Breaking:** `sync`, `cherry-pick`, and `writable apply` and `disable` refuse a workspace whose client spec has the

@@ -7,8 +7,11 @@ from typing import NoReturn
 
 from .changelist_store import alias_for
 from .common import CommandError, RunError, restoring
-from .git import commit_all, files_changed_since, get_head_commit, get_local_changes, is_ancestor, merges_above
+from .git import (
+    commit_all, files_changed_since, get_head_commit, get_local_changes, is_ancestor, is_sync_subject, merges_above,
+)
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
+from .sync_progress import STALE_SYNC_PROGRESS, AboveCommit
 from .log import log
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .words import (
@@ -31,6 +34,10 @@ class _Sync:
     finished: tuple[str, bool] | None = None
     # A resume's: the undescribed changes jj made on the recorded commit, holding the files as Perforce left them.
     snapshots: list[str] = field(default_factory=list)
+    # A resume's: the changes above the recorded commit, oldest first, as (commit, change ID, description), and the
+    # commit the bookmark was found at.
+    above: list[tuple[str, str, str]] = field(default_factory=list)
+    bookmark_at: str = ''
 
     @property
     def return_command(self) -> str:
@@ -241,16 +248,30 @@ class JjBackend:
         self.workspace.checkout(sync.commit)
         log.success(f'From {sync.start}')
 
-    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool]) -> str:
-        """Check the sync bookmark is at tip and the working change above it, with no change described since, and
-        take the start from start.
+    def resume_sync(self, sync_branch: str, tip: str, start: dict[str, str | bool], pass_subject: str | None) -> str:
+        """Check the sync bookmark is at tip, or at a commit on it with pass_subject, the crash window, and the working
+        change above it, and take the start from start; described changes above tip are for the caller to sort.
 
         Raises CommandError, naming the way out, where it isn't."""
         workspace = self.workspace
         log.heading(f'Checking sync bookmark {sync_branch}')
         if sync_branch not in workspace.bookmarks:
             raise no_sync_branch(sync_branch, self.words)
-        if _unconflicted(sync_branch, workspace.bookmarks[sync_branch]) != tip:
+        at = _unconflicted(sync_branch, workspace.bookmarks[sync_branch])
+        # jj's commit_sync moves the bookmark once the commit is made, so a crash leaves it on the pass's commit.
+        moved_by_pass = False
+        if at != tip and pass_subject is not None:
+            revision = workspace.resolve(at)
+            moved_by_pass = revision.parents == [tip] and revision.description.split('\n', 1)[
+                0] == pass_subject
+        if at != tip and not moved_by_pass:
+            if is_ancestor(tip, at, workspace.directory):
+                synced = [description for _, _, description in workspace.changes_above(tip, at)
+                          if is_sync_subject(description)]
+                if synced:
+                    for description in synced:
+                        log.info(description)
+                    raise CommandError(STALE_SYNC_PROGRESS)
             raise CommandError(f'jj bookmark "{sync_branch}" moved since the interrupted sync left it at {tip[:12]}. '
                                f'Put it back with "jj bookmark set {sync_branch} -r {tip} --allow-backwards", then run '
                                '"git p4son sync" again.')
@@ -261,20 +282,33 @@ class JjBackend:
             raise CommandError(f'The working change is not above {sync_branch}, where the interrupted sync left its '
                                f'files. Return to them with {back}, then run "git p4son sync" again.')
         above = workspace.changes_above(tip)
-        described = [(change, description)
-                     for change, description in above if description]
-        if described:
-            for change, description in described:
-                log.info(f'{change[:12]} {description}')
-            raise CommandError('The jj changes above were described after the interrupted sync, which git-p4son '
-                               'cannot resume over yet. Move them off it with "jj rebase", then run "git p4son sync" '
-                               'again.')
         log.success(f'At {tip[:12]}')
         self._sync = _Sync(sync_branch, tip, str(start['change']), bool(start['edited']),
                            get_head_commit(workspace.directory), bool(
                                start['on-sync-branch']),
-                           snapshots=[change for change, _ in above])
+                           snapshots=[change for _, change, _ in above], above=above, bookmark_at=at)
         return tip
+
+    def commits_above(self, tip: str) -> list[AboveCommit]:
+        """The described changes above tip, oldest first, each with a jj show of its commit, which still resolves once
+        the change is abandoned."""
+        return [AboveCommit(commit, f'jj show {commit[:12]}', description)
+                for commit, _, description in self._prepared().above if description]
+
+    def take_crash_commit(self, commit: str) -> None:
+        """Make commit, the pass's own, the sync bookmark's, and keep it from the snapshot changes after_lock
+        abandons."""
+        sync = self._prepared()
+        if sync.bookmark_at != commit:
+            self.workspace.move_bookmark(sync.bookmark, commit, sync.commit)
+        sync.commit = commit
+        change = next(change for above, change,
+                      _ in sync.above if above == commit)
+        sync.snapshots = [
+            snapshot for snapshot in sync.snapshots if snapshot != change]
+
+    def unwind(self, tip: str) -> None:
+        """Nothing to do: the changes above tip are abandoned with the snapshot changes, once jj is past them."""
 
     def begin_resume(self) -> None:
         """Point git's HEAD at the recorded commit, which changes no file, as jj keeps it at the working change's

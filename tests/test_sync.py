@@ -14,6 +14,7 @@ from git_p4son.git import format_sync_subject, merge_file
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.cherry_pick import cherry_pick_command
+from git_p4son.sync_progress import ProgressRecorder
 from git_p4son.sync import (
     build_sync_targets,
     _collect_split_users,
@@ -715,6 +716,20 @@ class TestSyncResume(SyncTestCase):
         self.assertFalse(os.path.exists(os.path.join(self.ws, 'x.txt')))
         self.assertIsNone(self.sync_progress_file())
 
+    def test_a_crash_between_a_pass_s_commit_and_its_record_counts_the_commit(self):
+        record = ProgressRecorder.pass_made
+
+        def crash_after_the_commit(recorder, prep, tip=None):
+            if tip is not None:
+                raise KeyboardInterrupt
+            record(recorder, prep, tip)
+        with mock.patch.object(ProgressRecorder, 'pass_made', crash_after_the_commit):
+            progress = self.interrupted_sync('101', '102')
+        self.assertEqual(progress['passes'][0]['changelist'], 101)
+        out = self.sync()
+        self.assertIn("the interrupted pass's own commit", out)
+        self.assert_synced_as_if_uninterrupted()
+
     def test_a_hard_reset_after_the_interruption_resyncs_the_files_behind_the_have_list(self):
         self.p4.interrupt_sync('@101', after=2)
         self.interrupted_sync('101', '102')
@@ -1065,12 +1080,55 @@ class TestSyncBranch(SyncTestCase):
         self.git('update-ref', 'refs/heads/main', 'main~1')
         self.sync_fails(message=f'git reset --keep {progress["tip"]}')
 
-    def test_a_resume_refuses_commits_above_the_recorded_tip_for_now(self):
+    def test_a_commit_of_partial_files_and_an_edit_is_unwound_and_the_edit_comes_back(self):
         self.interrupt()
-        self.git('commit', '-q', '--allow-empty', '-m', 'Mine')
-        out = self.sync_fails(
-            message='made on main after the interrupted sync')
-        self.assertIn('Mine', out)
+        self.edit('a.txt', 'mine\n')
+        self.git('add', '-A')
+        self.commit('Mine')
+        mine = self.git('rev-parse', 'HEAD')
+        out = self.sync()
+        self.assertEqual(out.count(f'git commit -c {mine[:7]}  Mine'), 2)
+        self.assertEqual(
+            self.git('rev-parse', 'refs/git-p4son/intersync-commits'), mine)
+        self.assertEqual(self.git('log', '--format=%s', '-3', 'main').splitlines(),
+                         ['git-p4son: p4 sync //myclient/...@102', 'git-p4son: p4 sync //myclient/...@101',
+                          'git-p4son: p4 sync //myclient/...@100'])
+        for commit, change in (('main~1', 101), ('main', 102)):
+            for path, content in self.p4.files_at(change).items():
+                self.assertEqual(
+                    self.git('show', f'{commit}:{path}'), content.rstrip('\n'), (commit, path))
+        self.assertEqual(self.read('a.txt'), 'mine\n')
+
+    def test_several_commits_above_the_tip_are_each_named(self):
+        self.interrupt()
+        self.edit('a.txt', 'one\n')
+        self.commit('One')
+        self.edit('b.txt', 'two\n')
+        self.commit('Two')
+        one, two = self.git('rev-parse', 'HEAD~1', 'HEAD').splitlines()
+        out = self.sync()
+        self.assertIn(f'git commit -c {one[:7]}  One', out)
+        self.assertIn(f'git commit -c {two[:7]}  Two', out)
+        self.assertEqual(
+            (self.read('a.txt'), self.read('b.txt')), ('one\n', 'two\n'))
+
+    def test_a_sync_commit_above_the_tip_is_stale_sync_progress_and_nothing_is_unwound(self):
+        self.interrupt()
+        self.git('commit', '-q', '--allow-empty', '-m',
+                 'git-p4son: p4 sync //myclient/...@105')
+        head = self.git('rev-parse', 'HEAD')
+        out = self.sync_fails(message='stale.*git p4son sync --abort')
+        self.assertIn('git-p4son: p4 sync //myclient/...@105', out)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def test_a_dry_run_names_the_commits_it_would_unwind(self):
+        self.interrupt()
+        self.edit('a.txt', 'mine\n')
+        self.commit('Mine')
+        head = self.git('rev-parse', 'HEAD')
+        out = self.sync('--dry-run')
+        self.assertIn(f'git commit -c {head[:7]}  Mine', out)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
 
     def test_a_resume_stays_on_the_sync_branch_when_the_start_branch_is_gone(self):
         self.commit_feature()

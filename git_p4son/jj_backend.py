@@ -313,11 +313,16 @@ class JjBackend:
         self.workspace.restore_working(sync.head)
         log.success(sync.start)
 
-    def fail_sync(self) -> None:
+    def fail_sync(self, resumable: bool) -> None:
         """Exclude what jj's next snapshot would wrongly track, and say where the sync stays."""
         sync = self._prepared()
         leave_out_case_only_ignored(self.workspace.directory)
-        if not sync.on_sync_branch:
+        if resumable:
+            back = '' if sync.on_sync_branch else f', which rebases your changes and returns to {sync.start}'
+            log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
+                        f'Perforce left them. Run "git p4son sync" to finish it{back}. After a "jj edit" elsewhere, '
+                        'return to that working change with "jj edit" first.')
+        elif not sync.on_sync_branch:
             log.warning(f'Staying on {sync.bookmark}: jj makes a new working change there, holding the files as '
                         f'Perforce left them, and nothing is rebased. Your changes are as they were; return with '
                         f'"{sync.return_command}" once it is sorted out.')
@@ -332,10 +337,18 @@ class JjBackend:
 
         Raises CommandError, after returning, if the rebase failed; the sync stays."""
         sync = self._sync
-        if sync is None or sync.finished is None or sync.on_sync_branch:
+        if sync is None or sync.finished is None:
+            return
+        workspace = self.workspace
+        # A snapshot change still holds the files as Perforce left them; once jj is past it, nothing needs it.
+        workspace.abandon_unless_working(sync.snapshots)
+        if sync.on_sync_branch:
             return
         at, rebase = sync.finished
-        workspace = self.workspace
+        if not workspace.change_exists(sync.start):
+            log.warning(
+                f'Staying on {sync.bookmark}, as {sync.start}, where sync started, no longer exists.')
+            return
         rebase_command = f'jj rebase -b {sync.start} -d {sync.bookmark}'
         failure = None
         if rebase:

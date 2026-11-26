@@ -68,6 +68,8 @@ class SyncProgress:
     pre_sync_commit: str
     start: Start
     passes: list[ProgressPass]
+    # The files the passes made since the last commit synced, as (mode, path): a catch-up pass's, until a commit.
+    uncommitted: list[tuple[str, str]] = field(default_factory=list)
     changed: list[LocalChange] = field(default_factory=list)
     merged: list[MergedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
@@ -109,8 +111,14 @@ class ProgressRecorder:
         if self.writable_mode:
             progress.synced = _added(
                 progress.synced, self._all_stored(prep.synced))
-        if tip is not None:
+        if tip is None:
+            modes = {path: mode for mode, path in progress.uncommitted}
+            modes.update((path, mode) for mode, path in lists.files)
+            progress.uncommitted = [(mode, path)
+                                    for path, mode in modes.items()]
+        else:
             progress.tip = tip
+            progress.uncommitted = []
         self._write()
 
     def merged(self, filepath: str, outcome: str | None) -> None:
@@ -199,6 +207,8 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         sync_branch=data['sync-branch'], depot_root=data['depot-root'], tip=data['tip'],
         pre_sync_commit=data['pre-sync-commit'], start=data['start'],
         passes=[_read_pass(item) for item in data.get('passes', [])],
+        uncommitted=[(mode, path)
+                     for mode, path in data.get('uncommitted', [])],
         changed=[_read_change(item) for item in end.get('changed', [])],
         merged=[MergedFile(item['path'], item['outcome'])
                 for item in end.get('merged', [])],
@@ -218,6 +228,8 @@ def format_sync_progress(progress: SyncProgress) -> str:
                  'sync-branch', progress.sync_branch),
              _line('depot-root', progress.depot_root), _line('tip', progress.tip),
              _line('pre-sync-commit', progress.pre_sync_commit),
+             *_array('uncommitted', [list(entry)
+                     for entry in progress.uncommitted]),
              # Only the end is left; an array of tables can't say it has none.
              *([] if progress.passes else [_line('passes', [])]),
              '', '[start]', *(_line(key, value)

@@ -947,9 +947,9 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.git('show', 'main:new.txt'), 'theirs')
         self.assertIsNone(self.sync_progress_file())
 
-    def interrupt_before_an_ignored_add(self, options):
+    def interrupt_before_an_ignored_add(self, options, read_only=False):
         """Under options, have sync 101 interrupted before p4 reaches x.log, a git-ignored file CL 101 adds, then make
-        x.log; what the resume printed."""
+        x.log, read-only if asked; what the resume printed."""
         self.p4.options = options
         self.write_file('.gitignore', '*.log\n')
         self.commit('Ignore logs')
@@ -957,6 +957,8 @@ class TestSyncPutsRight(SyncTestCase):
         self.p4.interrupt_sync('@101', after=1)
         self.interrupted_sync('101')
         self.write_file('x.log', 'mine\n')
+        if read_only:
+            os.chmod(os.path.join(self.ws, 'x.log'), stat.S_IRUSR)
         return self.sync()
 
     def test_a_git_ignored_file_made_since_where_the_pass_adds_one_is_kept_not_synced(self):
@@ -965,6 +967,19 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.read('x.log'), 'mine\n')
         self.assertIn('x.log', self.listed_under(
             out, 'Files not synced (git-ignored and writable)'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_read_only_git_ignored_file_made_since_where_the_pass_adds_one_is_replaced_under_noclobber(self):
+        out = self.interrupt_before_an_ignored_add(
+            'noallwrite noclobber', read_only=True)
+        self.assertNotIn('Keeping the git-ignored files', out)
+        self.assertEqual(self.read('x.log'), 'p4\n')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_git_ignored_file_made_since_where_the_pass_adds_one_is_overwritten_under_clobber(self):
+        out = self.interrupt_before_an_ignored_add('clobber')
+        self.assertNotIn('Keeping the git-ignored files', out)
+        self.assertEqual(self.read('x.log'), 'p4\n')
         self.assertIsNone(self.sync_progress_file())
 
     def interrupt_before_an_add(self):

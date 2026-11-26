@@ -47,46 +47,48 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   sorting git's changes since the recorded tip against the interrupted pass's stored file list, and the uncommitted
   files of the catch-up passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists,
   changed in git and matching the have-list, was synced by the interrupted run, and a file merged back before the
-  interruption is expected too. A listed tracked file clean in git that differs from the have-list, as after a `git
-  reset --hard` or a local change p4 had not reached, is behind it, and so is one p4 deleted that is back, and one p4
-  added that is gone again, by a `git clean` or a checkout, which git sees neither changed nor tracked, so it is judged
-  for being missing; p4's leftovers (`_p4_leftovers`) are the `tmp.<pid>.<hex>.<n>` files beside the pass's files and
-  the pass's adds on disk that a `p4 sync -n` of them still lists as adds, and its deletes, which an abort's pass adds
-  back, (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, and only when
-  the file holds the start of the depot revision p4 was writing, compared over the first MiB of each, as the file can be
-  large (`p4_print_start`), as p4 leaves it, line endings aside, any other being the user's, found from p4, not git, so
-  ignored folders too; a symlink or a folder at such an add is refused before anything reads it (`_refuse_links`,
-  `_refuse_folders`), as the compare cannot read a link, nor a save keep one, and p4 cannot write the add over a folder.
-  Any other changed file is an intersync change, one the user made while the sync was interrupted (`_Intersync`): once
-  the hooks have run, `_save_intersync` commits each such file's content under `ours/` (`git.commit_files`, kept alive
-  by `refs/git-p4son/intersync-changes`), and records the save; `_put_right` then puts the files back as the sync
-  expects them (the have revision in the pass, else the recorded tip's content with `git.restore_files`, gone where
-  there is none), and `_complete_saves` adds the have revision's content under `have/`, the base of a file p4 had
-  transferred, as no commit holds it; a file p4 had not reached is measured from the recorded tip, which
-  `p4_sync_pending` tells. A symlink, a git repository or a folder in place of a file among them is refused, as a save
-  holds file content. The pre-sync hooks run again (a failing one leaves it all as it was), then the backend puts the
-  sync branch at the recorded tip or the crash window's commit (`resume_at`), before the records: `_unwind` keeps the
-  user's commits under `refs/git-p4son/intersync-commits`, joined to an earlier resume's (`git.join_commits`), and
-  records them before the move takes the branch back below them, their content then sorted with the work tree and named
-  again at the end, and `_take_crash_commit` counts the crash window's commit as the pass made, then `_put_right` writes
-  the files behind the have-list again with `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the deleted
-  ones, clears the leftovers, and, under noclobber, makes read-only again a tracked file of the pass made writable since
-  without an edit, as the resumed pass doesn't prepare its files again, and keeps a git-ignored one made writable since,
-  which git has no copy of to tell an edit by, adding it to the stored ignored files, whose refusal the pass expects,
-  and the pass records that it is put right (`_record_put_right`), after which a file p4 has not reached is at its have
-  revision, and an edit to it is measured from there, not from the recorded tip, and `_resume_sync_passes` runs the
-  interrupted pass with its stored lists (`sync_passes.run_passes`) and the later ones as usual against the pre-sync
-  commit, and `sync_passes.end_sync` covers every pass, the passes made before the interruption among them, local
-  changes staged again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's, then
-  the intersync changes, with theirs, oldest save first (`_saved_changes`), and the ref is deleted with the sync
-  progress. A dry run stops after the checks, saying what is left. `--abort` goes through the same checks, sorting and
-  putting right, then `_abort` replaces the passes left in the sync progress with the catch-up to the sync branch's last
-  commit (`catch_up_passes`), uncommitted, when the interrupted pass's p4 sync or a catch-up pass's had run, and records
-  them before their p4 sync, so the resume that runs them, then or after an interruption, is the abort, which the sync
-  progress marks (`aborting`), so a later resume says it finishes the abort; the first runs with the interrupted pass's
-  stored lists, as every sync catches up to its last sync first, so going back there moves only that pass's files. An
-  abort of stale sync progress (`StaleSyncProgress`) only removes it, naming any changes it saved, which only the
-  intersync ref keeps then, and one with no synced changelist to go back to, a first sync, refuses.
+  interruption is expected too. A listed tracked file clean in git that differs from the have-list, as after a
+  `git reset --hard` or a local change p4 had not reached, is behind it, and so is one p4 deleted that is back, and one
+  p4 added that is gone again, by a `git clean` or a checkout, which git sees neither changed nor tracked, so it is
+  judged for being missing; p4's leftovers (`_p4_leftovers`) are the `tmp.<pid>.<hex>.<n>` files beside the pass's files
+  and the pass's adds on disk that a `p4 sync -n` of them still lists as adds, and its deletes, which an abort's pass
+  adds back, (`p4_sync_pending`), unless the stored lists account for them as ignored or added on both sides, and only
+  when the file holds the start of the depot revision p4 was writing, compared over the first MiB of each, as the file
+  can be large (`p4_print_start`), as p4 leaves it, line endings aside, any other being the user's, found from p4, not
+  git, so ignored folders too; a symlink or a folder at such an add is refused before anything reads it
+  (`_refuse_links`, `_refuse_folders`), as the compare cannot read a link, nor a save keep one, and p4 cannot write the
+  add over a folder. Any other changed file is an intersync change, one the user made while the sync was interrupted
+  (`_Intersync`): once the hooks have run, `_save_intersync` commits each such file's content under `ours/`
+  (`git.commit_files`, kept alive by `refs/git-p4son/intersync-changes`), and records the save; `_put_right` then puts
+  the files back as the sync expects them (the have revision in the pass, else the recorded tip's content with
+  `git.restore_files`, gone where there is none), and `_complete_saves` adds the have revision's content under `have/`,
+  the base of a file p4 had transferred, as no commit holds it; a file p4 had not reached is measured from the recorded
+  tip, which `p4_sync_pending` tells. A symlink, a git repository or a folder in place of a file among them is refused,
+  as a save holds file content. The pre-sync hooks run again (a failing one leaves it all as it was), then the backend
+  puts the sync branch at the recorded tip or the crash window's commit (`resume_at`), before the records: `_unwind`
+  keeps the user's commits under `refs/git-p4son/intersync-commits`, joined to an earlier resume's (`git.join_commits`),
+  and records them before the move takes the branch back below them, their content then sorted with the work tree and
+  named again at the end, and `_take_crash_commit` counts the crash window's commit as the pass made, then `_put_right`
+  writes the files behind the have-list again with `p4 sync -f <file>#have` (`perforce.p4_sync_to_have`), removes the
+  deleted ones, clears the leftovers, and, under noclobber, makes read-only again a tracked file of the pass made
+  writable since without an edit, as the resumed pass doesn't prepare its files again, and keeps a git-ignored one made
+  writable since, which git has no copy of to tell an edit by, adding it to the stored ignored files, whose refusal the
+  pass expects. A writable git-ignored file the user made where the pass adds one is kept the same way, as noclobber
+  adds no file over a writable one. The pass then records that it is put right (`_record_put_right`), after which a file
+  p4 has not reached is at its have revision, and an edit to it is measured from there, not from the recorded tip, and
+  `_resume_sync_passes` runs the interrupted pass with its stored lists (`sync_passes.run_passes`) and the later ones as
+  usual against the pre-sync commit, and `sync_passes.end_sync` covers every pass, the passes made before the
+  interruption among them, local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes
+  reported with this run's, then the intersync changes, with theirs, oldest save first (`_saved_changes`), and the ref
+  is deleted with the sync progress. A dry run stops after the checks, saying what is left. `--abort` goes through the
+  same checks, sorting and putting right, then `_abort` replaces the passes left in the sync progress with the catch-up
+  to the sync branch's last commit (`catch_up_passes`), uncommitted, when the interrupted pass's p4 sync or a catch-up
+  pass's had run, and records them before their p4 sync, so the resume that runs them, then or after an interruption, is
+  the abort, which the sync progress marks (`aborting`), so a later resume says it finishes the abort; the first runs
+  with the interrupted pass's stored lists, as every sync catches up to its last sync first, so going back there moves
+  only that pass's files. An abort of stale sync progress (`StaleSyncProgress`) only removes it, naming any changes it
+  saved, which only the intersync ref keeps then, and one with no synced changelist to go back to, a first sync,
+  refuses.
 
 - **`cherry_pick.py`** - The `cherry-pick` command, refused while an interrupted sync waits
   (`check_no_interrupted_sync`): syncs only the files of submitted changelists (`p4 sync @=N`) onto the sync branch,

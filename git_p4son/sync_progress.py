@@ -117,6 +117,7 @@ class SyncProgress:
     merged: list[MergedFile] = field(default_factory=list)
     # Merged after the local changes, oldest first.
     intersync: list[IntersyncSave] = field(default_factory=list)
+    intersync_merged: list[MergedFile] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
     not_synced: list[str] = field(default_factory=list)
     # Filled in writable mode only.
@@ -182,10 +183,10 @@ class ProgressRecorder:
 
     def intersync_merged(self, filepath: str, outcome: str | None) -> None:
         """Drop filepath from the oldest save that holds it, once its change is merged back, and the save once empty,
-        keeping the outcome, as for a local change."""
+        keeping the outcome apart from the local changes'."""
         path = self._stored(filepath)
         if outcome is not None:
-            self.progress.merged.append(MergedFile(path, outcome))
+            self.progress.intersync_merged.append(MergedFile(path, outcome))
         for save in self.progress.intersync:
             if any(file.path == path for file in save.files):
                 save.files = [file for file in save.files if file.path != path]
@@ -294,6 +295,8 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         changed=[_read_change(item) for item in end.get('changed', [])],
         merged=[MergedFile(item['path'], item['outcome'])
                 for item in end.get('merged', [])],
+        intersync_merged=[MergedFile(item['path'], item['outcome'])
+                          for item in end.get('intersync-merged', [])],
         intersync=[IntersyncSave(item['commit'], [IntersyncFile(file['path'], file['base']) for file in item['files']],
                                  item.get('complete', False)) for item in data.get('intersync', [])],
         ignored=end.get('ignored', []), not_synced=end.get('not-synced', []), synced=end.get('synced', []),
@@ -330,6 +333,8 @@ def format_sync_progress(progress: SyncProgress) -> str:
                                   for change in progress.changed]),
              *_array('merged', [{'path': merged.path, 'outcome': merged.outcome}
                      for merged in progress.merged]),
+             *_array('intersync-merged', [{'path': merged.path, 'outcome': merged.outcome}
+                                          for merged in progress.intersync_merged]),
              *_array('ignored', progress.ignored), *
              _array('not-synced', progress.not_synced),
              *_array('synced', progress.synced)]

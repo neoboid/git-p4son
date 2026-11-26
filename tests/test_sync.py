@@ -14,7 +14,7 @@ from git_p4son.git import format_sync_subject, merge_file
 from git_p4son.git_backend import GitBackend
 from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.cherry_pick import cherry_pick_command
-from git_p4son import perforce
+from git_p4son import perforce, sync_merge
 from git_p4son.sync_progress import ProgressRecorder
 from git_p4son.writable import writable_command
 from git_p4son.sync import (
@@ -559,7 +559,8 @@ class TestSyncProgress(SyncTestCase):
              'ignored': [], 'replace': []},
             {'changelist': 102, 'label': 'specified', 'subject': 'git-p4son: p4 sync //myclient/...@102'}])
         self.assertEqual(progress['end'], {
-                         'changed': [], 'merged': [], 'ignored': [], 'not-synced': [], 'synced': []})
+                         'changed': [], 'merged': [], 'intersync-merged': [], 'ignored': [], 'not-synced': [],
+                         'synced': []})
 
     def test_an_interruption_in_a_later_pass_keeps_the_commit_made_and_its_local_changes(self):
         base = self.commit_local_changes('a.txt')
@@ -853,6 +854,21 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.synced_commits()[-1], 102)
         self.assertIsNone(self.sync_progress_file())
 
+    def test_a_conflicted_intersync_merge_recorded_before_an_interruption_stays_reported_as_conflicted(self):
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        self.edit('b.txt', 'mine\n')
+        with mock.patch('git_p4son.sync_passes.report_not_synced', side_effect=KeyboardInterrupt):
+            self.interrupted_sync()
+        out = self.sync()
+        self.assertNotIn('changed since the interrupted sync', out)
+        merged = self.listed_under(
+            out, 'Merging the changes made while the sync was interrupted')
+        self.assertIn('[warn] 1 file merged with conflicts', merged)
+        self.assertEqual(merged.count('b.txt'), 1)
+        self.assertIn('<<<<<<<', self.read('b.txt'))
+
     def test_a_local_change_p4_had_not_reached_is_resynced_and_merged_back(self):
         self.commit_local_changes('b.txt')
         self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
@@ -977,6 +993,44 @@ class TestSyncIntersync(SyncTestCase):
 
     def committed(self, path):
         return self.git('show', f'main:{path}')
+
+    def merge_back_listing(self, out):
+        """How many times each file is listed under the local changes' merge, and under the intersync changes'."""
+        def counts(heading):
+            lines = self.listed_under(out, heading) if heading in out else []
+            return {name: sum(line.strip() == name for line in lines) for name in ('a.txt', 'b.txt', 'e.txt')}
+        return counts('Merging local changes'), counts('Merging the changes made while the sync was interrupted')
+
+    def test_an_interrupted_run_s_intersync_outcomes_are_reported_under_their_own_heading(self):
+        self.interrupt()
+        self.edit('b.txt', f'{self.read("b.txt")}mine\n')
+        self.edit('e.txt', f'{self.read("e.txt")}mine\n')
+        merges = []
+        merge = sync_merge._merge_intersync
+
+        def interrupt_the_second(*args):
+            merges.append(args)
+            if len(merges) == 2:
+                raise KeyboardInterrupt
+            return merge(*args)
+        with mock.patch('git_p4son.sync_merge._merge_intersync', side_effect=interrupt_the_second):
+            self.interrupted_sync()
+        local, intersync = self.merge_back_listing(self.sync())
+        self.assertEqual(
+            (local['b.txt'], intersync['b.txt'], intersync['e.txt']), (0, 1, 1))
+
+    def test_a_file_merged_but_not_recorded_before_an_interruption_is_reported_once(self):
+        self.interrupt()
+        self.edit('b.txt', f'{self.read("b.txt")}mine\n')
+
+        def interrupt_the_first_record(recorder, filepath, outcome):
+            raise KeyboardInterrupt
+        with mock.patch.object(ProgressRecorder, 'intersync_merged', interrupt_the_first_record):
+            self.interrupted_sync()
+        out = self.sync()
+        local, intersync = self.merge_back_listing(out)
+        self.assertEqual((local['b.txt'], intersync['b.txt']), (0, 1))
+        self.assertTrue(self.read('b.txt').endswith('mine\n'))
 
     def test_edits_to_a_file_p4_transferred_and_to_one_it_had_not_reached_merge_back_as_only_the_edits(self):
         self.interrupt()

@@ -15,7 +15,7 @@ from git_p4son.sync_merge import (
     report_not_synced,
     WritableSyncFileSet,
 )
-from git_p4son.sync_merge import IntersyncChange, merge_intersync_changes
+from git_p4son.sync_merge import IntersyncChange, _by_outcome, merge_intersync_changes
 from tests.helpers import captured_output, preview_update
 
 
@@ -635,6 +635,20 @@ class TestMergeIntersyncChanges(unittest.TestCase):
         self.merge('a.txt', b'same\n', b'same\n')
         self.assertEqual((self.disk('a.txt'), self.heard),
                          (b'theirs\n', [None]))
+
+
+class TestByOutcome(unittest.TestCase):
+    def test_each_file_once_under_its_last_outcome_unless_a_clean_one_follows_another(self):
+        ws = os.path.join(os.sep, 'ws')
+        merged = [(os.path.join(ws, 'a.txt'), 'conflicts'), (os.path.join(ws, 'b.txt'), 'clean'),
+                  (os.path.join(ws, 'a.txt'),
+                   'clean'), (os.path.join(ws, 'b.txt'), 'binary'),
+                  (os.path.join(ws, 'c.txt'), 'restored'), (os.path.join(
+                      ws, 'c.txt'), 'deleted-changed'),
+                  (os.path.join(ws, 'd.txt'), 'conflicts'), (os.path.join(ws, 'd.txt'), None)]
+        self.assertEqual(_by_outcome(merged, ws), {
+            'conflicts': [os.path.join(ws, 'a.txt'), os.path.join(ws, 'd.txt')], 'binary': [os.path.join(ws, 'b.txt')],
+            'deleted-changed': [os.path.join(ws, 'c.txt')]})
 
 
 class TestMergeChangedFiles(unittest.TestCase):

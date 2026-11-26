@@ -344,16 +344,30 @@ def merge_changed_files(changed_files: list[ChangedFile], workspace_dir: str, te
 
     log.heading('Merging local changes')
 
-    outcomes: dict[str | None, list[str]] = {}
-    for path, earlier in merged_before or []:
-        outcomes.setdefault(earlier, []).append(path)
+    merged: list[tuple[str, str | None]] = [*(merged_before or [])]
     for cf in changed_files:
         outcome = _merge_back(cf, workspace_dir, temp_root)
-        outcomes.setdefault(outcome, []).append(cf.filepath)
+        merged.append((cf.filepath, outcome))
         if on_merged is not None:
             on_merged(cf.filepath, outcome)
 
-    _report_outcomes(outcomes, workspace_dir)
+    _report_outcomes(_by_outcome(merged, workspace_dir), workspace_dir)
+
+
+def _by_outcome(merged: Sequence[tuple[str, str | None]], workspace_dir: str) -> dict[str | None, list[str]]:
+    """The merged files under their outcomes, each file once: under its last outcome that leaves something to look at,
+    else its last, as a later clean merge carries an earlier one's conflict markers along."""
+    quiet = ('clean', None)
+    last: dict[str, tuple[str, str | None]] = {}
+    for path, outcome in merged:
+        key = normalize_workspace_path(
+            path, workspace_dir, allow_outside=True) or path
+        if outcome not in quiet or key not in last or last[key][1] in quiet:
+            last[key] = (last[key][0] if key in last else path, outcome)
+    outcomes: dict[str | None, list[str]] = {}
+    for path, outcome in last.values():
+        outcomes.setdefault(outcome, []).append(path)
+    return outcomes
 
 
 # Each merge-back outcome, with how its files are logged: at warning unless clean, under a count and a sentence.
@@ -439,18 +453,20 @@ def _merge_intersync(change: IntersyncChange, workspace_dir: str, temp_root: str
 
 
 def merge_intersync_changes(changes: Sequence[IntersyncChange], workspace_dir: str, temp_root: str, uses_crlf: bool,
-                            on_merged: OnMerged) -> None:
+                            on_merged: OnMerged, merged_before: list[tuple[str, str]] | None = None) -> None:
     """Merge the changes made while a sync was interrupted back onto the files as they now stand, in order, calling
-    on_merged with each file's path after it."""
-    if not changes:
+    on_merged with each file's path after it.
+
+    merged_before holds the (path, outcome) of the changes an interrupted run merged back, reported with these."""
+    if not changes and not merged_before:
         return
     log.heading('Merging the changes made while the sync was interrupted')
-    outcomes: dict[str | None, list[str]] = {}
+    merged: list[tuple[str, str | None]] = [*(merged_before or [])]
     for change in changes:
         outcome = _merge_intersync(change, workspace_dir, temp_root, uses_crlf)
-        outcomes.setdefault(outcome, []).append(change.filepath)
+        merged.append((change.filepath, outcome))
         on_merged(change.filepath, outcome)
-    _report_outcomes(outcomes, workspace_dir)
+    _report_outcomes(_by_outcome(merged, workspace_dir), workspace_dir)
 
 
 def report_not_synced(preps: list[WritableSyncFileSet],

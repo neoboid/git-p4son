@@ -20,9 +20,9 @@ from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
 from .sync_progress import (
-    INTERSYNC_COMMITS_REF, INTERSYNC_REF, STALE_SYNC_PROGRESS, AboveCommit, IntersyncFile, IntersyncSave,
+    INTERSYNC_COMMITS_REF, INTERSYNC_REF, AboveCommit, IntersyncFile, IntersyncSave,
     LocalChange, NoProgress, PassLists, ProgressPass, ProgressRecorder, SyncProgress, local_path, progress_path,
-    read_sync_progress, write_sync_progress,
+    StaleSyncProgress, read_sync_progress, write_sync_progress,
 )
 from .sync_targets import default_sync_target, resolve_sync_target
 from .sync_merge import (
@@ -888,7 +888,7 @@ def _sort_commits(progress: SyncProgress, subject: str | None,
     if stale:
         for commit in stale:
             log.info(commit.subject)
-        raise CommandError(STALE_SYNC_PROGRESS)
+        raise StaleSyncProgress()
     if crash:
         log.info(f'{subject}: the interrupted pass\'s own commit')
     _log_unwound(user)

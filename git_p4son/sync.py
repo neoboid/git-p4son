@@ -12,7 +12,7 @@ from .backend import Backend
 from .common import CommandError, RunError, normalize_workspace_path
 from .git import (
     SyncState, files_changed_outside_syncs, format_cherry_pick_subject, format_sync_subject, get_head_commit,
-    commit_files, delete_ref, get_files_at_commits, get_tracked_files, list_tracked_files,
+    commit_files, delete_ref, is_sync_subject, get_files_at_commits, get_tracked_files, list_tracked_files,
     restore_files, set_ref, sync_state,
 )
 from .hooks import check_hooks, run_hook
@@ -20,8 +20,9 @@ from .depot import resolve_depot_root
 from .log import log, plural
 from .processes import check_no_blocking_processes
 from .sync_progress import (
-    INTERSYNC_REF, IntersyncFile, IntersyncSave, LocalChange, NoProgress, PassLists, ProgressPass, ProgressRecorder,
-    SyncProgress, local_path, progress_path, read_sync_progress, write_sync_progress,
+    INTERSYNC_COMMITS_REF, INTERSYNC_REF, STALE_SYNC_PROGRESS, AboveCommit, IntersyncFile, IntersyncSave,
+    LocalChange, NoProgress, PassLists, ProgressPass, ProgressRecorder, SyncProgress, local_path, progress_path,
+    read_sync_progress, write_sync_progress,
 )
 from .sync_targets import default_sync_target, resolve_sync_target
 from .sync_merge import (
@@ -892,6 +893,61 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
             log.success(f'{plural(len(put.leftovers), "file")} cleared')
 
 
+def _sort_commits(progress: SyncProgress, subject: str | None,
+                  backend: Backend) -> tuple[str | None, list[AboveCommit]]:
+    """Sort the commits above the recorded tip: the next pass's own, made just before the interruption could record
+    it, with subject, and the user's, to unwind; (the crash window's commit or None, the user's commits).
+
+    Raises CommandError, after listing them, for other sync commits, which make the sync progress stale."""
+    above = backend.commits_above(progress.tip)
+    if not above:
+        return None, []
+    log.heading('Sorting the commits above the recorded tip')
+    crash = above[0].commit if subject is not None and above[0].subject == subject else None
+    user = above[1:] if crash else above
+    stale = [commit for commit in user if is_sync_subject(commit.subject)]
+    if stale:
+        for commit in stale:
+            log.info(commit.subject)
+        raise CommandError(STALE_SYNC_PROGRESS)
+    if crash:
+        log.info(f'{subject}: the interrupted pass\'s own commit')
+    _log_unwound(user)
+    log.success(
+        f'{plural(len(user), "commit")} to unwind' if user else 'The pass\'s commit counts as made')
+    return crash, user
+
+
+def _log_unwound(commits: list[AboveCommit]) -> None:
+    """Name each commit unwound with how to get it back."""
+    for commit in commits:
+        log.info(f'{commit.back}  {commit.subject}')
+
+
+def _take_crash_commit(progress: SyncProgress, commit: str, backend: Backend, workspace_dir: str) -> None:
+    """Count commit, the interrupted pass's own, as the pass made, and record it."""
+    backend.take_crash_commit(commit)
+    lists = progress.passes[0].lists
+    assert lists is not None, 'a pass is recorded with its lists before its p4 sync'
+    # What p4 refused in that pass is unknown, and so not reported.
+    prep = WritableSyncFileSet(synced=_local_paths(
+        [path for _, path in lists.files], workspace_dir))
+    ProgressRecorder(progress, workspace_dir, is_writable_mode(
+        workspace_dir)).pass_made(prep, commit)
+
+
+def _unwind(progress: SyncProgress, commits: list[AboveCommit], backend: Backend, workspace_dir: str) -> None:
+    """Keep the user's commits above the tip under a ref, take the sync branch back to the tip, and record them."""
+    log.heading(
+        f'Unwinding {plural(len(commits), "commit")} made since the interrupted sync')
+    set_ref(INTERSYNC_COMMITS_REF, commits[-1].commit, workspace_dir)
+    backend.unwind(progress.tip)
+    progress.unwound = commits
+    write_sync_progress(progress, workspace_dir)
+    log.success(
+        f'Kept under {INTERSYNC_COMMITS_REF}; their changes are merged back at the end')
+
+
 def _check_no_plan_options(args: argparse.Namespace) -> None:
     """Raise CommandError for the options that make a sync's plan, which a resume runs as the interrupted sync made it,
     even ones that repeat it."""
@@ -917,8 +973,10 @@ def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
     if recorded != backend.words.tool:
         raise CommandError(f'The interrupted sync ran with the {recorded} backend. Run "git p4son --backend '
                            f'{recorded} sync" to finish it.')
+    subject = progress.passes[0].subject if progress.passes else None
     sync_revision = backend.resume_sync(
-        progress.sync_branch, progress.tip, progress.start)
+        progress.sync_branch, progress.tip, progress.start, subject)
+    crash, unwind = _sort_commits(progress, subject, backend)
     passes = progress.passes
     left = (f'{plural(len(passes), "changelist")} left, to CL {passes[-1].changelist}' if passes
             else 'only the merge-back is left')
@@ -945,11 +1003,18 @@ def _resume_sync(args: argparse.Namespace, progress: SyncProgress) -> int:
     settings = dataclasses.replace(client, depot_root=depot_root)
 
     def run() -> SyncState:
+        if crash:
+            _take_crash_commit(progress, crash, backend, workspace_dir)
+        if unwind:
+            _unwind(progress, unwind, backend, workspace_dir)
         backend.begin_resume()
         _save_intersync(put.intersync, progress, workspace_dir)
         _put_right(put, progress.tip, workspace_dir)
         _complete_saves(progress, workspace_dir)
         resume_sync_passes(progress, settings, workspace_dir, backend)
+        if progress.unwound:
+            log.heading('The commits unwound, now changes to review')
+            _log_unwound(progress.unwound)
         return sync_state(workspace_dir)
 
     return _finish_on_branch(OnSyncBranch.from_args(args, sync_revision), depot_root, last_synced, run)

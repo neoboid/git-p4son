@@ -6,7 +6,7 @@ import os
 import time
 import tomllib
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 from . import CONFIG_DIR, __version__
 from .common import CommandError, normalize_workspace_path
@@ -18,6 +18,10 @@ from .toml_writer import format_key, format_value
 VERSION = 1
 # Keeps the commits of the changes made while a sync is interrupted alive, until the sync finishes.
 INTERSYNC_REF = 'refs/git-p4son/intersync-changes'
+STALE_SYNC_PROGRESS = ('The sync commits above were made after the interrupted sync, so its sync progress is stale. '
+                       'Drop it with "git p4son sync --abort".')
+# Keeps the commits a resume unwound from the sync branch, until the next sync replaces it.
+INTERSYNC_COMMITS_REF = 'refs/git-p4son/intersync-commits'
 _REPLACE_ATTEMPTS = 5
 FILE_NAME = 'sync-progress.toml'
 
@@ -39,6 +43,13 @@ class MergedFile:
     """A local change merged back, with the outcome the end reports it under, such as conflicts."""
     path: str
     outcome: str
+
+
+class AboveCommit(NamedTuple):
+    """A commit above the recorded tip of an interrupted sync: the commit, how to get it back, and its subject."""
+    commit: str
+    back: str
+    subject: str
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,8 @@ class SyncProgress:
     passes: list[ProgressPass]
     # The files the passes made since the last commit synced, as (mode, path): a catch-up pass's, until a commit.
     uncommitted: list[tuple[str, str]] = field(default_factory=list)
+    # The commits a resume unwound from above the tip, named again at the end.
+    unwound: list[AboveCommit] = field(default_factory=list)
     changed: list[LocalChange] = field(default_factory=list)
     merged: list[MergedFile] = field(default_factory=list)
     # Merged after the local changes, oldest first.
@@ -258,6 +271,7 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         passes=[_read_pass(item) for item in data.get('passes', [])],
         uncommitted=[(mode, path)
                      for mode, path in data.get('uncommitted', [])],
+        unwound=[AboveCommit(*entry) for entry in data.get('unwound', [])],
         changed=[_read_change(item) for item in end.get('changed', [])],
         merged=[MergedFile(item['path'], item['outcome'])
                 for item in end.get('merged', [])],
@@ -288,6 +302,7 @@ def format_sync_progress(progress: SyncProgress) -> str:
              _line('pre-sync-commit', progress.pre_sync_commit),
              *_array('uncommitted', [list(entry)
                      for entry in progress.uncommitted]),
+             *_array('unwound', [list(entry) for entry in progress.unwound]),
              # Only the end is left; an array of tables can't say it has none.
              *([] if progress.passes else [_line('passes', [])]),
              '', '[start]', *(_line(key, value)

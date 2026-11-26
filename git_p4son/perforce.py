@@ -331,10 +331,11 @@ def p4_file_arg(path: str) -> str:
 
 
 def _run_file_list(p4_args: list[str], paths: list[str], workspace_dir: str, *, global_args: tuple[str, ...] = (),
-                   dry_run: bool = False, fail_on_returncode: bool = True) -> RunResult[list[str]]:
-    """Run p4 p4_args over paths as a -x - list of file arguments; add -f gets local names raw, as it escapes them."""
-    lines = paths if p4_args[0] == 'add' and '-f' in p4_args else map(
-        p4_file_arg, paths)
+                   dry_run: bool = False, fail_on_returncode: bool = True, revision: str = '') -> RunResult[list[str]]:
+    """Run p4 p4_args over paths as a -x - list of file arguments, each with revision after it, such as #have; add -f
+    gets local names raw, as it escapes them."""
+    lines = paths if p4_args[0] == 'add' and '-f' in p4_args else [
+        p4_file_arg(path) + revision for path in paths]
     return run([*_P4, *global_args, '-x', '-', *p4_args], cwd=workspace_dir, input='\n'.join(lines),
                dry_run=dry_run, fail_on_returncode=fail_on_returncode)
 
@@ -574,6 +575,23 @@ class P4SyncOutputProcessor:
 _NOT_ON_CLIENT = ' - file(s) not on client.'
 
 
+# p4 writes a file under such a name beside it, then renames it into place once it is whole: tmp.<pid>.<pointer>.<n>,
+# the pointer printed as 0x and hex where p4 2025.1 was probed.
+_TEMP_FILE_RE = re.compile(r'^tmp\.\d+\.(0x)?[0-9a-fA-F]+\.\d+$')
+
+
+def is_p4_temp_file(name: str) -> bool:
+    """Whether name, a file name without its folder, is one p4 writes a file under before renaming it into place."""
+    return bool(_TEMP_FILE_RE.match(name))
+
+
+def p4_sync_to_have(filepaths: list[str], workspace_dir: str) -> None:
+    """Write each file again as its have revision holds it (p4 sync -f <file>#have)."""
+    if filepaths:
+        _run_file_list(['sync', '-f'], filepaths,
+                       workspace_dir, revision='#have')
+
+
 def p4_off_have(filepaths: list[str], workspace_dir: str) -> tuple[set[str], set[str]]:
     """Of filepaths, the ones whose content isn't their have revision's, and the ones the have-list lacks.
 
@@ -635,6 +653,21 @@ def parse_p4_sync_entry(line: str) -> P4SyncPreviewFile | None:
     """The file of a p4 sync output line; None for any other line."""
     mode, filename = parse_p4_sync_line(line)
     return P4SyncPreviewFile(mode, filename) if mode and filename else None
+
+
+def p4_sync_pending(filepaths: list[str], revision: str, workspace_dir: str) -> list[P4SyncPreviewFile]:
+    """The ones of filepaths a sync to revision, such as @123 or @=123, would still sync (p4 sync -n)."""
+    if not filepaths:
+        return []
+    res = _run_file_list(['sync', '-n'], filepaths, workspace_dir,
+                         revision=revision, fail_on_returncode=False)
+    errors = _unexpected_p4_errors(res, ('up-to-date', 'no such file'))
+    if errors:
+        for line in errors:
+            log.info(line)
+        raise CommandError(
+            'p4 sync -n could not say which of the files above it would sync')
+    return [entry for entry in map(parse_p4_sync_entry, res.stdout) if entry is not None]
 
 
 def _run_p4_sync(args: list[str], workspace_dir: str,

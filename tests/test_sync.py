@@ -866,6 +866,32 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(self.git('show', 'main:b.txt'), 'b1\nupstream')
         self.assertIsNone(self.sync_progress_file())
 
+    def resume_through_a_later_pass(self, options):
+        """Under options, have sync 101 102 interrupted after CL 101's a0.txt, which CL 102 changes, then make a0.txt
+        writable, with no edit; what the resume printed."""
+        self.p4.options = options
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b0.txt': 'b\n'})
+        self.p4.submit(102, {'a0.txt': 'a2\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101', '102')
+        self.make_writable('a0.txt')
+        return self.sync()
+
+    def assert_no_local_change(self, out):
+        """The resume took no local change for a0.txt, and ended at CL 102's content."""
+        self.assertNotIn('has local changes', out)
+        self.assertNotIn('deleted locally', out)
+        self.assertEqual(self.read('a0.txt'), 'a2\n')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_resume_through_a_later_pass_takes_no_synced_file_made_writable_for_a_local_change(self):
+        self.assert_no_local_change(
+            self.resume_through_a_later_pass('noallwrite noclobber'))
+
+    def test_a_resume_through_a_later_pass_takes_no_synced_file_made_writable_for_a_local_change_under_clobber(self):
+        self.assert_no_local_change(
+            self.resume_through_a_later_pass('noallwrite clobber'))
+
     def test_writable_mode_turned_on_while_interrupted_lets_the_resume_sync_the_files_left(self):
         self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
         self.p4.interrupt_sync('@101', after=1)

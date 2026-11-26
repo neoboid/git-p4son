@@ -275,9 +275,13 @@ class GitBackend:
         except RunError as error:
             log.error(f'Could not return to {sync.start.name}: {error}')
 
-    def fail_sync(self) -> None:
+    def fail_sync(self, resumable: bool) -> None:
         sync = self._prepared()
-        if not sync.on_sync_branch:
+        if resumable:
+            back = '' if sync.on_sync_branch else f', which returns to {sync.start.name}'
+            log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. Run "git p4son sync" to '
+                        f'finish it{back}.')
+        elif not sync.on_sync_branch:
             log.warning(f'Staying on {sync.branch}, with the files as Perforce left them. '
                         f'Return to {sync.start.name} once it is sorted out.')
 
@@ -289,6 +293,10 @@ class GitBackend:
         if any(kind != 'untracked' for _, kind in get_dirty_files(self.workspace_dir)):
             log.warning(f'Staying on {sync.branch}, with the local changes above to review and commit. '
                         f'Then return to {sync.start.name}.')
+            return
+        if sync.start.branch and not branch_exists(sync.start.branch, self.workspace_dir):
+            log.warning(
+                f'Staying on {sync.branch}, as {sync.start.branch}, where sync started, no longer exists.')
             return
         self._return(sync)
         log.info(

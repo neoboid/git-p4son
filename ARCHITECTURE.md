@@ -13,22 +13,34 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   and returns (`abandon_sync`) if a pre-sync hook or a split query fails. `_run_sync` runs a catch-up pass to the last
   synced CL, syncs and commits each target and merges local changes back once at the end (`sync_merge.py`), and
   `sync_on_branch` then runs the post-sync hooks, where a Ctrl-C or an error stops the hooks and not the return
-  (`_run_post_sync_hooks`), with exit code 1. Changelist arguments are never aliases: aliases name pending CLs, which
-  Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split user's
-  submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then checks
-  them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split` ignores the
-  configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back
-  local changes; after a failure partway, sync stays on the sync branch.
+  (`_run_post_sync_hooks`), with exit code 1. With sync progress on disk, `sync_command` resumes instead of planning
+  (`_resume_sync`): the backend checks where the interrupted sync left the sync branch (`resume_sync`), the
+  blocking-process and p4-opened checks run, and `_check_resumable_files` stands in for the clean check, sorting git's
+  changes since the recorded tip against the interrupted pass's stored file list, and the uncommitted files of the
+  catch-up passes made before it, and `perforce.p4_off_have` (`p4 diff -se`): a file the pass lists, changed in git and
+  matching the have-list, was synced by the interrupted run, and a file merged back before the interruption is expected
+  too; any other changed file, or a listed tracked file that differs from the have-list without being a stored local
+  change, is refused for now. The pre-sync hooks run again (a failing one leaves it all as it was), then
+  `resume_sync_passes` runs the interrupted pass with its stored lists (`_resume_pass`) and the later ones as usual
+  against the pre-sync commit, and `_end_sync` covers every pass, the passes made before the interruption among them,
+  local changes staged again from git (`stage_changed_files`) and the earlier merge outcomes reported with this run's. A
+  dry run stops after the checks, saying what is left. Changelist arguments are never aliases: aliases name pending CLs,
+  which Perforce renumbers on submit. When moving forward, `build_sync_targets` also syncs the CL before each split
+  user's submit, so each of their changelists gets a commit of its own; `_split_targets` finds their CLs per user, then
+  checks them all against the depot root in one batched `-m2` query. `-u` adds users for one run and `--no-split`
+  ignores the configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as
+  merged-back local changes; after a failure partway, sync stays on the sync branch.
 
-  The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber, refusing allwrite),
-  `find_sync_state`, `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the
-  first target's commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks
-  the cherry-pick subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an
-  `OnSyncBranch` (the parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to
-  `finish_sync` as text. `sync` alone passes `record_progress` to `run_sync_passes`, which keeps the sync progress
-  (`sync_progress.py`) through a `ProgressRecorder`: the first pass's lists just before its `p4 sync`, a pass dropped
-  once its sync finishes (catch-up) or its commit is made (target, moving the recorded tip), each local change dropped
-  once merged back, and the file removed once the end has run, before the post-sync hooks.
+  The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
+  `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's
+  commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks the cherry-pick
+  subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an `OnSyncBranch` (the
+  parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to `finish_sync` as text.
+  `sync` alone passes `record_progress` to `run_sync_passes`, which keeps the sync progress (`sync_progress.py`) through
+  a `ProgressRecorder`: the first pass's lists just before its `p4 sync`, a pass dropped once its sync finishes
+  (catch-up) or its commit is made (target, moving the recorded tip), each local change dropped once merged back, and
+  the file removed once the end has run, before the post-sync hooks. A failure partway says to run `git p4son sync` to
+  finish (`fail_sync`, resumable while the file exists).
 
 - **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
   onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or
@@ -123,13 +135,14 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   `.git-p4son/sync-progress.toml` (`version = 1`), written to a temporary file and renamed into place, retried a few
   times while Windows refuses the rename. A `SyncProgress` holds the git-p4son that wrote it, the start time, the sync
   branch, the depot root, the recorded tip, the pre-sync commit, the backend's `[start]` (`Backend.progress_start`), the
-  passes left (`ProgressPass`), the first one with the `PassLists` its preview and `prepare_writable_files` gave (the
-  files with their modes, the local changes, the ignored and always-writable files), and, in `[end]`, what the end needs
-  from the passes made: the local changes still to merge back, the outcome of each one merged (`MergedFile`), the
-  ignored files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path, its base
-  commit and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace root, a
-  list item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` goes. Nothing reads
-  it yet but the tests.
+  passes left (`ProgressPass`), the files the passes made since the last commit synced (`uncommitted`, a catch-up pass's
+  until the next commit), the first one with the `PassLists` its preview and `prepare_writable_files` gave (the files
+  with their modes, the local changes, the ignored and always-writable files), and, in `[end]`, what the end needs from
+  the passes made: the local changes still to merge back, the outcome of each one merged (`MergedFile`), the ignored
+  files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path, its base commit
+  and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace root, a list
+  item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` and `resume_sync_passes`
+  go; `read_sync_progress` reads it back for a resume, and `local_path` turns a stored path into a local one.
 
 - **`per_commit.py`** - `run_per_commit` runs a git p4son command on each commit since a base branch, in-process, with
   that commit checked out through the backend, for `new --per-commit` and `update --per-commit`. The steps skip
@@ -246,8 +259,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   bookmark at the working change (`prepare_sync`), checks out the bookmark, commits with jj's line endings and moves the
   bookmark; `after_lock`, which `open_backend` calls once jj's lock is released, runs `jj rebase -b <start> -d
   <bookmark>` (unless `--no-rebase`), lists conflicts, and returns with `jj edit` or `jj new` unless merged-back changes
-  are left. Its `checkouts` puts each commit's files on disk with git under the lock, as the revision and clean check a
-  step reads, and the working change's files back at the end, so jj sees no change.
+  are left. A resume (`resume_sync`) wants the bookmark at the recorded commit and the working change above it with no
+  change described since, and `begin_resume`, once the dry run and the pre-sync hooks are past, points git's HEAD at the
+  recorded commit. `after_lock` then abandons the undescribed snapshot changes jj made there, once jj is past them, and
+  a start change that is gone leaves the sync on the bookmark with a warning, as a gone start branch does with git. Its
+  `checkouts` puts each commit's files on disk with git under the lock, as the revision and clean check a step reads,
+  and the working change's files back at the end, so jj sees no change.
 
 - **`lib.py`** - Combines git and Perforce operations: `check_git_workspace_clean`, `check_own_pending` (refuses a CL
   `describe_changelist` doesn't find pending and owned by the current user and client, `get_p4_user_and_client`,

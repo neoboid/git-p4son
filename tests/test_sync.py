@@ -225,6 +225,10 @@ class SyncTestCase(P4RepoTestCase):
         self.commit('Local changes')
         return self.git('rev-parse', 'HEAD~1')
 
+    def listed_under(self, out, heading):
+        """The lines logged under heading, up to the next heading."""
+        return out.split(heading, 1)[1].split('\n# ', 1)[0].splitlines()
+
     def hook_log(self):
         """A file outside the workspace for hooks to append to, and a reader for it."""
         tempdir = tempfile.TemporaryDirectory()
@@ -711,12 +715,16 @@ class TestSyncResume(SyncTestCase):
         self.assertFalse(os.path.exists(os.path.join(self.ws, 'x.txt')))
         self.assertIsNone(self.sync_progress_file())
 
-    def test_a_file_the_pass_adds_that_p4_has_not_recorded_is_refused_for_now(self):
-        self.p4.interrupt_sync('@101', after=1)
+    def test_a_hard_reset_after_the_interruption_resyncs_the_files_behind_the_have_list(self):
+        self.p4.interrupt_sync('@101', after=2)
         self.interrupted_sync('101', '102')
-        self.write_file('e.txt', 'partial\n')
-        out = self.sync_fails(message='changed since the interrupted sync')
-        self.assertIn('e.txt', out.splitlines())
+        self.git('reset', '-q', '--hard')
+        self.p4.transferred.clear()
+        out = self.sync()
+        self.assertIn('a.txt', self.listed_under(
+            out, 'Resyncing the files behind the have-list'))
+        self.assertEqual(self.p4.transferred, ['e.txt', 'f.txt', 'g.txt'])
+        self.assert_synced_as_if_uninterrupted()
 
     def test_a_file_changed_since_the_interruption_is_refused_for_now(self):
         self.p4.interrupt_sync('@101', after=2)
@@ -749,6 +757,110 @@ class TestSyncResume(SyncTestCase):
                          ['a.txt', '//myclient/a.txt']])
         self.sync()
         self.assert_synced_as_if_uninterrupted()
+
+
+class TestSyncPutsRight(SyncTestCase):
+    """A resume first puts right what the interruption left: files behind the have-list, and p4's leftovers."""
+
+    def test_a_file_p4_deleted_that_a_reset_put_back_is_removed_again(self):
+        self.p4.submit(101, {'b.txt': None, 'h.txt': 'h1\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        self.git('reset', '-q', '--hard')
+        self.assertTrue(os.path.exists(os.path.join(self.ws, 'b.txt')))
+        out = self.sync()
+        self.assertIn('b.txt', self.listed_under(
+            out, 'Resyncing the files behind the have-list'))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'b.txt')))
+        self.assertEqual(self.git('ls-tree', '--name-only',
+                         'main').splitlines(), ['a.txt', 'h.txt'])
+
+    def test_a_local_change_p4_had_not_reached_is_resynced_and_merged_back(self):
+        self.commit_local_changes('b.txt')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        out = self.sync()
+        self.assertIn('b.txt', self.listed_under(
+            out, 'Resyncing the files behind the have-list'))
+        self.assertEqual(self.git('show', 'main:b.txt'), 'b1\nupstream')
+        self.assertEqual(self.read('b.txt'), 'local\nb1\nupstream\n')
+
+    def interrupt_with_leftovers(self, folder, options='noallwrite noclobber'):
+        """Have sync 101, which adds folder/x.txt and folder/y.txt, interrupted with p4's leftovers beside y.txt."""
+        self.p4.options = options
+        self.p4.submit(101, {f'{folder}/x.txt': 'x1\n',
+                       f'{folder}/y.txt': 'y1\n'})
+        self.p4.interrupt_sync('@101', after=1, leftovers=True)
+        self.interrupted_sync('101')
+        self.assertEqual(self.read(f'{folder}/y.txt'), 'part')
+
+    def assert_leftovers_cleared(self, folder):
+        out = self.sync()
+        cleared = self.listed_under(out, "Clearing p4's leftovers")
+        self.assertIn(f'{folder}/y.txt', cleared)
+        self.assertIn(f'{folder}/tmp.4242.0x1f2e3d.1', cleared)
+        self.assertFalse(os.path.exists(os.path.join(
+            self.ws, folder, 'tmp.4242.0x1f2e3d.1')))
+        self.assertEqual(
+            (self.read(f'{folder}/x.txt'), self.read(f'{folder}/y.txt')), ('x1\n', 'y1\n'))
+        self.assertIsNone(self.sync_progress_file())
+
+    def ignore(self, folder):
+        self.write_file('.gitignore', f'{folder}/\n')
+        self.commit('Ignore a folder')
+
+    def test_leftovers_in_a_tracked_folder_are_cleared(self):
+        self.interrupt_with_leftovers('dir')
+        self.assert_leftovers_cleared('dir')
+        self.assertEqual(self.git('ls-tree', '--name-only', 'main',
+                         'dir/').splitlines(), ['dir/x.txt', 'dir/y.txt'])
+
+    def test_leftovers_in_a_git_ignored_folder_are_cleared(self):
+        self.ignore('ign')
+        self.interrupt_with_leftovers('ign')
+        self.assert_leftovers_cleared('ign')
+
+    def test_leftovers_are_cleared_under_allwrite(self):
+        self.interrupt_with_leftovers('dir', 'allwrite noclobber')
+        self.assert_leftovers_cleared('dir')
+
+    def test_leftovers_in_a_git_ignored_folder_are_cleared_under_allwrite(self):
+        self.ignore('ign')
+        self.interrupt_with_leftovers('ign', 'allwrite noclobber')
+        self.assert_leftovers_cleared('ign')
+
+    def test_an_ignored_file_from_before_the_sync_is_not_cleared(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.write_file('x.log', 'mine\n')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'x.log': 'p4\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        out = self.sync()
+        self.assertNotIn("Clearing p4's leftovers", out)
+        self.assertEqual(self.read('x.log'), 'mine\n')
+
+    def test_a_file_added_on_both_sides_is_not_cleared(self):
+        self.write_file('new.txt', 'mine\n')
+        self.commit('Add new')
+        self.p4.submit(101, {'a0.txt': 'a\n', 'new.txt': 'theirs\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        out = self.sync()
+        self.assertNotIn("Clearing p4's leftovers", out)
+        self.assertIn('<<<<<<<', self.read('new.txt'))
+        self.assertIn('mine', self.read('new.txt'))
+
+    def test_a_dry_run_lists_what_it_would_put_right_and_changes_nothing(self):
+        self.interrupt_with_leftovers('dir')
+        progress = self.sync_progress_file()
+        out = self.sync('--dry-run')
+        self.assertIn('dir/y.txt', self.listed_under(out,
+                      "p4's leftovers to clear"))
+        self.assertTrue(os.path.exists(os.path.join(
+            self.ws, 'dir', 'tmp.4242.0x1f2e3d.1')))
+        self.assertEqual(self.sync_progress_file(), progress)
 
 
 class TestWhileInterrupted(SyncTestCase):
@@ -1373,6 +1485,7 @@ TestSyncLocalChangesOnJj = on_jj(TestSyncLocalChanges)
 TestSyncProgressOnJj = on_jj(TestSyncProgress)
 TestSyncResumeOnJj = on_jj(TestSyncResume)
 TestWhileInterruptedOnJj = on_jj(TestWhileInterrupted)
+TestSyncPutsRightOnJj = on_jj(TestSyncPutsRight)
 TestSyncHooksOnJj = on_jj(TestSyncHooks)
 TestSyncDryRunOnJj = on_jj(TestSyncDryRun)
 TestSyncTargetsOnJj = on_jj(TestSyncTargets)

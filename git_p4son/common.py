@@ -324,6 +324,32 @@ def _stop(process: subprocess.Popen[str], by_ctrl_c: bool) -> None:
     process.kill()
 
 
+def run_output_start(command: list[str], size: int, cwd: str = '.', input: str | None = None) -> RunResult[bytes]:
+    """Run a command for at most the first size bytes of its output, ending it once they're read; its stderr comes
+    with them, and its return code, 0 when it was ended."""
+    _show_command(command)
+    if input is not None:
+        log.stdin(input)
+    process = subprocess.Popen(command, cwd=cwd, env=_command_env(cwd, None), stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert process.stdin and process.stdout and process.stderr
+    output: bytes | None = None
+    try:
+        process.stdin.write((input or '').encode('utf-8'))
+        process.stdin.close()
+        output = process.stdout.read(size)
+    finally:
+        # A short read means the command closed its output, and it ends on its own, maybe a moment later.
+        ended = (output is None or len(output) ==
+                 size) and process.poll() is None
+        if ended:
+            process.kill()
+        process.stdout.close()
+        stderr = process.stderr.read()
+        process.wait()
+    return RunResult(0 if ended else process.returncode, output or b'', stderr)
+
+
 def _show_command(command: list[str]) -> None:
     """Print command on a line of its own, before it writes to the terminal."""
     log.command(join_command_line(command))

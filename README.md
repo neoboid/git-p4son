@@ -439,16 +439,18 @@ be managed manually or via Perforce directly.
 After syncing, git-p4son prints a summary of how each writable file was handled, and instructs you to review and
 commit any files that need attention.
 
-**Workspaces with `allwrite`** - When your client spec has the `allwrite` option, every file is writable by design,
-so the read-only flag carries no information about local changes. git-p4son classifies files exactly as above (the
-verdict comes from git, not from the flag) and leaves the write bit alone. Perforce refuses to replace or delete a
-file whose content differs from the revision it last synced, writable or not, so git-p4son syncs the tracked files it
-refused again with `p4 sync -f` after each changelist, and merges your local changes back as above. Git-ignored files
-are left as they are: unchanged ones sync normally, and after the sync git-p4son lists the ones Perforce skipped
-because they were modified locally.
+**Workspaces with `allwrite`** - git-p4son doesn't support the `allwrite` client option: `sync`, `cherry-pick`, and
+`writable apply` and `disable` refuse a workspace whose client spec has it. Change it to `noallwrite` with `p4 client`,
+and use [writable mode](#writable-command) to keep tracked files writable. Turning `allwrite` off leaves every file
+writable, and Perforce doesn't replace a writable file, so each sync would list a git-ignored one it changes as not
+synced. Once, after the switch, make read-only the git-ignored files you haven't changed:
+`git ls-files --others --ignored --exclude-standard` lists the git-ignored files, and `p4 diff -se` the files that
+differ from what Perforce last synced. `chmod -w <file>`, or `attrib +r <file>` on Windows, makes one read-only, as does
+`p4 sync -f <file>#have`, which writes it again. Tracked files need nothing, as `sync` makes the unchanged ones
+read-only before Perforce runs.
 
 **Writable mode** - With [writable mode](#writable-command) on, the files a sync touches are made writable again after
-the sync if git tracks them. The sync itself works as described above, since the workspace is not `allwrite`.
+the sync if git tracks them. The sync itself works as described above.
 
 ### Cherry-Pick Command
 
@@ -1033,9 +1035,9 @@ git p4son writable disable    # Turn writable mode off, then apply it
 git p4son writable apply      # Make git-tracked files match the current mode
 ```
 
-`apply` makes every git-tracked file writable when the mode is on. When it's off, it makes them read-only, except
-files opened in Perforce in any changelist. On a workspace with the `allwrite` option, making files read-only is
-skipped, since the client spec wants every file writable. Git-ignored files are never changed.
+`apply` makes every git-tracked file writable when the mode is on. When it's off, it makes them read-only, except files
+opened in Perforce in any changelist. On a workspace with the `allwrite` option, which git-p4son doesn't support, it
+refuses, as `disable` and `sync` do. Git-ignored files are never changed.
 
 The setting is stored in `.git-p4son/config.toml`:
 

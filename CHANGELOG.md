@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking:** `sync`, `cherry-pick`, and `writable apply` and `disable` refuse a workspace whose client spec has the
+  `allwrite` option, and git-p4son's support for it is gone. Under `allwrite` Perforce refuses files by their content,
+  which every sync had to work around, and none of it ever ran against a live workspace. Change the option to
+  `noallwrite` with `p4 client`; the README's `allwrite` section has the one-time step after the switch
+
 ## 0.13.2
 
 - A Ctrl-C or an error during the post-sync hooks of `sync` or `cherry-pick` stops the hooks but still finishes the

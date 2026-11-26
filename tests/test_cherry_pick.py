@@ -59,6 +59,13 @@ class TestCherryPick(CherryPickTestCase):
         self.assertEqual(self.subjects(), [
                          'git-p4son: p4 sync //myclient/...@=102'])
 
+    def test_an_allwrite_workspace_is_refused(self):
+        self.p4.options = 'allwrite noclobber'
+        self.cherry_pick_fails(
+            '101', message='allwrite option, which git-p4son does not support')
+        self.assertEqual(self.subjects(), [])
+        self.assertEqual(self.files(), {'a.txt': 'a1\n', 'b.txt': 'b1\n'})
+
     def test_the_last_synced_changelist_stays(self):
         self.cherry_pick('102')
         self.assertEqual(git_last_synced_changelist(self.ws), 100)

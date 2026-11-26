@@ -234,6 +234,23 @@ class TestPrepareWritableFiles(unittest.TestCase):
             self.assertIsNone(cf.base_path)
             self.assertEqual(self._read(cf.ours_path), b'head content')
 
+    @mock.patch('git_p4son.sync_merge.get_blob_oids', return_value={('head123', 'a.txt'): None})
+    @mock.patch('git_p4son.sync_merge.get_files_at_commits')
+    @mock.patch('git_p4son.sync_merge.find_base_commits', return_value={'a.txt': None})
+    @mock.patch('git_p4son.sync_merge.p4_head_types')
+    @mock.patch('git_p4son.sync_merge.get_tracked_files',
+                side_effect=lambda paths, ws: set(paths))
+    def test_a_file_the_pre_sync_commit_lacks_is_unchanged(self, _tracked, _types, _find_base, mock_get_file,
+                                                           mock_oids):
+        """A file no commit before the sync has is one an earlier pass of the sync added."""
+        with tempfile.TemporaryDirectory() as ws:
+            path = self._make_file(ws, 'a.txt')
+            result = _prepare([preview_update(path)], ws,
+                              'head123', self.temp_root)
+            self.assertEqual(result.changed, [])
+            mock_oids.assert_called_once_with([('head123', 'a.txt')], ws)
+            mock_get_file.assert_not_called()
+
     @mock.patch('git_p4son.sync_merge.get_blob_oids', return_value={('head123', 'image.png'): 'oid_head'})
     @mock.patch('git_p4son.sync_merge.get_files_at_commits',
                 side_effect=_files_at_commits(lambda *_: b'head content'))

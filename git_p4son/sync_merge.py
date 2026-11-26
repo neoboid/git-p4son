@@ -207,9 +207,10 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
     oid_queries = []
     for f in candidates:
         base = base_commits.get(rel_paths[f])
-        if base is not None and base != pre_sync_head_commit:
+        if base != pre_sync_head_commit:
             oid_queries.append((pre_sync_head_commit, rel_paths[f]))
-            oid_queries.append((base, rel_paths[f]))
+            if base is not None:
+                oid_queries.append((base, rel_paths[f]))
     oids = get_blob_oids(oid_queries, workspace_dir)
 
     unchanged_count = 0
@@ -232,6 +233,10 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
             if ours_oid is not None and ours_oid == oids.get((base, rel)):
                 unchanged_count += 1
                 continue
+        elif oids.get((pre_sync_head_commit, rel)) is None:
+            # Every local change is in the pre-sync commit: a file it lacks is one an earlier pass of this sync added.
+            unchanged_count += 1
+            continue
 
         metas.append(_ChangedFileMeta(filepath=f, base_commit=base))
 

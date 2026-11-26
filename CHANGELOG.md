@@ -15,6 +15,10 @@
 - `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT, or a Ctrl-Break on Windows), where
   they killed it. After a failed rename or a Ctrl-C, p4 no longer leaves half-written files behind. p4 gets 10
   seconds to stop, and a second Ctrl-C kills it at once
+- A `sync` of several changelists no longer takes a file an earlier changelist of it added for a local change, on
+  `allwrite` workspaces and for a file of a `+w` type, which Perforce leaves writable. When a later changelist
+  changed the file again, it said the file had local changes, and at the end that it was "deleted locally but
+  modified in Perforce", though nothing had changed it
 
 ## 0.13.1
 

@@ -42,7 +42,7 @@ class _Intersync:
 class _PutRight:
     """What a resume puts right before its passes, as stored paths: files to write again as their have revision,
     files p4 deleted that are back, p4's leftovers, the changes made while it was interrupted, the pass's tracked
-    files made writable since without an edit, and its git-ignored ones made writable since, which are kept."""
+    files made writable since without an edit, and the git-ignored files p4 won't replace, which are kept."""
     resync: list[str]
     remove: list[str]
     leftovers: list[str]
@@ -198,6 +198,10 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
             # synced. Of the adds, only those the user made where p4 had still to add one.
             kept |= {path for mode, path in lists.files if (mode != 'add' or path in users_adds)
                      and untouched(path) and is_user_writable(local[path])}
+        if clobber_mode is ClobberMode.ALLWRITE:
+            # allwrite refuses an add over any file on disk, by its content, and the stored list can't hold one made
+            # since.
+            kept |= {path for path in users_adds if untouched(path)}
         ignore = sorted(kept)
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
@@ -324,8 +328,8 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
             make_read_only(local_paths(put.read_only, workspace_dir))
             log.success(f'{plural(len(put.read_only), "file")} made read-only')
     if put.ignore:
-        _log_paths('Git-ignored files made writable since, to keep' if dry_run
-                   else 'Keeping the git-ignored files made writable since', put.ignore)
+        _log_paths("Git-ignored files p4 won't replace, to keep" if dry_run
+                   else "Keeping the git-ignored files p4 won't replace", put.ignore)
 
 
 def _record_put_right(progress: SyncProgress, ignore: list[str], workspace_dir: str) -> None:

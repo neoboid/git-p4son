@@ -60,7 +60,9 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     has not recorded that its stored lists don't account for, as an ignored file or one added on both sides, and
     whose content begins the depot revision p4 was writing; (those, and the adds on disk that are the user's).
 
-    An abort's pass adds back the files the pass it gives up deleted, so a deleted file on disk is a candidate too."""
+    An abort's pass adds back the files the pass it gives up deleted, so a deleted file on disk is a candidate too.
+    Raises CommandError for a symlink where an add is pending, which neither the compare nor a save can read, and for a
+    folder, which p4 cannot write the add over."""
     accounted = set(lists.ignored) | {
         change.path for change in lists.changed if change.added_both}
     on_disk = [local_path(path, workspace_dir) for mode, path in lists.files
@@ -69,14 +71,18 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     revision = _pass_of(interrupted).revision
     pending = p4_sync_pending(on_disk, revision, workspace_dir)
     log.success(f'{plural(len(pending), "file")} on disk not synced yet')
+    adds = {entry.filepath: workspace_path(entry.filepath, workspace_dir)
+            for entry in pending if entry.mode == 'add'}
+    _refuse_links([path for local, path in adds.items()
+                  if os.path.islink(local)])
+    # git lists a folder's files, or nothing for an empty one, so the sorting never sees the folder itself.
+    _refuse_folders(
+        [path for local, path in adds.items() if os.path.isdir(local)])
     leftovers: set[str] = set()
     users: set[str] = set()
-    for entry in pending:
-        if entry.mode == 'add':
-            p4s = _begins_depot_revision(
-                entry.filepath, revision, workspace_dir)
-            (leftovers if p4s else users).add(
-                workspace_path(entry.filepath, workspace_dir))
+    for local, path in adds.items():
+        p4s = _begins_depot_revision(local, revision, workspace_dir)
+        (leftovers if p4s else users).add(path)
     for folder in {path.rpartition('/')[0] for _, path in lists.files}:
         try:
             names = os.listdir(local_path(folder, workspace_dir)

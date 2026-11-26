@@ -1017,6 +1017,39 @@ class TestSyncPutsRight(SyncTestCase):
             out, 'Files not synced (git-ignored and writable)'))
         self.assertIsNone(self.sync_progress_file())
 
+    def interrupt_before_an_add(self):
+        """Have sync 101 interrupted before p4 reaches e.txt, which CL 101 adds; the sync progress file it left."""
+        self.p4.submit(101, {'d.txt': 'd\n', 'e.txt': 'e\n', 'f.txt': 'f\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        return self.interrupted_sync('101')
+
+    def assert_refused(self, progress, *argv, message):
+        """sync with argv is refused, matching message, naming e.txt, and keeps the sync progress as it was."""
+        out = self.sync_fails(*argv, message=message)
+        self.assertIn('e.txt', out.splitlines())
+        self.assertEqual(self.sync_progress_file(), progress)
+
+    def test_a_symlink_made_since_where_the_pass_adds_a_file_is_refused(self):
+        progress = self.interrupt_before_an_add()
+        self.make_symlink('nowhere', 'e.txt')
+        self.assert_refused(progress, message='symlinks')
+
+    def test_a_symlink_made_since_where_the_pass_adds_a_file_is_refused_by_an_abort(self):
+        progress = self.interrupt_before_an_add()
+        self.make_symlink('nowhere', 'e.txt')
+        self.assert_refused(progress, '--abort', message='symlinks')
+
+    def test_an_empty_folder_made_since_where_the_pass_adds_a_file_is_refused(self):
+        progress = self.interrupt_before_an_add()
+        os.makedirs(os.path.join(self.ws, 'e.txt'))
+        self.assert_refused(progress, message='a folder in place of a file')
+
+    def test_a_folder_made_since_where_the_pass_adds_a_file_is_refused_by_an_abort(self):
+        progress = self.interrupt_before_an_add()
+        self.write_file('e.txt/x.txt', 'x\n')
+        self.assert_refused(progress, '--abort',
+                            message='a folder in place of a file')
+
     def test_a_file_added_on_both_sides_is_not_cleared(self):
         self.write_file('new.txt', 'mine\n')
         self.commit('Add new')

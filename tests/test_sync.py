@@ -16,6 +16,7 @@ from git_p4son.perforce import P4SyncAbortError, P4SyncClobberError
 from git_p4son.cherry_pick import cherry_pick_command
 from git_p4son import perforce
 from git_p4son.sync_progress import ProgressRecorder
+from git_p4son.writable import writable_command
 from git_p4son.sync import (
     build_sync_targets,
     _collect_split_users,
@@ -809,6 +810,48 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertFalse(os.path.exists(os.path.join(self.ws, 'b.txt')))
         self.assertEqual(self.git('ls-tree', '--name-only',
                          'main').splitlines(), ['a.txt', 'h.txt'])
+
+    def test_a_file_p4_had_not_reached_made_writable_without_an_edit_is_synced(self):
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        path = os.path.join(self.ws, 'b.txt')
+        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+        out = self.sync()
+        self.assertIn('b.txt', self.listed_under(
+            out, 'Making read-only again the files made writable since'))
+        self.assertEqual(self.read('b.txt'), 'b1\nupstream\n')
+        self.assertEqual(self.git('show', 'main:b.txt'), 'b1\nupstream')
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_writable_mode_turned_on_while_interrupted_lets_the_resume_sync_the_files_left(self):
+        self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})
+        self.p4.interrupt_sync('@101', after=1)
+        self.interrupted_sync('101')
+        self.run_command(writable_command, ['writable', 'enable'])
+        out = self.sync()
+        self.assertIn('b.txt', self.listed_under(
+            out, 'Making read-only again the files made writable since'))
+        self.assertEqual(self.read('b.txt'), 'b1\nupstream\n')
+        self.assertTrue(os.stat(os.path.join(
+            self.ws, 'b.txt')).st_mode & stat.S_IWUSR)
+        self.assertIsNone(self.sync_progress_file())
+
+    def test_a_git_ignored_file_p4_had_not_reached_made_writable_since_is_kept_not_synced(self):
+        self.write_file('.gitignore', '*.log\n')
+        self.commit('Ignore logs')
+        self.commit_sync(101, {'x.log': 'x1\n'})
+        self.p4.submit(102, {'a0.txt': 'a\n', 'x.log': 'x2\n'})
+        self.p4.interrupt_sync('@102', after=1)
+        self.interrupted_sync('102')
+        path = os.path.join(self.ws, 'x.log')
+        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+        out = self.sync()
+        self.assertEqual(self.read('x.log'), 'x1\n')
+        self.assertIn('x.log', self.listed_under(
+            out, 'Files not synced (git-ignored and writable)'))
+        self.assertEqual(self.synced_commits()[-1], 102)
+        self.assertIsNone(self.sync_progress_file())
 
     def test_a_local_change_p4_had_not_reached_is_resynced_and_merged_back(self):
         self.commit_local_changes('b.txt')

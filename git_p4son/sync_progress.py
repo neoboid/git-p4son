@@ -86,7 +86,6 @@ class PassLists:
     files: list[tuple[str, str]] = field(default_factory=list)
     changed: list[LocalChange] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
-    always_writable: list[str] = field(default_factory=list)
     # The tracked files allwrite refuses, each to its depot path.
     replace: dict[str, str] = field(default_factory=dict)
 
@@ -142,7 +141,7 @@ class ProgressRecorder:
             files=[(entry.mode, self._stored(entry.filepath))
                    for entry in preview],
             changed=[self._change(changed) for changed in prep.changed],
-            ignored=self._all_stored(prep.ignored), always_writable=self._all_stored(prep.always_writable),
+            ignored=self._all_stored(prep.ignored),
             replace={self._stored(path): depot_path for path, depot_path in prep.replace.items()})
         self._write()
 
@@ -346,8 +345,7 @@ def format_sync_progress(progress: SyncProgress) -> str:
             lines += [*_array('files', [list(entry) for entry in lists.files]),
                       *_array('changed', [_change(change)
                               for change in lists.changed]),
-                      *_array('ignored', lists.ignored), *
-                      _array('always-writable', lists.always_writable),
+                      *_array('ignored', lists.ignored),
                       *_array('replace', [list(entry) for entry in lists.replace.items()])]
     for save in progress.intersync:
         lines += ['', '[[intersync]]', _line('commit', save.commit), _line('complete', save.complete),
@@ -387,6 +385,6 @@ def _read_pass(item: dict[str, Any]) -> ProgressPass:
             files=[(mode, path) for mode, path in item['files']],
             changed=[_read_change(change)
                      for change in item.get('changed', [])],
-            ignored=item.get('ignored', []), always_writable=item.get('always-writable', []),
+            ignored=item.get('ignored', []),
             replace=dict(item.get('replace', [])))
     return ProgressPass(item['changelist'], item['label'], item.get('exact', False), item.get('subject'), lists)

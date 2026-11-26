@@ -15,6 +15,7 @@ from git_p4son.sync_merge import (
     report_not_synced,
     WritableSyncFileSet,
 )
+from git_p4son.sync_merge import IntersyncChange, merge_intersync_changes
 from tests.helpers import captured_output, preview_update
 
 
@@ -525,6 +526,84 @@ class TestPrepareWritableFiles(unittest.TestCase):
         result = _prepare([], '/ws', 'head123', self.temp_root)
         self.assertEqual(result.changed, [])
         self.assertEqual(result.ignored, [])
+
+
+class TestMergeIntersyncChanges(unittest.TestCase):
+    """Each change made while a sync was interrupted, applied onto the file as it now stands."""
+
+    def setUp(self):
+        tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tempdir.cleanup)
+        self.ws = tempdir.name
+        self.temp_root = os.path.join(self.ws, '.temp')
+        os.makedirs(self.temp_root)
+        self.heard = []
+
+    def path(self, name):
+        return os.path.join(self.ws, name)
+
+    def disk(self, name, content=None):
+        if content is not None:
+            with open(self.path(name), 'wb') as f:
+                f.write(content)
+        if not os.path.exists(self.path(name)):
+            return None
+        with open(self.path(name), 'rb') as f:
+            return f.read()
+
+    def merge(self, name, ours, base, uses_crlf=False):
+        with captured_output() as out:
+            merge_intersync_changes([IntersyncChange(self.path(name), ours, base)], self.ws, self.temp_root,
+                                    uses_crlf, lambda path, outcome: self.heard.append(outcome))
+        return out.getvalue()
+
+    def test_an_edit_is_merged_onto_the_file_as_it_now_stands(self):
+        self.disk('a.txt', b'top\na\nb\n')
+        self.merge('a.txt', b'a\nb\nmine\n', b'a\nb\n')
+        self.assertEqual((self.disk('a.txt'), self.heard),
+                         (b'top\na\nb\nmine\n', ['clean']))
+
+    def test_an_overlapping_edit_gets_conflict_markers(self):
+        self.disk('a.txt', b'theirs\n')
+        out = self.merge('a.txt', b'mine\n', b'base\n')
+        self.assertIn(b'<<<<<<<', self.disk('a.txt'))
+        self.assertEqual(self.heard, ['conflicts'])
+        self.assertIn('resolve conflicts and commit when ready', out)
+
+    def test_an_add_is_written_and_a_delete_of_an_unchanged_file_removes_it(self):
+        self.merge('new.txt', b'new\n', None)
+        self.disk('gone.txt', b'base\n')
+        self.merge('gone.txt', None, b'base\n')
+        self.assertEqual((self.disk('new.txt'), self.disk(
+            'gone.txt'), self.heard), (b'new\n', None, ['clean', 'clean']))
+
+    def test_a_delete_of_a_file_changed_since_keeps_it(self):
+        self.disk('a.txt', b'changed\n')
+        self.merge('a.txt', None, b'base\n')
+        self.assertEqual((self.disk('a.txt'), self.heard),
+                         (b'changed\n', ['deleted-changed']))
+
+    def test_an_edit_to_a_file_perforce_deleted_restores_it(self):
+        self.merge('a.txt', b'mine\n', b'base\n')
+        self.assertEqual((self.disk('a.txt'), self.heard),
+                         (b'mine\n', ['restored']))
+
+    def test_a_binary_edit_restores_the_user_s_version(self):
+        self.disk('a.bin', b'theirs\0')
+        self.merge('a.bin', b'mine\0', b'base\0')
+        self.assertEqual((self.disk('a.bin'), self.heard),
+                         (b'mine\0', ['binary']))
+
+    def test_text_takes_the_workspace_s_line_endings(self):
+        self.disk('a.txt', b'top\r\na\r\n')
+        self.merge('a.txt', b'a\nmine\n', b'a\n', uses_crlf=True)
+        self.assertEqual(self.disk('a.txt'), b'top\r\na\r\nmine\r\n')
+
+    def test_no_change_is_left_alone(self):
+        self.disk('a.txt', b'theirs\n')
+        self.merge('a.txt', b'same\n', b'same\n')
+        self.assertEqual((self.disk('a.txt'), self.heard),
+                         (b'theirs\n', [None]))
 
 
 class TestMergeChangedFiles(unittest.TestCase):

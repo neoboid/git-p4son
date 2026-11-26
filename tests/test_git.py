@@ -12,8 +12,13 @@ from unittest import mock
 from git_p4son.common import CommandError, run, RunError, RunResult
 from git_p4son.git import (
     add_all_files,
+    commit_files,
     commits_above,
+    delete_ref,
     files_changed_since,
+    get_files_at_commits,
+    restore_files,
+    set_ref,
     case_only_ignored,
     add_files,
     branch_exists,
@@ -752,6 +757,48 @@ class TestChangesSince(GitRepoTestCase):
         self.assertEqual([line.split(' ', 1)[1] for line in commits_above(
             base, 'HEAD', self.ws)], ['Two', 'One'])
         self.assertEqual(commits_above('HEAD', 'HEAD', self.ws), [])
+
+
+class TestCommitFiles(GitRepoTestCase):
+    """A commit of a.txt and b.txt."""
+
+    def build_workspace(self):
+        super().build_workspace()
+        self.write_file('a.txt', 'a\n')
+        self.write_file('b.txt', 'b\n')
+        self.commit('Base')
+
+    def test_a_commit_of_files_under_paths_of_its_own_leaves_the_index_alone(self):
+        self.write_file('a.txt', 'changed\n')
+        first = commit_files(
+            {'ours/a.txt': os.path.join(self.ws, 'a.txt')}, 'One', self.ws)
+        self.write_file('a.txt', 'again\n')
+        second = commit_files({'have/a.txt': os.path.join(self.ws, 'a.txt')}, 'Two', self.ws,
+                              parent=first, tree_from=first)
+        contents = get_files_at_commits([(second, 'ours/a.txt'), (second, 'have/a.txt'), (first, 'have/a.txt')],
+                                        self.ws)
+        self.assertEqual(contents, {(second, 'ours/a.txt'): b'changed\n', (second, 'have/a.txt'): b'again\n',
+                                    (first, 'have/a.txt'): None})
+        self.assertEqual(self.git('rev-parse', f'{second}^'), first)
+        self.assertEqual(self.git('diff', '--cached', '--name-only'), '')
+
+    def test_a_ref_keeps_it_until_deleted(self):
+        commit = commit_files({}, 'Empty', self.ws)
+        set_ref('refs/git-p4son/test', commit, self.ws)
+        self.assertEqual(self.git('rev-parse', 'refs/git-p4son/test'), commit)
+        delete_ref('refs/git-p4son/test', self.ws)
+        delete_ref('refs/git-p4son/test', self.ws)
+        self.assertEqual(self.git('for-each-ref', 'refs/git-p4son/'), '')
+
+    def test_restore_files_writes_them_as_a_commit_holds_them(self):
+        base = self.git('rev-parse', 'HEAD')
+        self.write_file('a.txt', 'changed\n')
+        os.remove(os.path.join(self.ws, 'b.txt'))
+        restore_files(base, ['a.txt', 'b.txt'], self.ws)
+        for name, content in (('a.txt', 'a\n'), ('b.txt', 'b\n')):
+            with open(os.path.join(self.ws, name)) as f:
+                self.assertEqual(f.read(), content)
+        self.assertEqual(self.git('status', '--porcelain'), '')
 
 
 class TestMergesAbove(GitRepoTestCase):

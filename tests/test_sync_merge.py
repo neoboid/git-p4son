@@ -458,6 +458,18 @@ class TestPrepareWritableFiles(unittest.TestCase):
             mode = os.stat(path).st_mode
             self.assertTrue(mode & stat.S_IWUSR)
 
+    def test_an_always_writable_add_stays_ignored(self):
+        """p4 adds no file over a writable one on disk, +w or not, so a +w add stays with the ignored files."""
+        with tempfile.TemporaryDirectory() as ws:
+            always = self._make_file(ws, 'Tool.exe')
+            with mock.patch('git_p4son.sync_merge.get_tracked_files', return_value=set()), \
+                    mock.patch('git_p4son.sync_merge.p4_head_types', return_value={always: 'binary+w'}):
+                result = _prepare(
+                    [P4SyncPreviewFile('add', always)], ws, 'head123', self.temp_root)
+
+            self.assertEqual(result.ignored, [always])
+            self.assertEqual(result.always_writable, [])
+
     def test_always_writable_files_excluded_from_expected_clobber(self):
         """+w files are not expected clobber errors."""
         with tempfile.TemporaryDirectory() as ws:

@@ -181,7 +181,8 @@ def prepare_writable_files(preview_files: list[P4SyncPreviewFile],
         ignored = []
         for f in result.ignored:
             head_type = ignored_types.get(f)
-            if head_type and is_always_writable_file_type(head_type) and f not in refused:
+            # p4 updates a +w file it has, writable or not, but adds none over a writable file on disk.
+            if head_type and is_always_writable_file_type(head_type) and f not in refused and f not in added_upstream:
                 result.always_writable.append(f)
             else:
                 ignored.append(f)

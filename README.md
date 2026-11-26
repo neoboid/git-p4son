@@ -488,7 +488,9 @@ keep working.
   since, or a git repository or a folder in place of a file made since, is refused, as the save holds file content.
 - **A `git reset --hard` or `git checkout -- <file>`** that put the old content back is undone, and so is a
   `git clean` or a checkout that removed a file the sync had added: those files are synced again.
-- **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared.
+- **What p4 left behind** when it was killed, its `tmp.*` files and half-written adds, is cleared. A file you made
+  where the sync adds one is kept, told apart by its content: it's merged back as a file added on both sides, or, when
+  git ignores it, left as it is and listed as not synced.
 - **Commits you made on the sync branch** are taken off it again, so the sync commits hold only Perforce's files. They
   are kept under `refs/git-p4son/intersync-commits`, with those a later resume of the same sync takes off, until another
   sync takes commits off. Their changes come back uncommitted, and each is named with `git commit -c <sha>` to commit

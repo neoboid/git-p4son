@@ -237,13 +237,21 @@ class TestWritableCommand(GitRepoTestCase):
 
     @mock.patch('git_p4son.writable.p4_get_opened_files')
     @mock.patch('git_p4son.writable.get_client_spec')
-    def test_apply_off_leaves_allwrite_workspace_alone(self, mock_spec,
-                                                       mock_opened):
+    def test_apply_off_refuses_an_allwrite_workspace(self, mock_spec, mock_opened):
         mock_spec.return_value = mock.Mock(allwrite=True)
         self._set_all(stat.S_IRUSR | stat.S_IWUSR)
-        self.assertEqual(self._run('apply'), 0)
+        with captured_output(), self.assertRaisesRegex(CommandError, 'allwrite option'):
+            self._run('apply')
         self.assertTrue(self._writable(self.tracked))
         mock_opened.assert_not_called()
+
+    @mock.patch('git_p4son.writable.get_client_spec')
+    def test_disable_refuses_an_allwrite_workspace_with_the_mode_kept(self, mock_spec):
+        set_writable_mode(self.ws, True)
+        mock_spec.return_value = mock.Mock(allwrite=True)
+        with captured_output(), self.assertRaisesRegex(CommandError, 'allwrite option'):
+            self._run('disable')
+        self.assertTrue(is_writable_mode(self.ws))
 
     def test_setting_the_mode_keeps_the_rest_of_config_toml(self):
         self.write_config(

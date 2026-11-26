@@ -20,7 +20,7 @@ from .sync_merge import (
     WritableSyncFileSet, merge_changed_files, prepare_writable_files,
     report_not_synced,
 )
-from .writable import is_writable_mode, restore_writable
+from .writable import check_not_allwrite, is_writable_mode, restore_writable
 from .sync_split_users import (
     canonical_split_users,
     get_split_users,
@@ -146,9 +146,12 @@ class SyncSettings:
 
 
 def sync_settings(workspace_dir: str) -> SyncSettings:
-    """The workspace's depot root and the client spec's line endings and clobber option."""
+    """The workspace's depot root and the client spec's line endings and clobber option.
+
+    Raises CommandError for a client spec with the allwrite option."""
     resolved = resolve_depot_root(workspace_dir)
     client_spec = resolved.client_spec
+    check_not_allwrite(client_spec)
     return SyncSettings(resolved.depot_root, bool(client_spec and client_spec.uses_crlf),
                         client_spec.clobber_mode if client_spec else ClobberMode.NOCLOBBER)
 

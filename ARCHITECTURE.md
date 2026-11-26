@@ -20,11 +20,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   configured ones. `finish_sync` returns to where sync started, unless changes are left in the work tree, as merged-back
   local changes; after a failure partway, sync stays on the sync branch.
 
-  The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber), `find_sync_state`,
-  `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the first target's
-  commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks the cherry-pick
-  subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an `OnSyncBranch` (the
-  parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to `finish_sync` as text.
+  The parts `cherry-pick` shares are public: `sync_settings` (depot root, line endings, clobber, refusing allwrite),
+  `find_sync_state`, `parse_changelist`, `run_sync_passes`, which syncs a list of catch-up `SyncPass`es folded into the
+  first target's commit, then commits each target (a pass's `revision` is `@N`, or `@=N` with `exact`, which also picks
+  the cherry-pick subject), and `sync_on_branch`, the preflight, checkout, hooks and return around them, given an
+  `OnSyncBranch` (the parsers add its options with `_add_sync_branch_args`), passing the sync branch's `SyncState` to
+  `finish_sync` as text.
 
 - **`cherry_pick.py`** - The `cherry-pick` command: syncs only the files of submitted changelists (`p4 sync @=N`)
   onto the sync branch, through `sync`'s `sync_on_branch` and `run_sync_passes`. It refuses a changelist at or
@@ -93,10 +94,12 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   init --colocate` last if asked to in an existing repo (a new one lists it as a next step, after the user's first
   commit).
 
-- **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command
-  (shows the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
+- **`writable.py`** - Writable mode: reading and writing the `core.writable` setting and the `writable` command (shows
+  the mode without an action; `enable`, `disable`, `apply`). Its helpers (`make_writable`, `make_read_only`,
   `restore_writable`, `is_user_writable`) set and clear the user write bit on git-tracked files and are also used by
-  `sync` and `lib`. Making files read-only skips files opened in Perforce, and allwrite workspaces entirely.
+  `sync` and `lib`. Making files read-only skips files opened in Perforce. `check_not_allwrite` refuses a client spec
+  with the allwrite option, which git-p4son does not support, for `writable`'s off path, `apply` and `disable`, and,
+  through `sync.sync_settings`, for `sync` and `cherry-pick`.
 
 - **`skill.py`** - The `skill` command: `install` writes a stub `SKILL.md` to the user's Claude Code skills directory,
   and `show` prints the full agent instructions shipped in `skill/git-p4son.md`, followed by the workspace's own

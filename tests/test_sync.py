@@ -869,6 +869,20 @@ class TestSyncPutsRight(SyncTestCase):
         self.assertEqual(merged.count('b.txt'), 1)
         self.assertIn('<<<<<<<', self.read('b.txt'))
 
+    def test_a_file_the_pass_added_and_git_clean_removed_is_synced_again(self):
+        self.p4.submit(101, {'a.txt': 'a1\nupstream\n',
+                       'd.txt': 'd1\n', 'e.txt': 'e1\n'})
+        self.p4.interrupt_sync('@101', after=2)
+        self.interrupted_sync('101')
+        self.assertTrue(os.path.exists(os.path.join(self.ws, 'd.txt')))
+        self.git('clean', '-q', '-fd')
+        out = self.sync()
+        self.assertIn('d.txt', self.listed_under(
+            out, 'Resyncing the files behind the have-list'))
+        self.assertEqual(self.read('d.txt'), 'd1\n')
+        self.assertEqual(self.git('show', 'main:d.txt'), 'd1')
+        self.assertIsNone(self.sync_progress_file())
+
     def test_a_local_change_p4_had_not_reached_is_resynced_and_merged_back(self):
         self.commit_local_changes('b.txt')
         self.p4.submit(101, {'a0.txt': 'a\n', 'b.txt': 'b1\nupstream\n'})

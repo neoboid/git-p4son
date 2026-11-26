@@ -1375,6 +1375,16 @@ class TestJjSyncFromAnywhere(JjP4RepoTestCase):
     def test_a_resume_refuses_a_jj_new_on_the_stack_sync_started_from(self):
         self.assert_the_start_stack_is_refused('new')
 
+    def test_jj_new_on_the_recorded_commit_then_a_resume_ends_with_every_file_of_the_pass(self):
+        self.interrupt()
+        self.assertTrue(os.path.exists(os.path.join(self.ws, 'd.txt')))
+        self.jj('new', 'main')
+        self.assertFalse(os.path.exists(os.path.join(self.ws, 'd.txt')))
+        self.p4son('sync')
+        self.assertEqual(
+            (self.read('d.txt'), self.read('e.txt')), ('d1\n', 'e1\n'))
+        self.assertEqual(self.git('show', 'main:d.txt'), 'd1')
+
     def test_a_described_change_above_the_bookmark_is_unwound_and_abandoned(self):
         snapshot = self.interrupt()
         self.jj('describe', '-m', 'Mine')

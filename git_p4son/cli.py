@@ -28,6 +28,7 @@ from .git import branch_name, get_workspace_dir
 from .log import log
 from .complete import run_complete
 from .skill import skill_install_command, skill_show_command
+from .sync_progress import check_no_interrupted_sync
 from .writable import writable_command
 
 
@@ -729,6 +730,7 @@ def _run_in_workspace(args: argparse.Namespace) -> int:
     """Resolve the arguments that depend on the workspace, then run the command."""
     backend = args.backend
     if _needs_clean(args):
+        check_no_interrupted_sync(args.workspace_dir)
         backend.check_on_sync_tip()
     if hasattr(args, 'base_branch'):
         log.heading('Resolving base')

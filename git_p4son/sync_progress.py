@@ -221,6 +221,13 @@ def read_sync_progress(workspace_dir: str) -> SyncProgress | None:
         written_by=data['written-by'], started=data['started'], version=data['version'])
 
 
+def check_no_interrupted_sync(workspace_dir: str) -> None:
+    """Raise CommandError while an interrupted sync waits to be finished, for a command that works on the files."""
+    if os.path.exists(progress_path(workspace_dir)):
+        raise CommandError('The files on disk are partly synced, as an interrupted sync is not finished. Run '
+                           '"git p4son sync" to finish it first.')
+
+
 def remove_sync_progress(workspace_dir: str) -> None:
     with contextlib.suppress(FileNotFoundError):
         os.remove(progress_path(workspace_dir))

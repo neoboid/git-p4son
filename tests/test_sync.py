@@ -481,7 +481,7 @@ class TestSyncProgress(SyncTestCase):
         self.assertEqual(progress['passes'], [
             {'changelist': 101, 'label': 'specified', 'subject': 'git-p4son: p4 sync //myclient/...@101',
              'files': [['upd', 'a.txt'], ['add', 'd.txt']], 'changed': [{'path': 'a.txt', 'base': base}],
-             'ignored': [], 'always-writable': []},
+             'ignored': []},
             {'changelist': 102, 'label': 'specified', 'subject': 'git-p4son: p4 sync //myclient/...@102'}])
         self.assertEqual(progress['end'], {
                          'changed': [], 'merged': [], 'ignored': [], 'synced': []})

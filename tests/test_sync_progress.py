@@ -42,7 +42,7 @@ class TestSyncProgressFile(WorkspaceTestCase):
                            ('add', 'dir with space/"quoted".txt')],
                     changed=[LocalChange('Config/x.ini', 'base1'), LocalChange('new.txt', None, added_both=True),
                              LocalChange('art.psd', 'base2', binary=True)],
-                    ignored=['Saved/x.log'], always_writable=['Saved/w.log'])),
+                    ignored=['Saved/x.log'])),
                 ProgressPass(102, 'cherry-picked', exact=True),
                 ProgressPass(103, 'split', subject='git-p4son: p4 sync //ws/...@103')],
             uncommitted=[('del', 'x.txt')],
@@ -136,7 +136,7 @@ class TestProgressRecorder(WorkspaceTestCase):
         first, second = written(self.ws).passes
         self.assertEqual(first.lists, PassLists(
             files=[('upd', 'd/a.txt'), ('add', 'b.txt')], changed=[LocalChange('d/a.txt', 'base1')],
-            ignored=['x.log'], always_writable=['w.log']))
+            ignored=['x.log']))
         self.assertIsNone(second.lists)
 
     def test_pass_made_drops_it_and_keeps_what_the_end_needs(self):

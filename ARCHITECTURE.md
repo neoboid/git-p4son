@@ -176,13 +176,13 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   passes left (`ProgressPass`), the commits a resume unwound (`unwound`, each an `AboveCommit`: the commit, how to get
   it back and its subject, kept by `INTERSYNC_COMMITS_REF`), the files the passes made since the last commit synced
   (`uncommitted`, a catch-up pass's until the next commit), the first one with the `PassLists` its preview and
-  `prepare_writable_files` gave (the files with their modes, the local changes, the ignored and always-writable files),
-  and, in `[end]`, what the end needs from the passes made: the local changes still to merge back, the outcome of each
-  one merged (`MergedFile`), the intersync saves (`IntersyncSave`, kept alive by `INTERSYNC_REF`: the commit, each file
-  with its base, `have` or a commit, and whether its `have/` content is kept yet, which `intersync_merged` drops one by
-  one), the ignored files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path,
-  its base commit and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace
-  root, a list item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` and
+  `prepare_writable_files` gave (the files with their modes, the local changes, the ignored files), and, in `[end]`,
+  what the end needs from the passes made: the local changes still to merge back, the outcome of each one merged
+  (`MergedFile`), the intersync saves (`IntersyncSave`, kept alive by `INTERSYNC_REF`: the commit, each file with its
+  base, `have` or a commit, and whether its `have/` content is kept yet, which `intersync_merged` drops one by one), the
+  ignored files and, in writable mode, the files synced. Local changes are references (`LocalChange`: a path, its base
+  commit and flags), read again from the pre-sync commit and the base. Paths are slash paths from the workspace root, a
+  list item per line, for a user to read. `ProgressRecorder` keeps it in step as `run_sync_passes` and
   `_resume_sync_passes` go; `read_sync_progress` reads it back for a resume, refusing one a newer git-p4son wrote,
   `check_no_interrupted_sync` refuses `new`, `update`, `review` and `cherry-pick` while it exists, as the files on disk
   are partly synced. `local_path` and `local_paths` turn stored paths into local ones, and `workspace_path` a local path

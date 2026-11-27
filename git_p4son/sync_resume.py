@@ -504,10 +504,10 @@ def _drop_stale_progress(progress: SyncProgress, workspace_dir: str, dry_run: bo
     saved = sorted(
         {file.path for save in progress.intersync for file in save.files})
     if saved:
-        log.warning(f'The changes made while the sync was interrupted stay saved under {INTERSYNC_REF}, each as '
-                    'ours/<path>:')
         for path in saved:
             log.info(path)
+        log.warning(f'The changes above, made while the sync was interrupted, stay saved under {INTERSYNC_REF}, '
+                    'each as ours/<path>')
     return 0
 
 

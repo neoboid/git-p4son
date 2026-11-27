@@ -1691,8 +1691,9 @@ class TestSyncBranch(SyncTestCase):
         self.git('commit', '-q', '--allow-empty', '-m',
                  'git-p4son: p4 sync //myclient/...@105')
         out = self.sync('--abort')
-        self.assertEqual(self.listed_under(
-            out, 'stay saved under refs/git-p4son/intersync-changes')[1:], ['b.txt'])
+        self.assertEqual(self.listed_under(out, 'Removing the stale sync progress')[2:], [
+            'b.txt', '[warn] The changes above, made while the sync was interrupted, stay saved under '
+            'refs/git-p4son/intersync-changes, each as ours/<path>'])
         self.assertEqual(
             self.git('show', 'refs/git-p4son/intersync-changes:ours/b.txt'), 'mine')
         self.assertIsNone(self.sync_progress_file())

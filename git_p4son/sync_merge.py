@@ -124,13 +124,13 @@ def stage_changed_files(refs: list[ChangedFileRef], pre_sync_head_commit: str, w
 
 def _log_file_group(log_fn: Callable[[str], None], files: list[str], singular: str, plural_noun: str,
                     text: str, workspace_dir: str | None = None) -> None:
-    """Log how many files are in a group, then list them if workspace_dir is given."""
+    """List a group's files if workspace_dir is given, then log how many there are."""
     if not files:
         return
-    log_fn(f'{plural(len(files), singular, plural_noun)} {text}')
     if workspace_dir is not None:
         for f in files:
             log.info(os.path.relpath(f, workspace_dir))
+    log_fn(f'{plural(len(files), singular, plural_noun)} {text}')
 
 
 def _log_prepare_summary(result: WritableSyncFileSet, workspace_dir: str,
@@ -376,11 +376,11 @@ def _report_outcomes(outcomes: dict[str | None, list[str]], workspace_dir: str) 
                         plural_noun, text, workspace_dir)
     if not any(outcomes.get(outcome) for outcome in _OUTCOMES):
         return
-    log.info('')
     if outcomes.get('conflicts') or outcomes.get('added-both'):
-        log.info('Manually review changes, resolve conflicts and commit when ready')
+        log.warning(
+            'Manually review changes, resolve conflicts and commit when ready')
     else:
-        log.info('Manually review changes and commit when ready')
+        log.warning('Manually review changes and commit when ready')
 
 
 @dataclass(frozen=True)

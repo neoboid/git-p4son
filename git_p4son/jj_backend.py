@@ -12,7 +12,7 @@ from .git import (
 )
 from .jj import Workspace, changes_revset, leave_out_case_only_ignored
 from .sync_progress import GIVE_UP, AboveCommit, StaleSyncProgress
-from .log import log
+from .log import log, plural
 from .sync_branch import choose_sync_branch, sync_branch_name
 from .words import (
     Words, base_below_sync_tip, base_not_below, has_merge, named_base, no_sync_branch, not_on_sync_tip, several_nearest,
@@ -295,10 +295,10 @@ class JjBackend:
             raise CommandError(f'The working change is on the stack the interrupted sync started from, not on the '
                                f'files it left on {sync_branch}. Return to them with {back()}, then run "git p4son '
                                f'sync" again, {GIVE_UP}.')
+        head = get_head_commit(workspace.directory)
         log.success(f'At {tip[:12]}')
         self._sync = _Sync(sync_branch, tip, str(start['change']), bool(start['edited']),
-                           get_head_commit(workspace.directory), bool(
-                               start['on-sync-branch']),
+                           head, bool(start['on-sync-branch']),
                            snapshots=[change for _, change, _ in above], above=above, bookmark_at=at)
         return tip
 
@@ -380,10 +380,15 @@ class JjBackend:
         if sync is None or sync.finished is None:
             return
         workspace = self.workspace
-        # A snapshot change still holds the files as Perforce left them; once jj is past it, nothing needs it. With no
-        # pass left to commit, jj is still on it, and an unwound change, still described, becomes a plain one.
-        workspace.undescribe_working(sync.snapshots)
-        workspace.abandon_unless_working(sync.snapshots)
+        if sync.snapshots:
+            log.heading(
+                f"Dropping the interrupted sync's {plural(len(sync.snapshots), 'snapshot change')}")
+            # A snapshot change still holds the files as Perforce left them; once jj is past it, nothing needs it.
+            # With no pass left to commit, jj is still on it, and an unwound change, still described, becomes a plain
+            # one.
+            workspace.undescribe_working(sync.snapshots)
+            workspace.abandon_unless_working(sync.snapshots)
+            log.success('Dropped')
         if sync.on_sync_branch:
             return
         at, rebase = sync.finished

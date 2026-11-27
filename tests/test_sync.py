@@ -1122,6 +1122,13 @@ class TestSyncIntersync(SyncTestCase):
         self.assertEqual(
             (local['b.txt'], intersync['b.txt'], intersync['e.txt']), (0, 1, 1))
 
+    def test_a_resume_removes_the_saves_ref_even_with_no_save_left_to_list_it(self):
+        # As a resume cut short after merging back a save whose outcome it had no reason to record leaves it.
+        self.interrupt()
+        self.git('update-ref', 'refs/git-p4son/intersync-changes', 'HEAD')
+        self.sync()
+        self.assertEqual(self.git('for-each-ref', 'refs/git-p4son/'), '')
+
     def test_a_file_merged_but_not_recorded_before_an_interruption_is_reported_once(self):
         self.interrupt()
         self.edit('b.txt', f'{self.read("b.txt")}mine\n')

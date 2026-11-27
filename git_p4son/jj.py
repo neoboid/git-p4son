@@ -188,12 +188,13 @@ def colocate_steps(workspace_dir: str) -> list[str]:
 
 def leave_out_case_only_ignored(workspace_dir: str) -> None:
     """Leave the untracked paths git ignores only without case out of jj's snapshots, as jj would track them."""
+    log.heading(
+        "Leaving what git ignores only without case out of jj's snapshots")
     paths = case_only_ignored(workspace_dir)
     auto_track = _auto_track(workspace_dir, paths) if paths else None
     if auto_track is None:
+        log.success('Nothing to leave out')
         return
-    log.heading(
-        "Leaving what git ignores only without case out of jj's snapshots")
     _run_live(workspace_dir, '--ignore-working-copy', 'config', 'set', '--repo', 'snapshot.auto-track',
               _config_value(auto_track))
     log.success(f'snapshot.auto-track is now {auto_track}')

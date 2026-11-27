@@ -199,9 +199,11 @@ class GitBackend:
 
     def prepare_sync(self, branch: str | None) -> str:
         """The sync branch: branch, else [sync] branch, else main; raise CommandError if none exists."""
+        log.heading('Finding sync branch')
         name = choose_sync_branch(self.workspace_dir, branch,
                                   lambda name: branch_exists(name, self.workspace_dir), 'branch')
         self._sync = _Sync(name, _Position.current(self.workspace_dir))
+        log.success(name)
         # In full, so a tag of the same name, which git would read first, is not read instead.
         return f'refs/heads/{name}'
 
@@ -273,8 +275,9 @@ class GitBackend:
         sync = self._prepared()
         if sync.on_sync_branch:
             return
+        log.heading(f'Returning to {sync.start.name}')
         try:
-            self._return(sync)
+            self._restore(sync)
         except RunError as error:
             log.error(f'Could not return to {sync.start.name}: {error}')
 
@@ -293,6 +296,7 @@ class GitBackend:
         sync = self._prepared()
         if sync.on_sync_branch:
             return
+        log.heading(f'Returning to {sync.start.name}')
         if any(kind != 'untracked' for _, kind in get_dirty_files(self.workspace_dir)):
             log.warning(f'Staying on {sync.branch}, with the local changes above to review and commit. '
                         f'Then return to {sync.start.name}.')
@@ -301,7 +305,7 @@ class GitBackend:
             log.warning(
                 f'Staying on {sync.branch}, as {sync.start.branch}, where sync started, no longer exists.')
             return
-        self._return(sync)
+        self._restore(sync)
         log.info(
             f'{sync.branch} is now at {state}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
 
@@ -312,7 +316,6 @@ class GitBackend:
         assert self._sync is not None, 'prepare_sync comes first'
         return self._sync
 
-    def _return(self, sync: _Sync) -> None:
-        log.heading(f'Returning to {sync.start.name}')
+    def _restore(self, sync: _Sync) -> None:
         sync.start.restore(self.workspace_dir)
         log.success(sync.start.name)

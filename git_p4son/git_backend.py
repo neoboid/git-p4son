@@ -306,7 +306,7 @@ class GitBackend:
                 f'Staying on {sync.branch}, as {sync.start.branch}, where sync started, no longer exists.')
             return
         self._restore(sync)
-        log.info(
+        log.warning(
             f'{sync.branch} is now at {state}. Run "git rebase {sync.branch}" to bring {sync.start.name} up to date.')
 
     def after_lock(self) -> None:

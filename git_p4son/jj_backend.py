@@ -414,8 +414,11 @@ class JjBackend:
         else:
             workspace.return_to(sync.start, sync.editing)
             log.success(sync.start)
-            hint = '' if rebase else f' Run "{rebase_command}" to bring your changes up to date.'
-            log.info(f'{sync.bookmark} is now at {at}.{hint}')
+            if rebase:
+                log.success(f'{sync.bookmark} is now at {at}.')
+            else:
+                log.warning(
+                    f'{sync.bookmark} is now at {at}. Run "{rebase_command}" to bring your changes up to date.')
         if failure is not None:
             raise CommandError(f'{sync.bookmark} reached {at}, but jj could not rebase your changes: {failure}. '
                                f'Run: {rebase_command}', failure.returncode) from failure

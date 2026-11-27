@@ -62,12 +62,12 @@ def _should_split(split_users: list[str], last_synced: int | None,
     if not split_users or not targets:
         return False
     if not last_synced:
-        log.info('Not splitting out changelists: '
-                 'no previous sync to start from')
+        log.warning('Not splitting out changelists: '
+                    'no previous sync to start from')
         return False
     if targets[0][0] < last_synced:
-        log.info('Not splitting out changelists: '
-                 'syncing to an older changelist')
+        log.warning('Not splitting out changelists: '
+                    'syncing to an older changelist')
         return False
     return True
 
@@ -139,6 +139,7 @@ def _resolve_sync_targets(
                     c, last_synced, depot_root, workspace_dir)
             targets.append((resolved[name], name))
 
+    log.heading('Checking sync targets')
     _check_increasing([(cl, str(cl) if label == _SPECIFIED_LABEL else f'{cl} ({label})')
                       for cl, label in targets])
     numbers = [cl for cl, _ in targets]
@@ -153,7 +154,7 @@ def _resolve_sync_targets(
             f'(currently at CL {last_synced})')
 
     if last_synced in numbers:
-        log.info(f'Skipping CL {last_synced} (already synced)')
+        log.warning(f'Skipping CL {last_synced} (already synced)')
         targets = [(cl, lbl) for cl, lbl in targets
                    if cl != last_synced]
 
@@ -206,7 +207,6 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
         targets = _resolve_sync_targets(
             args.changelist, last_synced, depot_root, workspace_dir, args.allow_backwards)
         if not targets:
-            log.heading('Checking sync targets')
             log.success(f'Already at {state}, nothing to sync')
             return None
         final = targets[-1][0]
@@ -216,10 +216,12 @@ def _plan_sync(args: argparse.Namespace, sync_revision: str) -> _SyncPlan | None
             log.warning(f'Syncing to CL {final} takes back the cherry-picks of CL '
                         f'{", ".join(map(str, taken_back))}')
 
+    split = _should_split(split_users, last_synced, targets)
+    if targets:
+        log.success(f'To CL {targets[-1][0]}')
     return _SyncPlan(
         settings=settings, state=state, targets=targets,
-        resync_last_synced=resync_last_synced, split_users=split_users,
-        split=_should_split(split_users, last_synced, targets))
+        resync_last_synced=resync_last_synced, split_users=split_users, split=split)
 
 
 def _add_split_targets(plan: _SyncPlan, workspace_dir: str) -> None:

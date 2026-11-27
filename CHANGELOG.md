@@ -4,27 +4,19 @@
 
 ## 0.13.2
 
-- A Ctrl-C during the post-sync hooks of `sync` or `cherry-pick` stops the hooks, not the command's end: it says
-  "post-sync hooks interrupted", returns to where it started, with jj after rebasing, and exits with code 1. So
-  does an error that stops them, such as an expired p4 login for `$(user)`. It used to stay on the sync branch and
-  warn that the files were as Perforce left them, though the sync had finished
-- In a git workspace, git-p4son runs one command at a time, as it already did in a jj workspace: a command started
-  while another runs stops with "Another git-p4son command is running in this workspace", where two syncs could run
-  p4 and commit at once. `init` is held back too, once the workspace is set up. A hook that runs git-p4son runs under
-  the lock of the command that started it
-- In a jj workspace, a program that a hook starts and leaves running, such as an editor, no longer runs git-p4son
-  without the workspace's lock
-- `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT, or a Ctrl-Break on Windows), where
-  they killed it. After a failed rename or a Ctrl-C, p4 no longer leaves half-written files behind. p4 gets 10
-  seconds to stop, and a second Ctrl-C kills it at once
-- A `sync` of several changelists no longer takes a file an earlier changelist of it added for a local change, on
-  `allwrite` workspaces and for a file of a `+w` type, which Perforce leaves writable. When a later changelist
-  changed the file again, it said the file had local changes, and at the end that it was "deleted locally but
-  modified in Perforce", though nothing had changed it
-- `sync` no longer stops with "p4 unexpectedly refused to replace the files above" when Perforce adds a git-ignored
-  file of a `+w` type where a writable file is already on disk. p4 overwrites a `+w` file it has synced before, but
-  adds none over a writable file, so this one is kept and listed as not synced, as other git-ignored writable files
-  are
+- A Ctrl-C or an error during the post-sync hooks of `sync` or `cherry-pick` stops the hooks but still finishes the
+  command: it returns to where it started and exits with code 1, where it used to stay on the sync branch
+- In a git workspace, git-p4son runs one command at a time, as in a jj workspace: a second one stops with "Another
+  git-p4son command is running in this workspace". A hook that runs git-p4son runs under the lock of the command that
+  started it
+- In a jj workspace, a program a hook starts and leaves running, such as an editor, no longer runs git-p4son without the
+  workspace's lock
+- `sync` and `cherry-pick` stop p4 with an interrupt it cleans up after (SIGINT, or Ctrl-Break on Windows) instead of
+  killing it, so a failed rename or a Ctrl-C no longer leaves half-written files. A second Ctrl-C kills it at once
+- A `sync` of several changelists no longer warns that a file an earlier changelist of it added was "deleted locally but
+  modified in Perforce", on `allwrite` workspaces and for files of a `+w` type
+- `sync` no longer stops with "p4 unexpectedly refused to replace the files above" when Perforce adds a git-ignored `+w`
+  file where a writable one is already on disk: the file is kept and listed as not synced
 
 ## 0.13.1
 

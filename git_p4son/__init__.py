@@ -2,6 +2,6 @@
 
 CONFIG_DIR = '.git-p4son'
 
-__version__ = "0.13.1"
+__version__ = "0.13.2"
 __author__ = "Andreas Andersson"
 __email__ = "andreas@neoboid.com"

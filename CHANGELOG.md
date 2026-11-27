@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.2
+
 - A Ctrl-C during the post-sync hooks of `sync` or `cherry-pick` stops the hooks, not the command's end: it says
   "post-sync hooks interrupted", returns to where it started, with jj after rebasing, and exits with code 1. So
   does an error that stops them, such as an expired p4 login for `$(user)`. It used to stay on the sync branch and

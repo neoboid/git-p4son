@@ -423,4 +423,6 @@ The module-by-module map of `git_p4son/`. `CLAUDE.md` covers `cli.py` and the ru
   file changes, command echo with a spinner, child process output, and quiet and verbose modes, with
   `log.quiet()` scoping quiet mode to a block. Writes to stderr flush stdout first, so merged streams keep their order.
   A line logged while a command line is open, as from a streamed command's output handler, first ends that line and
-  stops its spinner (`stop_spinner`). `plural` formats counts.
+  stops its spinner (`stop_spinner`). `plural` formats counts. A step logs its heading before its first command and
+  its success after its last, so every command line sits under the step that ran it; the command test helpers fail on
+  a command logged after a step's success (`stray_commands` in `tests/helpers.py`).

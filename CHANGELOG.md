@@ -17,6 +17,9 @@
   - `new`, `update`, `review` and `cherry-pick` refuse while a sync is interrupted
 - `git p4son sync --abort` gives up an interrupted sync instead: the commits it made stay, the files go back to the
   last committed changelist, and the local changes are merged back. It also removes stale sync progress
+- Every command line `sync`, `cherry-pick`, `update`, `review-tool` and `init` log sits under the heading of the step
+  that runs it, where some landed after the step before's `[ok]`. Steps of their own now find the sync branch and the
+  files committed outside syncs, drop a resume's snapshot changes, and check the base for a catch-up, among others
 - The messages of a sync that fails partway name `git p4son sync` to finish it and `git p4son sync --abort` to give
   it up, where they said to return once it was sorted out, and a file p4 couldn't replace to commit or restore the
   synced files

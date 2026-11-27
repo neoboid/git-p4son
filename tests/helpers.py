@@ -59,6 +59,20 @@ def captured_output() -> Iterator[io.StringIO]:
         yield out
 
 
+def stray_commands(output: str) -> list[str]:
+    """The command lines of output logged after a step's [ok], with no heading since."""
+    stray = []
+    in_step = True
+    for line in output.splitlines():
+        if line.startswith('# '):
+            in_step = True
+        elif line.startswith('[ok] '):
+            in_step = False
+        elif line.startswith('> ') and not in_step:
+            stray.append(line)
+    return stray
+
+
 @overload
 def make_run_result(returncode: int = 0, stdout: list[str] | None = None,
                     stderr: list[str] | None = None,
@@ -330,7 +344,7 @@ class WorkspaceTestCase(unittest.TestCase):
         with captured_output() as out, self.command_args(argv, **overrides) as args:
             check_clean_workspace(args)
             self.assertEqual(command(args), 0)
-        return out.getvalue()
+        return self.checked_steps(out.getvalue())
 
     def p4son(self, *argv: str, exit_code: int = 0) -> str:
         """Run git-p4son with argv as the command line would, expecting exit_code; returns everything it printed.
@@ -346,7 +360,7 @@ class WorkspaceTestCase(unittest.TestCase):
             error.add_note(
                 f'git p4son {" ".join(argv)} printed:\n{out.getvalue()}')
             raise
-        return out.getvalue()
+        return self.checked_steps(out.getvalue())
 
     def p4son_fails(self, *argv: str, message: str) -> str:
         """Run git-p4son with argv, expecting a CommandError matching message; returns everything it printed."""
@@ -355,7 +369,7 @@ class WorkspaceTestCase(unittest.TestCase):
                 mock.patch('git_p4son.cli.get_workspace_dir', return_value=self.ws), \
                 self.assertRaisesRegex(CommandError, message):
             run_command(create_parser().parse_args(argv))
-        return out.getvalue()
+        return self.checked_steps(out.getvalue())
 
     def command_fails(self, command: Callable[[argparse.Namespace], int], argv: list[str],
                       message: str) -> str:
@@ -365,7 +379,13 @@ class WorkspaceTestCase(unittest.TestCase):
                 self.command_args(argv) as args:
             check_clean_workspace(args)
             command(args)
-        return out.getvalue()
+        return self.checked_steps(out.getvalue())
+
+    def checked_steps(self, output: str) -> str:
+        """Fail if output logs a command outside a step, after its [ok]; returns output."""
+        self.assertEqual(stray_commands(output), [],
+                         f'commands logged outside a step in:\n{output}')
+        return output
 
 
 class GitRepoTestCase(WorkspaceTestCase):

@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from git_p4son.log import Log, _truncate_to_terminal_width, plural
+from tests.helpers import stray_commands
 
 
 class TestNonTtyOutput(unittest.TestCase):
@@ -181,6 +182,31 @@ class TestCommandTruncation(unittest.TestCase):
 
         self.assertIn(' ... ', log._spinner_line)
         self.assertEqual(log._spinner_final_line, f'> {command}')
+
+
+class TestStrayCommands(unittest.TestCase):
+    """The command test helpers' check that every command line sits under its step."""
+
+    def test_a_command_after_a_steps_ok_is_stray(self):
+        output = '# Step\n>  git a\n[ok] done\n>  git b\n\n# Next\n>  git c\n[ok] done\n'
+        self.assertEqual(stray_commands(output), ['>  git b'])
+
+    def test_commands_before_any_heading_belong_to_the_caller(self):
+        self.assertEqual(stray_commands('>  git a\n# Step\n[ok] done\n'), [])
+
+    def test_a_warning_or_an_info_line_does_not_end_a_step(self):
+        output = '# Step\n[warn] careful\n>  git a\nfile.txt\n>  git b\n[ok] done\n'
+        self.assertEqual(stray_commands(output), [])
+
+    def test_it_reads_the_lines_log_prints(self):
+        out = io.StringIO()
+        log = Log()
+        with contextlib.redirect_stdout(out):
+            log.heading('Step')
+            log.command('git a')
+            log.success('done')
+            log.command('git b')
+        self.assertEqual(stray_commands(out.getvalue()), ['> git b'])
 
 
 if __name__ == '__main__':

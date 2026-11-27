@@ -179,8 +179,12 @@ def review_tool_command(args: argparse.Namespace) -> int:
         log.heading('Default review tool')
         log.success(default_review_tool(workspace_dir))
     else:
-        # Resolved first, so the commands it logs don't land inside the list.
-        alias = None if action == 'list' else _current_alias(args)
+        alias = None
+        if action != 'list':
+            # Found first, so the commands it logs don't land inside the list.
+            log.heading('Finding the current alias')
+            alias = _current_alias(args)
+            log.success(alias or 'No current alias')
         _list(workspace_dir)
         if alias is not None:
             _show(alias, workspace_dir)

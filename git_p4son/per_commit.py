@@ -61,7 +61,7 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
                    backend: Backend, *, sleep: int | None, dry_run: bool,
                    message: str | None = None, message_file: str | None = None,
                    resumable: Callable[[], str | None] | None = None, base_name: str | None = None,
-                   only: set[str] | None = None,
+                   only: list[str] | None = None,
                    base_to: Literal['every step', 'the first step', 'no step'] = 'every step') -> None:
     """Run the git p4son arguments first on the oldest commit since base_branch, rest (or first) on each later one,
     with -b at base_branch for the steps base_to names. Steps without -b, and the resume hint unless every step gets
@@ -75,8 +75,9 @@ def run_per_commit(first: list[str], rest: list[str] | None, base_branch: str, w
     base = resolve_commit(base_branch, workspace_dir)
     commits = get_commits_since(base, workspace_dir, backend.revision)
     if only is not None:
+        wanted = {resolve_commit(revision, workspace_dir) for revision in only}
         commits = [(commit, subject)
-                   for commit, subject in commits if commit in only]
+                   for commit, subject in commits if commit in wanted]
     if not commits:
         raise CommandError(
             f'No commits found since {branch_name(base_branch)}')

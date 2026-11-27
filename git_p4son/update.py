@@ -5,7 +5,7 @@ import shlex
 from dataclasses import replace
 from .changelist_store import Record, Review, find_record, find_review, load_changelist_alias, update_record
 from .common import CommandError
-from .git import get_head_subject, resolve_commit
+from .git import get_head_subject
 from .included import Plan, catch_up_subject, included_count, plan_update, resolve_recorded_base
 from .lib import check_at_latest_revision, check_own_pending, edit_and_shelve, update_changelist
 from .log import log, plural
@@ -70,15 +70,16 @@ def _catch_up(plan: Plan, args: argparse.Namespace, workspace_dir: str) -> bool:
 
     A dry run only says what it would insert. The record then has the moved base, so the steps of a loop that shelves
     don't catch up again, and the catch-up, so a rerun after a failed shelve still shelves it alone."""
+    log.heading('Catching up with the base')
     subject = catch_up_subject(plan, workspace_dir, args.backend.revision)
     if subject is None:
+        log.success('Not needed')
         return False
     after = get_head_subject(workspace_dir, plan.after)
     if args.dry_run:
-        log.info(
+        log.success(
             f'Would insert "{subject}" after "{after}", as the base moved since the last shelve.')
         return False
-    log.heading('Catching up with the base')
     commit: str = args.backend.insert_empty_after(plan.after, subject)
     update_record(plan.alias, replace(plan.kept, base_commit=plan.start,
                                       catch_up=args.backend.commit_identities([commit])[0]), workspace_dir)
@@ -96,8 +97,7 @@ def _shelve_twice(plan: Plan, catch_up: str, changelist: str, review: Review | N
                        sleep=_shelf_delay(review), dry_run=False, message=args.message,
                        message_file=args.file,
                        resumable=lambda: None,
-                       only={catch_up, resolve_commit(
-                           args.backend.revision, workspace_dir)},
+                       only=[catch_up, args.backend.revision],
                        base_to='no step')
     except CommandError as error:
         # The record keeps the catch-up until it is included, so the same command finishes either step.

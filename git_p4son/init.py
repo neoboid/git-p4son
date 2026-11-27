@@ -186,6 +186,7 @@ def _configure_jj(cwd: str) -> bool:
             return False
         colocate = True
         log.success('Will colocate')
+    log.heading('Configuring the jj p4son alias')
     if jj.has_p4son_alias(cwd):
         log.success('jj p4son alias found')
     elif _ask_yes_no('Add the jj p4son alias to your jj config, to run git-p4son as jj p4son?', True):

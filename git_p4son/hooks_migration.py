@@ -84,9 +84,10 @@ def _check_no_hook_files(config: dict[str, Any], workspace_dir: str) -> None:
                 never_ran.append(relative)
             else:
                 commands.setdefault(hook, []).append(command)
-    for relative in never_ran:
-        log.warning(f'Ignoring {relative}, which never ran as a hook')
+    if never_ran or commands:
+        log.heading('Checking for old hook files')
     if not commands:
+        _warn_never_ran(never_ran)
         return
     section = config.get(_SECTION)
     # A table that holds only [hooks.extension-associations] has no [hooks] header to add the keys under.
@@ -105,8 +106,16 @@ def _check_no_hook_files(config: dict[str, Any], workspace_dir: str) -> None:
         log.info(']')
     log.info('Hooks no longer get GIT_P4SON_BACKEND or GIT_P4SON_REPO_ROOT_DIR: pass $(backend), and the working '
              'directory is the root.')
+    # After the [hooks] lines, so the step ends with its status lines.
+    _warn_never_ran(never_ran)
     raise CommandError(f'Hooks are configured in [{_SECTION}] in {CONFIG_DIR}/config.toml now, as lists of '
                        'commands. See the lines above.')
+
+
+def _warn_never_ran(paths: list[str]) -> None:
+    """Warn about each hook file that never ran."""
+    for relative in paths:
+        log.warning(f'Ignoring {relative}, which never ran as a hook')
 
 
 def check_no_old_hooks(workspace_dir: str) -> None:

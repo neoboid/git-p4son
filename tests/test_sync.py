@@ -293,8 +293,10 @@ class TestSync(SyncTestCase):
 
     def test_the_last_synced_changelist_in_a_list_is_skipped(self):
         self.p4.submit(101, {'a.txt': 'a2\n'})
-        self.sync('100', '101')
+        out = self.sync('100', '101')
         self.assertEqual(self.synced_commits(), [101])
+        self.assertEqual(self.listed_under(out, '# Checking sync targets')[1:],
+                         ['[warn] Skipping CL 100 (already synced)', '[ok] To CL 101'])
 
     def test_already_synced_does_nothing(self):
         path, read_log = self.hook_log()
@@ -2142,6 +2144,13 @@ class TestSyncSplitting(SyncTestCase):
         out = self.sync()
         self.assertIn('no previous sync to start from', out)
         self.assertEqual(self.p4.synced(), ['@106'])
+
+    def test_a_sync_backwards_is_not_split(self):
+        self.configure('me')
+        out = self.sync('--allow-backwards', '50')
+        self.assertIn(
+            '[warn] Not splitting out changelists: syncing to an older changelist', out)
+        self.assertEqual(self.p4.synced(), ['@50'])
 
     def test_changelists_outside_the_view_are_not_split(self):
         self.p4.submit(107, {}, user='me')

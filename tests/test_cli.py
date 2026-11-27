@@ -321,11 +321,11 @@ class TestRunCommand(unittest.TestCase):
         mock_sync.assert_not_called()
 
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
-    def test_dry_run_ends_with_one_final_line(self, _sync, _ws):
+    def test_dry_run_ends_with_one_final_status_line(self, _sync, _ws):
         with captured_output() as out:
             run_command(create_parser().parse_args(['sync', '-n']))
         self.assertTrue(out.getvalue().endswith(
-            '\nDry run, nothing changed\n'))
+            '\n[ok] Dry run, nothing changed\n'))
 
     @mock.patch('git_p4son.cli.sync_command', return_value=0)
     def test_real_run_has_no_dry_run_line(self, _sync, _ws):

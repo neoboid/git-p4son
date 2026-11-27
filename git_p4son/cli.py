@@ -728,7 +728,7 @@ def _run_command(args: argparse.Namespace) -> int:
         args.backend = backend
         exit_code = _run_in_workspace(args)
     if exit_code == 0 and getattr(args, 'dry_run', False):
-        log.info('Dry run, nothing changed')
+        log.success('Dry run, nothing changed')
     return exit_code
 
 

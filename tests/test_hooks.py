@@ -43,7 +43,7 @@ class HooksTestCase(WorkspaceTestCase):
         with captured_output() as out:
             failed = run_hook(hook, self.ws, 'jj', 100,
                               '//myclient', synced=101)
-        return failed, out.getvalue()
+        return failed, self.checked_steps(out.getvalue())
 
 
 class TestHookCommands(HooksTestCase):
@@ -134,7 +134,7 @@ class TestCheckHooks(HooksTestCase):
     def check_fails(self, message):
         with captured_output() as out, self.assertRaisesRegex(CommandError, message):
             check_hooks(self.ws)
-        return out.getvalue()
+        return self.checked_steps(out.getvalue())
 
     def test_nothing_to_check(self):
         check_hooks(self.ws)
@@ -177,7 +177,8 @@ class TestCheckHooks(HooksTestCase):
         with captured_output() as out:
             check_hooks(self.ws)
         self.assertIn(
-            '[warn] Ignoring .git-p4son/hooks/pre-sync/.DS_Store, which never ran as a hook\n', out.getvalue())
+            '[warn] Ignoring .git-p4son/hooks/pre-sync/.DS_Store, which never ran as a hook\n',
+            self.checked_steps(out.getvalue()))
 
     @mock.patch('git_p4son.hooks_migration._is_windows', return_value=False)
     def test_the_lines_keep_the_commands_a_hooks_table_has(self, _windows):

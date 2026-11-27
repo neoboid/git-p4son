@@ -59,17 +59,23 @@ def captured_output() -> Iterator[io.StringIO]:
         yield out
 
 
-def stray_commands(output: str) -> list[str]:
-    """The command lines of output logged after a step's [ok], with no heading since."""
-    stray = []
-    in_step = True
+def stray_lines(output: str) -> list[str]:
+    """The lines of output outside a step: a command after the step's [ok], or any line after its last status."""
+    stray: list[str] = []
+    steps: list[list[str]] = []
     for line in output.splitlines():
         if line.startswith('# '):
-            in_step = True
-        elif line.startswith('[ok] '):
-            in_step = False
-        elif line.startswith('> ') and not in_step:
-            stray.append(line)
+            steps.append([])
+        elif steps:
+            steps[-1].append(line)
+    for lines in steps:
+        last = max((i for i, line in enumerate(lines) if line.startswith(('[ok] ', '[warn] '))),
+                   default=len(lines))
+        first_ok = next((i for i, line in enumerate(lines)
+                        if line.startswith('[ok] ')), len(lines))
+        stray += [line for line in lines[first_ok + 1:last]
+                  if line.startswith('> ')]
+        stray += [line for line in lines[last + 1:] if line.strip()]
     return stray
 
 
@@ -382,9 +388,9 @@ class WorkspaceTestCase(unittest.TestCase):
         return self.checked_steps(out.getvalue())
 
     def checked_steps(self, output: str) -> str:
-        """Fail if output logs a command outside a step, after its [ok]; returns output."""
-        self.assertEqual(stray_commands(output), [],
-                         f'commands logged outside a step in:\n{output}')
+        """Fail if output logs a line outside a step, after its [ok] or its last status; returns output."""
+        self.assertEqual(stray_lines(output), [],
+                         f'lines logged outside a step in:\n{output}')
         return output
 
 

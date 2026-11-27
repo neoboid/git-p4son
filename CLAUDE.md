@@ -101,7 +101,9 @@ these together, with a CHANGELOG note:
   Keep it to one line, two at most. Never restate the code or the `log.heading`/`log.error` next to it.
 - Design rationale, history and the reasoning behind a fix belong in the commit message, not in comments.
 - A step logs its heading before its first command and its `log.success` after its last, so no command line lands
-  after a step's `[ok]`. The command test helpers fail on one that does.
+  after a step's `[ok]`. Detail lines, such as a file list, come before the status line that sums them up, and only
+  status lines follow a step's last one: advice to act on is a `log.warning`. The command test helpers fail on a
+  line that breaks this.
 - A fatal failure raises `CommandError` (from `common.py`), with any detail lines (file lists, names) logged with
   `log.info` just before. Only `cli.main` prints errors and turns them into exit codes, so functions do not log an
   error and return `None`/`False`/`1` for their callers to pass on. `log.error` elsewhere is only for failures the

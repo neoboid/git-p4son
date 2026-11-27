@@ -229,6 +229,7 @@ class JjBackend:
 
         Raises CommandError when it does not exist, is conflicted, or points at the working change."""
         workspace = self.workspace
+        log.heading('Finding sync bookmark')
         name = choose_sync_branch(
             workspace.directory, branch, lambda name: name in workspace.bookmarks, 'bookmark')
         commit = _unconflicted(name, workspace.bookmarks[name])
@@ -236,15 +237,17 @@ class JjBackend:
             _refuse_bookmark_at_working(workspace, name)
         self._sync = _Sync(name, commit, workspace.tip.change_id[:12], workspace.working is workspace.tip,
                            get_head_commit(workspace.directory), workspace.tip.commit == commit)
+        log.success(name)
         return commit
 
     def start_sync(self) -> None:
         """Put the sync bookmark's files on disk; on the bookmark they are there already, and HEAD only detaches."""
         sync = self._prepared()
+        log.heading(f'Checking out sync bookmark {sync.bookmark}')
         if sync.on_sync_branch:
             self.workspace.detach_head(sync.commit)
+            log.success('Already on it')
             return
-        log.heading(f'Checking out sync bookmark {sync.bookmark}')
         self.workspace.checkout(sync.commit)
         log.success(f'From {sync.start}')
 
@@ -384,6 +387,8 @@ class JjBackend:
         if sync.on_sync_branch:
             return
         at, rebase = sync.finished
+        log.heading(
+            f'Rebasing your changes onto {sync.bookmark}' if rebase else f'Returning to {sync.start}')
         if not workspace.change_exists(sync.start):
             log.warning(
                 f'Staying on {sync.bookmark}, as {sync.start}, where sync started, no longer exists.')
@@ -391,18 +396,17 @@ class JjBackend:
         rebase_command = f'jj rebase -b {sync.start} -d {sync.bookmark}'
         failure = None
         if rebase:
-            log.heading(f'Rebasing your changes onto {sync.bookmark}')
             try:
                 workspace.rebase_branch(sync.start, sync.commit)
             except RunError as error:
                 failure = error
             else:
                 self._report_conflicts(sync)
+            log.heading(f'Returning to {sync.start}')
         if not workspace.working_is_empty():
             log.warning(f'Staying on {sync.bookmark}, with the merged local changes in the working change. Review '
                         f'them, then return with "{sync.return_command}".')
         else:
-            log.heading(f'Returning to {sync.start}')
             workspace.return_to(sync.start, sync.editing)
             log.success(sync.start)
             hint = '' if rebase else f' Run "{rebase_command}" to bring your changes up to date.'

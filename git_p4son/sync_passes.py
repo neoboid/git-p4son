@@ -68,6 +68,14 @@ def find_sync_state(workspace_dir: str, sync_revision: str) -> SyncState:
     return state
 
 
+def find_files_changed_outside_syncs(workspace_dir: str, revision: str) -> set[str]:
+    """The tracked files commits other than syncs and cherry-picks changed since the first sync, under a heading."""
+    log.heading('Finding files committed outside syncs')
+    changed = files_changed_outside_syncs(workspace_dir, revision)
+    log.success(plural(len(changed), 'file'))
+    return changed
+
+
 @dataclass(frozen=True)
 class SyncSettings:
     """What every sync of a workspace reads from its depot root and client spec."""
@@ -243,8 +251,9 @@ def run_passes(passes: list[tuple[SyncPass, str | None]], ctx: SyncContext, back
 
         log.heading(f'Committing git changes for CL {sync_pass.changelist}')
         staged = backend.commit_sync(subject)
+        tip = get_head_commit(ctx.workspace_dir)
         log.success(f'Committed {plural(staged, "file")}')
-        ctx.recorder.pass_made(prep, get_head_commit(ctx.workspace_dir))
+        ctx.recorder.pass_made(prep, tip)
     return preps
 
 
@@ -313,7 +322,7 @@ def run_sync_passes(catch_up: list[SyncPass], targets: list[SyncPass], settings:
                                    backend) if record_progress else NoProgress())
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
         ctx = SyncContext(workspace_dir, settings, pre_sync_head_commit, temp_root,
-                          files_changed_outside_syncs(workspace_dir, pre_sync_head_commit), recorder)
+                          find_files_changed_outside_syncs(workspace_dir, pre_sync_head_commit), recorder)
 
         passes: list[tuple[SyncPass, str | None]] = [
             (sync_pass, None) for sync_pass in catch_up]

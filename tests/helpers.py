@@ -27,6 +27,7 @@ from git_p4son.changelist_store import find_record, Record
 from git_p4son.common import CommandError, RunError, RunResult
 from git_p4son.config import config_path, ensure_config_dir, load_config
 from git_p4son.toml_writer import format_toml
+from git_p4son.log import log
 from git_p4son.git import EOL_FOR_AUTOCRLF, format_sync_subject, get_autocrlf
 from git_p4son.perforce import P4SyncPreviewFile
 
@@ -108,9 +109,10 @@ def cli_args(argv: list[str], **overrides: Any) -> argparse.Namespace:
         args.backend = GitBackend(args.workspace_dir)
     if hasattr(args, 'base_branch'):
         args.base_given = args.base_branch
-        # The workspace may be fake, so git doesn't look the base up, as a commit or as a branch.
+        # The workspace may be fake, so git doesn't look the base up, as a commit or as a branch. Quiet, as the
+        # command line resolves it under a heading of its own.
         with mock.patch('git_p4son.git_backend.resolve_commit'), \
-                mock.patch.object(GitBackend, '_is_branch', return_value=False):
+                mock.patch.object(GitBackend, '_is_branch', return_value=False), log.quiet():
             args.base_branch = args.backend.resolve_base(args.base_branch)
     return args
 

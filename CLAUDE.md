@@ -100,6 +100,8 @@ these together, with a CHANGELOG note:
 - Write a `#` comment only for what the code cannot show: a data format, a platform quirk, or a non-obvious reason.
   Keep it to one line, two at most. Never restate the code or the `log.heading`/`log.error` next to it.
 - Design rationale, history and the reasoning behind a fix belong in the commit message, not in comments.
+- A step logs its heading before its first command and its `log.success` after its last, so no command line lands
+  after a step's `[ok]`. The command test helpers fail on one that does.
 - A fatal failure raises `CommandError` (from `common.py`), with any detail lines (file lists, names) logged with
   `log.info` just before. Only `cli.main` prints errors and turns them into exit codes, so functions do not log an
   error and return `None`/`False`/`1` for their callers to pass on. `log.error` elsewhere is only for failures the

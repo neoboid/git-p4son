@@ -212,11 +212,16 @@ def _sync_pass(sync_pass: SyncPass, ctx: SyncContext) -> WritableSyncFileSet:
 
 def stage_again(changes: list[LocalChange], ctx: SyncContext) -> list[ChangedFile]:
     """Stage again the local changes the sync progress keeps by reference."""
+    if not changes:
+        return []
+    log.heading('Staging again the local changes the interrupted sync kept')
     workspace_dir = ctx.workspace_dir
-    return stage_changed_files(
+    staged = stage_changed_files(
         [ChangedFileRef(local_path(change.path, workspace_dir), change.base, change.binary, change.added_both)
          for change in changes],
         ctx.pre_sync_head_commit, workspace_dir, ctx.temp_root, ctx.settings.uses_crlf)
+    log.success(f'{plural(len(staged), "file")} staged')
+    return staged
 
 
 def _resume_pass(sync_pass: SyncPass, lists: PassLists, ctx: SyncContext) -> WritableSyncFileSet:

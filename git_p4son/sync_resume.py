@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from .backend import Backend
 from .common import CommandError, RevisionNotFoundError
 from .git import (
-    SyncState, files_changed_outside_syncs, commit_files, delete_ref, is_sync_subject, get_files_at_commits,
-    get_blob_oids, join_commits, resolve_commit, restore_files, set_ref, sync_state,
+    SyncState, commit_files, delete_ref, is_sync_subject, get_files_at_commits,
+    get_blob_oids, join_commits, resolve_commit, restore_files, set_ref,
 )
 from .log import log, plural
 from .processes import check_no_blocking_processes
@@ -24,8 +24,9 @@ from .sync_merge import IntersyncChange, WritableSyncFileSet
 from .writable import is_user_writable, is_writable_mode, make_read_only, make_writable
 from .perforce import ClobberMode, p4_off_have, p4_print_start, p4_sync_pending, p4_sync_to_have, is_p4_temp_file
 from .sync_passes import (
-    catch_up_passes, check_p4_workspace_clean, end_sync, finish_on_branch, OnSyncBranch, run_passes,
-    run_pre_sync_hooks, stage_again, sync_settings, SyncContext, SyncPass, SyncSettings,
+    catch_up_passes, check_p4_workspace_clean, end_sync, find_files_changed_outside_syncs, find_sync_state,
+    finish_on_branch, OnSyncBranch, run_passes, run_pre_sync_hooks, stage_again, sync_settings, SyncContext, SyncPass,
+    SyncSettings,
 )
 
 
@@ -70,7 +71,6 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
     log.heading('Finding what p4 has left to sync')
     revision = _pass_of(interrupted).revision
     pending = p4_sync_pending(on_disk, revision, workspace_dir)
-    log.success(f'{plural(len(pending), "file")} on disk not synced yet')
     adds = {entry.filepath: workspace_path(entry.filepath, workspace_dir)
             for entry in pending if entry.mode == 'add'}
     _refuse_links([path for local, path in adds.items()
@@ -91,6 +91,7 @@ def _p4_leftovers(interrupted: ProgressPass, lists: PassLists, workspace_dir: st
             continue
         leftovers.update(
             f'{folder}/{name}' if folder else name for name in names if is_p4_temp_file(name))
+    log.success(f'{plural(len(pending), "file")} on disk not synced yet')
     return leftovers, users
 
 
@@ -174,7 +175,6 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
                 read_only.append(path)
         else:
             unsorted.append(path)
-    log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
     # Until a resume puts the files right, a file p4 has not reached is at the recorded tip's content, which an edit
     # is made against; after, at its have revision.
     pending: set[str] = set()
@@ -202,6 +202,7 @@ def _sort_files(progress: SyncProgress, backend: Backend, clobber_mode: ClobberM
         ignore = sorted(path for mode, path in lists.files if (mode != 'add' or aborting or path in users_adds)
                         and path not in tracked and path not in changed and path not in stored_ignored
                         and is_user_writable(local[path]))
+    log.success(f'{plural(len(synced), "file")} synced by the interrupted run')
     return _PutRight(resync, remove, sorted(leftovers), intersync, read_only, ignore)
 
 
@@ -272,6 +273,7 @@ def _complete_saves(progress: SyncProgress, workspace_dir: str) -> None:
     incomplete = [save for save in progress.intersync if not save.complete]
     if not incomplete:
         return
+    log.heading('Completing the saves an interruption cut short')
     head = progress.intersync[-1].commit
     for save in incomplete:
         have = _on_disk(
@@ -281,15 +283,20 @@ def _complete_saves(progress: SyncProgress, workspace_dir: str) -> None:
         save.complete = True
     set_ref(INTERSYNC_REF, head, workspace_dir)
     write_sync_progress(progress, workspace_dir)
+    log.success(f'{plural(len(incomplete), "save")} completed')
 
 
 def _saved_changes(progress: SyncProgress, workspace_dir: str) -> list[IntersyncChange]:
     """The saved changes, oldest save first, as their saves hold them."""
+    if not progress.intersync:
+        return []
+    log.heading('Reading the changes saved while the sync was interrupted')
     keys = [(file, (save.commit, f'ours/{file.path}'),
              (save.commit, f'have/{file.path}') if file.base == 'have' else (file.base, file.path))
             for save in progress.intersync for file in save.files]
     contents = get_files_at_commits(
         [key for _, ours, base in keys for key in (ours, base)], workspace_dir)
+    log.success(plural(len(keys), 'file'))
     return [IntersyncChange(local_path(file.path, workspace_dir), contents[ours], contents[base])
             for file, ours, base in keys]
 
@@ -306,14 +313,21 @@ def _put_right(put: _PutRight, tip: str, workspace_dir: str, dry_run: bool = Fal
         _log_paths('Files behind the have-list to resync' if dry_run else 'Resyncing the files behind the have-list',
                    behind)
     if not dry_run:
-        p4_sync_to_have(local_paths(put.resync + [c.path for c in put.intersync if c.back == 'have'],
-                                    workspace_dir), workspace_dir)
-        _remove(
-            put.remove + [c.path for c in put.intersync if c.back == 'remove'], workspace_dir)
-        restore_files(
-            tip, [c.path for c in put.intersync if c.back == 'restore'], workspace_dir)
         if behind:
+            p4_sync_to_have(local_paths(
+                put.resync, workspace_dir), workspace_dir)
+            _remove(put.remove, workspace_dir)
             log.success(f'{plural(len(behind), "file")} resynced')
+        if put.intersync:
+            log.heading(
+                "Putting the saved changes' files back as the sync left them")
+            back = {kind: [c.path for c in put.intersync if c.back == kind]
+                    for kind in ('have', 'remove', 'restore')}
+            p4_sync_to_have(local_paths(
+                back['have'], workspace_dir), workspace_dir)
+            _remove(back['remove'], workspace_dir)
+            restore_files(tip, back['restore'], workspace_dir)
+            log.success(plural(len(put.intersync), 'file'))
     if put.leftovers:
         _log_paths(
             "p4's leftovers to clear" if dry_run else "Clearing p4's leftovers", put.leftovers)
@@ -353,10 +367,11 @@ def _sort_commits(progress: SyncProgress, subject: str | None,
     it, with subject, and the user's, to unwind; (the crash window's commit or None, the user's commits).
 
     Raises CommandError, after listing them, for other sync commits, which make the sync progress stale."""
+    log.heading('Sorting the commits above the recorded tip')
     above = backend.commits_above(progress.tip)
     if not above:
+        log.success('None')
         return None, []
-    log.heading('Sorting the commits above the recorded tip')
     crash = above[0].commit if subject is not None and above[0].subject == subject else None
     user = above[1:] if crash else above
     stale = [commit for commit in user if is_sync_subject(commit.subject)]
@@ -442,7 +457,7 @@ def _resume_sync_passes(progress: SyncProgress, settings: SyncSettings, workspac
     pre_sync_commit = progress.pre_sync_commit
     with tempfile.TemporaryDirectory(prefix='git-p4son-sync-') as temp_root:
         ctx = SyncContext(workspace_dir, settings, pre_sync_commit, temp_root,
-                          files_changed_outside_syncs(workspace_dir, pre_sync_commit), recorder)
+                          find_files_changed_outside_syncs(workspace_dir, pre_sync_commit), recorder)
         made = WritableSyncFileSet(
             changed=stage_again(progress.changed, ctx),
             ignored=local_paths(progress.ignored, workspace_dir),
@@ -456,7 +471,9 @@ def _resume_sync_passes(progress: SyncProgress, settings: SyncSettings, workspac
         intersync = _saved_changes(progress, workspace_dir)
         end_sync([made, *run_passes(passes, ctx, backend, resumed)],
                  ctx, merged_before, intersync, intersync_before)
+    log.heading("Removing the saved changes' ref")
     delete_ref(INTERSYNC_REF, workspace_dir)
+    log.success(INTERSYNC_REF)
 
 
 def _check_no_plan_options(args: argparse.Namespace) -> None:
@@ -517,7 +534,7 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
         return _drop_stale_progress(progress, workspace_dir, args.dry_run)
     passes = progress.passes
     # The crash window's commit counts as made, so an abort goes back to it.
-    abort_to = sync_state(
+    abort_to = find_sync_state(
         workspace_dir, crash or progress.tip) if args.abort and passes else None
     if abort_to is not None:
         if abort_to.last_synced is None:
@@ -525,8 +542,8 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
                                'go back to. Run "git p4son sync" to finish it.')
         log.heading(f'Aborting the interrupted sync: back to {abort_to}')
     elif progress.aborting:
-        log.heading(
-            f'Finishing the interrupted abort: back to {sync_state(workspace_dir, progress.tip)}')
+        back_to = find_sync_state(workspace_dir, progress.tip)
+        log.heading(f'Finishing the interrupted abort: back to {back_to}')
     else:
         left = (f'{plural(len(passes), "changelist")} left, to CL {passes[-1].changelist}' if passes
                 else 'only the merge-back is left')
@@ -549,7 +566,7 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
         log.success(backend.returns_to() or f'Stays on {progress.sync_branch}')
         return 0
 
-    last_synced = sync_state(
+    last_synced = find_sync_state(
         workspace_dir, progress.pre_sync_commit).last_synced
     run_pre_sync_hooks(last_synced, depot_root,
                        workspace_dir, backend.words.tool)
@@ -561,7 +578,10 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
         if unwind:
             _unwind(progress, unwind, at, backend, workspace_dir)
         else:
+            log.heading(
+                f"Putting {progress.sync_branch} at the interrupted sync's tip")
             backend.resume_at(at)
+            log.success(at[:12])
         if crash:
             _take_crash_commit(progress, crash, workspace_dir)
         _save_intersync(put.intersync, progress, workspace_dir)
@@ -574,6 +594,6 @@ def resume_interrupted_sync(args: argparse.Namespace, progress: SyncProgress) ->
         if progress.unwound:
             log.heading('The commits unwound, now changes to review')
             _log_unwound(progress.unwound)
-        return sync_state(workspace_dir)
+        return find_sync_state(workspace_dir, 'HEAD')
 
     return finish_on_branch(OnSyncBranch.from_args(args, sync_revision), depot_root, last_synced, run)
